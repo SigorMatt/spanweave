@@ -44,8 +44,19 @@ Code executes against.
   > next to `__version__`, and both `--version` and `--help` carry the loud
   > "NOT FROZEN" notice `CLAUDE.md` 7 requires.
 
-- [ ] **0.3 CI.** GitHub Actions: ruff + mypy + pytest on push/PR via
+- [x] **0.3 CI.** GitHub Actions: ruff + mypy + pytest on push/PR via
   `make check`. *Done when CI is green on a trivial test.*
+  > The workflow shipped with the seed commit, so this task supplied the tests
+  > it had nothing to run: `tests/test_version.py` (the version literal tracks
+  > `pyproject.toml`; the schema version still announces itself unfrozen) and
+  > `tests/test_cli.py` (every subcommand parses; `--version` exits 0).
+  > **Known gap, closed by 0.8:** the seeded `Makefile`'s `gates` target runs
+  > `tests/test_gates.py`, which tasks 0.4–0.5 create, and CI's `determinism`
+  > job runs `make conformance` + `tests/test_determinism.py`, which 0.6 and
+  > 1.9 create. So `make check` is red between here and 0.4, and the
+  > `determinism` job is red until 1.9, purely because the harness was seeded
+  > ahead of the checks it names. `uv run ruff check`, `ruff format --check`,
+  > `mypy spanweave`, and `pytest` are all green here.
 
 - [ ] **0.4 Safety gates.** Three AST/lexical checks over `spanweave/`, each
   proven by a deliberately planted violation:
