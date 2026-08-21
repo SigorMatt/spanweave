@@ -78,6 +78,13 @@ def _by_code(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{"code": code, "count": counts[code]} for code in sorted(counts)]
 
 
+#: Every dialect the corpus is expected to cover. A scenario must either
+#: render each of these or declare in `expected/coverage.json` that it cannot
+#: (`FIXTURES.md` §4.3). Phase 2 adds the second entry here, and that addition
+#: is what makes every scenario account for it.
+DIALECTS = ("openinference",)
+
+
 @dataclass(frozen=True)
 class Scenario:
     """One directory of `fixtures/conformance/`."""
@@ -103,11 +110,37 @@ class Scenario:
 
     @property
     def expected_error(self) -> dict[str, Any] | None:
-        """Some scenarios must NOT build. That is the assertion."""
+        """Some scenarios must NOT build. That is the assertion (§4.2)."""
         path = self.path / "expected/error.json"
         if not path.exists():
             return None
         return json.loads(path.read_text(encoding="utf-8"))
+
+    @property
+    def coverage(self) -> dict[str, Any]:
+        """Dialects this scenario declares it cannot render (§4.3)."""
+        path = self.path / "expected/coverage.json"
+        if not path.exists():
+            return {}
+        declared = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            dialect: entry
+            for dialect, entry in declared.items()
+            if not dialect.startswith("_")
+        }
+
+    def rendering(self, dialect: str) -> pathlib.Path | None:
+        for path in self.dialects:
+            if path.stem == dialect:
+                return path
+        return None
+
+    def declared_unrenderable(self, dialect: str) -> str | None:
+        """The stated reason this dialect cannot render it, if it says so."""
+        entry = self.coverage.get(dialect)
+        if entry is None or entry.get("renderable", True):
+            return None
+        return str(entry.get("reason", ""))
 
 
 def scenarios() -> tuple[Scenario, ...]:

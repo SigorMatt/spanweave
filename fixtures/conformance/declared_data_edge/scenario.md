@@ -16,7 +16,13 @@ would be testing our imagination rather than the dialect — and a fixture that
 lies about a dialect is worse than a missing one, because it passes.
 
 So the scenario is seeded and its rendering waits for a dialect that really
-emits such a declaration (Phase 2). Until then:
+emits such a declaration (Phase 2). That absence is **declared**, not implied:
+`expected/coverage.json` records which dialect cannot render this and why, and
+a test fails if any scenario is silently missing a rendering it never declared
+(`FIXTURES.md` §4.3). The file deletes itself the moment a dialect can render
+the scenario.
+
+Until then:
 
 - the **mechanism** is covered at the builder level:
   `tests/test_build.py::test_a_declared_data_edge_is_transcribed_with_the_declared_basis`

@@ -1,8 +1,5 @@
 {
-  "_note": "This scenario must NOT build. See scenario.md.",
+  "_note": "This scenario must NOT build. See scenario.md and FIXTURES.md 4.2. Matched by type and code, never by message text: pinning a phrase would freeze wording into the corpus, and the fixture would then pressure the message to stay as written.",
   "error": "DuplicateNodeIdError",
-  "message_contains": [
-    "s1",
-    "Refusing to overwrite"
-  ]
+  "code": "duplicate_node_id"
 }

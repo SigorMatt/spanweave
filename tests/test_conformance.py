@@ -16,10 +16,10 @@ import json
 import pytest
 
 import spanweave
-from spanweave.errors import SpanweaveError
+from spanweave.errors import ERROR_CODES, SpanweaveError
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
-from tests.conformance import CORPUS, canonical, scenarios
+from tests.conformance import CORPUS, DIALECTS, canonical, scenarios
 
 SCENARIOS = scenarios()
 BUILDABLE = [s for s in SCENARIOS if s.dialects and s.expected_error is None]
@@ -85,11 +85,44 @@ def test_every_scenario_describes_itself(scenario):
         assert forbidden not in text.lower()
 
 
-def test_the_scenarios_with_no_rendering_are_the_ones_we_expect():
-    # Not a hole: OpenInference declares no producer->consumer relation, so
-    # there is nothing to transcribe and inventing an attribute would make the
-    # fixture assert something about the dialect we cannot substantiate.
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=ids(SCENARIOS))
+@pytest.mark.parametrize("dialect", DIALECTS)
+def test_every_dialect_is_either_rendered_or_declared_unrenderable(scenario, dialect):
+    """Silence is a failure (`FIXTURES.md` §4.3).
+
+    Without this, "we could not express this in that dialect" and "somebody
+    forgot" look identical, and a dialect's coverage could rot away one file
+    at a time with nothing noticing.
+    """
+    rendered = scenario.rendering(dialect) is not None
+    reason = scenario.declared_unrenderable(dialect)
+    assert rendered != (reason is not None), (
+        f"{scenario.name} must either render {dialect} or declare in "
+        f"expected/coverage.json that it cannot, with a reason"
+    )
+    if reason is not None:
+        # A declaration without a reason is just a missing file with extra
+        # steps. The reason is what a reviewer checks.
+        assert len(reason) > 20
+
+
+def test_the_only_unrenderable_scenario_is_the_one_we_agreed_on():
+    # Recorded so that a second unrenderable scenario has to be argued for
+    # rather than merely added.
     assert ids(PENDING) == ["declared_data_edge"]
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=ids(SCENARIOS))
+def test_a_scenario_expects_exactly_one_outcome(scenario):
+    # Exactly one of graph.json or error.json -- never both, never neither
+    # (`FIXTURES.md` §1). Neither would be indistinguishable from an
+    # unfinished fixture; both would be a contradiction.
+    has_graph = (scenario.path / "expected/graph.json").exists()
+    has_error = scenario.expected_error is not None
+    if not scenario.dialects:
+        assert not has_graph and not has_error
+        return
+    assert has_graph != has_error
 
 
 # --------------------------------------------------------------------------
@@ -116,9 +149,25 @@ def test_the_scenario_refuses_to_build(scenario):
     expectation = scenario.expected_error
     with pytest.raises(SpanweaveError) as failure:
         built(scenario)
+    # Type AND code, never message text (`FIXTURES.md` §4.2). A fixture that
+    # pinned a phrase would start pressuring the message to stay as written.
     assert type(failure.value).__name__ == expectation["error"]
-    for fragment in expectation["message_contains"]:
-        assert fragment in str(failure.value)
+    assert failure.value.code == expectation["code"]
+
+
+@pytest.mark.parametrize("scenario", FAILING, ids=ids(FAILING))
+def test_a_refusal_still_says_something_useful_to_a_human(scenario):
+    # The corpus does not pin the wording, so something else has to insist
+    # there IS wording. Otherwise "matched by code" quietly licenses an empty
+    # message.
+    with pytest.raises(SpanweaveError) as failure:
+        built(scenario)
+    assert len(str(failure.value)) > 40
+
+
+def test_every_expected_error_code_is_one_the_library_actually_raises():
+    for scenario in FAILING:
+        assert scenario.expected_error["code"] in ERROR_CODES
 
 
 # --------------------------------------------------------------------------

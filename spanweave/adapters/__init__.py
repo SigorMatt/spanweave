@@ -17,7 +17,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from spanweave.adapters.base import Adapter
-from spanweave.errors import AdapterSelectionError, UnknownAdapterError
+from spanweave.errors import (
+    ADAPTER_DETECT_FAILED,
+    ADAPTER_UNCONFIDENT,
+    DUPLICATE_ADAPTER_ID,
+    NO_ADAPTERS_REGISTERED,
+    AdapterSelectionError,
+    UnknownAdapterError,
+)
 from spanweave.model import JsonValue
 
 __all__ = [
@@ -49,7 +56,8 @@ class AdapterRegistry:
         if existing is not None and existing is not adapter:
             raise AdapterSelectionError(
                 f"two different adapters both claim the id {adapter.id!r}; "
-                f"ids must be unique"
+                f"ids must be unique",
+                code=DUPLICATE_ADAPTER_ID,
             )
         self._adapters[adapter.id] = adapter
 
@@ -80,7 +88,8 @@ class AdapterRegistry:
                 # prevent. So it is reported, loudly, naming the adapter.
                 raise AdapterSelectionError(
                     f"adapter {adapter.id!r} raised during detection "
-                    f"({failure!r}); detect() must be pure and must not raise"
+                    f"({failure!r}); detect() must be pure and must not raise",
+                    code=ADAPTER_DETECT_FAILED,
                 ) from failure
             results.append((adapter.id, confidence))
         return tuple(results)
@@ -89,7 +98,8 @@ class AdapterRegistry:
         """Choose the adapter for this input, or refuse to (`SPEC.md` §6.1)."""
         if not self._adapters:
             raise AdapterSelectionError(
-                "no adapters are registered, so nothing can read this input"
+                "no adapters are registered, so nothing can read this input",
+                code=NO_ADAPTERS_REGISTERED,
             )
         sample = list(records[:DETECTION_SAMPLE_SIZE])
         measured = self.confidences(sample)
@@ -101,7 +111,8 @@ class AdapterRegistry:
                 f"no adapter is confident enough about this input "
                 f"(highest {best:.2f}, minimum {MINIMUM_CONFIDENCE:.2f}). "
                 f"{_report(measured)} "
-                f"Name one explicitly with --adapter if you know the dialect."
+                f"Name one explicitly with --adapter if you know the dialect.",
+                code=ADAPTER_UNCONFIDENT,
             )
         if len(winners) > 1:
             tied = ", ".join(winners)

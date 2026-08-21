@@ -1,0 +1,7 @@
+{
+  "_note": "Dialects that cannot render this scenario, each with a reason (FIXTURES.md 4.3). A dialect is either rendered or declared here; silence is a failure. This file deletes itself when a dialect can render the scenario.",
+  "openinference": {
+    "renderable": false,
+    "reason": "the dialect declares no producer->consumer relation, so there is nothing to transcribe; writing a rendering would mean inventing an attribute and asserting the instrumentor emits it (ADAPTERS.md 1)"
+  }
+}

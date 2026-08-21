@@ -5,8 +5,15 @@ because it must not produce one.**
 
 ## Expected outcome
 
-A hard error: `DuplicateNodeIdError`, naming the id and both records. The
-expectation lives in `expected/error.json` rather than `expected/graph.json`.
+A hard error: `DuplicateNodeIdError`, code `duplicate_node_id`, naming the id
+and both records. The expectation lives in `expected/error.json` rather than
+`expected/graph.json` (`FIXTURES.md` §4.2).
+
+It is matched by **type and code, never by message text.** The message must be
+useful to a human — a separate test insists it says something — but pinning a
+phrase would freeze wording into the corpus, and the fixture would then
+pressure the message to stay as written the first time someone tried to
+improve it.
 
 Almost everything else in this corpus degrades into a diagnostic. This does
 not, and the difference is worth stating. A silent overwrite would drop a

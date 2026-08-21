@@ -292,6 +292,43 @@ graph rather than about this field.
 path. Those would break byte-identical determinism and leak the operator's
 environment.
 
+### 3.10 Errors and error codes
+
+Almost everything the library cannot handle becomes a **diagnostic** (§3.7).
+What remains is a short list of structural impossibilities, where continuing
+would mean publishing a graph that is quietly wrong. Those raise.
+
+Every raised error is a `SpanweaveError` (or a subclass) and carries a stable,
+machine-matchable `code`:
+
+```
+SpanweaveError:
+  code:    str        # stable, machine-matchable — see the table below
+  args[0]: str        # human-readable, specific. NOT a matching surface.
+```
+
+| Code | Type | Meaning |
+|---|---|---|
+| `duplicate_node_id` | `DuplicateNodeIdError` | two records resolved to one node id (§3.6) |
+| `no_adapters_registered` | `AdapterSelectionError` | nothing is registered to read this input |
+| `adapter_ambiguous` | `AdapterSelectionError` | two or more adapters are equally confident (§6.1) |
+| `adapter_unconfident` | `AdapterSelectionError` | no adapter reached the minimum confidence (§6.1) |
+| `adapter_detect_failed` | `AdapterSelectionError` | an adapter raised from `detect()`, which §6 forbids |
+| `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
+| `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
+
+Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
+codes: adding one is deliberate, and renaming one after the freeze needs a
+version bump.
+
+Match on the code, never on the message. The exception *type* is too coarse to
+act on — `AdapterSelectionError` alone covers four different situations, and a
+caller that wants to retry an ambiguous input with `--adapter` but fail hard on
+a broken adapter cannot tell them apart from the type. The alternative to a
+code is string-matching the message, which silently makes every message a
+compatibility surface and means nobody can improve one without breaking a
+caller.
+
 ## 4. Edge kinds — the centerpiece
 
 A **closed** enum. Adding one is a spec change (halt point).

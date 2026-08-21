@@ -21,15 +21,18 @@ fixtures/
         langfuse.json
         ...
       expected/
-        graph.json                # THE canonical graph — one per scenario
+        graph.json                # THE canonical graph. Exactly one of this
+                                  #   or error.json — never both, never
+                                  #   neither.
+        error.json                # this scenario must NOT build (§4.2).
         diagnostics.json          # expected diagnostics (codes + counts)
         comparison.json           # optional: node fields this scenario has
                                   #   declared dialect-varying (§4), erased
                                   #   by canonical(). Absent = erase nothing.
-        error.json                # optional, and mutually exclusive with
-                                  #   graph.json: this scenario must NOT
-                                  #   build. Names the error type and the
-                                  #   fragments its message must contain.
+        coverage.json             # optional: dialects that CANNOT render this
+                                  #   scenario, each with a reason (§4.3).
+                                  #   A dialect is either rendered or declared
+                                  #   here. Silence is a failure.
   captured/
     <name>.jsonl
     <name>.provenance.md          # §6 — mandatory
@@ -104,18 +107,10 @@ For a scenario with dialects D₁…Dₙ:
 canonical(build(D₁)) == canonical(build(D₂)) == … == expected/graph.json
 ```
 
-A scenario with an `error.json` and no `graph.json` is asserting a **refusal**
-— `duplicate_span_ids` is the only one so far. Almost everything in this corpus
-degrades into a diagnostic; where it must not, the expectation has to be able to
-say so, and a missing `graph.json` alone would be indistinguishable from an
-unfinished fixture.
-
-A scenario may also have **no dialect rendering** in some dialect, and that is a
-statement too: `declared_data_edge` has none in OpenInference, because the
-dialect declares no producer→consumer relation and writing one would mean
-inventing an attribute and asserting the instrumentor emits it. Its
-`scenario.md` says so, and a test asserts the list of unrendered scenarios is
-exactly the expected one, so a rendering cannot go missing by accident.
+Two scenarios in the seed corpus have no `expected/graph.json`, for two
+**different** reasons, and they get two different mechanisms because they are
+two different statements. Conflating them would make the corpus unable to say
+which one it meant (§4.2, §4.3).
 
 `canonical()` erases what is legitimately dialect-specific and nothing else:
 
@@ -150,6 +145,69 @@ Node ids are compared, so dialects must agree on them. Two rules make that work:
 - When a dialect has no span ids, the derived id (`SPEC.md` §3.6) will differ.
   Such a scenario must say so in `scenario.md`, and `canonical()` maps ids to
   positional labels (`n0`, `n1`, …) in topological order before comparing.
+
+### 4.2 Scenarios that must **not** build
+
+A scenario whose expected outcome is a **refusal** carries `expected/error.json`
+instead of `expected/graph.json`. `duplicate_span_ids` is the only one so far.
+
+Almost everything in this corpus degrades into a diagnostic; where the library
+must instead refuse (`SPEC.md` §3.6), the corpus has to be able to say so. A
+missing `graph.json` on its own would be indistinguishable from an unfinished
+fixture, which is exactly the ambiguity this file exists to remove.
+
+```json
+{
+  "error": "DuplicateNodeIdError",
+  "code": "duplicate_node_id"
+}
+```
+
+- `error` — the exception type, by name.
+- `code` — the stable error code the exception carries (`SPEC.md` §3.10).
+
+Matched by **type and code, never by message text.** Pinning a phrase like
+`"Refusing to overwrite"` would freeze wording into the corpus, and a fixture
+that pins prose starts *pressuring the message to stay as written* the first
+time someone tries to improve it. Matching by type alone is too weak in the
+other direction: `AdapterSelectionError` covers a tie, a low confidence, an
+empty registry and an adapter that raised, and a consumer must be able to tell
+those apart without string-matching. The code is the machine-readable middle,
+and it is the same shape as a diagnostic code for the same reason.
+
+**Equivalence (§4):** every dialect rendering of a refusal scenario must raise
+the **same** error type with the **same** code. A dialect that builds a graph
+where another refuses is a finding about the model, not a fixture to relax.
+
+### 4.3 Dialects that cannot render a scenario
+
+Some scenarios cannot be expressed in some dialects at all. `declared_data_edge`
+has no OpenInference rendering, because OpenInference declares no
+producer→consumer relation: there is nothing to transcribe, and writing a
+rendering would mean inventing an attribute and asserting the instrumentor emits
+it (`ADAPTERS.md` §1).
+
+That is a statement about **coverage**, not about behavior, and unlike a refusal
+it is **per dialect** and **temporary** — the scenario's `graph.json` arrives
+with the first dialect that can render it.
+
+```json
+{
+  "openinference": {
+    "renderable": false,
+    "reason": "the dialect declares no producer->consumer relation"
+  }
+}
+```
+
+**Equivalence (§4):** equivalence holds over the dialects that *can* render the
+scenario. A dialect declared unrenderable here is skipped.
+
+**Silence is a failure.** For every scenario and every supported dialect, there
+must be either a rendering **or** an entry here with a reason. A missing
+rendering that nobody declared fails the corpus — otherwise "we could not
+express this" and "somebody forgot" look identical, and a dialect's coverage
+could quietly rot away one file at a time.
 
 ## 5. Hand-authored fixtures
 
