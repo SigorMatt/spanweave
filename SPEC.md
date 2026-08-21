@@ -88,6 +88,20 @@ A **closed** enum. Adding a kind is a spec change (halt point, `AGENT.md`).
 be mapped becomes an `unknown` node **plus** a diagnostic (§3.7) — never a
 discard, never a guess. Downstream tools can then decide for themselves.
 
+When an adapter maps a span to `unknown`, it MUST preserve the dialect's own
+kind string, verbatim, under the normalized attribute key **`reported_kind`**,
+as well as in the diagnostic. `attributes.reported_kind` is the only normalized
+key this specification currently defines, and it is named here rather than left
+to each adapter because `Node.attributes` is part of the serialized schema
+(§3.9, §7) and freezes with it at Phase 4: a key invented per adapter would
+become a per-adapter schema.
+
+This is what makes the closed enum survivable in practice. Real dialects invent
+kinds constantly — `guardrail`, `reranker`, `router`, `handoff` — and a
+consumer that needs one of them can read the original string off the node
+instead of waiting for a spec change (`OPEN_QUESTIONS.md` §1, whose provisional
+stance this implements).
+
 ### 3.3 Payload
 
 Telemetry is routinely partial. Conflating "absent," "empty," and "redacted"
@@ -376,6 +390,17 @@ graph, byte-for-byte** on serialization, on any machine.
   `separators=(",", ":")`, and a trailing newline.
 - **Input line order is not significant.** Shuffling the records of an input file
   MUST produce an identical graph. This is a test (`TASKS.md` 0.6).
+  - The one field exempt from that claim is **`meta.source_digest`**, which
+    fingerprints the input **bytes** rather than the graph's content (§3.9).
+    Shuffling changes the bytes by definition, so the digest changes with them;
+    everything else — every node, edge, diagnostic and remaining `meta` field —
+    must be byte-identical. An independent checker must exclude that one field,
+    or it will report a failure the spec does not intend.
+  - The exclusion is required to carry its own proof: a **separate** assertion
+    shows that `source_digest` genuinely *does* differ between a trace and its
+    shuffled twin. Without it, excluding a field would be indistinguishable from
+    excusing a field that never varies — and an exclusion nobody can see through
+    is exactly the shape of a determinism claim that is quietly false.
 - No clocks, no randomness, no `hash()`, no set iteration order, no
   dict-insertion-order dependence in any output-affecting path.
 
