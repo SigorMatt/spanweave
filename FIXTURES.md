@@ -96,6 +96,7 @@ implementation gets wrong.
 | `duplicate_span_ids` | two records claiming one id | hard error, not silent overwrite |
 | `cyclic_parents` | a parent cycle | graph still built, diagnostic, no hang |
 | `shuffled_order` | the same trace, lines reordered | byte-identical to its ordered twin |
+| `tool_call_history_echo` | a call id resent as input context by a later turn | **no** `call_result` edge from the echoing span |
 
 Every new adapter must render **all** of these, including the degenerate ones.
 An adapter that only handles happy paths is not done.
@@ -220,6 +221,46 @@ having really happened.
 Keep them minimal — the smallest trace that exercises the property. A fixture
 that is hard to read is a fixture nobody will check.
 
+### 5.1 Derive a rendering from observed output, never from a reading
+
+Hand-authored does **not** mean invented. A rendering must be derived from
+output you have actually seen an instrumentor produce — run it, look, write
+that down — and only then trimmed.
+
+A rendering written from your understanding of a dialect tests your
+understanding. Your adapter will agree with it, every test will pass, and both
+will be wrong about the world in the same way, silently and forever. There is
+no test that catches this, because the fixture and the code share the error.
+
+**This happened here, and it is why this section exists.** All four
+call-bearing fixtures — `llm_tool_llm`, `shuffled_order`, `parallel_tool_calls`
+and `unpaired_tool_call` — were written to an idea of OpenInference rather than
+to its output. Three consequences, none visible from inside the corpus:
+
+- They omitted the **conversation history** every real follow-up turn carries,
+  so no fixture contained a call id echoed as input context. The adapter
+  matched a call id anywhere on a span and emitted a second `call_result` edge
+  for a span that had requested nothing — `warrant=explicit`, for a relation
+  the telemetry never stated.
+- They put the requester's id in a **top-level `tool_calls` key inside
+  `output.value`**, a shape no observed instrumentor emits. The adapter grew a
+  code path to read it. That path existed only because a fixture asked for it.
+- They omitted `input.value`, which the instrumentor emits on **every** LLM
+  span, so the expected graphs asserted `inputs: absent` — a statement about
+  the dialect that was simply false.
+
+The first captured trace found all three in one run, and `FIXTURES.md` §6
+decided it: the captured one is right. The frozen expected graph moved.
+
+The rule that follows, and the one to apply when trimming: **omission is fine,
+misstatement is not.** A rendering may leave out keys it does not exercise. It
+may not leave out a key whose absence changes what the expected graph asserts —
+dropping `input.value` is not simplification, it is a claim that the
+instrumentor does not send one.
+
+`tool_call_history_echo` is the regression fixture for the specific defect;
+this section is for the class.
+
 ## 6. Captured fixtures — different rules
 
 A hand-authored fixture proves the adapter matches **our understanding** of a
@@ -281,3 +322,8 @@ wants that conclusion draws it — and owns it.
   Regenerating an expected graph to match new code is how a corpus dies —
   changing one requires an explicit note in the PR saying why the *expectation*
   was wrong.
+- The exception, and the only one: a **captured trace** disagreeing with a
+  hand-authored fixture (§6). Then the expectation was wrong about the world
+  and must move, and the diff is the record of what our reading of the dialect
+  got wrong — worth writing down in the PR where someone can find it later
+  without reading the code.

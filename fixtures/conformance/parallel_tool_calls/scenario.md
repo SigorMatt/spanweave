@@ -33,7 +33,7 @@ Node order: s0, s1, s2, s3.
 | Node | inputs | outputs |
 |---|---|---|
 | s0 | `present` (text/plain) | `absent` |
-| s1 | `absent` | `present` (application/json) — both requested calls |
+| s1 | `present` (application/json) | `present` (application/json) — both requested calls |
 | s2 | `absent` | `absent` |
 | s3 | `absent` | `absent` |
 
@@ -43,8 +43,17 @@ None. The dialect reports no token counts here; `llm_tool_llm` covers usage.
 
 ## Diagnostics
 
-None. This is the clean case for parallel calls: every requested id is
+`unmapped_attributes` ×1 on s1, `info`. No warnings: every requested id is
 fulfilled, and nothing has to be reported to avoid dropping one.
+
+## What this scenario does not cover
+
+There is no follow-up LLM turn here, so no call id is ever echoed as history —
+which means this scenario would **not** have caught the pairing defect that
+`tool_call_history_echo` exists for, and it is not asked to. Rendered
+faithfully with a follow-up turn it would have shown that defect twice over,
+once per id. One property per scenario: this one is about several calls
+requested at once.
 
 ## Cross-dialect notes
 

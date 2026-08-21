@@ -18,9 +18,14 @@ Identical to `llm_tool_llm` in every compared field, including node order:
 1 `agent`, 2 `llm`, 1 `tool`; 3 `parent`, 1 `call_result`, 2 `temporal`;
 node order s0, s1, s2, s3.
 
+That includes the history echo on s3: the shuffled twin must also produce
+exactly one `call_result` edge, and reordering the lines must not change which
+span is the requester.
+
 ## Diagnostics
 
-None.
+`unmapped_attributes` ×2, exactly as its twin — identical in code and count,
+because it is the same records in a different order.
 
 ## Cross-dialect notes
 

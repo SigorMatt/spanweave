@@ -50,6 +50,7 @@ DEGENERATE = (
     "duplicate_span_ids",
     "cyclic_parents",
     "shuffled_order",
+    "tool_call_history_echo",
 )
 
 

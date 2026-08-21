@@ -452,6 +452,17 @@ adapter can recover, and it is frequently **not** the parent/child relation.
 - The builder joins on each `call_id` within a trace and emits `call_result`
   with `basis = "tool_call_id"`. Several `call_result` edges may leave one
   node, and that is ordinary.
+- **A requester is the span that *originated* the call, not one that merely
+  mentions it.** Conversational protocols require the whole history to be
+  resent on every turn, so the same call id reappears on later spans as
+  *context* — and a rule that matched the id anywhere would make a span that
+  requested nothing look like a requester, producing a `call_result` edge with
+  `warrant=explicit` for a relation the telemetry never stated. An adapter
+  MUST take a requester id only from what the span itself produced. **An echo
+  of a reference is not the reference.**
+- An id a span merely received is not dropped: it is left unmapped and
+  reported (§3.7). It is evidence of context, and there is no edge kind for
+  that — inventing one would be worse than saying nothing.
 - Unmatched calls/results produce `unpaired_call` / `unpaired_result`
   diagnostics — never a fabricated pairing, and never a fallback to guessing by
   name or proximity.

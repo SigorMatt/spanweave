@@ -29,12 +29,16 @@ Node order (topological over `parent ∪ call_result`, tie-broken by
 | Node | inputs | outputs |
 |---|---|---|
 | s0 | `present` (text/plain) | `absent` |
-| s1 | `absent` | `present` (application/json) |
+| s1 | `present` (application/json) | `present` (application/json) |
 | s2 | `present` (application/json) | `present` (application/json) |
-| s3 | `absent` | `present` (text/plain) |
+| s3 | `present` (application/json) | `present` (application/json) |
 
-Note s1 and s3: the dialect emits no input payload for these spans. That is
-`absent`, **not** `empty` — see `empty_payload` for the contrasting case.
+Every LLM span reports both. The instrumentor emits `input.value` (the whole
+request) and `output.value` (the whole response object) on every model call —
+so an LLM span with `absent` inputs would be a claim about this dialect that
+is simply false. For the `absent`-versus-`empty` contrast, see
+`missing_payloads` and `empty_payload`, which are about exactly that and
+nothing else.
 
 ## Usage
 
@@ -45,7 +49,42 @@ not state (`ADAPTERS.md` §1).
 
 ## Diagnostics
 
-None. This is the clean case.
+`unmapped_attributes` ×2 — one each on s1 and s3, both `info`.
+
+This is still the clean case: **no warnings**, nothing unpaired, nothing
+unmappable. Real telemetry carries more than this library normalizes —
+`llm.finish_reason`, the message lists, the request payload — and the library
+reports those keys rather than dropping them (`SPEC.md` §3.7). A scenario with
+*zero* diagnostics would be a scenario whose rendering had been trimmed until
+the library had nothing left to report, which is how the corpus came to be
+wrong about this dialect in the first place.
+
+## The history echo, and why this expectation changed
+
+s3 carries the call id `call_a` — twice — under
+`llm.input_messages.1.message.tool_calls.0.tool_call.id` and
+`llm.input_messages.2.message.tool_call_id`. **s3 requested nothing.** The
+protocol requires a follow-up turn to resend the whole conversation, so the
+previous turn's tool call and its result arrive as *input* context, and the
+instrumentor records them faithfully.
+
+There is exactly **one** `call_result` edge, s1→s2. An edge from s3 would
+assert a request-fulfilment relation the telemetry never stated. An echo of a
+reference is not the reference.
+
+This scenario's expected graph was frozen by a human before any code existed,
+and it changed here anyway, because a **captured trace disagreed with it**
+(`FIXTURES.md` §6: the captured one is right). What moved, and why:
+
+| Change | Cause |
+|---|---|
+| s1, s3 inputs `absent` → `present` | the instrumentor does emit `input.value` on every LLM span; the old rendering omitted it |
+| diagnostics `[]` → `unmapped_attributes` ×2 | the old rendering carried only keys the library maps |
+| s1 `outputs.value` reshaped | the old rendering put tool calls at the top level of `output.value`; the real response object nests them under `choices[0].message` |
+| the requester id moved | from a top-level `tool_calls` key in the payload to `llm.output_messages.0.message.tool_calls.0.tool_call.id`, which is what the instrumentor actually emits |
+
+The node and edge structure did **not** change. What changed is everything the
+old rendering had quietly asserted about the dialect.
 
 ## Cross-dialect notes
 

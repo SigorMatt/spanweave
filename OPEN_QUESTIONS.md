@@ -212,3 +212,49 @@ its own id and role — roughly the same size as the change that introduced
 
 **Recorded during Phase 1 review**, at the same time as the `call_ids` change,
 so that Phase 2 recognises this case rather than rediscovering it.
+
+---
+
+## 9. Is `llm.output_messages` enough to identify a call's originator?
+
+**(a)** A requester id is taken only from what a span itself produced — in
+OpenInference, `llm.output_messages.*.tool_call.id` rather than
+`llm.input_messages.*` (`SPEC.md` §4.4). Is that one attribute prefix enough,
+or should the adapter corroborate it with a second signal?
+
+**(b)** The rule is currently carried by a **single** attribute prefix. If a
+dialect, an instrumentor version, or a streaming path ever puts an originating
+call somewhere other than the output message list — or omits the message lists
+entirely and reports only payloads — the rule quietly stops distinguishing
+origination from echo, and the failure looks exactly like the defect it was
+written to fix: a `call_result` edge with `warrant=explicit` for a relation
+nobody stated. That edge is indistinguishable downstream from a real one.
+
+There **is** a second signal available in the trace we have.
+`llm.finish_reason` was `tool_calls` on the originating span and `stop` on the
+follow-up that merely echoed the id. It corroborates the output-side rule
+exactly, and it is emitted by the same instrumentor on the same spans.
+
+Against wiring it in now: it has been observed on **one** dialect from **one**
+instrumentor in **one** capture. `finish_reason` is a property of a whole
+response, not of an individual call, so it cannot say *which* id originated
+where a span both echoes an old call and requests a new one — a shape the
+output-side rule already handles correctly on its own. And a second rule that
+agrees with the first on every case seen so far adds no discrimination while
+adding a way to disagree later.
+
+**(c)** Phase 2, and the second adapter in particular. If OTel GenAI (or any
+further instrumentor) turns out not to separate produced from received
+messages, this stops being a corroboration question and becomes the larger one
+§8 gestures at: whether the dialect can distinguish these at all. Watch also
+for a streaming path, where the two signals are most likely to first disagree.
+
+**(d) Provisional:** the output-side rule alone. `llm.finish_reason` is
+**recorded here as available** and deliberately not wired in — one observed
+dialect is not enough to justify a second rule, and a rule adopted before it is
+needed is a rule nobody knows how to test. The corpus keeps `llm.finish_reason`
+in its renderings precisely so that the signal is present the day this is
+reopened.
+
+**Recorded during the first captured-trace review**, alongside the fix it
+would corroborate.

@@ -49,13 +49,9 @@ def test_the_worked_example_parses_exactly_as_the_scenario_describes():
         NodeKind.LLM,
     ]
     assert [s.operation for s in spans] == [None, "demo-model", "lookup", "demo-model"]
-    # Payload states, per FIXTURES.md §7: absent is not empty.
-    assert [s.inputs.state for s in spans] == [
-        PayloadState.PRESENT,
-        PayloadState.ABSENT,
-        PayloadState.PRESENT,
-        PayloadState.ABSENT,
-    ]
+    # Every LLM span reports both: the instrumentor emits input.value on
+    # every model call, which the old rendering of this fixture omitted.
+    assert [s.inputs.state for s in spans] == [PayloadState.PRESENT] * 4
     assert [s.outputs.state for s in spans] == [
         PayloadState.ABSENT,
         PayloadState.PRESENT,
@@ -68,9 +64,20 @@ def test_the_worked_example_parses_exactly_as_the_scenario_describes():
     # The pairing the whole scenario exists for.
     assert (spans[1].call_ids, spans[1].call_role) == (("call_a",), CallRole.REQUESTER)
     assert (spans[2].call_ids, spans[2].call_role) == (("call_a",), CallRole.FULFILLER)
-    # The clean case: nothing unmapped, nothing diagnosed.
-    assert all(s.unmapped == () for s in spans)
-    assert all(s.diagnostics == () for s in spans)
+    # The pairing this scenario exists for -- and NOT a second one. s3
+    # carries the same id in its input history and requested nothing.
+    assert spans[3].call_ids == ()
+    assert spans[3].call_role is None
+
+    # Real telemetry carries more than this library normalizes, and those keys
+    # are reported rather than dropped. Including the echoed ids.
+    echoed = [key for key in spans[3].unmapped if "tool_call" in key]
+    assert echoed == [
+        "llm.input_messages.1.message.tool_calls.0.tool_call.function.name",
+        "llm.input_messages.1.message.tool_calls.0.tool_call.id",
+        "llm.input_messages.2.message.tool_call_id",
+    ]
+    assert [d.code for d in spans[3].diagnostics] == [codes.UNMAPPED_ATTRIBUTES]
 
 
 def test_every_record_keeps_its_verbatim_source():
@@ -316,7 +323,42 @@ def test_a_requester_is_recognized_from_the_dotted_message_attribute():
     assert (span.call_ids, span.call_role) == (("call_a",), CallRole.REQUESTER)
 
 
-def test_a_requester_is_recognized_from_an_id_stated_in_the_output_payload():
+def test_an_id_echoed_in_input_history_is_not_a_request():
+    # The defect a captured trace found: a follow-up turn must resend the
+    # conversation, so the previous turn's call arrives as INPUT context. A
+    # rule matching the id by suffix alone reads that as a second request and
+    # the builder emits `warrant=explicit` for a relation nobody stated.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.tool_calls.0.tool_call.id": "call_a",
+            "llm.input_messages.2.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.call_ids == ()
+    assert span.call_role is None
+    # Not consumed, therefore reported. An echo is evidence of context, and
+    # the library has no edge kind for that.
+    assert "llm.input_messages.2.message.tool_call_id" in span.unmapped
+
+
+def test_a_span_that_both_originates_and_echoes_is_a_requester_of_its_own_only():
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.tool_calls.0.tool_call.id": "call_earlier",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_now",
+        }
+    )
+    assert span.call_ids == ("call_now",)
+    assert span.call_role is CallRole.REQUESTER
+
+
+def test_an_id_in_the_output_payload_alone_is_not_a_request():
+    # The payload path this adapter used to have. No observed instrumentor
+    # puts tool calls at the top level of output.value -- OpenAI nests them
+    # under choices[0].message -- so the path existed only because a
+    # hand-authored fixture used that shape.
     span = span_of(
         {
             "openinference.span.kind": "LLM",
@@ -324,7 +366,8 @@ def test_a_requester_is_recognized_from_an_id_stated_in_the_output_payload():
             "output.mime_type": "application/json",
         }
     )
-    assert (span.call_ids, span.call_role) == (("call_a",), CallRole.REQUESTER)
+    assert span.call_ids == ()
+    assert span.call_role is None
 
 
 def test_a_span_with_no_id_gets_no_pairing_at_all():
@@ -336,15 +379,12 @@ def test_a_span_with_no_id_gets_no_pairing_at_all():
 
 def test_several_requested_calls_are_all_carried():
     # One LLM span requesting several tools at once is how current agent
-    # frameworks work, not an edge case. All of the ids travel, and nothing
-    # has to be reported as unmapped to avoid dropping one.
+    # frameworks work, not an edge case. All of the ids travel.
     span = span_of(
         {
             "openinference.span.kind": "LLM",
-            "output.value": json.dumps(
-                {"tool_calls": [{"id": "call_a"}, {"id": "call_b"}]}
-            ),
-            "output.mime_type": "application/json",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+            "llm.output_messages.0.message.tool_calls.1.tool_call.id": "call_b",
         }
     )
     assert span.call_ids == ("call_a", "call_b")
@@ -352,13 +392,12 @@ def test_several_requested_calls_are_all_carried():
     assert codes_of(span) == []
 
 
-def test_duplicate_ids_across_the_two_sources_are_not_repeated():
+def test_the_same_id_stated_twice_on_one_span_is_carried_once():
     span = span_of(
         {
             "openinference.span.kind": "LLM",
             "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
-            "output.value": json.dumps({"tool_calls": [{"id": "call_a"}]}),
-            "output.mime_type": "application/json",
+            "llm.output_messages.1.message.tool_calls.0.tool_call.id": "call_a",
         }
     )
     assert span.call_ids == ("call_a",)

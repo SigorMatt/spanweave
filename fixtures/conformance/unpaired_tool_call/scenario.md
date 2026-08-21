@@ -29,15 +29,20 @@ Node order: s0, s1, s2.
 
 ## Payloads
 
-s1 reports an output (the requested call, parsed). Everything else is
-`absent`.
+s1 reports both, as every LLM span in this dialect does. s0 and s2 report
+neither.
 
 ## Diagnostics
 
 | Code | Count | On |
 |---|---|---|
+| `unmapped_attributes` | 1 | s1 |
 | `unpaired_call` | 1 | s1 |
 | `unpaired_result` | 1 | s2 |
+
+s1 states its requested id in `llm.output_messages.0.message.tool_calls.0.tool_call.id`
+— the form the instrumentor really emits — and s2 answers a different id in
+`tool_call.id`. Nothing joins them, and nothing pretends to.
 
 ## Dialects
 

@@ -109,13 +109,17 @@ def test_inspect_counts_nodes_edges_and_diagnostics(capsys):
     # Edges by kind AND by warrant, which is the distinction that matters.
     assert "parent (explicit): 3" in printed
     assert "temporal (derived): 2" in printed
-    assert "diagnostics: 0" in printed
+    # info-level only: real telemetry carries keys this library does not
+    # normalize, and reports them rather than dropping them.
+    assert "diagnostics: 2" in printed
+    assert "unmapped_attributes: 2" in printed
 
 
 def test_inspect_reports_payload_availability(capsys):
     main(["inspect", TRACE])
     printed = capsys.readouterr().out
-    assert "inputs  absent: 2" in printed
+    assert "inputs  present: 4" in printed
+    assert "outputs absent: 1" in printed
     assert "outputs present: 3" in printed
 
 

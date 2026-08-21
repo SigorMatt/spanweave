@@ -71,6 +71,15 @@ OUTPUT_VALUE = "output.value"
 OUTPUT_MIME = "output.mime_type"
 TOOL_NAME = "tool.name"
 TOOL_CALL_ID = "tool_call.id"
+
+# A requested call id, and ONLY from the span's own output. The dialect marks
+# who spoke in the message-list prefix -- `output_messages` is what the model
+# said, `input_messages` is what was shown to it -- and a follow-up turn
+# carries the previous turn's tool call in its input, because the protocol
+# requires the history to be resent. Matching the suffix alone would read that
+# echo as a second request (see `tool_call_history_echo`).
+OUTPUT_MESSAGES = "llm.output_messages."
+CALL_ID_SUFFIX = ".tool_call.id"
 LLM_MODEL = "llm.model_name"
 EMBEDDING_MODEL = "embedding.model_name"
 TOKEN_PREFIX = "llm.token_count."
@@ -173,7 +182,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     operation, model = _operation(attributes, consumed)
     if model is not None:
         normalized["model"] = model
-    call_ids, call_role = _call(attributes, outputs, consumed)
+    call_ids, call_role = _call(attributes, consumed)
     status, status_note = _status(record)
 
     unmapped = sorted(
@@ -358,21 +367,25 @@ def _operation(
 
 
 def _call(
-    attributes: Mapping[str, JsonValue],
-    outputs: Payload,
-    consumed: set[str],
+    attributes: Mapping[str, JsonValue], consumed: set[str]
 ) -> tuple[tuple[str, ...], CallRole | None]:
     """Recover the call ids the dialect carries. Never guess one.
 
     A span that *answers* a call carries ``tool_call.id``. A span that
     *requests* one -- or several, which is the common case -- states the ids
-    in its output messages, either in the dotted message attributes or inside
-    the output payload when the instrumentor puts the raw response there. Both
-    are the dialect stating an id; neither is a comparison of values
-    (`SPEC.md` §4.2).
+    in **its own output messages**. Both are the dialect stating an id.
 
-    Order is document order, deduplicated, and it does not matter: the builder
-    joins on the ids themselves and sorts what it emits.
+    The `output_messages` prefix is load-bearing, not decoration. The same id
+    reappears on the *next* turn's span under `input_messages`, because the
+    protocol requires the whole conversation to be resent -- so a rule that
+    matched the id anywhere would make a span that requested nothing look like
+    a requester, and the builder would emit a `call_result` edge with
+    `warrant=explicit` for a relation the telemetry never stated. An echo of a
+    reference is not the reference (`SPEC.md` §4.4).
+
+    Ids echoed in input context are left unconsumed, so they surface in
+    `unmapped` and are reported rather than dropped. They are evidence of
+    context, and the library has no edge kind for that.
     """
     consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
@@ -381,34 +394,15 @@ def _call(
 
     requested: list[str] = []
     for key in sorted(str(k) for k in attributes):
-        if key.endswith(".tool_call.id") or key.endswith(".tool_call_id"):
+        if key.startswith(OUTPUT_MESSAGES) and key.endswith(CALL_ID_SUFFIX):
             consumed.add(key)
             found = _as_str(attributes[key])
             if found is not None and found not in requested:
                 requested.append(found)
-    for found in _call_ids_in(outputs.value):
-        if found not in requested:
-            requested.append(found)
 
     if not requested:
         return (), None
     return tuple(requested), CallRole.REQUESTER
-
-
-def _call_ids_in(value: JsonValue) -> list[str]:
-    """Tool-call ids stated inside a parsed output payload."""
-    if not isinstance(value, dict):
-        return []
-    calls = value.get("tool_calls")
-    if not isinstance(calls, list):
-        return []
-    found = []
-    for call in calls:
-        if isinstance(call, dict):
-            identifier = _as_str(call.get("id"))
-            if identifier is not None:
-                found.append(identifier)
-    return found
 
 
 def _status(record: Mapping[str, JsonValue]) -> tuple[Status, str | None]:

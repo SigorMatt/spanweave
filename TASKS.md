@@ -481,6 +481,61 @@ Only the `llm` spans come from the instrumentor, and the printed provenance
 template says so — "captured from real instrumentation" is otherwise true of
 some spans and not others.
 
+### First captured trace — a pairing defect, and four unrepresentative fixtures
+
+The first real capture disagreed with the corpus, and `FIXTURES.md` §6 decided
+it. **This is the most valuable artifact of Phase 1 review**: the diff below is
+the record of what our reading of the dialect got wrong.
+
+**The defect.** One tool span acquired **two** `call_result` edges, both
+`warrant=explicit`. Only one LLM span had originated the call id; the other
+re-sent it in message history, because the protocol requires a follow-up turn
+to resend the conversation. The library asserted a request-fulfilment relation
+the telemetry never stated — and nothing downstream could have told.
+
+**The dialect distinguishes them; the adapter ignored the part that does.** The
+originator states the id under `llm.`**`output_messages`**`.*.tool_call.id`; the
+echo appears under `llm.`**`input_messages`**`.*`. The rule matched the *suffix*
+and never looked at the message list. Fixed: a requester id is taken only from
+what a span itself produced. Echoed ids are left unmapped, so they are reported
+rather than dropped. `SPEC.md` §4.4 now states the principle dialect-agnostically.
+
+**Expected graphs that moved, and why.** Structure — nodes and edges — did not
+change in any of them. What changed is everything the old renderings had
+quietly asserted about the dialect:
+
+| Scenario | What moved | Cause |
+|---|---|---|
+| `llm_tool_llm` | s1/s3 `inputs` `absent`→`present`; s1 `outputs.value` reshaped; diagnostics `[]`→`unmapped_attributes` ×2 | omitted `input.value` (emitted on **every** LLM span); tool calls moved from a top-level `output.value` key to `llm.output_messages.*`; the rendering carried only keys the library maps |
+| `shuffled_order` | identical to its twin | it is the same records reordered |
+| `parallel_tool_calls` | s1 `inputs` `absent`→`present`; +`unmapped_attributes` ×1 | same rendering corrections; **both** `call_result` edges unchanged |
+| `unpaired_tool_call` | s1 `inputs` `absent`→`present`; +`unmapped_attributes` ×1 | same; both unpaired diagnostics unchanged |
+
+`llm_tool_llm`'s expectation was the one frozen by a human before any code
+existed. It moved because a captured trace disagreed with it, which is the only
+circumstance in which it may (`FIXTURES.md` §8).
+
+**New scenario `tool_call_history_echo`** isolates the property. Verified as a
+regression test rather than assumed: simulating the old rule against it
+produces the spurious second edge. The corrected `llm_tool_llm` catches it too;
+`parallel_tool_calls` does **not** — it has no follow-up turn, so no echo — which
+is why the isolated scenario earns its place.
+
+**Removed:** the adapter path that read tool-call ids from a top-level
+`tool_calls` key inside `output.value`. No observed instrumentor emits that
+shape — OpenAI nests them under `choices[0].message` — so the path existed only
+because a hand-authored fixture asked for it.
+
+**The lesson, written where the next contributor will meet it:** `FIXTURES.md`
+§5.1 (derive a rendering from observed output, never from a reading; omission is
+fine, misstatement is not) and `ADAPTERS.md` §5 and its checklist.
+
+`OPEN_QUESTIONS.md` §9 records `llm.finish_reason` (`tool_calls` on the
+originator, `stop` on the echo) as an available second signal, deliberately
+**not** wired in: one observed dialect is not enough to justify a second rule.
+The corpus keeps the attribute in its renderings so the signal is there the day
+it is reopened.
+
 **Two notes for whoever picks this up next.**
 
 The reviewer's `review_corpus.py` flags `declared_data_edge` and

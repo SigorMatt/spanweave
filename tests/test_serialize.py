@@ -45,7 +45,9 @@ def test_a_node_carries_everything_the_model_says_it_does(document):
         "total_tokens": None,
         "extra": {},
     }
-    assert node["inputs"]["state"] == "absent"
+    # The instrumentor emits input.value on every LLM span (the fixture was
+    # corrected against a captured trace).
+    assert node["inputs"]["state"] == "present"
     assert node["provenance"]["adapter_id"] == "openinference"
 
 

@@ -96,6 +96,15 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   joins on the ids and sorts what it emits.
 - `call_role` — `requester` on the span that asked, `fulfiller` on the span that
   answered. One role per span, shared by all of its ids.
+- **Take a requester id only from what the span itself produced.** Nearly
+  every chat protocol resends the conversation on each turn, so a later span
+  carries the earlier turn's call id as *input context*. If you match the id
+  wherever it appears, that span becomes a requester and the builder states a
+  request-fulfilment relation nobody asserted. Find the part of the dialect
+  that distinguishes what the model **said** from what it was **shown** — in
+  OpenInference it is `llm.output_messages.*` versus `llm.input_messages.*` —
+  and key on it. An echo of a reference is not the reference. Leave the echoed
+  ids unmapped so they are reported rather than dropped.
 - If the dialect doesn't carry ids, leave `call_ids` empty and `call_role`
   `None`. **Do not pair by name,
   proximity, or timing** — a guessed pairing is indistinguishable from a real
@@ -126,6 +135,16 @@ An adapter without fixtures is not mergeable.
 
 1. Render **every** scenario in `fixtures/conformance/` in your dialect,
    including all the degenerate ones (`FIXTURES.md` §3).
+
+   **Render from output you have observed, not from your reading of the
+   dialect's spec.** Run the instrumentor, look at what comes out, and write
+   that down. A rendering built from your understanding tests your
+   understanding: your adapter will agree with it, every test will pass, and
+   both will be wrong about the world in the same way. That is not
+   hypothetical — it is how all four call-bearing fixtures in this corpus came
+   to omit the conversation history that every real follow-up turn carries,
+   and how a pairing defect survived a full test suite until the first
+   captured trace (`FIXTURES.md` §5).
 2. Your renderings must produce the **existing** `expected/graph.json`,
    unmodified. If they don't, the adapter is wrong — or the model is, and that
    is a discussion, not an edit to the expectation (`FIXTURES.md` §4).
@@ -143,6 +162,10 @@ An adapter without fixtures is not mergeable.
 - [ ] All five payload states distinguished; absent ≠ empty.
 - [ ] No inferred pairings, no inferred data edges, no invented ids.
 - [ ] `unmapped` keys recorded; `raw` preserved verbatim.
+- [ ] Renderings derived from **observed instrumentor output**, not from a
+      reading of the dialect's spec.
+- [ ] Requester ids taken only from what a span itself produced — history
+      echoes do not pair.
 - [ ] All conformance scenarios rendered and passing against the **unmodified**
       expected graphs.
 - [ ] One captured fixture with provenance.
