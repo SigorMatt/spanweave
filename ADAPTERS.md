@@ -90,10 +90,14 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 **Usage** — token counts only; no prices, ever (`SPEC.md` §9).
 
 **Call pairing** — the highest-value thing you can recover.
-- `call_id` — the dialect's `tool_call_id` / `function_call_id` / equivalent.
+- `call_ids` — the dialect's `tool_call_id` / `function_call_id` / equivalent.
+  A **tuple**: one span routinely requests several calls at once, and all of
+  them belong in it. Deduplicate, and do not worry about order — the builder
+  joins on the ids and sorts what it emits.
 - `call_role` — `requester` on the span that asked, `fulfiller` on the span that
-  answered.
-- If the dialect doesn't carry ids, leave both `None`. **Do not pair by name,
+  answered. One role per span, shared by all of its ids.
+- If the dialect doesn't carry ids, leave `call_ids` empty and `call_role`
+  `None`. **Do not pair by name,
   proximity, or timing** — a guessed pairing is indistinguishable from a real
   one downstream, which is exactly the harm the warrant system exists to
   prevent.

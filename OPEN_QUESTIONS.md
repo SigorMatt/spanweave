@@ -175,3 +175,40 @@ becomes an ordinary operational option.
 **(d) Provisional:** keep the prohibition. If P3 fires, **do not wave it
 through** on the technicality that it reuses an existing `EdgeKind` and warrant
 — decide it here, deliberately, as the policy question it is.
+
+---
+
+## 8. Can one span be both a requester and a fulfiller?
+
+**(a)** `NormalizedSpan` carries `call_ids` — several, since one model turn
+routinely requests several tools — but a **single** `call_role` shared by all of
+them. A span that *fulfils* its parent's call while *requesting* its own cannot
+be expressed. Should the seam instead carry `(id, role)` pairs?
+
+**(b)** The shape is not hypothetical: **agent-as-tool** is a real and
+near-term pattern. A sub-agent invoked as a tool fulfils the call that invoked
+it and requests calls of its own, and an instrumentor that labels both ends
+would produce exactly this span. Under the current seam an adapter must choose
+one role, so one of the two relations is silently unavailable — and because the
+seam simply has nowhere to put it, nothing would be reported: the failure is
+invisible rather than diagnosed, which is worse than the multi-id limitation
+this replaced.
+
+Against changing it now: the seam is explicitly **not** a public contract
+(`DESIGN.md` §3.1), so the change stays cheap for as long as we wait, and no
+dialect we have read is known to label both ends of an agent-as-tool span
+today. Building for it before seeing one emitted is buying generality on an
+argument rather than on evidence — which is the exact move `PREDICTIONS.md`
+exists to catch.
+
+**(c)** Phase 2, and specifically the second adapter plus the captured traces.
+The question resolves the moment one real instrumentor labels both ends of a
+sub-agent span. Look for it deliberately rather than waiting to trip over it.
+
+**(d) Provisional:** `call_ids` + one `call_role` per span. If agent-as-tool
+appears, the fix is `calls: tuple[CallRef, ...]` where each `CallRef` carries
+its own id and role — roughly the same size as the change that introduced
+`call_ids`, and confined to the seam, the adapter and one builder loop.
+
+**Recorded during Phase 1 review**, at the same time as the `call_ids` change,
+so that Phase 2 recognises this case rather than rediscovering it.

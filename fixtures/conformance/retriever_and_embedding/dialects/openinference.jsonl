@@ -1,0 +1,3 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"chain.answer","start_time":1000.0,"end_time":1003.0,"status":"OK","attributes":{"openinference.span.kind":"CHAIN"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"embedding.query","start_time":1000.2,"end_time":1000.6,"status":"OK","attributes":{"openinference.span.kind":"EMBEDDING","embedding.model_name":"demo-embed","input.value":"order status","input.mime_type":"text/plain"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"retriever.search","start_time":1000.8,"end_time":1001.4,"status":"OK","attributes":{"openinference.span.kind":"RETRIEVER","output.value":"[{\"id\":\"doc-1\"},{\"id\":\"doc-2\"}]","output.mime_type":"application/json"}}

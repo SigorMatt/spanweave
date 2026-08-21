@@ -1,0 +1,110 @@
+{
+  "diagnostics": [],
+  "edges": [
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s1",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s2",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s2",
+      "kind": "temporal",
+      "src": "s1",
+      "warrant": "derived"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 0,
+    "edge_count": 3,
+    "node_count": 3,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {},
+      "ended_at": 1003.0,
+      "id": "s0",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "chain",
+      "name": "chain.answer",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.0,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {
+        "model": "demo-embed"
+      },
+      "ended_at": 1000.6,
+      "id": "s1",
+      "inputs": {
+        "mime": "text/plain",
+        "state": "present",
+        "value": "order status"
+      },
+      "kind": "embedding",
+      "name": "embedding.query",
+      "operation": "demo-embed",
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1001.4,
+      "id": "s2",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "retriever",
+      "name": "retriever.search",
+      "operation": null,
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": [
+          {
+            "id": "doc-1"
+          },
+          {
+            "id": "doc-2"
+          }
+        ]
+      },
+      "started_at": 1000.8,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    }
+  ]
+}

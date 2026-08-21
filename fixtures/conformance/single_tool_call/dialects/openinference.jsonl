@@ -1,0 +1,1 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"tool.lookup","start_time":1000.0,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup","input.value":"{\"order\":\"A-1\"}","input.mime_type":"application/json","output.value":"{\"status\":\"shipped\"}","output.mime_type":"application/json"}}

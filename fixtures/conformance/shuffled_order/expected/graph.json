@@ -1,0 +1,168 @@
+{
+  "diagnostics": [],
+  "edges": [
+    {
+      "basis": "tool_call_id",
+      "dst": "s2",
+      "kind": "call_result",
+      "src": "s1",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s1",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s2",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s3",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s2",
+      "kind": "temporal",
+      "src": "s1",
+      "warrant": "derived"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s3",
+      "kind": "temporal",
+      "src": "s2",
+      "warrant": "derived"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 0,
+    "edge_count": 6,
+    "node_count": 4,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {},
+      "ended_at": 1004.0,
+      "id": "s0",
+      "inputs": {
+        "mime": "text/plain",
+        "state": "present",
+        "value": "Look up the order status."
+      },
+      "kind": "agent",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.0,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {
+        "model": "demo-model"
+      },
+      "ended_at": 1001.0,
+      "id": "s1",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "llm",
+      "operation": "demo-model",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "tool_calls": [
+            {
+              "arguments": {
+                "order": "A-1"
+              },
+              "id": "call_a",
+              "name": "lookup"
+            }
+          ]
+        }
+      },
+      "started_at": 1000.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": {
+        "extra": {},
+        "input_tokens": 42,
+        "output_tokens": 17,
+        "total_tokens": null
+      }
+    },
+    {
+      "attributes": {},
+      "ended_at": 1002.0,
+      "id": "s2",
+      "inputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "order": "A-1"
+        }
+      },
+      "kind": "tool",
+      "operation": "lookup",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "status": "shipped"
+        }
+      },
+      "started_at": 1001.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {
+        "model": "demo-model"
+      },
+      "ended_at": 1003.0,
+      "id": "s3",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "llm",
+      "operation": "demo-model",
+      "outputs": {
+        "mime": "text/plain",
+        "state": "present",
+        "value": "Your order has shipped."
+      },
+      "started_at": 1002.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": {
+        "extra": {},
+        "input_tokens": 61,
+        "output_tokens": 12,
+        "total_tokens": null
+      }
+    }
+  ]
+}

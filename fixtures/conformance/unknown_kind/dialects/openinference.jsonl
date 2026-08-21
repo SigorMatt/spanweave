@@ -1,0 +1,2 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1002.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"guardrail.check","start_time":1000.2,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"GUARDRAIL"}}

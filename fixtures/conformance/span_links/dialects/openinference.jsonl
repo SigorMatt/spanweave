@@ -1,0 +1,2 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1002.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT"},"links":[{"trace_id":"t1","span_id":"s1"}]}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"chain.step","start_time":1000.2,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"CHAIN"},"links":[{"trace_id":"t2","span_id":"s9"}]}
