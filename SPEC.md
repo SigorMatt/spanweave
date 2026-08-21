@@ -213,7 +213,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unknown_span_kind` | the dialect's kind did not map to a `NodeKind` |
 | `unmapped_attributes` | attributes the adapter did not normalize (names only) |
 | `payload_parse_failed` | JSON mime type but the value did not parse |
-| `orphan_parent` | `parent` reference to a span not present in the trace |
+| `orphan_parent` | `parent` reference to a span not present in the trace (§4.0 — a dangling `link` is **not** reported, and why) |
 | `unpaired_call` | a requested tool call with no fulfilling span |
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
@@ -346,6 +346,32 @@ graph**: links are routinely cross-trace, and requiring the target to be
 present would make the kind useless for the case it exists to describe. A
 consumer that only wants intra-trace structure filters on kind, which it is
 already doing.
+
+### 4.0 Dangling references: why `link` and `parent` differ
+
+`parent` and `link` meet the identical situation — a reference to a span that
+is not in this input — and handle it in **opposite** ways. That is deliberate,
+and it is a statement about the two relations rather than an inconsistency:
+
+| | Reference to an absent span | Rationale |
+|---|---|---|
+| `parent` | **no edge**, plus an `orphan_parent` diagnostic (§3.7); the node is kept | A parent is a containment claim *within* one trace. A dangling one means the trace is incomplete — sampled, filtered, or exported mid-run — which is worth reporting. |
+| `link` | **edge emitted**, `dst` naming the absent span; no diagnostic | A link is routinely *about* another trace. A dangling one is the normal case, not a defect, and reporting it would be reporting that the feature worked. |
+
+Consequences a consumer must know:
+
+- **A `link` edge's `dst` may not resolve.** `graph.node(dst)` returns `None`,
+  and that is the contract, not a bug. Node-returning queries (`children`,
+  `parents`, `descendants`, `ancestors`, `reachable`, `paths`) report ids
+  exactly as the edges name them, foreign targets included: the edge exists and
+  names its target, so dropping the id would hide a relation the telemetry
+  stated. Resolve defensively.
+- **No other edge kind may dangle.** `parent`, `call_result` and `data` edges
+  connect nodes that are present; `validate()` enforces exactly that asymmetry
+  (§7).
+- Node-returning queries report each node **once**, even when several kinds of
+  edge connect the same pair. One result per *relation* is what `edges()` is
+  for.
 
 ### 4.1 Warrant
 

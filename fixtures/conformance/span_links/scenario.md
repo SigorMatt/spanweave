@@ -26,6 +26,13 @@ to be present would make the kind useless for the case it exists for
 (`SPEC.md` §4). `graph.node("s9")` returns `None`, and that is the honest
 answer.
 
+Note the deliberate contrast with `orphan_parent`, which meets the identical
+situation — a reference to an absent span — and does the **opposite**:
+suppresses the edge and emits a diagnostic. A dangling parent means the trace
+is incomplete, which is worth reporting; a dangling link is the normal case,
+and reporting it would be reporting that the feature worked. `SPEC.md` §4.0
+states the asymmetry and what follows from it for a consumer resolving ids.
+
 No temporal edges: each sibling group has one member.
 
 Node order: s0, s1.

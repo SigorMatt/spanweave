@@ -44,6 +44,21 @@ STATED_KINDS = frozenset({EdgeKind.PARENT, EdgeKind.CALL_RESULT})
 Kinds = Iterable[EdgeKind | str] | EdgeKind | str | None
 
 
+def _once(ids: Iterable[NodeId]) -> tuple[NodeId, ...]:
+    """Each id once, in first-appearance order.
+
+    Node-returning queries answer "which nodes", so a node reached by two
+    kinds of edge is still one node -- `len(children(x))` must be a count of
+    nodes, not of relations. Ask `edges()` when you want one result per
+    relation. Order comes from the edge tuple, which is already totally
+    ordered, so deduplicating here keeps determinism intact.
+    """
+    seen: dict[NodeId, None] = {}
+    for node_id in ids:
+        seen.setdefault(node_id, None)
+    return tuple(seen)
+
+
 def _kinds(selector: Kinds) -> frozenset[str] | None:
     if selector is None:
         return None
@@ -122,6 +137,15 @@ class Graph:
         ``None`` rather than an exception because a `link` edge may legally
         point at a span that has no node here (`SPEC.md` §4): asking about a
         foreign target is a normal thing to do, not an error.
+
+        **This is the contract, and traversal relies on it.** ``children``,
+        ``parents``, ``descendants``, ``ancestors``, ``reachable`` and
+        ``paths`` report ids exactly as the edges name them, including a
+        cross-trace link target that has no node here. The edge exists and
+        names its target; dropping the id would hide a relation the telemetry
+        stated. So a consumer resolving ids must expect ``None`` --
+        ``graph.node(i).kind`` is the line that will bite, and
+        ``[n for i in ids if (n := graph.node(i))]`` is the fix.
         """
         return self._index.get(node_id)
 
@@ -172,22 +196,25 @@ class Graph:
     def children(
         self, node_id: NodeId, edge_kinds: Kinds = EdgeKind.PARENT
     ) -> tuple[NodeId, ...]:
-        """Ids this node points at, over the chosen kinds."""
-        wanted = _kinds(edge_kinds)
-        return tuple(
-            edge.dst
-            for edge in self._out.get(node_id, ())
-            if wanted is None or str(edge.kind) in wanted
-        )
+        """Ids this node points at, over the chosen kinds. Each once."""
+        return _once(edge.dst for edge in self._select(self._out, node_id, edge_kinds))
 
     def parents(
         self, node_id: NodeId, edge_kinds: Kinds = EdgeKind.PARENT
     ) -> tuple[NodeId, ...]:
-        """Ids that point at this node, over the chosen kinds."""
+        """Ids that point at this node, over the chosen kinds. Each once."""
+        return _once(edge.src for edge in self._select(self._in, node_id, edge_kinds))
+
+    def _select(
+        self,
+        adjacency: Mapping[NodeId, tuple[Edge, ...]],
+        node_id: NodeId,
+        edge_kinds: Kinds,
+    ) -> tuple[Edge, ...]:
         wanted = _kinds(edge_kinds)
         return tuple(
-            edge.src
-            for edge in self._in.get(node_id, ())
+            edge
+            for edge in adjacency.get(node_id, ())
             if wanted is None or str(edge.kind) in wanted
         )
 
@@ -244,19 +271,20 @@ class Graph:
         Simple: a node appears at most once, so a cycle bounds the search
         instead of unbounding it.
         """
-        wanted = _kinds(edge_kinds)
         found: list[tuple[NodeId, ...]] = []
 
         def walk(current: NodeId, trail: tuple[NodeId, ...]) -> None:
             if current == dst and len(trail) > 0:
                 found.append((*trail, current))
                 return
-            for edge in self._out.get(current, ()):
-                if wanted is not None and str(edge.kind) not in wanted:
+            # Unique next ids, not unique edges: two kinds may connect the
+            # same pair, and walking both would return the same path twice.
+            for nxt in _once(
+                edge.dst for edge in self._select(self._out, current, edge_kinds)
+            ):
+                if nxt in trail or nxt == current:
                     continue
-                if edge.dst in trail or edge.dst == current:
-                    continue
-                walk(edge.dst, (*trail, current))
+                walk(nxt, (*trail, current))
 
         walk(src, ())
         return tuple(found)
