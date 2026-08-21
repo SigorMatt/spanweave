@@ -148,7 +148,7 @@ def test_what_the_harness_writes_is_what_the_adapter_reads():
     # Sorted by start time, so the tool span (earlier here) comes first.
     assert spans[0].call_role is CallRole.FULFILLER
     assert spans[1].call_role is CallRole.REQUESTER
-    assert spans[0].call_id == spans[1].call_id == "toolu_x"
+    assert spans[0].call_ids == spans[1].call_ids == ("toolu_x",)
     # And nothing the instrumentor emitted was left unaccounted for.
     assert all(span.unmapped == () for span in spans)
 

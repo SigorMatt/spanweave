@@ -74,6 +74,7 @@ implementation gets wrong.
 |---|---|
 | `single_tool_call` | the minimum viable trace |
 | `llm_tool_llm` | `call_result` pairing across an LLM/tool boundary |
+| `parallel_tool_calls` | **several** calls requested by one span, all paired |
 | `parallel_tools` | sibling ordering and tie-breaks |
 | `nested_agents` | multi-level `parent`, sub-agent containment |
 | `retriever_and_embedding` | the less common node kinds |

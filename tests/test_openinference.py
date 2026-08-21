@@ -66,8 +66,8 @@ def test_the_worked_example_parses_exactly_as_the_scenario_describes():
     assert [s.usage is None for s in spans] == [True, False, True, False]
     assert spans[1].usage.total_tokens is None
     # The pairing the whole scenario exists for.
-    assert (spans[1].call_id, spans[1].call_role) == ("call_a", CallRole.REQUESTER)
-    assert (spans[2].call_id, spans[2].call_role) == ("call_a", CallRole.FULFILLER)
+    assert (spans[1].call_ids, spans[1].call_role) == (("call_a",), CallRole.REQUESTER)
+    assert (spans[2].call_ids, spans[2].call_role) == (("call_a",), CallRole.FULFILLER)
     # The clean case: nothing unmapped, nothing diagnosed.
     assert all(s.unmapped == () for s in spans)
     assert all(s.diagnostics == () for s in spans)
@@ -303,7 +303,7 @@ def test_a_token_count_that_is_not_a_count_is_reported_as_unmapped():
 
 def test_a_tool_span_carrying_a_call_id_is_the_fulfiller():
     span = span_of({"openinference.span.kind": "TOOL", "tool_call.id": "call_a"})
-    assert (span.call_id, span.call_role) == ("call_a", CallRole.FULFILLER)
+    assert (span.call_ids, span.call_role) == (("call_a",), CallRole.FULFILLER)
 
 
 def test_a_requester_is_recognized_from_the_dotted_message_attribute():
@@ -313,7 +313,7 @@ def test_a_requester_is_recognized_from_the_dotted_message_attribute():
             "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
         }
     )
-    assert (span.call_id, span.call_role) == ("call_a", CallRole.REQUESTER)
+    assert (span.call_ids, span.call_role) == (("call_a",), CallRole.REQUESTER)
 
 
 def test_a_requester_is_recognized_from_an_id_stated_in_the_output_payload():
@@ -324,17 +324,20 @@ def test_a_requester_is_recognized_from_an_id_stated_in_the_output_payload():
             "output.mime_type": "application/json",
         }
     )
-    assert (span.call_id, span.call_role) == ("call_a", CallRole.REQUESTER)
+    assert (span.call_ids, span.call_role) == (("call_a",), CallRole.REQUESTER)
 
 
 def test_a_span_with_no_id_gets_no_pairing_at_all():
     # Not by name, not by proximity, not by timing (SPEC.md §4.4).
     span = span_of({"openinference.span.kind": "TOOL", "tool.name": "lookup"})
-    assert span.call_id is None
+    assert span.call_ids == ()
     assert span.call_role is None
 
 
-def test_several_requested_calls_are_reported_rather_than_dropped():
+def test_several_requested_calls_are_all_carried():
+    # One LLM span requesting several tools at once is how current agent
+    # frameworks work, not an edge case. All of the ids travel, and nothing
+    # has to be reported as unmapped to avoid dropping one.
     span = span_of(
         {
             "openinference.span.kind": "LLM",
@@ -344,9 +347,21 @@ def test_several_requested_calls_are_reported_rather_than_dropped():
             "output.mime_type": "application/json",
         }
     )
-    assert span.call_id == "call_a"
-    assert codes_of(span) == [codes.UNMAPPED_ATTRIBUTES]
-    assert span.diagnostics[0].source == ["call_b"]
+    assert span.call_ids == ("call_a", "call_b")
+    assert span.call_role is CallRole.REQUESTER
+    assert codes_of(span) == []
+
+
+def test_duplicate_ids_across_the_two_sources_are_not_repeated():
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+            "output.value": json.dumps({"tool_calls": [{"id": "call_a"}]}),
+            "output.mime_type": "application/json",
+        }
+    )
+    assert span.call_ids == ("call_a",)
 
 
 # --------------------------------------------------------------------------

@@ -97,10 +97,14 @@ class NormalizedSpan:
     inputs: Payload = field(default_factory=Payload.absent)
     outputs: Payload = field(default_factory=Payload.absent)
     usage: Usage | None = None
-    #: For `call_result` pairing. Left `None` when the dialect carries no id:
+    #: For `call_result` pairing. Empty when the dialect carries no id:
     #: pairing by name, proximity or timing is forbidden, because a guessed
     #: pairing is indistinguishable from a real one downstream (`SPEC.md` §4.4).
-    call_id: str | None = None
+    #:
+    #: A tuple because one span routinely requests **several** tool calls at
+    #: once, which is how current agent frameworks work. All of them share
+    #: this span's `call_role`.
+    call_ids: tuple[str, ...] = ()
     call_role: CallRole | None = None
     links: tuple[SpanLink, ...] = ()
     data_edges: tuple[DeclaredDataEdge, ...] = ()

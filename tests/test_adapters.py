@@ -218,6 +218,6 @@ def test_a_span_defaults_to_absent_payloads_and_no_pairing():
     assert span.inputs.state.value == "absent"
     assert span.outputs.state.value == "absent"
     # Never invented: no id in the dialect means no pairing at all.
-    assert span.call_id is None
+    assert span.call_ids == ()
     assert span.call_role is None
     assert span.links == () and span.data_edges == () and span.unmapped == ()

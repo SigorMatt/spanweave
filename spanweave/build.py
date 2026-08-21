@@ -301,10 +301,11 @@ def _call_result_edges(
     requesters: dict[str, list[NodeId]] = {}
     fulfillers: dict[str, list[NodeId]] = {}
     for span, node_id in zip(spans, ids, strict=True):
-        if span.call_id is None or span.call_role is None:
+        if not span.call_ids or span.call_role is None:
             continue
         side = requesters if span.call_role is CallRole.REQUESTER else fulfillers
-        side.setdefault(span.call_id, []).append(node_id)
+        for call_id in span.call_ids:
+            side.setdefault(call_id, []).append(node_id)
 
     edges = []
     for call_id in sorted(set(requesters) | set(fulfillers)):

@@ -39,7 +39,7 @@ def graph():
                 "s0",
                 started=1000.2,
                 kind=NodeKind.LLM,
-                call_id="call_a",
+                call_ids=("call_a",),
                 call_role=CallRole.REQUESTER,
             ),
             a_span(
@@ -47,7 +47,7 @@ def graph():
                 "s0",
                 started=1001.2,
                 kind=NodeKind.TOOL,
-                call_id="call_a",
+                call_ids=("call_a",),
                 call_role=CallRole.FULFILLER,
             ),
             a_span("s3", "s0", started=1002.2, kind=NodeKind.LLM),

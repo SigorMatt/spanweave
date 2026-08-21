@@ -173,7 +173,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     operation, model = _operation(attributes, consumed)
     if model is not None:
         normalized["model"] = model
-    call_id, call_role = _call(attributes, outputs, consumed, diagnostics)
+    call_ids, call_role = _call(attributes, outputs, consumed)
     status, status_note = _status(record)
 
     unmapped = sorted(
@@ -212,7 +212,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         inputs=inputs,
         outputs=outputs,
         usage=usage,
-        call_id=call_id,
+        call_ids=call_ids,
         call_role=call_role,
         links=_links(record),
         data_edges=_data_edges(record),
@@ -361,20 +361,23 @@ def _call(
     attributes: Mapping[str, JsonValue],
     outputs: Payload,
     consumed: set[str],
-    diagnostics: list[Diagnostic],
-) -> tuple[str | None, CallRole | None]:
-    """Recover the call id the dialect carries. Never guess one.
+) -> tuple[tuple[str, ...], CallRole | None]:
+    """Recover the call ids the dialect carries. Never guess one.
 
     A span that *answers* a call carries ``tool_call.id``. A span that
-    *requests* one states the id in its output messages -- either in the
-    dotted message attributes, or inside the output payload when the
-    instrumentor puts the raw response there. Both are the dialect stating an
-    id; neither is a comparison of values (`SPEC.md` §4.2).
+    *requests* one -- or several, which is the common case -- states the ids
+    in its output messages, either in the dotted message attributes or inside
+    the output payload when the instrumentor puts the raw response there. Both
+    are the dialect stating an id; neither is a comparison of values
+    (`SPEC.md` §4.2).
+
+    Order is document order, deduplicated, and it does not matter: the builder
+    joins on the ids themselves and sorts what it emits.
     """
     consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
-        return fulfilling, CallRole.FULFILLER
+        return (fulfilling,), CallRole.FULFILLER
 
     requested: list[str] = []
     for key in sorted(str(k) for k in attributes):
@@ -388,26 +391,8 @@ def _call(
             requested.append(found)
 
     if not requested:
-        return None, None
-    if len(requested) > 1:
-        # The seam holds one call id per span (SPEC.md §6). A span requesting
-        # several is a real shape the model does not yet express, so the extra
-        # ids are reported rather than dropped -- this is exactly what
-        # `unmapped_attributes` is for.
-        diagnostics.append(
-            Diagnostic(
-                code=UNMAPPED_ATTRIBUTES,
-                message=(
-                    "this span requests more than one tool call "
-                    f"({', '.join(requested)}); the model carries one call id "
-                    "per span, so only the first is paired and the rest are "
-                    "reported here"
-                ),
-                source=list(requested[1:]),
-                adapter=ADAPTER_ID,
-            )
-        )
-    return requested[0], CallRole.REQUESTER
+        return (), None
+    return tuple(requested), CallRole.REQUESTER
 
 
 def _call_ids_in(value: JsonValue) -> list[str]:

@@ -138,8 +138,8 @@ def test_a_parent_edge_is_never_derived():
 def test_a_call_and_its_result_are_joined_by_the_id_the_dialect_carried():
     graph = build(
         [
-            a_span("s1", call_id="call_a", call_role=CallRole.REQUESTER),
-            a_span("s2", call_id="call_a", call_role=CallRole.FULFILLER),
+            a_span("s1", call_ids=("call_a",), call_role=CallRole.REQUESTER),
+            a_span("s2", call_ids=("call_a",), call_role=CallRole.FULFILLER),
         ]
     )
     assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s1", "s2")]
@@ -152,8 +152,8 @@ def test_the_pairing_is_independent_of_the_parent_relation():
     graph = build(
         [
             a_span("s0"),
-            a_span("s1", "s0", call_id="call_a", call_role=CallRole.REQUESTER),
-            a_span("s2", "s0", call_id="call_a", call_role=CallRole.FULFILLER),
+            a_span("s1", "s0", call_ids=("call_a",), call_role=CallRole.REQUESTER),
+            a_span("s2", "s0", call_ids=("call_a",), call_role=CallRole.FULFILLER),
         ]
     )
     assert ("s1", "s2") in edges_of(graph, EdgeKind.CALL_RESULT)
@@ -163,7 +163,7 @@ def test_the_pairing_is_independent_of_the_parent_relation():
 def test_a_call_nobody_answered_is_diagnosed_not_invented():
     graph = build(
         [
-            a_span("s1", call_id="call_a", call_role=CallRole.REQUESTER),
+            a_span("s1", call_ids=("call_a",), call_role=CallRole.REQUESTER),
             a_span("s2", name="tool.lookup"),
         ]
     )
@@ -173,7 +173,7 @@ def test_a_call_nobody_answered_is_diagnosed_not_invented():
 
 
 def test_a_result_nobody_asked_for_is_diagnosed_too():
-    graph = build([a_span("s2", call_id="call_a", call_role=CallRole.FULFILLER)])
+    graph = build([a_span("s2", call_ids=("call_a",), call_role=CallRole.FULFILLER)])
     assert codes_of(graph) == [codes.UNPAIRED_RESULT]
 
 
@@ -192,16 +192,43 @@ def test_pairing_never_falls_back_to_name_or_proximity():
 def test_two_spans_fulfilling_one_call_produce_two_explicit_edges():
     graph = build(
         [
-            a_span("s1", call_id="c", call_role=CallRole.REQUESTER),
-            a_span("s2", call_id="c", call_role=CallRole.FULFILLER),
-            a_span("s3", call_id="c", call_role=CallRole.FULFILLER),
+            a_span("s1", call_ids=("c",), call_role=CallRole.REQUESTER),
+            a_span("s2", call_ids=("c",), call_role=CallRole.FULFILLER),
+            a_span("s3", call_ids=("c",), call_role=CallRole.FULFILLER),
         ]
     )
     assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s1", "s2"), ("s1", "s3")]
 
 
+def test_one_span_can_request_several_calls():
+    # The shape current agent frameworks emit constantly: one model turn
+    # asking for several tools at once.
+    graph = build(
+        [
+            a_span("s1", call_ids=("a", "b"), call_role=CallRole.REQUESTER),
+            a_span("s2", call_ids=("a",), call_role=CallRole.FULFILLER),
+            a_span("s3", call_ids=("b",), call_role=CallRole.FULFILLER),
+        ]
+    )
+    assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s1", "s2"), ("s1", "s3")]
+    assert codes_of(graph) == []
+
+
+def test_one_unanswered_call_among_several_is_diagnosed_on_its_own():
+    graph = build(
+        [
+            a_span("s1", call_ids=("a", "b"), call_role=CallRole.REQUESTER),
+            a_span("s2", call_ids=("a",), call_role=CallRole.FULFILLER),
+        ]
+    )
+    # The answered one still pairs; only the unanswered one is reported.
+    assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s1", "s2")]
+    assert codes_of(graph) == [codes.UNPAIRED_CALL]
+    assert "'b'" in graph.diagnostics[0].message
+
+
 def test_a_call_id_without_a_role_pairs_with_nothing():
-    graph = build([a_span("s1", call_id="c"), a_span("s2", call_id="c")])
+    graph = build([a_span("s1", call_ids=("c",)), a_span("s2", call_ids=("c",))])
     assert edges_of(graph, EdgeKind.CALL_RESULT) == []
 
 
@@ -273,8 +300,8 @@ def test_the_same_pair_may_carry_several_kinds_of_edge():
     graph = build(
         [
             a_span("s0"),
-            a_span("s1", "s0", call_id="c", call_role=CallRole.FULFILLER),
-            a_span("s0b", call_id="c", call_role=CallRole.REQUESTER),
+            a_span("s1", "s0", call_ids=("c",), call_role=CallRole.FULFILLER),
+            a_span("s0b", call_ids=("c",), call_role=CallRole.REQUESTER),
         ]
     )
     assert ("s0", "s1") in edges_of(graph, EdgeKind.PARENT)

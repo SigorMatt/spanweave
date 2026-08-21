@@ -151,8 +151,8 @@ def test_a_child_comes_after_its_parent():
 def test_a_fulfiller_comes_after_its_requester_even_when_it_started_first():
     graph = build(
         [
-            a_span("s2", started=1.0, call_id="c", call_role=CallRole.FULFILLER),
-            a_span("s1", started=9.0, call_id="c", call_role=CallRole.REQUESTER),
+            a_span("s2", started=1.0, call_ids=("c",), call_role=CallRole.FULFILLER),
+            a_span("s1", started=9.0, call_ids=("c",), call_role=CallRole.REQUESTER),
         ]
     )
     # call_result is an ordering edge: the pairing outranks the clock.
@@ -241,8 +241,10 @@ def test_the_cycle_diagnostic_names_the_nodes_involved():
 def test_a_cycle_through_call_result_is_caught_too():
     graph = build(
         [
-            a_span("a", "b", started=1.0, call_id="c", call_role=CallRole.REQUESTER),
-            a_span("b", started=2.0, call_id="c", call_role=CallRole.FULFILLER),
+            a_span(
+                "a", "b", started=1.0, call_ids=("c",), call_role=CallRole.REQUESTER
+            ),
+            a_span("b", started=2.0, call_ids=("c",), call_role=CallRole.FULFILLER),
         ]
     )
     assert set(order_of(graph)) == {"a", "b"}

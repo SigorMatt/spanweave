@@ -32,6 +32,7 @@ STRUCTURAL = (
     "single_tool_call",
     "llm_tool_llm",
     "parallel_tools",
+    "parallel_tool_calls",
     "nested_agents",
     "retriever_and_embedding",
     "span_links",

@@ -397,10 +397,17 @@ it is not materialized in the edge set.
 Tool call/result pairing is the single most valuable thing a dialect-aware
 adapter can recover, and it is frequently **not** the parent/child relation.
 
-- Adapters SHOULD emit a `call_id` on requesting and fulfilling spans when the
-  dialect carries one (`tool_call_id`, `function_call_id`, or equivalent).
-- The builder joins on `call_id` within a trace and emits `call_result` with
-  `basis = "tool_call_id"`.
+- Adapters SHOULD emit `call_ids` on requesting and fulfilling spans when the
+  dialect carries them (`tool_call_id`, `function_call_id`, or equivalent).
+  **A span may carry several.** One model turn requesting several tools at
+  once is how current agent frameworks work, not an edge case, and a seam that
+  held one id per span could only express it by dropping one.
+- All of a span's ids share that span's `call_role`. A span that both requests
+  one call and fulfils another is not expressible; that shape is recorded in
+  `OPEN_QUESTIONS.md` §8 rather than designed for in advance.
+- The builder joins on each `call_id` within a trace and emits `call_result`
+  with `basis = "tool_call_id"`. Several `call_result` edges may leave one
+  node, and that is ordinary.
 - Unmatched calls/results produce `unpaired_call` / `unpaired_result`
   diagnostics — never a fabricated pairing, and never a fallback to guessing by
   name or proximity.
@@ -459,7 +466,7 @@ NormalizedSpan:
   status_note: str | None
   inputs / outputs: Payload
   usage:       Usage | None
-  call_id:     str | None         # for call_result pairing (§4.4)
+  call_ids:    tuple[str, ...]    # for call_result pairing (§4.4); may be many
   call_role:   requester | fulfiller | None
   links:       tuple[SpanLink, ...]
   data_edges:  tuple[DeclaredDataEdge, ...]   # explicit only (§4.2)
