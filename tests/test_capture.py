@@ -8,6 +8,7 @@ opentelemetry installed.
 """
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -660,8 +661,9 @@ def test_every_spec_names_tools_that_exist():
 
 
 def test_specs_cycle_and_are_deterministic():
+    over = len(fleet.FLEET)
     assert fleet.specs(3) == fleet.FLEET[:3]
-    assert fleet.specs(10)[8:] == fleet.FLEET[:2]
+    assert fleet.specs(over + 2)[over:] == fleet.FLEET[:2]
     assert fleet.specs(5) == fleet.specs(5)
 
 
@@ -719,7 +721,9 @@ def a_stub_backend(script):
 
     def request(client, model, messages, tools, parallel=False):
         seen.append(
-            SimpleNamespace(messages=list(messages), tools=tools, parallel=parallel)
+            SimpleNamespace(
+                model=model, messages=list(messages), tools=tools, parallel=parallel
+            )
         )
         return script[len(seen) - 1]
 
@@ -731,7 +735,7 @@ def a_stub_backend(script):
         model_env="STUB_MODEL",
         default_model="stub-1",
         instrument=lambda provider: None,
-        client=lambda: object(),
+        client=lambda base_url=None: SimpleNamespace(base_url=base_url),
         request=request,
         results=backends._openai_results,
     )
@@ -971,3 +975,120 @@ def test_the_anthropic_backend_accepts_the_flag_and_sends_nothing_extra():
         client, "m", [], (backends.TOOLS["get_weather"],), parallel=True
     )
     assert "tool_choice" not in sent
+
+
+# -- a fleet that spans models (TASKS.md 2.2) ------------------------------
+
+
+def test_the_fleet_names_at_most_two_models_beyond_the_default():
+    # The bound is the line between changing the setup and selecting an
+    # answer. Adding a third model to chase a shape is selection, and this is
+    # what says so before the temptation arrives rather than after.
+    assert len(fleet.extra_models()) <= fleet.MAX_EXTRA_MODELS
+
+
+def test_only_the_parallel_aimed_specs_name_another_model():
+    # Varying the model is for the one shape the default model would not
+    # produce. Varying it everywhere would make every other finding harder to
+    # attribute for no gain.
+    for spec in fleet.FLEET:
+        if spec.model:
+            assert fleet.PARALLEL_TOOL_CALLS in spec.intends
+
+
+def test_a_model_on_another_endpoint_says_which_variable_holds_it():
+    for spec in fleet.FLEET:
+        if spec.model == fleet.KIMI:
+            assert spec.endpoint_env == fleet.KIMI_ENDPOINT
+
+
+def test_specs_beyond_the_requested_count_are_named_not_silently_dropped():
+    # The multi-model specs sit at the end, so a habitual --fleet 8 skips
+    # every one of them. A silent cap reads as "we covered everything".
+    assert fleet.unreached(len(fleet.FLEET)) == ()
+    assert "two_cities_qwen" in fleet.unreached(8)
+
+
+def test_every_fleet_trace_records_which_model_produced_it(tmp_path, monkeypatch):
+    # A fleet that mixes models without saying which is worse than a
+    # single-model fleet: every finding it produces is unattributable.
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "fleet")
+    tracer = StubTracer()
+    backend, _ = a_stub_backend([("assistant", [])] * 8)
+    run._fleet(2, backend, "stub-1", tracer, ScriptedExporter(a_complete_fleet()))
+
+    agents = [span for span in tracer.spans if span.name == "agent.run"]
+    assert agents
+    for span in agents:
+        assert json.loads(span.attributes["metadata"])["model"] == "stub-1"
+    # ...and in the filename too, so it is legible without parsing anything.
+    assert all("__stub-1" in p.name for p in (tmp_path / "fleet").iterdir())
+
+
+def test_the_reference_capture_is_not_stamped(tmp_path):
+    # 2.6's matched pair differs only in the instrumentor. An extra metadata
+    # attribute on the agent span would be one more difference.
+    tracer = StubTracer()
+    backend, _ = a_stub_backend([("assistant", [])])
+    backends.converse(backend, "stub-1", tracer)
+    assert "metadata" not in tracer.spans[0].attributes
+
+
+def test_a_run_whose_endpoint_is_unset_is_skipped_not_misrouted(
+    tmp_path, monkeypatch, capsys
+):
+    # Sending a model to the wrong endpoint produces a trace whose provenance
+    # is wrong, which is worse than a trace you do not have (SPEC.md §6.1's
+    # posture, applied to the harness).
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "fleet")
+    monkeypatch.delenv(fleet.KIMI_ENDPOINT, raising=False)
+    kimi = next(s for s in fleet.FLEET if s.endpoint_env == fleet.KIMI_ENDPOINT)
+    monkeypatch.setattr(fleet, "FLEET", (fleet.FLEET[0], kimi))
+
+    backend, seen = a_stub_backend([("assistant", [])] * 4)
+    code = run._fleet(
+        2,
+        backend,
+        "stub-1",
+        StubTracer(),
+        ScriptedExporter([records_of(an_llm_span(), a_tool_span())]),
+    )
+
+    # One trace written, and the skipped run made no request at all.
+    assert len(list((tmp_path / "fleet").iterdir())) == 1
+    assert all(turn.model != fleet.KIMI for turn in seen)
+    assert code == 1  # the fleet is short of required shapes, and says so
+    out = capsys.readouterr().out
+    assert "SKIPPED" in out
+    assert fleet.KIMI_ENDPOINT in out
+
+
+def a_recording_backend(script):
+    """A stub backend that also records the base_url its client was built with."""
+    backend, seen = a_stub_backend(script)
+    urls = []
+
+    def client(base_url=None):
+        urls.append(base_url)
+        return SimpleNamespace(base_url=base_url)
+
+    return replace(backend, client=client), seen, urls
+
+
+def test_a_named_endpoint_reaches_the_client(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "fleet")
+    monkeypatch.setenv(fleet.KIMI_ENDPOINT, "https://example.invalid/v1/")
+    kimi = next(s for s in fleet.FLEET if s.endpoint_env == fleet.KIMI_ENDPOINT)
+    monkeypatch.setattr(fleet, "FLEET", (kimi,))
+
+    backend, seen, urls = a_recording_backend([("assistant", [])] * 2)
+    run._fleet(
+        1,
+        backend,
+        "stub-1",
+        StubTracer(),
+        ScriptedExporter([records_of(an_llm_span(), a_tool_span())]),
+    )
+    assert urls == ["https://example.invalid/v1/"]
+    # ...and the run used the spec's model, not the configured default.
+    assert seen[0].model == fleet.KIMI

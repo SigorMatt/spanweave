@@ -862,7 +862,10 @@ below:
   > unsupported keyword. Detection is on the status code, never the message
   > text (`SPEC.md` §3.10's rule, applied to the harness).
   >
-  > **Resolved: the model calls tools sequentially.** Four fleet attempts —
+  > **Resolved: `openai/gpt-oss-120b` calls tools sequentially.** This finding
+  > stands, and adding models below does not retract it — but read its scope
+  > exactly: it is a finding about **that model**, not about models. Four fleet
+  > attempts —
   > `--fleet 8` twice, `--fleet 12` twice, the last with
   > `parallel_tool_calls=True` — **32 runs, three specs aimed at the shape,
   > not one parallel call.** The endpoint accepted the parameter: no 400
@@ -926,6 +929,49 @@ below:
   > is not evidence of generality; it is absence of evidence, and the whole
   > point of `PREDICTIONS.md` is not to let those two be written down the same
   > way.
+  >
+  > **Reopened: a fleet from one model is a batch, not a fleet.** The stop rule
+  > above is about **selection pressure inside a fixed setup** — rewording
+  > prompts until one model does what you want. **Swapping the model changes
+  > the setup**, and 2.2's objective was the *shape*, not the model. Nothing
+  > pins the fleet to `gpt-oss-120b`; that pin belongs to **2.6's matched
+  > pair**, which is untouched.
+  > The stronger reason is not procedural: **real fleets span models.** A
+  > multi-model fleet is closer to what a fleet aggregator actually meets,
+  > which is precisely what P5 needs — so this makes the fleet better evidence
+  > regardless of whether parallel calls appear.
+  > `RunSpec` gains `model` and `endpoint_env`. The three parallel-aimed specs
+  > are repeated against **`Qwen/Qwen3-235B-A22B-Instruct-2507`** (same
+  > endpoint) and **`moonshotai/Kimi-K3`** (needs `NEBIUS_BASE_URL_EU_WEST2`),
+  > both of which advertise strong agentic tool use. Same prompts, same tools,
+  > same instrumentor — **only the model differs**, so a difference in outcome
+  > is attributable to the model and to nothing else.
+  > Four things are enforced rather than intended:
+  > - **Attribution.** Every fleet trace stamps `{"model", "spec"}` as
+  >   OpenInference `metadata` on its `agent.run` span, and carries the model
+  >   in its filename. A fleet that mixes models without saying which is worse
+  >   than a single-model fleet, because every finding it produces is
+  >   unattributable. The reference capture is **not** stamped — that would be
+  >   one more difference in a pair that must differ only in the instrumentor
+  >   — and there is a test for each direction.
+  > - **The bound.** At most **two** models beyond the configured default
+  >   (`MAX_EXTRA_MODELS`), pinned by a test, because past that it *is*
+  >   selection. Only parallel-aimed specs may name a model, also tested:
+  >   varying it elsewhere would make every other finding harder to attribute
+  >   for no gain.
+  > - **No misrouting.** A spec whose `endpoint_env` is unset is **skipped and
+  >   reported**, never sent to the default endpoint — the `SPEC.md` §6.1
+  >   posture, for the same reason: a trace whose provenance is wrong is worse
+  >   than a trace you do not have.
+  > - **No silent cap.** The multi-model specs sit at the end, so `--fleet 8`
+  >   reaches none of them. The harness names every spec it did not reach and
+  >   says to run `--fleet 14`.
+  > **If neither model produces parallel calls either, that is a far more
+  > interesting finding than one model not doing it** — it would suggest the
+  > shape is rarer in practice than the corpus implies, and
+  > `parallel_tool_calls`' status as a hand-authored-only fixture becomes a
+  > statement about the world rather than about this fleet. Record it that way
+  > at 2.4, with all three models named.
   >
   > **One thing the library got right that nothing had tested.** `04_no_tool`
   > and `07_out_of_scope` are the **first traces it has ever seen with no tool

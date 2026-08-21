@@ -49,6 +49,7 @@ INPUT_VALUE = "input.value"
 INPUT_MIME = "input.mime_type"
 OUTPUT_VALUE = "output.value"
 OUTPUT_MIME = "output.mime_type"
+METADATA = "metadata"
 JSON_MIME = "application/json"
 TEXT_MIME = "text/plain"
 
@@ -238,9 +239,12 @@ def _anthropic_instrument(provider: Any) -> None:
     AnthropicInstrumentor().instrument(tracer_provider=provider)
 
 
-def _anthropic_client() -> Any:
+def _anthropic_client(base_url: str | None = None) -> Any:
     import anthropic
 
+    # Accepted for one signature across backends; Anthropic's endpoint is
+    # fixed, so there is nothing to override.
+    del base_url
     return anthropic.Anthropic()
 
 
@@ -310,14 +314,16 @@ def _openai_instrument(provider: Any) -> None:
     OpenAIInstrumentor().instrument(tracer_provider=provider)
 
 
-def _openai_client() -> Any:
+def _openai_client(base_url: str | None = None) -> Any:
     import openai
 
     # base_url is what makes this backend point anywhere. The instrumentor
-    # neither knows nor cares -- it patches this client object.
+    # neither knows nor cares -- it patches this client object. The override
+    # exists because a fleet may span models that live on different regional
+    # endpoints (`fleet.py`); the default is unchanged.
     return openai.OpenAI(
         api_key=os.environ["NEBIUS_API_KEY"],
-        base_url=os.environ.get("NEBIUS_BASE_URL"),
+        base_url=base_url or os.environ.get("NEBIUS_BASE_URL"),
     )
 
 
@@ -459,6 +465,8 @@ def converse(
     prompt: str = QUESTION,
     tool_names: tuple[str, ...] = DEFAULT_TOOLS,
     parallel: bool = False,
+    note: dict[str, Any] | None = None,
+    base_url: str | None = None,
 ) -> bool:
     """One two-turn tool-using conversation: agent -> [llm, tool, llm].
 
@@ -475,6 +483,12 @@ def converse(
     in the instrumentor -- the matched pair would be matched on nothing. The
     fleet sets it; the reference conversation must not.
 
+    ``note`` is stamped onto the ``agent.run`` span as OpenInference
+    ``metadata``, and the fleet uses it to say **which model produced this
+    trace**. A fleet that spans models without recording which is worse than a
+    single-model fleet: every finding it produces is unattributable. The
+    reference capture passes nothing, so its spans are unchanged.
+
     **The agent and tool spans are emitted here, by this file.** Only the
     ``llm`` spans come from the instrumentor, because an instrumentor wraps an
     SDK client and executing a tool is not an SDK call -- so nothing would
@@ -487,17 +501,21 @@ def converse(
     came from real instrumentation" is then true of some spans and not
     others, and the difference is exactly what a captured fixture is for.
     """
-    client = backend.client()
+    client = backend.client(base_url)
     tools = tuple(TOOLS[name] for name in tool_names)
 
-    with tracer.start_as_current_span(
-        "agent.run",
-        attributes={
-            SPAN_KIND: "AGENT",
-            INPUT_VALUE: prompt,
-            INPUT_MIME: TEXT_MIME,
-        },
-    ):
+    attributes: dict[str, Any] = {
+        SPAN_KIND: "AGENT",
+        INPUT_VALUE: prompt,
+        INPUT_MIME: TEXT_MIME,
+    }
+    if note:
+        # Not mapped by any adapter, and that is fine: the library reports it
+        # as an unmapped attribute and keeps it verbatim in `raw`, so the
+        # attribution survives without the model pretending to understand it.
+        attributes[METADATA] = json.dumps(note, sort_keys=True)
+
+    with tracer.start_as_current_span("agent.run", attributes=attributes):
         messages: list[Any] = [{"role": "user", "content": prompt}]
 
         history, calls = backend.request(client, model, messages, tools, parallel)

@@ -13,11 +13,28 @@ human-reviewed, redacted, provenance-bearing artifacts; a fleet of unreviewed
 traces in there would destroy the only property that directory has
 (``FIXTURES.md`` §6).
 
-**What varies, and what does not.** The backend, the model and the
-instrumentor are fixed — the fleet is not a comparison between those. What
-varies is the *shape of the run*: which tools exist, whether the model calls
-one, several, or none, and whether a tool fails. A fleet of identical traces is
-one trace counted N times.
+**What varies, and what does not.** The backend and the instrumentor are
+fixed. What varies is the *shape of the run* — which tools exist, whether the
+model calls one, several, or none, and whether a tool fails — and, for some
+runs, **the model**. A fleet of identical traces is one trace counted N times.
+
+**Why the model varies too.** A fleet drawn from one model is a batch, not a
+fleet: real fleets span models, so a multi-model fleet is closer to what a
+fleet aggregator actually meets, which is what P5 needs. Swapping the model is
+changing the setup, not selecting an answer — it is not the thing the steering
+rule below prohibits, which is rewording prompts inside a fixed setup until one
+model does what you want. The bound is stated instead: **at most two models
+beyond the configured default**, pinned by a test, because past that it *is*
+selection.
+
+**The reference capture is not part of this.** ``TASKS.md`` 2.6 pins the
+matched pair to ``openai/gpt-oss-120b``; that pin belongs to the pair, never to
+the fleet. Nothing here touches it.
+
+**Every trace records which model produced it**, as OpenInference ``metadata``
+on its ``agent.run`` span and in its filename. A fleet that mixes models
+without saying which is worse than a single-model fleet, because every finding
+it produces is unattributable.
 
 **Enabling a capability is not steering.** The fleet sends
 ``parallel_tool_calls=True`` on the OpenAI backend (`backends.py`). That is
@@ -64,6 +81,26 @@ WHY = {
 }
 
 
+#: The models a run may name. `None` means "whatever the backend resolved",
+#: which is the configured default. The two overrides both advertise strong
+#: agentic tool use, which is the property under test.
+QWEN = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+KIMI = "moonshotai/Kimi-K3"
+
+#: Kimi is served from a different regional endpoint, so the runs that name it
+#: also name the environment variable holding that endpoint. If it is unset the
+#: run is **skipped and said so**, never quietly sent to the wrong endpoint --
+#: the same refusal posture as backend selection (`SPEC.md` §6.1), for the same
+#: reason: a trace whose provenance is wrong is worse than a trace you do not
+#: have.
+KIMI_ENDPOINT = "NEBIUS_BASE_URL_EU_WEST2"
+
+#: At most this many models beyond the configured default. The bound is the
+#: line between changing the setup and selecting an answer, and it is pinned by
+#: a test rather than left to judgement in the moment.
+MAX_EXTRA_MODELS = 2
+
+
 @dataclass(frozen=True)
 class RunSpec:
     """One run of the fleet: a prompt, an inventory, and what it aims at.
@@ -71,12 +108,17 @@ class RunSpec:
     ``intends`` is the shape this run is *steered* toward. It is documentation
     and a tripwire (:func:`intended_shapes`), never evidence — what a run
     actually produced is read back from its records.
+
+    ``model`` is ``None`` for the configured default. ``endpoint_env`` names
+    the variable holding this model's endpoint, when it is not the default one.
     """
 
     id: str
     prompt: str
     tools: tuple[str, ...]
     intends: tuple[str, ...]
+    model: str | None = None
+    endpoint_env: str | None = None
 
 
 FLEET: tuple[RunSpec, ...] = (
@@ -138,7 +180,83 @@ FLEET: tuple[RunSpec, ...] = (
         tools=("get_weather", "get_population", "convert_currency"),
         intends=(TOOL_CALL, PARALLEL_TOOL_CALLS, VARIED_TOOLS),
     ),
+    # The parallel-aimed specs again, against two other models. Same prompts,
+    # same tools, same instrumentor -- only the model differs, so a difference
+    # in outcome is attributable to the model and to nothing else. `gpt-oss-120b`
+    # answered these sequentially across turns 32 times (`TASKS.md` 2.2); these
+    # runs are what turn "that model does not" into either "these models do" or
+    # the considerably more interesting "none of them do".
+    RunSpec(
+        id="two_cities_qwen",
+        prompt="Compare the weather in Paris and in Oslo. Call the tool for each city.",
+        tools=("get_weather",),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS),
+        model=QWEN,
+    ),
+    RunSpec(
+        id="weather_and_people_qwen",
+        prompt=(
+            "How is the weather in Oslo, and how many people live there? Use the tools."
+        ),
+        tools=("get_weather", "get_population"),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS, VARIED_TOOLS),
+        model=QWEN,
+    ),
+    RunSpec(
+        id="three_at_once_qwen",
+        prompt=(
+            "For Paris: the weather, the population, and what 50 USD is in EUR. "
+            "Use the tools."
+        ),
+        tools=("get_weather", "get_population", "convert_currency"),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS, VARIED_TOOLS),
+        model=QWEN,
+    ),
+    RunSpec(
+        id="two_cities_kimi",
+        prompt="Compare the weather in Paris and in Oslo. Call the tool for each city.",
+        tools=("get_weather",),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS),
+        model=KIMI,
+        endpoint_env=KIMI_ENDPOINT,
+    ),
+    RunSpec(
+        id="weather_and_people_kimi",
+        prompt=(
+            "How is the weather in Oslo, and how many people live there? Use the tools."
+        ),
+        tools=("get_weather", "get_population"),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS, VARIED_TOOLS),
+        model=KIMI,
+        endpoint_env=KIMI_ENDPOINT,
+    ),
+    RunSpec(
+        id="three_at_once_kimi",
+        prompt=(
+            "For Paris: the weather, the population, and what 50 USD is in EUR. "
+            "Use the tools."
+        ),
+        tools=("get_weather", "get_population", "convert_currency"),
+        intends=(TOOL_CALL, PARALLEL_TOOL_CALLS, VARIED_TOOLS),
+        model=KIMI,
+        endpoint_env=KIMI_ENDPOINT,
+    ),
 )
+
+
+def extra_models(runs: tuple[RunSpec, ...] = FLEET) -> frozenset[str]:
+    """The models named explicitly, i.e. beyond the configured default."""
+    return frozenset(run.model for run in runs if run.model)
+
+
+def unreached(count: int) -> tuple[str, ...]:
+    """Specs a fleet of ``count`` runs never gets to.
+
+    A silent cap reads as "we covered everything" when it did not, and the
+    multi-model specs sit at the end of the list -- so a habitual
+    ``--fleet 8`` would skip every one of them and nothing would say so.
+    """
+    return tuple(spec.id for spec in FLEET[count:]) if count < len(FLEET) else ()
 
 
 def specs(count: int) -> tuple[RunSpec, ...]:

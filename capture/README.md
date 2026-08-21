@@ -160,13 +160,36 @@ traces for the Phase 2b adversarial consumer, because `PREDICTIONS.md` P5 is
 claim**.
 
 ```bash
-make capture ARGS="--fleet 8"     # -> capture/_scratch/fleet/01_weather.local.jsonl, ...
+make capture ARGS="--fleet 14"    # -> capture/_scratch/fleet/01_weather__....jsonl
 ```
 
-One file per run, because one trace is one graph (`SPEC.md` §7). The backend,
-the model and the instrumentor are **fixed** — the fleet is not a comparison
-between those. What varies is the shape of the run, steered by the prompt and
-the tool inventory (`capture/fleet.py`).
+One file per run, because one trace is one graph (`SPEC.md` §7). The backend
+and the instrumentor are **fixed**. What varies is the shape of the run —
+steered by the prompt and the tool inventory — and, for some runs, **the
+model** (`capture/fleet.py`).
+
+**Why the model varies.** A fleet drawn from one model is a batch, not a fleet.
+Real fleets span models, so a multi-model fleet is closer to what a fleet
+aggregator actually meets, which is what P5 needs. Swapping the model changes
+the setup; it does not select an answer, which is what the steering rule below
+prohibits. The bound is stated instead: **at most two models beyond the
+configured default**, pinned by a test, because past that it *is* selection.
+
+Every trace records which model produced it — as OpenInference `metadata` on
+its `agent.run` span, and in its filename. A fleet that mixes models without
+saying which is worse than a single-model fleet: every finding it produces is
+unattributable.
+
+The multi-model specs sit at the end of the list, so `--fleet 8` never reaches
+them and the harness says which specs it did not reach. A model on a different
+regional endpoint names the environment variable holding it
+(`NEBIUS_BASE_URL_EU_WEST2` for Kimi); if that is unset the run is **skipped
+and reported**, never sent to the default endpoint — a trace whose provenance
+is wrong is worse than one you do not have.
+
+**None of this touches the reference capture.** `TASKS.md` 2.6 pins the matched
+pair to `openai/gpt-oss-120b`; that pin belongs to the pair, never to the
+fleet.
 
 **Why it is harder.** Eight traces nobody reads carefully are a better hiding
 place than one fixture under review. So the rules are stated rather than

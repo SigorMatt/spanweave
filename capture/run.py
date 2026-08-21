@@ -230,13 +230,34 @@ def _fleet(count, backend, model, tracer, exporter):
 
     runs = fleet.specs(count)
     traces = []
+    skipped = []
     for position, spec in enumerate(runs, start=1):
+        run_model = spec.model or model
+        endpoint = os.environ.get(spec.endpoint_env) if spec.endpoint_env else None
+        if spec.endpoint_env and not endpoint:
+            # Refuse rather than send this model to the default endpoint. A
+            # trace whose provenance is wrong is worse than one you do not
+            # have -- the same posture as backend selection (SPEC.md §6.1).
+            skipped.append((spec.id, spec.endpoint_env))
+            print(
+                f"  run {position:2d}/{count}  {spec.id:<24} SKIPPED "
+                f"-- {spec.endpoint_env} is not set"
+            )
+            continue
+
         exporter.drain()
         # parallel=True for fleet runs ONLY: it enables a capability the
         # fleet needs and changes `llm.invocation_parameters`, which would
         # unmatch 2.6's pair if it reached the reference capture.
         backends.converse(
-            backend, model, tracer, spec.prompt, spec.tools, parallel=True
+            backend,
+            run_model,
+            tracer,
+            spec.prompt,
+            spec.tools,
+            parallel=True,
+            note={"model": run_model, "spec": spec.id},
+            base_url=endpoint,
         )
         records = exporter.sorted_records()
         if not records:
@@ -245,20 +266,37 @@ def _fleet(count, backend, model, tracer, exporter):
                 file=sys.stderr,
             )
             return 2
-        path = write_trace(
-            FLEET_SCRATCH / f"{position:02d}_{spec.id}.local.jsonl", records
-        )
+        name = f"{position:02d}_{spec.id}__{_slug(run_model)}.local.jsonl"
+        write_trace(FLEET_SCRATCH / name, records)
         traces.append(records)
         print(
-            f"  run {position:2d}/{count}  {spec.id:<20} {len(records):2d} spans"
-            f"  -> {path.name}"
+            f"  run {position:2d}/{count}  {spec.id:<24} {len(records):2d} spans"
+            f"  {run_model}"
         )
+
+    if not traces:
+        print("capture: every run was skipped; nothing was captured", file=sys.stderr)
+        return 2
 
     found = fleet.coverage(traces)
     absent = fleet.missing(found)
     print(f"\nWrote {len(traces)} traces -> {FLEET_SCRATCH}")
     print(fleet.report(found, absent))
+    for spec_id, variable in skipped:
+        print(f"SKIPPED: {spec_id} -- export {variable} to include it.")
+    for spec_id in fleet.unreached(count):
+        print(f"NOT REACHED at --fleet {count}: {spec_id}")
+    if fleet.unreached(count):
+        # Said out loud because the multi-model specs sit at the end, so a
+        # habitual `--fleet 8` skips all of them and a silent cap would read
+        # as "we covered everything".
+        print(f"Run --fleet {len(fleet.FLEET)} to reach every spec.")
     return 1 if absent else 0
+
+
+def _slug(model: str) -> str:
+    """A model id as a filename fragment, so a trace is attributable at a glance."""
+    return "".join(c if c.isalnum() or c in "-." else "-" for c in model).strip("-")
 
 
 def _next_steps(*, captured, name, backend, model, endpoint, today, count):
