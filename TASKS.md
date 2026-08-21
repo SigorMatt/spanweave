@@ -131,12 +131,33 @@ Code executes against.
   > Also: the `gates` target now runs `tests/test_determinism.py` too, so `make
   > gates` covers 0.4–0.6 exactly as the seeded `Makefile` comment says it does.
 
-- [ ] **0.7 Model types.** `spanweave/model.py`: `NodeKind`, `EdgeKind`,
+- [x] **0.7 Model types.** `spanweave/model.py`: `NodeKind`, `EdgeKind`,
   `Warrant`, `Status`, `Payload`, `Usage`, `Provenance`, `RawRecord`, `Node`,
   `Edge`, `Diagnostic`, `Meta` — all frozen dataclasses / enums per `SPEC.md`
   §3–§4. Pure, no I/O, no behavior beyond constructors and simple predicates
   (`Payload.absent()`, `Payload.has_content`).
   *Done when the types round-trip a hand-written node and mypy --strict is clean.*
+  > Two things are **enforced** rather than documented, both because they are
+  > failures a consumer downstream could never detect: `Edge.__post_init__`
+  > refuses an explicit-only kind with a `derived` warrant and vice versa
+  > (`SPEC.md` §4.1's table is binding, so the model binds it), and
+  > `tests/test_model.py` asserts the exact membership of `NodeKind`,
+  > `EdgeKind`, `PayloadState`, `Warrant`, `Status` and `DiagnosticLevel` — a
+  > tripwire, since extending any of them is a halt point.
+  > `SPEC.md` updated in the same change for two things the types needed and it
+  > did not say: `AdapterInfo` gains `confidence` (§6.1 requires the detection
+  > confidence in `meta`, and §3.9 had no field for it), and §3.5 now states that
+  > `RawRecord.line_number` is held but **not serialized** — it is a property of
+  > where a record sat in one file, and writing it out would make a shuffled
+  > input produce a different graph. §3.9 likewise now says `source_digest`
+  > fingerprints the input bytes rather than the graph.
+  > Mappings (`Node.attributes`, `Usage.extra`) are defensively copied on
+  > construction, so a caller mutating the dict it passed in cannot reach inside
+  > a frozen node afterwards.
+  > Noted for the record: the neutrality gate fired on this file's first draft —
+  > on the *denial* "no prices" in `Usage`'s docstring. The gate cannot tell a
+  > denial from an assertion, and that is the right trade; the sentence was
+  > reworded rather than the gate weakened.
 
 - [ ] **0.8 Acceptance harness (`make check`).** The phase done-whens as runnable
   checks, not prose: lint, types, tests, `spanweave --version`, and the gates.

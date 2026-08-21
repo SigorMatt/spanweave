@@ -149,6 +149,11 @@ Every node MUST be traceable back to exactly one source record. Round-tripping
 `raw.source` through the serializer MUST reproduce the input record byte-for-byte
 after canonical JSON encoding.
 
+`line_number` is held in memory — it is what makes a diagnostic about an
+unparseable line actionable — but it is **not serialized**. It is a property of
+where a record sat in one file, not of the run the graph describes, and writing
+it out would make a shuffled input produce a different graph, breaking §5.2.
+
 ### 3.6 Identity
 
 Node ids are deterministic and stable across runs, machines, and Python versions.
@@ -242,10 +247,24 @@ Graph:
 Meta:
   schema_version:   str        # "1" once frozen; "0.x" until then
   spanweave_version: str
-  adapters:         tuple[AdapterInfo, ...]   # id + version, sorted
+  adapters:         tuple[AdapterInfo, ...]   # id + version + confidence, sorted
   source_digest:    str | None # sha256 of input bytes, when built from a file
   node_count / edge_count / diagnostic_count: int
+
+AdapterInfo:
+  id:         str
+  version:    str
+  confidence: float | None     # from detection; None when named with --adapter
 ```
+
+`AdapterInfo.confidence` is where §6.1's "the chosen adapter and its confidence
+are recorded in `meta`" lands. It is `None` when the caller named the adapter,
+because there was no detection to report.
+
+`source_digest` fingerprints the **input bytes**, not the graph. Shuffling the
+input therefore changes it while the graph itself stays identical — which is
+the correct behavior, and why §5.2's order-independence claim is about the
+graph rather than about this field.
 
 `meta` MUST NOT contain a build timestamp, a hostname, a username, or a file
 path. Those would break byte-identical determinism and leak the operator's
