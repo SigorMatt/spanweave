@@ -307,13 +307,29 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > updated) so that `Provenance.dialect_note`, which §3.5 defines, is actually
   > reachable — it had no path from any adapter before.
 
-- [ ] **1.6 Builder — temporal edges and ordering.** Sibling-consecutive
+- [x] **1.6 Builder — temporal edges and ordering.** Sibling-consecutive
   `temporal` edges per `SPEC.md` §4.3 (`missing_timestamp` where excluded);
   Kahn topological sort over `parent ∪ call_result` with the
   `(started_at or +inf, node_id)` tie-break; cycle-tolerant fallback plus
   diagnostic. `--no-temporal` flag.
   *Done when ordering is stable, a synthetic cycle does not hang or raise, and
   shuffled input is byte-identical.*
+  > `--no-temporal` exists here as the `temporal=` build argument; the CLI flag is
+  > wired at 1.8, and the **byte**-identical half of the done-when lands there too,
+  > since there is no serializer until then. Order-independence is already tested
+  > at the graph level: every rotation of an input builds the same node order.
+  > Three decisions worth naming. `temporal` edges are deliberately **excluded**
+  > from the ordering sort — they are derived from the very timestamps that break
+  > ties, so including them would let a computed relation decide an order a stated
+  > one should; a test pins that `temporal=False` does not change the order. A node
+  > whose parent is missing is treated as a **root sibling**, because in *this*
+  > graph it has no parent, which is exactly what `SPEC.md` §4.3 says makes
+  > siblings. And `missing_timestamp` is emitted only when temporal edges are being
+  > built: it exists to explain an omitted edge, and with the kind switched off
+  > there is nothing to explain.
+  > The cycle path orders the whole **residual** set (the cycle plus anything
+  > downstream of it) by the tie-break and names it in the diagnostic. A
+  > self-parenting span is the one-node case and is covered.
 
 - [ ] **1.7 Graph surface + annotations.** `spanweave/graph.py`: `nodes(...)`,
   `edges(kind=, warrant=)`, `node(id)`, `parents`/`children`, `ancestors`/

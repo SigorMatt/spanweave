@@ -13,6 +13,7 @@ guess. An unpaired call stays unpaired.
 from __future__ import annotations
 
 import dataclasses
+import itertools
 from collections.abc import Iterable, Sequence
 
 from spanweave import diagnostics as codes
@@ -21,6 +22,7 @@ from spanweave.graph import Graph
 from spanweave.ids import assign
 from spanweave.model import (
     AdapterInfo,
+    DiagnosticLevel,
     Edge,
     EdgeKind,
     Meta,
@@ -34,6 +36,13 @@ from spanweave.version import SCHEMA_VERSION, __version__
 
 PARENT_BASIS = "span.parent_span_id"
 CALL_BASIS = "tool_call_id"
+TEMPORAL_BASIS = "sibling start_time ordering"
+
+#: The kinds a node's position is sorted over. `temporal` is deliberately not
+#: among them: it is derived from the timestamps that already break ties, so
+#: including it would let a computed relation decide the order that a stated
+#: one should (`SPEC.md` §5.2).
+ORDERING_KINDS = (EdgeKind.PARENT, EdgeKind.CALL_RESULT)
 
 
 def build_graph(
@@ -42,12 +51,16 @@ def build_graph(
     adapter: AdapterInfo,
     collector: DiagnosticCollector | None = None,
     source_digest: str | None = None,
+    temporal: bool = True,
 ) -> Graph:
     """Turn normalized spans into a graph.
 
     ``collector`` carries diagnostics raised before this point -- by the
     reader, typically -- so that a malformed line and an unpaired call end up
     in the same list. They are the same kind of statement about the input.
+
+    ``temporal=False`` omits the one derived edge kind, for a consumer that
+    wants only what the telemetry stated.
     """
     collected = collector if collector is not None else DiagnosticCollector()
     ordered = list(spans)
@@ -75,11 +88,10 @@ def build_graph(
     _report_nonmonotonic_time(ordered, ids, collected, adapter)
 
     edges = _explicit_edges(ordered, ids, by_span_id, collected, adapter)
+    if temporal:
+        edges = _deduplicated([*edges, *_temporal_edges(nodes, edges, collected)])
 
-    # Ordering proper -- a topological sort over parent and call_result -- is
-    # task 1.6. Until then nodes come out in the tie-break order that sort
-    # falls back to, which is already total and already deterministic.
-    nodes = tuple(sorted(nodes, key=_tie_break))
+    nodes = _in_order(nodes, edges, collected)
 
     return Graph(
         trace_id=trace_id or "",
@@ -391,3 +403,102 @@ def _deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:
     for edge in edges:
         unique.setdefault(edge.identity, edge)
     return tuple(sorted(unique.values(), key=lambda edge: edge.sort_key))
+
+
+def _temporal_edges(
+    nodes: Sequence[Node],
+    edges: Sequence[Edge],
+    collected: DiagnosticCollector,
+) -> list[Edge]:
+    """Consecutive siblings only (`SPEC.md` §4.3).
+
+    An edge for every ordered pair would be O(n^2) and would tell a consumer
+    nothing it could not compute: the transitive closure is available through
+    ``graph.reachable(...)``, so materializing it here would trade memory for
+    no information.
+    """
+    parent_of = {edge.dst: edge.src for edge in edges if edge.kind is EdgeKind.PARENT}
+    groups: dict[str, list[Node]] = {}
+    for node in nodes:
+        if node.started_at is None:
+            # Excluded, and told: a consumer that sees no temporal edge on a
+            # node should be able to tell "it was last" from "we never knew
+            # when it started".
+            collected.add(
+                codes.MISSING_TIMESTAMP,
+                "no start time, so this node takes part in no temporal edges",
+                node_id=node.id,
+                level=DiagnosticLevel.INFO,
+            )
+            continue
+        # Nodes with no parent are siblings of each other at trace root --
+        # and so is a node whose stated parent is not in this input, because
+        # in *this* graph it has none.
+        groups.setdefault(parent_of.get(node.id, ""), []).append(node)
+
+    found = []
+    for parent in sorted(groups):
+        siblings = sorted(groups[parent], key=_tie_break)
+        for earlier, later in itertools.pairwise(siblings):
+            found.append(
+                Edge(
+                    src=earlier.id,
+                    dst=later.id,
+                    kind=EdgeKind.TEMPORAL,
+                    warrant=Warrant.DERIVED,
+                    basis=TEMPORAL_BASIS,
+                )
+            )
+    return found
+
+
+def _in_order(
+    nodes: Sequence[Node], edges: Sequence[Edge], collected: DiagnosticCollector
+) -> tuple[Node, ...]:
+    """Kahn's topological sort, with an explicit tie-break (`SPEC.md` §5.2).
+
+    Hand-rolled, and the tie-break is the point: a topological order is not
+    unique, so without a stated rule for choosing among ready nodes the same
+    input could produce two different orders on two machines.
+    """
+    by_id = {node.id: node for node in nodes}
+    incoming: dict[NodeId, int] = dict.fromkeys(by_id, 0)
+    outgoing: dict[NodeId, list[NodeId]] = {node_id: [] for node_id in by_id}
+    for edge in edges:
+        if edge.kind not in ORDERING_KINDS:
+            continue
+        if edge.src not in by_id or edge.dst not in by_id:
+            continue
+        outgoing[edge.src].append(edge.dst)
+        incoming[edge.dst] += 1
+
+    ready = sorted((by_id[i] for i in by_id if incoming[i] == 0), key=_tie_break)
+    ordered: list[Node] = []
+    while ready:
+        node = ready.pop(0)
+        ordered.append(node)
+        released = []
+        for target in outgoing[node.id]:
+            incoming[target] -= 1
+            if incoming[target] == 0:
+                released.append(by_id[target])
+        if released:
+            ready = sorted([*ready, *released], key=_tie_break)
+
+    if len(ordered) == len(nodes):
+        return tuple(ordered)
+
+    # Malformed telemetry can state a cycle. The graph is still produced:
+    # what is left is ordered by the tie-break alone, and the cycle is
+    # reported rather than allowed to hang or crash the build.
+    placed = {node.id for node in ordered}
+    residual = sorted((node for node in nodes if node.id not in placed), key=_tie_break)
+    named = ", ".join(node.id for node in residual)
+    collected.add(
+        codes.ORDERING_CYCLE,
+        f"the parent/call_result edges contain a cycle; these nodes could not "
+        f"be ordered topologically and are ordered by start time and id "
+        f"instead: {named}",
+        source=[node.id for node in residual],
+    )
+    return (*ordered, *residual)

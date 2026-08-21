@@ -41,6 +41,11 @@ def a_span(span_id, parent=None, *, trace="t1", line=1, **overrides):
 
 
 def build(spans, **kwargs):
+    # Explicit edges only. Derived temporal edges -- and the
+    # `missing_timestamp` diagnostics that explain the nodes they skip -- are
+    # 1.6's subject and are exercised in `test_ordering.py`. Switching them
+    # off here keeps these assertions exact rather than filtered.
+    kwargs.setdefault("temporal", False)
     return build_graph(spans, adapter=ADAPTER, **kwargs)
 
 
