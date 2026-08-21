@@ -676,7 +676,7 @@ below:
 
 ### `[prereq]`
 
-- [ ] **2.1 Re-scope `AGENT.md` for Phase 2.** `AGENT.md`'s *Scope of this run*
+- [ ] **2.1 Re-scope `AGENT.md` for Phase 2.** `[prereq]` `AGENT.md`'s *Scope of this run*
   delivers through the 1.9 exit and then halts; it explicitly forbids a second
   adapter, `examples/`, and starting Phase 2 at all. A cold Phase 2 session
   reads that file first and is told to stop. Rewrite the scope block for Phase
