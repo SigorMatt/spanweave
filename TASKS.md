@@ -33,10 +33,16 @@ Code executes against.
   > source checkout reports one too; `tests/test_version.py` (0.3) keeps it in
   > step with `pyproject.toml`.
 
-- [ ] **0.2 CLI entrypoint.** `console_scripts` → `spanweave`; `--version`
+- [x] **0.2 CLI entrypoint.** `console_scripts` → `spanweave`; `--version`
   prints the version; subcommand skeleton (`build`, `inspect`, `validate`,
   `adapters`) that parses and exits cleanly with "not implemented".
   *Done when `spanweave --version` runs.*
+  > Divergence, both additive: (1) the subcommands declare their **full**
+  > argument surface from `SPEC.md` §7 now (`--adapter`, `-o`, `--no-temporal`)
+  > rather than a bare stub, so a later task implements a surface it did not
+  > also get to redesign. (2) `SCHEMA_VERSION` moved into `spanweave/version.py`
+  > next to `__version__`, and both `--version` and `--help` carry the loud
+  > "NOT FROZEN" notice `CLAUDE.md` 7 requires.
 
 - [ ] **0.3 CI.** GitHub Actions: ruff + mypy + pytest on push/PR via
   `make check`. *Done when CI is green on a trivial test.*

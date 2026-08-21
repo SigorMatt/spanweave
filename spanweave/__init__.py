@@ -7,9 +7,6 @@ The library reads trace files and writes a graph. It assigns no roles, no
 judgement, and no domain interpretation of any kind (``SPEC.md`` §1).
 """
 
-__all__ = ["__version__"]
+from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 
-# Kept in step with ``pyproject.toml`` by ``tests/test_version.py``. The
-# package deliberately does not read its version from installed metadata:
-# ``spanweave`` must import and report a version from a source checkout too.
-__version__ = "0.1.0"
+__all__ = ["SCHEMA_FROZEN", "SCHEMA_VERSION", "__version__"]
