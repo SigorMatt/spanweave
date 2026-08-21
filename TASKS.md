@@ -188,11 +188,27 @@ Code executes against.
 Build the whole pipeline for **one** dialect. No second adapter — that is Phase
 2, and it exists to falsify this work.
 
-- [ ] **1.1 Reader.** `spanweave/read.py`: bytes/path/stdin → `Iterable[JsonValue]`.
+- [x] **1.1 Reader.** `spanweave/read.py`: bytes/path/stdin → `Iterable[JsonValue]`.
   Detects JSONL vs. JSON-array by first non-whitespace byte. Malformed lines
   produce a diagnostic and are skipped, never an exception. **Iterator-based
   end to end** (`DESIGN.md` §6). *Done when both forms and a malformed line are
   covered by tests.*
+  > **Halt point resolved (asked, not assumed):** a malformed line must produce a
+  > diagnostic, and `SPEC.md` §3.7's table had no code for one. Decision: add
+  > `malformed_record`, and `ordering_cycle` alongside it (§5.2 mandates a
+  > diagnostic on a cycle and likewise named none). Both are now in the §3.7
+  > table. Adding a diagnostic code is a halt point, so neither was invented in
+  > passing.
+  > The reader is genuinely lazy, not lazily described: a test asserts the first
+  > record is yielded before the second chunk is pulled. The JSON-array form is
+  > the one exception, and the format forces it — an array is not a record until
+  > its closing bracket arrives.
+  > A `str` source is **always** a path (or `-`), never trace content; content is
+  > passed as `bytes`. Sniffing between the two is how a file named `{` becomes a
+  > bug report.
+  > `malformed_record` carries the line's **text** as its source. That is the only
+  > place it can survive — it never became a record — and it is the one case
+  > where a diagnostic legitimately carries content rather than keys.
 
 - [ ] **1.2 Adapter protocol + registry.** `spanweave/adapters/base.py`
   (`NormalizedSpan`, `Adapter` protocol, `SpanLink`, `DeclaredDataEdge`) and

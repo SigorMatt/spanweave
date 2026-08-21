@@ -206,6 +206,8 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
 | `duplicate_source_id` | two records claimed the same source id |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
+| `malformed_record` | an input line that is not valid JSON; its text is kept here |
+| `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
 are already preserved verbatim in `RawRecord`, and duplicating payload content
