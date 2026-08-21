@@ -42,8 +42,8 @@ otlp = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_ORG/spanweave"
-Issues = "https://github.com/YOUR_ORG/spanweave/issues"
+Homepage = "https://github.com/SigorMatt/spanweave"
+Issues = "https://github.com/SigorMatt/spanweave/issues"
 
 [tool.hatch.build.targets.wheel]
 # Ship the library only. capture/, examples/, fixtures/, and tests/ are
