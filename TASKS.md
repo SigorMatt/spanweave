@@ -77,7 +77,7 @@ Code executes against.
   > and saying so twice adds nothing), and a tripwire asserts the scan actually
   > visited files, since a gate that silently scans nothing passes forever.
 
-- [ ] **0.5 Neutrality + layering gates.** Two more checks, both **module-scoped**
+- [x] **0.5 Neutrality + layering gates.** Two more checks, both **module-scoped**
   (`DESIGN.md` §3):
   - **neutrality** — fails if semantic vocabulary appears in identifiers or
     string literals under `spanweave/`: `severity`, `risk`, `secret`,
@@ -92,6 +92,20 @@ Code executes against.
   > Note the shape deliberately: a lexical scan would be fooled by a
   > dialect-keyed dict inside the builder, so the rule is scoped by **module**,
   > not by syntax.
+  > **Halt point resolved (asked, not assumed):** the banned list collided with
+  > `SPEC.md` §3.7, which named a `Diagnostic` field `severity`. Decision: rename
+  > the field to `level` (`SPEC.md` §3.7 updated in this change) rather than carve
+  > an exception into the gate — an absolute gate is worth more than the word, and
+  > fixing the name before `0.9.x` ships it as a serialized key is far cheaper
+  > than after. The banned list therefore has **no** exceptions.
+  > Two implementation notes: matching is substring and case-insensitive
+  > (`max_severity` fails, `Severity` fails), and every word on the list is
+  > exercised by a test, because a word silently dropped from the list is a hole
+  > nobody would ever notice. The dialect gate is lexical over the whole file,
+  > comments included — the builder naming a dialect *at all* is the smell — and
+  > there is a test proving the identical dialect-keyed table is legal one
+  > directory over, under `adapters/`, since the rule locates dialect knowledge
+  > rather than forbidding it.
 
 - [ ] **0.6 Determinism + losslessness gates.** Property tests, wired into
   `make check`, that will grow with the fixture corpus:

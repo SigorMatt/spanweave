@@ -157,6 +157,148 @@ SAFETY_RULES = (no_network, no_unsafe, no_hash)
 
 
 # --------------------------------------------------------------------------
+# 0.5 -- neutrality + layering gates (CLAUDE.md 1 and 6)
+# --------------------------------------------------------------------------
+
+# THE BANNED LIST. Maintained here and nowhere else (TASKS.md 0.5).
+#
+# Core assigns no roles, no severity, no risk, no cost, and no quality
+# judgement. That is the product, not a preference: the library is depend-able
+# precisely because it takes no position (CLAUDE.md 1). Semantics arrive as
+# vocabulary long before they arrive as logic, so the vocabulary is what is
+# gated -- in identifiers AND in string literals, because a string literal is
+# how a judgement reaches a consumer.
+#
+# Matching is substring and case-insensitive, so `severity`, `Severity`, and
+# `max_severity` all fail. That is deliberate: a gate with a clever exemption
+# rule is a gate someone will argue with.
+#
+# A deliberate exception requires a spec change, and there are none. The one
+# collision found so far -- `Diagnostic.severity` in SPEC.md 3.7 -- was
+# resolved by renaming the field to `level` rather than by carving a hole here,
+# because an absolute gate is worth more than a word.
+#
+# These belong to consumers, and `examples/` (outside the package) is free to
+# use every one of them (DESIGN.md 8).
+SEMANTIC_VOCABULARY = (
+    "severity",
+    "risk",
+    "secret",
+    "sensitive",
+    "sink",
+    "taint",
+    "vulnerab",
+    "attack",
+    "malicious",
+    "threat",
+    "cost",
+    "price",
+    "usd",
+    "score",
+    "quality",
+    "hallucinat",
+)
+
+# Dialect ids. Legal under spanweave/adapters/ and nowhere else: the builder
+# owns graphs and must never learn a dialect name (DESIGN.md 3). The rule is
+# scoped by MODULE, not by syntax, because a lexical scan is fooled by a
+# dialect-keyed dict inside the builder -- the shape of this check matters as
+# much as its existence (TASKS.md 0.5).
+DIALECT_IDS = (
+    "openinference",
+    "otel",
+    "langfuse",
+    "langsmith",
+    "logfire",
+    "vercel",
+)
+
+
+def _identifiers(tree: ast.AST) -> Iterator[tuple[str, int, str]]:
+    """Every name a module defines or mentions, with its line."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            yield node.id, node.lineno, "identifier"
+        elif isinstance(node, ast.Attribute):
+            yield node.attr, node.lineno, "attribute"
+        elif isinstance(node, ast.arg):
+            yield node.arg, node.lineno, "argument"
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            yield node.name, node.lineno, "definition"
+        elif isinstance(node, ast.keyword) and node.arg is not None:
+            yield node.arg, node.lineno, "keyword"
+        elif isinstance(node, ast.alias):
+            yield node.name, node.lineno, "import"
+            if node.asname is not None:
+                yield node.asname, node.lineno, "import"
+        elif isinstance(node, ast.ExceptHandler) and node.name is not None:
+            yield node.name, node.lineno, "except name"
+
+
+def _string_literals(tree: ast.AST) -> Iterator[tuple[str, int, str]]:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            yield node.value, node.lineno, "string literal"
+
+
+def neutrality(path: str, source: str, tree: ast.AST) -> list[Violation]:
+    found = []
+    for text, line, what in [*_identifiers(tree), *_string_literals(tree)]:
+        lowered = text.lower()
+        for word in SEMANTIC_VOCABULARY:
+            if word in lowered:
+                found.append(
+                    Violation(
+                        "neutrality",
+                        path,
+                        line,
+                        f"{what} carries the semantic word {word!r}; core "
+                        f"assigns no such judgement -- it belongs in a "
+                        f"consumer (CLAUDE.md 1)",
+                    )
+                )
+    return found
+
+
+def _under_adapters(path: str) -> bool:
+    parts = pathlib.PurePath(path).parts
+    return "adapters" in parts
+
+
+def no_dialect_outside_adapters(
+    path: str, source: str, tree: ast.AST
+) -> list[Violation]:
+    """A dialect id anywhere in the package but `adapters/` is a seam breach.
+
+    Scanned lexically over the whole file, comments included: the builder
+    mentioning a dialect *at all* is the smell this catches, and a comment is
+    where the first one usually appears.
+    """
+    if _under_adapters(path):
+        return []
+    found = []
+    for number, line in enumerate(source.splitlines(), start=1):
+        lowered = line.lower()
+        for dialect in DIALECT_IDS:
+            if dialect in lowered:
+                found.append(
+                    Violation(
+                        "no-dialect-in-builder",
+                        path,
+                        number,
+                        f"names the dialect {dialect!r} outside "
+                        f"spanweave/adapters/; below the seam nothing knows a "
+                        f"dialect exists (DESIGN.md 3)",
+                    )
+                )
+    return found
+
+
+NEUTRALITY_RULES = (neutrality, no_dialect_outside_adapters)
+ALL_RULES = (*SAFETY_RULES, *NEUTRALITY_RULES)
+
+
+# --------------------------------------------------------------------------
 # Running a rule set
 # --------------------------------------------------------------------------
 

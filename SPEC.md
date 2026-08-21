@@ -173,12 +173,19 @@ part of the output, not log noise.
 ```
 Diagnostic:
   code:     str          # stable, machine-matchable — see the table below
-  severity: info | warning        # never "error": errors raise
+  level:    info | warning        # never "error": errors raise
   message:  str          # human-readable, specific
   node_id:  NodeId | None
   source:   JsonValue | None      # the offending fragment, verbatim
   adapter:  str | None
 ```
+
+The field is `level`, not `severity`. It grades how loudly to report a mapping
+gap — nothing about the trace. `severity` is banned vocabulary under
+`spanweave/` (`TASKS.md` 0.5) because in this domain it reads as a judgement
+about what the telemetry *means*, which is exactly what core never makes
+(`CLAUDE.md` 1). Keeping the gate absolute is worth more than the word, and the
+name is fixed here rather than after `0.9.x` ships it as a serialized key.
 
 Seed codes (extend deliberately; codes are a public contract once frozen):
 
