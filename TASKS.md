@@ -387,7 +387,7 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > document directly, so there is only one contract in this direction rather than
   > two that could drift.
 
-- [ ] **1.9 Conformance corpus + captured trace.** Seed every scenario in
+- [x] **1.9 Conformance corpus + captured trace.** Seed every scenario in
   `FIXTURES.md` §3 with the OpenInference rendering and its expected canonical
   graph, including the degenerate ones. Add the capture harness (`make capture`,
   in `capture/`, **outside the package**).
