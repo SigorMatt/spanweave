@@ -229,6 +229,9 @@ def _fleet(count, backend, model, tracer, exporter):
         return 2
 
     runs = fleet.specs(count)
+    stale = clear_fleet_dir()
+    if stale:
+        print(f"  cleared {stale} trace(s) from a previous fleet")
     traces = []
     skipped = []
     for position, spec in enumerate(runs, start=1):
@@ -292,6 +295,31 @@ def _fleet(count, backend, model, tracer, exporter):
         # as "we covered everything".
         print(f"Run --fleet {len(fleet.FLEET)} to reach every spec.")
     return 1 if absent else 0
+
+
+def clear_fleet_dir():
+    """Remove the previous fleet's traces before writing this one.
+
+    **A defect this fixed rather than a precaution.** The runner appended, so
+    `--fleet 14` after `--fleet 12` left 26 files: 12 stale ones under the old
+    naming beside 14 new. An aggregator pointed at the directory would have
+    double-counted nine traces and treated a stale run as distinct from its
+    own re-run -- and the duplicates are *not* identical (`unmapped_attributes`
+    went 2 to 3 once the model/spec stamp was added), so they would have looked
+    like real variation rather than like duplicates. That corrupts the evidence
+    silently, which is the worst way for evidence to be wrong.
+
+    The directory therefore holds exactly one fleet. Only files this harness
+    writes are removed, and the count is reported -- a deletion nobody is told
+    about is its own small version of the same problem.
+    """
+    if not FLEET_SCRATCH.is_dir():
+        return 0
+    removed = 0
+    for path in sorted(FLEET_SCRATCH.glob("*.local.jsonl")):
+        path.unlink()
+        removed += 1
+    return removed
 
 
 def _slug(model: str) -> str:

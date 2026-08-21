@@ -862,10 +862,18 @@ below:
   > unsupported keyword. Detection is on the status code, never the message
   > text (`SPEC.md` §3.10's rule, applied to the harness).
   >
-  > **Resolved: `openai/gpt-oss-120b` calls tools sequentially.** This finding
-  > stands, and adding models below does not retract it — but read its scope
-  > exactly: it is a finding about **that model**, not about models. Four fleet
-  > attempts —
+  > ---
+  > **READ THE FINAL RECORD FIRST (below, "Fleet complete").** Two readings in
+  > this section were **superseded** by the multi-model fleet, and only the
+  > final one is right. They are kept rather than deleted because *how* they
+  > were wrong is the more useful record: both were well-evidenced within their
+  > setup, and the setup was the thing that needed varying.
+  > ---
+  >
+  > **Superseded reading (1 of 2): `openai/gpt-oss-120b` calls tools
+  > sequentially.** This part is still true, and it is a finding about **that
+  > model**, not about models. What was wrong was everything generalised from
+  > it. Four fleet attempts —
   > `--fleet 8` twice, `--fleet 12` twice, the last with
   > `parallel_tool_calls=True` — **32 runs, three specs aimed at the shape,
   > not one parallel call.** The endpoint accepted the parameter: no 400
@@ -966,12 +974,65 @@ below:
   > - **No silent cap.** The multi-model specs sit at the end, so `--fleet 8`
   >   reaches none of them. The harness names every spec it did not reach and
   >   says to run `--fleet 14`.
-  > **If neither model produces parallel calls either, that is a far more
-  > interesting finding than one model not doing it** — it would suggest the
-  > shape is rarer in practice than the corpus implies, and
-  > `parallel_tool_calls`' status as a hand-authored-only fixture becomes a
-  > statement about the world rather than about this fleet. Record it that way
-  > at 2.4, with all three models named.
+  > *(That anticipation — "if neither model produces parallel calls, the shape
+  > is rarer in practice than the corpus implies" — is **superseded reading 2
+  > of 2**. Both models produced them immediately. See below.)*
+  >
+  > ### Fleet complete — 14 traces, three models, all five shapes
+  >
+  > Reproduced on a **second independent run**, so what follows is stable
+  > behavior rather than a lucky draw.
+  >
+  > **1. Parallel tool calls are routine. `gpt-oss-120b` is the outlier.**
+  > Qwen3-235B and Kimi-K3 produced them on **every** parallel-aimed spec,
+  > first try, both runs. `three_at_once` builds to 6 nodes / 15 edges on both:
+  > **3 `call_result` edges and 3 declared `data` edges**, against
+  > `gpt-oss-120b`'s 1 and 1 for the identical prompt and tools.
+  >
+  > **This reverses the earlier reading, and the reversal is the finding.**
+  > "Parallel calls are rare in practice; the corpus overstates the shape" was
+  > wrong. It was one model's behavior generalised from a sample of one — and
+  > it was not sloppy: 32 runs, three specs aimed at the shape, the capability
+  > explicitly enabled and accepted by the endpoint, a mechanism identified
+  > (sequential calls across turns) and corroborated by
+  > `llm.finish_reason: tool_calls` on follow-up spans. **Well-evidenced,
+  > internally consistent, and still wrong**, because every one of those 32
+  > runs varied the prompt inside a fixed setup and the setup was the variable
+  > that mattered. The corpus's `parallel_tool_calls` scenario describes
+  > something **common**, and the fleet now produces it from a model rather
+  > than only from a fixture — which retires limitation 1 above as well.
+  >
+  > **2. The unpaired call is an interaction, not a truncated loop.** Sharper
+  > than recorded above: the Qwen and Kimi traces have **zero** unpaired calls
+  > despite running through the *same* single-turn loop, because a model that
+  > requests everything in one turn is fully served by one turn. The unpaired
+  > call is the **interaction** between a sequentially-calling model and a
+  > single-turn loop — a property of neither alone.
+  > That **weakens the case for making `converse()` loop**: the shape it would
+  > fix is specific to models that call sequentially, and two of the three
+  > models here do not. Still a 2.4 decision, now with a smaller expected
+  > payoff.
+  >
+  > **3. A harness defect that would have corrupted 2.3's evidence silently.**
+  > `_fleet` appended rather than replaced, so `--fleet 14` after `--fleet 12`
+  > left **26 files** — 12 stale under the old naming beside 14 new. An
+  > aggregator pointed at that directory would have double-counted nine traces
+  > and treated stale runs as distinct from their own re-runs. And the
+  > duplicates are **not identical**: `unmapped_attributes` went 2 → 3 once the
+  > model/spec stamp was added, so they would have read as *real variation*
+  > rather than as duplicates. Fixed: the directory now holds exactly one
+  > fleet, only files this harness writes are removed, and the count removed is
+  > reported.
+  >
+  > **The recorded limitation, updated.** The fleet is **five distinct shapes
+  > across three models**, not two across one: `2/1` (no tool call), `4/7`,
+  > `4/7` with an unpaired call, `5/11` (two parallel calls), `6/15` (three).
+  > It is **still a one-turn fleet** — `converse()` executes tools for one turn,
+  > so no trace is deeper than `agent -> llm -> tool* -> llm`, and depth
+  > remains untested. But it is no longer *unstressed*: it varies in breadth,
+  > in diagnostics, in edge count, and across three models. **2.4's resolution
+  > must still name the depth limit** — "P5 survived a one-turn fleet" is the
+  > honest claim — but it no longer has to add "and a fleet with two shapes".
   >
   > **One thing the library got right that nothing had tested.** `04_no_tool`
   > and `07_out_of_scope` are the **first traces it has ever seen with no tool

@@ -1092,3 +1092,43 @@ def test_a_named_endpoint_reaches_the_client(tmp_path, monkeypatch):
     assert urls == ["https://example.invalid/v1/"]
     # ...and the run used the spec's model, not the configured default.
     assert seen[0].model == fleet.KIMI
+
+
+# -- one fleet per directory -----------------------------------------------
+
+
+def test_a_new_fleet_clears_the_previous_one(tmp_path, monkeypatch):
+    # The defect this fixes: --fleet 14 after --fleet 12 left 26 files, and an
+    # aggregator would have double-counted nine traces. The duplicates were
+    # not even identical -- unmapped_attributes changed when the model/spec
+    # stamp arrived -- so they would have read as real variation.
+    directory = tmp_path / "fleet"
+    directory.mkdir()
+    for index in range(3):
+        (directory / f"9{index}_stale.local.jsonl").write_text("{}\n")
+    monkeypatch.setattr(run, "FLEET_SCRATCH", directory)
+
+    backend, _ = a_stub_backend([("assistant", [])] * 8)
+    run._fleet(2, backend, "stub-1", StubTracer(), ScriptedExporter(a_complete_fleet()))
+
+    written = sorted(p.name for p in directory.iterdir())
+    assert len(written) == 2
+    assert not any("stale" in name for name in written)
+
+
+def test_clearing_leaves_files_the_harness_did_not_write(tmp_path, monkeypatch):
+    # Scratch or not, deleting something a human put there is not this
+    # harness's business.
+    directory = tmp_path / "fleet"
+    directory.mkdir()
+    (directory / "NOTES.md").write_text("mine")
+    (directory / "01_old.local.jsonl").write_text("{}\n")
+    monkeypatch.setattr(run, "FLEET_SCRATCH", directory)
+
+    assert run.clear_fleet_dir() == 1
+    assert [p.name for p in directory.iterdir()] == ["NOTES.md"]
+
+
+def test_clearing_an_absent_directory_is_not_an_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "never-made")
+    assert run.clear_fleet_dir() == 0
