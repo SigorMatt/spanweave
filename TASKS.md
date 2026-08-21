@@ -432,7 +432,8 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > Two scenarios are deliberately shaped differently, both documented in
   > `FIXTURES.md` §1/§4: `declared_data_edge` has **no** OpenInference rendering
   > (the dialect declares no producer→consumer relation, and inventing an
-  > attribute would make the fixture assert something unsubstantiated), and
+  > attribute would make the fixture assert something unsubstantiated —
+  > **this turned out to be false; see the cold-review record below**), and
   > `duplicate_span_ids` has **no** expected graph, because it must not build —
   > its expectation is an `expected/error.json`.
 
@@ -535,6 +536,52 @@ originator, `stop` on the echo) as an available second signal, deliberately
 **not** wired in: one observed dialect is not enough to justify a second rule.
 The corpus keeps the attribute in its renderings so the signal is there the day
 it is reopened.
+
+### Cold review of the first captured trace — a missed `data` edge
+
+A reviewer with no knowledge of this project, given the capture and its graph
+and asked only whether the graph represents the trace, found a relation we were
+discarding. We had just finished establishing that input-side tool-call ids are
+history echoes, and over-generalized that into "input-side ids are noise".
+
+**What was there.** A tool-result message in the follow-up span's input —
+`role="tool"`, `tool_call_id=X` — carries the same id the tool span answered.
+That is the instrumentor declaring that one span's output became another's
+input, joined by **id**, with no value comparison anywhere. Our own
+`unmapped_attributes` diagnostic had been listing the attribute all along.
+
+**The spec change, made deliberately rather than slipped in.** `SPEC.md` §4.2.1
+now permits a `data` edge from a declaration made at **message** granularity,
+resolved to spans by declared id. It names the objection and accepts it rather
+than dismissing it: the declaration's subject is a message and the edge's
+subject is a span, which is a granularity leap that takes a position on
+`OPEN_QUESTIONS.md` §2 — recorded there as a precedent, with its narrowness
+spelled out. The `basis` names the resolution (`tool_call_id in tool-result
+message`), not just the field, so the step is auditable. A stated gap: a
+received result whose producer is absent yields no edge and no diagnostic.
+
+**What moved.** `llm_tool_llm`, `shuffled_order`, `tool_call_history_echo` each
+gain one `data` edge (6→7 edges, 3→4 for the echo). `parallel_tool_calls` and
+`unpaired_tool_call` are unchanged — no follow-up turn, so no result received.
+`declared_data_edge` **is rendered at last** and its `coverage.json` deleted,
+which is the §4.3 lifecycle working exactly as designed; no scenario is
+unrenderable now, and the tripwire test says so.
+
+**The restraint sentence inverted rather than vanished.** `llm_tool_llm` and
+`FIXTURES.md` §7 said the graph declined to connect the tool to the second LLM
+call "because the telemetry didn't" — the library's most-quoted illustration of
+restraint, wrong about the very trace it described. It now shows the rule
+working in both directions: the declared relation is emitted with a basis
+naming how it was resolved, and what is still not asserted is any flow nobody
+stated. That is the better illustration.
+
+**And the class of defect is now checked.** `FIXTURES.md` §7 had also gone stale
+against the fixture it quotes — I corrected the fixture and not the document.
+`tests/test_docs.py` extends the `test_codes.py` pattern to prose: the quoted
+JSONL must be the fixture verbatim, every edge kind/warrant/basis the section
+claims must be one the graph builds, the diagnostics claim must match, and
+per-span attribute counts must agree. Watched failing on planted drift in both
+the block and the prose.
 
 **Two notes for whoever picks this up next.**
 

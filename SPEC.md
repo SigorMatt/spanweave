@@ -424,6 +424,48 @@ threshold, a normalization rule, and an encoding policy — none of them
 opinion-free — and shipping one default set of those choices would be closer to
 semantics than anything else in the library (`CLAUDE.md` 1).
 
+#### 4.2.1 Declarations made at message granularity
+
+A declaration does **not** have to name two spans. It may be made about a
+**message**, and resolved to spans by **declared id** — never by comparing
+values.
+
+The case this exists for: a chat protocol's tool-result message
+(`{"role": "tool", "tool_call_id": X, ...}`) states that the output of whatever
+answered call X became an input to the span that received the message. The span
+that answered X declares the same id. Joining them is the mechanism §4.4
+already uses for `call_result`, and no content is examined at any point — so
+none of the three objections above has anything to apply to: there is no
+threshold, no normalization rule and no encoding policy, because there is
+nothing being matched.
+
+Such an edge is `explicit`, and its `basis` MUST name the resolution rather
+than only the field — `"tool_call_id in tool-result message"`, not
+`"tool_call_id"` — because a consumer auditing it is entitled to know that a
+resolution step happened and what it joined on.
+
+**The objection, which is accepted rather than dismissed.** The subject of the
+declaration is a *message*; the subject of the edge is a *span*. In
+`call_result` both endpoints make claims about themselves, and here one endpoint
+makes a claim about something it received, which the library then attributes to
+another span. That is a granularity leap, and it takes a position on
+`OPEN_QUESTIONS.md` §2 (are messages nodes, or payload content?): it resolves
+message-level provenance **to span level** instead of surfacing it as
+message-level nodes.
+
+It is accepted because the alternative is worse in the library's own terms.
+Suppressing a relation the telemetry states plainly is the mirror image of
+asserting one it did not — the failure this section exists to prevent — and the
+warrant and basis together make exactly what happened auditable: `explicit`
+says the telemetry asserted it, and the basis says how it was resolved. What is
+**not** licensed is any widening of this: a declaration must still be a
+declaration, and the id must still be the join.
+
+**A stated gap.** If a span reports receiving the result of call X and no span
+in the input fulfilled X, no edge is emitted and **nothing is reported** — the
+producer is simply absent. That is currently silent; it wants a diagnostic code
+the first time someone meets it.
+
 ### 4.3 `temporal` edges: scope and rule
 
 Emitting a `temporal` edge for every ordered pair is O(n²) and useless. The rule
@@ -548,6 +590,8 @@ NormalizedSpan:
   call_role:   requester | fulfiller | None
   links:       tuple[SpanLink, ...]
   data_edges:  tuple[DeclaredDataEdge, ...]   # explicit only (§4.2)
+  received_call_ids: tuple[str, ...]  # results this span was GIVEN (§4.2.1);
+                                      # the builder resolves them to producers
   attributes:  Mapping[str, JsonValue]
   unmapped:    tuple[str, ...]    # attribute keys seen and not normalized
   raw:         RawRecord

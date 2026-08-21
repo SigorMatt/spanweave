@@ -36,6 +36,13 @@ from spanweave.version import SCHEMA_VERSION, __version__
 
 PARENT_BASIS = "span.parent_span_id"
 CALL_BASIS = "tool_call_id"
+
+#: Names the resolution, not just the field. The instrumentor declares the
+#: relation about a **message** ("this input is the result of call X"); the
+#: builder resolves it to the span that fulfilled X. A consumer auditing this
+#: edge is entitled to know that a resolution happened and what it joined on
+#: (`SPEC.md` §4.2).
+DATA_BASIS = "tool_call_id in tool-result message"
 TEMPORAL_BASIS = "sibling start_time ordering"
 
 #: When two siblings report the *same* start time, neither started first, and
@@ -248,12 +255,32 @@ def _explicit_edges(
     adapter: AdapterInfo,
 ) -> tuple[Edge, ...]:
     """Every relation the telemetry stated. Nothing it merely implied."""
+    requesters, fulfillers = _call_sides(spans, ids)
     found: list[Edge] = []
     found.extend(_parent_edges(spans, ids, by_span_id, collected, adapter))
-    found.extend(_call_result_edges(spans, ids, collected, adapter))
+    found.extend(_call_result_edges(requesters, fulfillers, collected, adapter))
     found.extend(_link_edges(spans, ids, by_span_id, adapter))
-    found.extend(_data_edges(spans, ids, by_span_id, adapter))
+    found.extend(_data_edges(spans, ids, by_span_id, fulfillers, adapter))
     return _deduplicated(found)
+
+
+def _call_sides(
+    spans: Sequence[NormalizedSpan], ids: Sequence[NodeId]
+) -> tuple[dict[str, list[NodeId]], dict[str, list[NodeId]]]:
+    """Who asked for each call, and who answered it.
+
+    Built once: `call_result` joins the two sides, and a `data` edge joins the
+    answering side to whoever was later given the answer (`SPEC.md` §4.2).
+    """
+    requesters: dict[str, list[NodeId]] = {}
+    fulfillers: dict[str, list[NodeId]] = {}
+    for span, node_id in zip(spans, ids, strict=True):
+        if not span.call_ids or span.call_role is None:
+            continue
+        side = requesters if span.call_role is CallRole.REQUESTER else fulfillers
+        for call_id in span.call_ids:
+            side.setdefault(call_id, []).append(node_id)
+    return requesters, fulfillers
 
 
 def _parent_edges(
@@ -294,8 +321,8 @@ def _parent_edges(
 
 
 def _call_result_edges(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
+    requesters: dict[str, list[NodeId]],
+    fulfillers: dict[str, list[NodeId]],
     collected: DiagnosticCollector,
     adapter: AdapterInfo,
 ) -> list[Edge]:
@@ -305,15 +332,6 @@ def _call_result_edges(
     indistinguishable from a real one downstream, which is exactly the harm
     the warrant system exists to prevent (`SPEC.md` §4.4).
     """
-    requesters: dict[str, list[NodeId]] = {}
-    fulfillers: dict[str, list[NodeId]] = {}
-    for span, node_id in zip(spans, ids, strict=True):
-        if not span.call_ids or span.call_role is None:
-            continue
-        side = requesters if span.call_role is CallRole.REQUESTER else fulfillers
-        for call_id in span.call_ids:
-            side.setdefault(call_id, []).append(node_id)
-
     edges = []
     for call_id in sorted(set(requesters) | set(fulfillers)):
         asked = sorted(requesters.get(call_id, ()))
@@ -382,15 +400,26 @@ def _data_edges(
     spans: Sequence[NormalizedSpan],
     ids: Sequence[NodeId],
     by_span_id: dict[str, NodeId],
+    fulfillers: dict[str, list[NodeId]],
     adapter: AdapterInfo,
 ) -> list[Edge]:
     """Only ever the ones the instrumentor declared (`SPEC.md` §4.2).
 
-    Nothing here compares an output to an input. A `data` edge exists in this
-    graph if and only if the source said so.
+    Two shapes of declaration, and nothing here compares an output to an
+    input in either of them:
+
+    * both ends named on one span -- transcribed as given;
+    * a span stating that it **received** the result of call X, joined to the
+      span that fulfilled X. The relation is declared about a message and
+      resolved to spans by id, which is a real step and is why the basis says
+      so rather than naming a bare field.
+
+    A received result whose producing span is not in this input yields no
+    edge: there is nothing to point at. That gap is currently silent, and is
+    recorded as such in `SPEC.md` §4.2.
     """
     edges = []
-    for span, _node_id in zip(spans, ids, strict=True):
+    for span, node_id in zip(spans, ids, strict=True):
         for declared in span.data_edges:
             edges.append(
                 Edge(
@@ -402,6 +431,22 @@ def _data_edges(
                     adapter=adapter.id,
                 )
             )
+        for call_id in span.received_call_ids:
+            for producer in sorted(fulfillers.get(call_id, ())):
+                if producer == node_id:
+                    # A span cannot feed itself. Malformed input rather than a
+                    # relation, and a self-loop would be neither.
+                    continue
+                edges.append(
+                    Edge(
+                        src=producer,
+                        dst=node_id,
+                        kind=EdgeKind.DATA,
+                        warrant=Warrant.EXPLICIT,
+                        basis=DATA_BASIS,
+                        adapter=adapter.id,
+                    )
+                )
     return edges
 
 

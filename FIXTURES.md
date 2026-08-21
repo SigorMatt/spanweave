@@ -183,11 +183,21 @@ where another refuses is a finding about the model, not a fixture to relax.
 
 ### 4.3 Dialects that cannot render a scenario
 
-Some scenarios cannot be expressed in some dialects at all. `declared_data_edge`
-has no OpenInference rendering, because OpenInference declares no
-producer→consumer relation: there is nothing to transcribe, and writing a
-rendering would mean inventing an attribute and asserting the instrumentor emits
-it (`ADAPTERS.md` §1).
+Some scenarios cannot be expressed in some dialects at all — a dialect may
+simply have no way to say the thing a scenario is about. Writing a rendering
+anyway would mean inventing an attribute and asserting the instrumentor emits
+it (`ADAPTERS.md` §1), which is worse than a gap because it passes.
+
+> **The seed corpus's only user of this mechanism has since graduated, and the
+> way it did is a warning.** `declared_data_edge` was declared unrenderable in
+> OpenInference on the grounds that the dialect had no producer→consumer
+> attribute. It has one, in every multi-turn trace, and the corpus had been
+> carrying it in `unmapped` for a whole phase. The `coverage.json` was deleted
+> and the scenario rendered (§5.1).
+>
+> So a `renderable: false` with a stated reason is an **invitation to check the
+> reason against observed output**, not a settled fact. It records what we
+> believed on the day, which is exactly why the reason is mandatory.
 
 That is a statement about **coverage**, not about behavior, and unlike a refusal
 it is **per dialect** and **temporary** — the scenario's `graph.json` arrives
@@ -195,9 +205,9 @@ with the first dialect that can render it.
 
 ```json
 {
-  "openinference": {
+  "some_dialect": {
     "renderable": false,
-    "reason": "the dialect declares no producer->consumer relation"
+    "reason": "the dialect has no attribute for <the thing this scenario is about>"
   }
 }
 ```
@@ -288,10 +298,10 @@ right** and the adapter is wrong.
 ## 7. Worked example — `llm_tool_llm` (OpenInference)
 
 ```jsonl
-{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1004.0,"attributes":{"openinference.span.kind":"AGENT","input.value":"Look up the order status.","input.mime_type":"text/plain"}}
-{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"llm.plan","start_time":1000.2,"end_time":1001.0,"attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.token_count.prompt":42,"llm.token_count.completion":17,"output.value":"{\"tool_calls\":[{\"id\":\"call_a\",\"name\":\"lookup\"}]}","output.mime_type":"application/json"}}
-{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"tool.lookup","start_time":1001.2,"end_time":1002.0,"attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup","tool_call.id":"call_a","input.value":"{\"order\":\"A-1\"}","input.mime_type":"application/json","output.value":"{\"status\":\"shipped\"}","output.mime_type":"application/json"}}
-{"trace_id":"t1","span_id":"s3","parent_id":"s0","name":"llm.answer","start_time":1002.2,"end_time":1003.0,"attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.token_count.prompt":61,"llm.token_count.completion":12,"output.value":"Your order has shipped.","output.mime_type":"text/plain"}}
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1004.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT","input.value":"Look up the order status.","input.mime_type":"text/plain"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"llm.plan","start_time":1000.2,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.finish_reason":"tool_calls","llm.token_count.prompt":42,"llm.token_count.completion":17,"input.value":"{\"messages\":[{\"role\":\"user\",\"content\":\"Look up the order status.\"}]}","input.mime_type":"application/json","llm.input_messages.0.message.role":"user","llm.input_messages.0.message.content":"Look up the order status.","llm.output_messages.0.message.role":"assistant","llm.output_messages.0.message.tool_calls.0.tool_call.id":"call_a","llm.output_messages.0.message.tool_calls.0.tool_call.function.name":"lookup","llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments":"{\"order\":\"A-1\"}","output.value":"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_a\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"order\\\":\\\"A-1\\\"}\"}}]}}]}","output.mime_type":"application/json"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"tool.lookup","start_time":1001.2,"end_time":1002.0,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup","tool_call.id":"call_a","input.value":"{\"order\":\"A-1\"}","input.mime_type":"application/json","output.value":"{\"status\":\"shipped\"}","output.mime_type":"application/json"}}
+{"trace_id":"t1","span_id":"s3","parent_id":"s0","name":"llm.answer","start_time":1002.2,"end_time":1003.0,"status":"OK","attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.finish_reason":"stop","llm.token_count.prompt":61,"llm.token_count.completion":12,"input.value":"{\"messages\":[{\"role\":\"user\",\"content\":\"Look up the order status.\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_a\",\"name\":\"lookup\",\"arguments\":{\"order\":\"A-1\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_a\",\"content\":\"{\\\"status\\\":\\\"shipped\\\"}\"}]}","input.mime_type":"application/json","llm.input_messages.0.message.role":"user","llm.input_messages.0.message.content":"Look up the order status.","llm.input_messages.1.message.role":"assistant","llm.input_messages.1.message.tool_calls.0.tool_call.id":"call_a","llm.input_messages.1.message.tool_calls.0.tool_call.function.name":"lookup","llm.input_messages.2.message.role":"tool","llm.input_messages.2.message.content":"{\"status\":\"shipped\"}","llm.input_messages.2.message.tool_call_id":"call_a","llm.output_messages.0.message.role":"assistant","llm.output_messages.0.message.content":"Your order has shipped.","output.value":"{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"Your order has shipped.\"}}]}","output.mime_type":"application/json"}}
 ```
 
 Expected canonical graph:
@@ -300,16 +310,30 @@ Expected canonical graph:
 - **Edges:**
   - `parent` explicit, basis `span.parent_span_id`: s0→s1, s0→s2, s0→s3
   - `call_result` explicit, basis `tool_call_id`: s1→s2
+  - `data` explicit, basis `tool_call_id in tool-result message`: s2→s3
   - `temporal` derived, basis `sibling start_time ordering`: s1→s2, s2→s3
-- **Payloads:** s0 inputs present / outputs absent; s1 inputs absent / outputs
-  present (JSON); s2 both present (JSON); s3 inputs absent / outputs present.
+- **Payloads:** s0 inputs present / outputs absent; every LLM span reports both
+  (the instrumentor emits `input.value` on every model call); s2 both present.
 - **Usage:** on s1 and s3 only.
-- **Diagnostics:** none.
+- **Diagnostics:** `unmapped_attributes` ×2, both `info` — the message-list
+  keys this library does not normalize.
 
-Note what is *not* there: no edge from s2 to s3 asserting the tool result
-reached the second LLM call, even though a reader can see that it did. The
-telemetry did not state it, so the library does not either. A consumer that
-wants that conclusion draws it — and owns it.
+Note what *is* there, and what is not. The `data` edge s2→s3 exists because the
+instrumentor **declared** it: s3's input carries a tool-result message whose
+`tool_call_id` is the id s2 answered (§4.2.1). The `temporal` edge on the same
+pair says something different and weaker, and both are kept.
+
+What is still absent is any flow nobody stated. Nothing here compares an output
+string to an input string; a consumer that wants a conclusion of that kind
+draws it — and owns it.
+
+> **This section previously said the opposite**, and it was wrong about the very
+> trace it quotes: it claimed the library declined to connect s2 to s3 "because
+> the telemetry did not state it". The telemetry did, in an attribute the
+> adapter was discarding and this document never checked. The JSONL above is
+> now generated from the fixture and asserted against it by
+> `tests/test_docs.py`, because a document that quotes a fixture and drifts
+> from it is a document that will eventually lie.
 
 ## 8. Fixture hygiene
 

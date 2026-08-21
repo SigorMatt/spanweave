@@ -108,10 +108,16 @@ def test_every_dialect_is_either_rendered_or_declared_unrenderable(scenario, dia
         assert len(reason) > 20
 
 
-def test_the_only_unrenderable_scenario_is_the_one_we_agreed_on():
-    # Recorded so that a second unrenderable scenario has to be argued for
-    # rather than merely added.
-    assert ids(PENDING) == ["declared_data_edge"]
+def test_no_scenario_is_currently_unrenderable():
+    # `declared_data_edge` was the only one, on the stated grounds that
+    # OpenInference declared no producer->consumer relation. It does, in every
+    # multi-turn trace (SPEC.md §4.2.1), so the scenario was rendered and its
+    # coverage.json deleted -- which is the §4.3 lifecycle working.
+    #
+    # Kept as a tripwire: a new unrenderable scenario has to be argued for
+    # rather than merely added, and the reason has to survive being checked
+    # against observed output.
+    assert ids(PENDING) == []
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=ids(SCENARIOS))

@@ -119,9 +119,19 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 **Explicit relations**
 - `links` — span links, when present.
 - `data_edges` — **only** when the dialect explicitly declares a producer→
-  consumer relation. Comparing values to guess a flow is forbidden
-  (`SPEC.md` §4.2).
-- Every declared edge needs a `basis` naming the source field.
+  consumer relation, naming both ends. Comparing values to guess a flow is
+  forbidden (`SPEC.md` §4.2).
+- `received_call_ids` — when the dialect says this span was **given** the
+  result of a call (a tool-result message, typically). You cannot name the
+  producer from one span, and you should not try: record the id and let the
+  builder resolve it (`SPEC.md` §4.2.1).
+- Look for this before concluding your dialect declares no data relations. It
+  is easy to miss, because it does not look like an edge — it looks like a
+  message in a request. This corpus asserted for a whole phase that
+  OpenInference declared nothing of the kind, while every multi-turn trace
+  carried it.
+- Every declared edge needs a `basis` naming the source field — and, where the
+  library resolved a declaration from one granularity to another, saying so.
 
 **Losslessness**
 - `unmapped` — the attribute **keys** you saw and did not normalize. Keys only;

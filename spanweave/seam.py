@@ -108,6 +108,15 @@ class NormalizedSpan:
     call_role: CallRole | None = None
     links: tuple[SpanLink, ...] = ()
     data_edges: tuple[DeclaredDataEdge, ...] = ()
+    #: Call ids whose **results this span was given** -- the dialect declaring
+    #: that some other span's output became this span's input.
+    #:
+    #: Separate from `data_edges` because an adapter cannot name the producer:
+    #: it sees one span, and the span says only "I received the result of call
+    #: X". Resolving X to the span that fulfilled it needs the whole trace, so
+    #: the builder does it -- exactly the division of labour `call_ids` already
+    #: uses for `call_result` (`SPEC.md` §4.2).
+    received_call_ids: tuple[str, ...] = ()
     attributes: Mapping[str, JsonValue] = field(default_factory=dict)
     #: Attribute **keys** the adapter saw and did not normalize. Keys only:
     #: the values are already in `raw`.

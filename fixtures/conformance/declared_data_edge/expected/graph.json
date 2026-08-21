@@ -2,22 +2,19 @@
   "diagnostics": [
     {
       "code": "unmapped_attributes",
-      "count": 2
+      "count": 1
+    },
+    {
+      "code": "unpaired_result",
+      "count": 1
     }
   ],
   "edges": [
     {
-      "basis": "tool_call_id",
-      "dst": "s2",
-      "kind": "call_result",
-      "src": "s1",
-      "warrant": "explicit"
-    },
-    {
       "basis": "tool_call_id in tool-result message",
-      "dst": "s3",
+      "dst": "s2",
       "kind": "data",
-      "src": "s2",
+      "src": "s1",
       "warrant": "explicit"
     },
     {
@@ -25,76 +22,21 @@
       "dst": "s2",
       "kind": "temporal",
       "src": "s1",
-      "warrant": "derived"
-    },
-    {
-      "basis": "sibling start_time ordering",
-      "dst": "s3",
-      "kind": "temporal",
-      "src": "s2",
       "warrant": "derived"
     }
   ],
   "meta": {
     "diagnostic_count": 2,
-    "edge_count": 4,
-    "node_count": 3,
+    "edge_count": 2,
+    "node_count": 2,
     "schema_version": "0.1",
     "trace_id": "t1"
   },
   "nodes": [
     {
-      "attributes": {
-        "model": "demo-model"
-      },
+      "attributes": {},
       "ended_at": 1000.1,
       "id": "s1",
-      "inputs": {
-        "mime": "application/json",
-        "state": "present",
-        "value": {
-          "messages": [
-            {
-              "content": "Look up the order status.",
-              "role": "user"
-            }
-          ]
-        }
-      },
-      "kind": "llm",
-      "name": "llm.plan",
-      "operation": "demo-model",
-      "outputs": {
-        "mime": "application/json",
-        "state": "present",
-        "value": {
-          "choices": [
-            {
-              "finish_reason": "tool_calls",
-              "message": {
-                "role": "assistant",
-                "tool_calls": [
-                  {
-                    "function": {
-                      "name": "lookup"
-                    },
-                    "id": "call_a"
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      },
-      "started_at": 1000.0,
-      "status": "ok",
-      "status_note": null,
-      "usage": null
-    },
-    {
-      "attributes": {},
-      "ended_at": 1000.3,
-      "id": "s2",
       "inputs": {
         "mime": null,
         "state": "absent",
@@ -110,7 +52,7 @@
           "status": "shipped"
         }
       },
-      "started_at": 1000.2,
+      "started_at": 1000.0,
       "status": "ok",
       "status_note": null,
       "usage": null
@@ -119,8 +61,8 @@
       "attributes": {
         "model": "demo-model"
       },
-      "ended_at": 1000.5,
-      "id": "s3",
+      "ended_at": 1000.3,
+      "id": "s2",
       "inputs": {
         "mime": "application/json",
         "state": "present",
@@ -168,7 +110,7 @@
           ]
         }
       },
-      "started_at": 1000.4,
+      "started_at": 1000.2,
       "status": "ok",
       "status_note": null,
       "usage": null

@@ -72,9 +72,27 @@ a consumer only inside `Payload.value` or `raw`, and the messages are already
 them must either re-parse `output.value` or re-assemble them from the dotted
 keys itself.
 
-This is the first evidence for this question that did not come from us, and it
-arrived as a usability complaint rather than a design argument — which is the
-form the answer is most likely to take. It does **not** settle whether messages
+**A position has now been taken, in code, and it should be visible here.**
+`SPEC.md` §4.2.1 emits a `data` edge from a declaration the instrumentor makes
+at **message** granularity — a tool-result message saying "this input is the
+result of call X" — by resolving it to the **span** that fulfilled X. That is
+message-level provenance answered at span level rather than surfaced as
+message-level nodes.
+
+It is evidence *for* the provisional stance, not against it: the resolution
+worked, on real telemetry, and produced an edge a consumer can audit. The
+information that lived in a message reached the graph without messages
+becoming nodes.
+
+It is not a resolution, and it is deliberately not written as one. It is one
+relation, in one dialect, where the id happened to make the resolution
+unambiguous. A message-level fact that does **not** carry a span-resolvable id
+— which document ended up in which prompt, the case §2(b) is actually about —
+would not survive this treatment, and nothing here says it would. Recorded so
+that whoever resolves §2 knows a precedent exists and how narrow it is.
+
+The other evidence for this question arrived as a usability complaint rather
+than a design argument — which is the form the answer is most likely to take. It does **not** settle whether messages
 should be *nodes*: mapping the message list into `Node.attributes` would answer
 the complaint without touching granularity at all, and that is §5's question.
 Recorded here because the two are easily confused and the evidence bears on
@@ -219,7 +237,7 @@ becomes an ordinary operational option.
 through** on the technicality that it reuses an existing `EdgeKind` and warrant
 — decide it here, deliberately, as the policy question it is.
 
-**Evidence — the premise of this entry is now in question. NOT resolved here.**
+**Evidence — the premise of this entry was false. The QUESTION is still open.**
 
 This entry, and `PREDICTIONS.md` P3, both rest on an unstated premise:
 that `EdgeKind.data` is **near-vacuous in v1** because no supported dialect
@@ -227,23 +245,26 @@ declares a producer→consumer relation, so the only way to get a `data` edge
 would be to infer one. `declared_data_edge` was seeded with no OpenInference
 rendering on exactly that ground.
 
-A cold review of the first captured trace says the premise may be false. On a
-follow-up LLM span, `llm.input_messages.N.message.tool_call_id` with
-`role="tool"` carries the same id as the tool span's `tool_call.id`. Verified in
-the raw spans: the role **is** present and distinguishes a tool-result message
-from an assistant message that merely echoes `tool_calls`; the two also differ
-in attribute form (`.message.tool_call_id` versus
-`.message.tool_calls.N.tool_call.id`). If that constitutes the instrumentor
-declaring that the output of one span became an input to another, then a `data`
-edge is available **by id linkage, with no value comparison** — and none of
-§4.2's objections (threshold, normalization rule, encoding policy) apply,
-because there is nothing to compare.
+A cold review of the first captured trace showed it is false, and the library
+now emits such edges (`SPEC.md` §4.2.1). On a follow-up LLM span,
+`llm.input_messages.N.message.tool_call_id` with `role="tool"` carries the same
+id as the tool span's `tool_call.id`. The role **is** present and distinguishes
+a tool-result message from an assistant message that merely echoes
+`tool_calls`; the two also differ in attribute form. The join is by **id, with
+no value comparison**, so none of §4.2's objections — threshold, normalization
+rule, encoding policy — has anything to apply to.
 
-What that would change here: this entry asks whether to permit *inferred* data
-edges. If declared ones turn out to be routinely available, the question changes
-shape — from "should we relax the prohibition" to "how much does the
-prohibition actually cost, now that the declared path is not empty". Those are
-different questions with different answers.
+So `EdgeKind.data` is **not** near-vacuous in v1: every multi-turn OpenInference
+trace declares at least one, and the corpus had been carrying the evidence in
+an `unmapped` list for a phase.
+
+What that changes here: this entry asks whether to permit *inferred* data
+edges, and that question is untouched — a declared edge is not an inferred one.
+What moves is the **cost** of saying no. The argument for relaxing the
+prohibition was partly that `data` would otherwise be an edge kind nothing ever
+populated; it is populated now, from telemetry, with a warrant and an auditable
+basis. Whether that makes inference less necessary or more attractive is
+exactly what still has to be decided here, deliberately.
 
 **Deliberately not resolved.** Neither this entry nor P3 is being decided, and
 `PREDICTIONS.md` is not being edited — it records what was predicted *before*

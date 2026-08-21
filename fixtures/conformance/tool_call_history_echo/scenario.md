@@ -30,9 +30,17 @@ Edges:
 | Kind | Warrant | Basis | Pairs |
 |---|---|---|---|
 | `call_result` | explicit | `tool_call_id` | s1→s2 |
+| `data` | explicit | `tool_call_id in tool-result message` | s2→s3 |
 | `temporal` | derived | `sibling start_time ordering` | s1→s2, s2→s3 |
 
 **Exactly one `call_result` edge, and it does not start at s3.**
+
+Note the two relations s3 takes part in, and that they point opposite ways.
+s3 did **not** request the call, so there is no `call_result` edge from it —
+but it *was given the result*, which the telemetry declares in the very same
+message list, so there is a `data` edge **into** it (`SPEC.md` §4.2.1). Reading
+the first as a request and reading the second as nothing were the two mistakes
+this corpus made, in opposite directions, on the same attribute family.
 
 Node order: s1, s2, s3.
 
@@ -50,10 +58,11 @@ attribute sits in: `output_messages` is what the model produced,
 `input_messages` is what it was given. A rule that matched the id by its
 suffix alone would read the last two rows as requests.
 
-s3's echoed ids are **not** consumed by the adapter, so they surface in
-`unmapped` and are reported. They are evidence of context, and the library has
-no edge kind for that — reporting them is the honest outcome, and inventing
-one would be worse than saying nothing.
+s3's echoed **request** id (row 3) is not consumed by the adapter, so it
+surfaces in `unmapped` and is reported: it is evidence of context, and the
+library has no edge kind for that. The **result** id (row 4) is consumed, and
+becomes the `data` edge. Same span, same message list, two different answers,
+because the dialect draws the distinction and the adapter now reads it.
 
 ## Payloads
 

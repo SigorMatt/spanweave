@@ -80,6 +80,17 @@ TOOL_CALL_ID = "tool_call.id"
 # echo as a second request (see `tool_call_history_echo`).
 OUTPUT_MESSAGES = "llm.output_messages."
 CALL_ID_SUFFIX = ".tool_call.id"
+
+# A tool RESULT the span was given, as opposed to a call it requested. The
+# dialect renders an OpenAI tool-result message -- {"role": "tool",
+# "tool_call_id": ...} -- as a flat `.message.tool_call_id` under
+# `llm.input_messages.*`, with `.message.role == "tool"`. Two things separate
+# it from the assistant echo alongside it: the role, and the attribute form
+# (the echo nests under `.message.tool_calls.N.tool_call.id`).
+INPUT_MESSAGES = "llm.input_messages."
+RESULT_ID_SUFFIX = ".message.tool_call_id"
+ROLE_SUFFIX = ".message.role"
+TOOL_ROLE = "tool"
 LLM_MODEL = "llm.model_name"
 EMBEDDING_MODEL = "embedding.model_name"
 TOKEN_PREFIX = "llm.token_count."
@@ -225,6 +236,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_role=call_role,
         links=_links(record),
         data_edges=_data_edges(record),
+        received_call_ids=_received_results(attributes, consumed),
         attributes=normalized,
         unmapped=tuple(unmapped),
         raw=RawRecord(source=record, source_id=span_id, line_number=index),
@@ -440,12 +452,43 @@ def _links(record: Mapping[str, JsonValue]) -> tuple[SpanLink, ...]:
     return tuple(links)
 
 
-def _data_edges(record: Mapping[str, JsonValue]) -> tuple[DeclaredDataEdge, ...]:
-    """OpenInference declares no producer -> consumer relation.
+def _received_results(
+    attributes: Mapping[str, JsonValue], consumed: set[str]
+) -> tuple[str, ...]:
+    """Call ids whose results this span was **given** (`SPEC.md` §4.2).
 
-    So there is nothing to transcribe, and nothing is transcribed. Comparing
-    an output to an input and concluding a flow is forbidden (`SPEC.md` §4.2),
-    and it is what this empty tuple is refusing to do.
+    A tool-result message in this span's input is the instrumentor stating
+    that the output of the span which fulfilled that call became an input
+    here. It is a declaration, joined by an id: nothing compares an output
+    string to an input string, so none of §4.2's objections -- threshold,
+    normalization rule, encoding policy -- has anything to apply to.
+
+    The role is what makes it safe. `role == "tool"` is a result the span
+    received; the assistant message beside it carries the same id under a
+    different attribute form and is only an echo of the *request*
+    (`tool_call_history_echo`). Reading either as the other is a mistake in
+    opposite directions.
+    """
+    received: list[str] = []
+    for key in sorted(str(k) for k in attributes):
+        if not (key.startswith(INPUT_MESSAGES) and key.endswith(RESULT_ID_SUFFIX)):
+            continue
+        message = key[: -len(RESULT_ID_SUFFIX)]
+        if _as_str(attributes.get(message + ROLE_SUFFIX)) != TOOL_ROLE:
+            continue
+        found = _as_str(attributes[key])
+        if found is not None and found not in received:
+            consumed.add(key)
+            received.append(found)
+    return tuple(received)
+
+
+def _data_edges(record: Mapping[str, JsonValue]) -> tuple[DeclaredDataEdge, ...]:
+    """OpenInference never names **both** ends of a relation on one span.
+
+    What it does declare -- that this span was given the result of call X --
+    is carried in `received_call_ids` instead, because only the builder can
+    resolve X to the span that produced it.
     """
     return ()
 

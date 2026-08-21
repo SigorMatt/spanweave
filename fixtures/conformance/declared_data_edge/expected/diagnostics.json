@@ -1,0 +1,13 @@
+{
+  "_note": "Expected diagnostics by code and count. An empty list is a real assertion: this scenario must produce NO diagnostics. A scenario that starts emitting an unexpected diagnostic has changed behavior even if its graph still matches.",
+  "expected": [
+    {
+      "code": "unmapped_attributes",
+      "count": 1
+    },
+    {
+      "code": "unpaired_result",
+      "count": 1
+    }
+  ]
+}

@@ -3,62 +3,72 @@
 An `explicit` `data` edge: a producer→consumer relation that **the
 instrumentor itself declared**.
 
-## Status: seeded, with no dialect rendering yet
+Two spans, minimal on purpose. A tool span that answered call `call_a`, and an
+LLM span whose input carries the result of `call_a` as a tool-result message.
+The dialect states the relation; the library transcribes it.
 
-**OpenInference declares no producer→consumer relation.** There is no
-attribute in the dialect that says "this span's output fed that span's input",
-so there is nothing for an OpenInference adapter to transcribe, and this
-scenario has no `dialects/openinference.jsonl`.
+## Structure
 
-Writing one would mean inventing an attribute and asserting that OpenInference
-emits it. That is precisely the failure `ADAPTERS.md` §1 forbids — the fixture
-would be testing our imagination rather than the dialect — and a fixture that
-lies about a dialect is worse than a missing one, because it passes.
-
-So the scenario is seeded and its rendering waits for a dialect that really
-emits such a declaration (Phase 2). That absence is **declared**, not implied:
-`expected/coverage.json` records which dialect cannot render this and why, and
-a test fails if any scenario is silently missing a rendering it never declared
-(`FIXTURES.md` §4.3). The file deletes itself the moment a dialect can render
-the scenario.
-
-Until then:
-
-- the **mechanism** is covered at the builder level:
-  `tests/test_build.py::test_a_declared_data_edge_is_transcribed_with_the_declared_basis`
-  builds one from a `DeclaredDataEdge` on the seam and checks its warrant and
-  basis;
-- the **prohibition** is covered too:
-  `tests/test_build.py::test_no_data_edge_appears_from_matching_values` gives
-  two spans where one's output is byte-identical to the other's input, and
-  asserts that no `data` edge appears.
-
-## Expected structure, when a dialect for it arrives
-
-Nodes: 2 (producer, consumer).
+Nodes: 1 `tool`, 1 `llm`.
 
 Edges:
 
 | Kind | Warrant | Basis | Pairs |
 |---|---|---|---|
-| `data` | explicit | whatever field declared it | producer→consumer |
+| `data` | explicit | `tool_call_id in tool-result message` | s1→s2 |
+| `temporal` | derived | `sibling start_time ordering` | s1→s2 |
 
-The `basis` must name the **source field**, not the rule: it is what lets a
-consumer audit the edge rather than trust it.
+Node order: s1, s2.
 
-## Why `data` is never derived
+Both edges connect the same pair and say different things: `data` is what the
+telemetry declared, `temporal` is what the clock shows. A consumer that trusts
+only stated relations filters on warrant (`SPEC.md` §3.8).
 
-A `data` edge is the most consequential kind in the model — it is what
-downstream tools treat as evidence. Matching an output string to an input
-string needs a threshold, a normalization rule, and an encoding policy, none
-of which are opinion-free, and shipping one default set of those choices would
-be closer to semantics than anything else in the library (`SPEC.md` §4.2).
+## How the relation is declared
 
-That prohibition is itself under review — `OPEN_QUESTIONS.md` §7 records that
-it is stricter than the warrant system requires, and names it as a scope
-decision rather than an architectural one. It is binding until decided.
+| Span | Attribute | Meaning |
+|---|---|---|
+| s1 | `tool_call.id` = `call_a` | this span **answered** `call_a` |
+| s2 | `llm.input_messages.2.message.role` = `tool` | this input is a **result** |
+| s2 | `llm.input_messages.2.message.tool_call_id` = `call_a` | of `call_a` |
+
+The join is by **id**. No content is compared — the contents happen to match,
+and that is irrelevant to the edge. This is what keeps the edge inside
+`SPEC.md` §4.2: there is no threshold, no normalization rule and no encoding
+policy, because nothing is being matched.
+
+The `basis` names the **resolution**, not just the field. The instrumentor
+declares the relation about a *message*; the library resolves it to the span
+that fulfilled the id. A consumer auditing this edge is entitled to know that a
+resolution happened (`SPEC.md` §4.2.1).
+
+## This scenario was unrenderable for a whole phase, and should not have been
+
+It was seeded with **no** OpenInference rendering, on the stated grounds that
+"OpenInference declares no producer→consumer relation". That was false, and
+every multi-turn trace in the corpus carried the counter-example — the
+attribute was sitting in the `unmapped` list of a diagnostic we printed.
+
+It was believed because it was never checked against observed output: the
+renderings were written from a reading of the dialect, so the corpus and the
+adapter agreed with each other and neither was tested against reality
+(`FIXTURES.md` §5.1). A cold review of the first captured trace found it.
+
+Its `expected/coverage.json` has been deleted, which is what §4.3 says happens
+when a dialect turns out to be able to render a scenario after all. That file
+was written to record an inability; the inability was ours.
+
+## Payloads
+
+s1 reports an output and no input. s2 reports both, as every LLM span in this
+dialect does.
+
+## Diagnostics
+
+`unmapped_attributes` ×1 on s2, `info` — the message-list keys this library
+does not normalize.
 
 ## Dialects
 
-- [ ] `openinference` — **not renderable**: the dialect declares no such relation
+- [x] `openinference` — Phase 1, rendered from an observed capture
 - [ ] `otel_genai` — Phase 2

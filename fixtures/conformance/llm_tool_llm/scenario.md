@@ -5,9 +5,24 @@ that fulfils it (joined by a tool-call id), and a second LLM call.
 
 This is the reference scenario. It exercises the one relation that a
 dialect-aware adapter is uniquely able to recover — `call_result` pairing —
-and it demonstrates the library's central restraint: the second LLM call
-obviously used the tool's result, and the graph does **not** say so, because the
-telemetry didn't.
+and it demonstrates the library's central rule working in **both** directions.
+
+The second LLM call used the tool's result, and the graph **says so**: a `data`
+edge, `explicit`, with a basis naming how it was resolved. The telemetry
+declared it — the tool-result message in s3's input carries the same id as the
+tool span (`SPEC.md` §4.2.1) — so the library transcribes it.
+
+What the graph still does **not** assert is any flow the instrumentor did not
+state. Nothing here is concluded from comparing an output string to an input
+string; every edge in this scenario points at a field that licensed it.
+
+> This paragraph used to say the opposite: that the graph deliberately did not
+> connect s2 to s3 *"because the telemetry didn't"*. It was the library's
+> most-quoted illustration of restraint, and it was **wrong about the very
+> trace it describes** — the telemetry did state it, in an attribute the
+> adapter was discarding. A cold reviewer of the first captured trace found it.
+> Restraint is refusing to assert what was not stated; it is not refusing to
+> read.
 
 ## Structure
 
@@ -19,7 +34,13 @@ Edges:
 |---|---|---|---|
 | `parent` | explicit | `span.parent_span_id` | s0→s1, s0→s2, s0→s3 |
 | `call_result` | explicit | `tool_call_id` | s1→s2 |
+| `data` | explicit | `tool_call_id in tool-result message` | s2→s3 |
 | `temporal` | derived | `sibling start_time ordering` | s1→s2, s2→s3 |
+
+s2→s3 carries **two** edges: `data` (the telemetry declared the result reached
+s3) and `temporal` (s2 started before s3). Different relations, different
+warrants, and a consumer that trusts only what was stated filters on warrant
+(`SPEC.md` §3.8).
 
 Node order (topological over `parent ∪ call_result`, tie-broken by
 `(started_at, node_id)`): s0, s1, s2, s3.
