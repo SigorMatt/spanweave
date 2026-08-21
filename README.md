@@ -87,8 +87,12 @@ library's entire reason to exist, and it is a test, not a claim.
 
 ## Status
 
-Early development (Phase 0 — skeleton & contract). **The graph schema is not
-frozen.**
+Early development. Phase 1 is the vertical slice — one dialect (OpenInference)
+read end to end into a graph, with the conformance corpus, the query surface,
+annotations, canonical serialization, and the CLI. A second adapter, which
+exists to *falsify* this model rather than confirm it, is Phase 2.
+
+**The graph schema is not frozen.**
 
 It stays unfrozen through the `0.9.x` release: publishing is reversible and
 freezing is not, so the launch happens first and the freeze happens on evidence
@@ -99,11 +103,12 @@ your version.
 
 ```
 uv sync --extra dev
-uv run ruff check .
-uv run mypy spanweave
-uv run pytest
-make check
+make check          # the gate: lint, types, tests, the invariant gates, the CLI
+make conformance    # the corpus: every scenario, against its canonical graph
 ```
+
+`make capture` is human-run only and makes a real model call — see
+`capture/README.md`.
 
 ## Documents
 

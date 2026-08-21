@@ -1,0 +1,3 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1003.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"llm.plan","start_time":1000.2,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","output.value":"{\"tool_calls\":[{\"id\":\"call_a\",\"name\":\"lookup\"}]}","output.mime_type":"application/json"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"tool.other","start_time":1001.2,"end_time":1002.0,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"other","tool_call.id":"call_b"}}

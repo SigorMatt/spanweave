@@ -397,6 +397,44 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   *Done when all scenarios pass, the captured trace builds cleanly, and its
   provenance file exists.*
   **(Phase 1 exit — HALT for human review.)**
+  > **DELIBERATELY LEFT UNCHECKED. The corpus half is done; the captured half is
+  > yours.** Everything an agent may do here is done:
+  > - All 18 scenarios from `FIXTURES.md` §3 are seeded with an OpenInference
+  >   rendering, a `scenario.md`, and a reviewed expected graph. `make
+  >   conformance` is green.
+  > - The capture harness exists (`capture/`, outside the package, `make
+  >   capture`). Its span→dialect conversion is duck-typed and unit-tested
+  >   against stub spans, including the join that matters: what the harness
+  >   writes, the adapter must read.
+  > - **`fixtures/captured/` is still empty, and must stay that way until a human
+  >   fills it.** Running the harness needs a model API key the agent does not
+  >   have and must not have (`ENVIRONMENT.md`), and synthesizing a file and
+  >   labelling it captured is the one thing that would destroy the only property
+  >   that directory has. `make capture` writes to `capture/_scratch/` and prints
+  >   the three steps that remain: read it, redact it and record the redaction,
+  >   then move it and write its provenance.
+  >
+  > Two things about the corpus a reviewer should look at rather than take on
+  > trust:
+  > - **`llm_tool_llm`'s expected graph was frozen before any of this code
+  >   existed, and the pipeline reproduces it exactly.** That is the one
+  >   expectation in the corpus this agent did not author, and it is the strongest
+  >   evidence here that the implementation follows the spec rather than the
+  >   reverse.
+  > - **Every other expected graph was generated from this implementation and then
+  >   read back against its `scenario.md`.** That is generated-then-reviewed by the
+  >   author, which is weaker than `FIXTURES.md` §8 intends. Each `scenario.md`
+  >   states its node and edge counts, payload states and diagnostics **in prose**
+  >   precisely so a human can check the expectation is *right* rather than merely
+  >   *what the code currently does* — that read is the outstanding review, and it
+  >   is worth doing before Phase 2 turns these into cross-dialect anchors.
+  >
+  > Two scenarios are deliberately shaped differently, both documented in
+  > `FIXTURES.md` §1/§4: `declared_data_edge` has **no** OpenInference rendering
+  > (the dialect declares no producer→consumer relation, and inventing an
+  > attribute would make the fixture assert something unsubstantiated), and
+  > `duplicate_span_ids` has **no** expected graph, because it must not build —
+  > its expectation is an `expected/error.json`.
 
 ---
 

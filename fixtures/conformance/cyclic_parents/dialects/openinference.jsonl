@@ -1,0 +1,2 @@
+{"trace_id":"t1","span_id":"s1","parent_id":"s2","name":"chain.one","start_time":1000.0,"end_time":1002.0,"status":"OK","attributes":{"openinference.span.kind":"CHAIN"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s1","name":"chain.two","start_time":1000.2,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"CHAIN"}}

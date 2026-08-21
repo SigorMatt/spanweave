@@ -23,6 +23,13 @@ fixtures/
       expected/
         graph.json                # THE canonical graph — one per scenario
         diagnostics.json          # expected diagnostics (codes + counts)
+        comparison.json           # optional: node fields this scenario has
+                                  #   declared dialect-varying (§4), erased
+                                  #   by canonical(). Absent = erase nothing.
+        error.json                # optional, and mutually exclusive with
+                                  #   graph.json: this scenario must NOT
+                                  #   build. Names the error type and the
+                                  #   fragments its message must contain.
   captured/
     <name>.jsonl
     <name>.provenance.md          # §6 — mandatory
@@ -97,13 +104,28 @@ For a scenario with dialects D₁…Dₙ:
 canonical(build(D₁)) == canonical(build(D₂)) == … == expected/graph.json
 ```
 
+A scenario with an `error.json` and no `graph.json` is asserting a **refusal**
+— `duplicate_span_ids` is the only one so far. Almost everything in this corpus
+degrades into a diagnostic; where it must not, the expectation has to be able to
+say so, and a missing `graph.json` alone would be indistinguishable from an
+unfinished fixture.
+
+A scenario may also have **no dialect rendering** in some dialect, and that is a
+statement too: `declared_data_edge` has none in OpenInference, because the
+dialect declares no producer→consumer relation and writing one would mean
+inventing an attribute and asserting the instrumentor emits it. Its
+`scenario.md` says so, and a test asserts the list of unrendered scenarios is
+exactly the expected one, so a rendering cannot go missing by accident.
+
 `canonical()` erases what is legitimately dialect-specific and nothing else:
 
 - **Erased:** `provenance` (adapter id/version, dialect note), `Node.raw` (the
   source record differs by construction), `Payload.raw` (the *encoding* of a
-  payload is dialect-specific even when its parsed value is not),
+  payload is dialect-specific even when its parsed value is not), `Edge.adapter`,
   `meta.adapters`, `meta.source_digest`, `meta.spanweave_version`, and node
-  `name` **only where** `scenario.md` explicitly lists it as dialect-varying.
+  `name` **only where** `scenario.md` explicitly lists it as dialect-varying —
+  declared per scenario in `expected/comparison.json`, so the erasure is a
+  reviewable fact in the corpus rather than a branch in the comparison code.
 - **Compared:** node ids, kinds, operations, timestamps, statuses, payload
   **states and values**, usage, all edges (`src`, `dst`, `kind`, `warrant`,
   `basis`), node order, and diagnostics by code and count.

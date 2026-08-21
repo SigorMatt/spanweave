@@ -1,0 +1,77 @@
+{
+  "diagnostics": [
+    {
+      "code": "ordering_cycle",
+      "count": 1
+    }
+  ],
+  "edges": [
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s2",
+      "kind": "parent",
+      "src": "s1",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s1",
+      "kind": "parent",
+      "src": "s2",
+      "warrant": "explicit"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 1,
+    "edge_count": 2,
+    "node_count": 2,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {},
+      "ended_at": 1002.0,
+      "id": "s1",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "chain",
+      "name": "chain.one",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.0,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1001.0,
+      "id": "s2",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "chain",
+      "name": "chain.two",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    }
+  ]
+}

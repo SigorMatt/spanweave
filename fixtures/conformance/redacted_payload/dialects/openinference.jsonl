@@ -1,0 +1,1 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"llm.answer","start_time":1000.0,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","input.value":"__REDACTED__","input.mime_type":"text/plain","output.value":"__REDACTED__","output.mime_type":"text/plain"}}

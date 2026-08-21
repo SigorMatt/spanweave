@@ -1,0 +1,8 @@
+{
+  "_note": "This scenario must NOT build. See scenario.md.",
+  "error": "DuplicateNodeIdError",
+  "message_contains": [
+    "s1",
+    "Refusing to overwrite"
+  ]
+}
