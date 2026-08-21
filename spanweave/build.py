@@ -38,6 +38,13 @@ PARENT_BASIS = "span.parent_span_id"
 CALL_BASIS = "tool_call_id"
 TEMPORAL_BASIS = "sibling start_time ordering"
 
+#: When two siblings report the *same* start time, neither started first, and
+#: the edge between them records a decision rather than an observation. It
+#: still exists -- the order is deterministic and consumers need it -- but it
+#: says so in its own basis, so a consumer can tell a tied edge from a strict
+#: one by reading the graph instead of the documentation (`SPEC.md` §4.3).
+TEMPORAL_TIED_BASIS = "sibling start_time ordering (tied, broken by node_id)"
+
 #: The kinds a node's position is sorted over. `temporal` is deliberately not
 #: among them: it is derived from the timestamps that already break ties, so
 #: including it would let a computed relation decide the order that a stated
@@ -417,6 +424,12 @@ def _temporal_edges(
     nothing it could not compute: the transitive closure is available through
     ``graph.reachable(...)``, so materializing it here would trade memory for
     no information.
+
+    Two siblings reporting the same start time still get an edge -- the order
+    has to be total or the graph is not deterministic -- but it carries a
+    different ``basis``, because "we put these in an order" and "this one
+    started first" are different claims and only one of them is an
+    observation.
     """
     parent_of = {edge.dst: edge.src for edge in edges if edge.kind is EdgeKind.PARENT}
     groups: dict[str, list[Node]] = {}
@@ -441,13 +454,14 @@ def _temporal_edges(
     for parent in sorted(groups):
         siblings = sorted(groups[parent], key=_tie_break)
         for earlier, later in itertools.pairwise(siblings):
+            tied = earlier.started_at == later.started_at
             found.append(
                 Edge(
                     src=earlier.id,
                     dst=later.id,
                     kind=EdgeKind.TEMPORAL,
                     warrant=Warrant.DERIVED,
-                    basis=TEMPORAL_BASIS,
+                    basis=TEMPORAL_TIED_BASIS if tied else TEMPORAL_BASIS,
                 )
             )
     return found

@@ -23,7 +23,7 @@
       "warrant": "explicit"
     },
     {
-      "basis": "sibling start_time ordering",
+      "basis": "sibling start_time ordering (tied, broken by node_id)",
       "dst": "s2",
       "kind": "temporal",
       "src": "s1",

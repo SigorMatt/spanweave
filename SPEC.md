@@ -339,7 +339,7 @@ A **closed** enum. Adding one is a spec change (halt point).
 | `call_result` | requesting op → fulfilling op | a tool call and the span that answered it, joined by an id | `explicit` only |
 | `data` | producer → consumer | an output feeds an input | `explicit` only |
 | `link` | source → linked | an OTel span link (often cross-trace) | `explicit` only |
-| `temporal` | earlier → later | one operation started before another | `derived` only |
+| `temporal` | earlier → later | one operation **ordered** before another among its siblings | `derived` only |
 
 `link` is the one kind whose `dst` may name a span that has **no node in this
 graph**: links are routinely cross-trace, and requiring the target to be
@@ -388,6 +388,24 @@ is narrow and stated:
 Nodes with no `started_at` are excluded from temporal edges and get a
 `missing_timestamp` diagnostic. Ties are broken by `node_id`, ascending, and the
 tie-break rule is a determinism invariant.
+
+**A `temporal` edge asserts an order, not a precedence.** Two siblings may
+report the *same* start time, and then neither started first — the edge between
+them records a decision the library made so that the order is total, not
+something the telemetry observed. Such an edge is still emitted (a partial order
+would not be deterministic, and dropping it would break the sibling chain), but
+it carries a different basis:
+
+| Situation | `basis` |
+|---|---|
+| `started_at` strictly increases | `sibling start_time ordering` |
+| `started_at` is equal, order decided by `node_id` | `sibling start_time ordering (tied, broken by node_id)` |
+
+That distinction is why `basis` exists. `warrant` already says the relation was
+computed; the basis says *from what*, so a consumer can discount a tie-broken
+edge — or find every one of them — by reading the graph rather than by
+re-deriving the timestamps it was built from. A consumer that does not care
+matches on `kind` and ignores both.
 
 The transitive closure is available to consumers via `graph.reachable(...)`;
 it is not materialized in the edge set.

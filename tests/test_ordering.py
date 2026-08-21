@@ -101,6 +101,46 @@ def test_equal_start_times_are_broken_by_node_id():
     assert temporal_of(graph) == [("a", "b")]
 
 
+def test_a_tie_broken_edge_says_that_it_was_tie_broken():
+    # `temporal` asserts an ORDER, not a precedence (SPEC.md §4.3). When two
+    # siblings report the same start time neither started first, so an edge
+    # claiming precedence would be false -- and the basis is where a consumer
+    # reads which kind of claim it is holding.
+    graph = build([a_span("a", started=1000.0), a_span("b", started=1000.0)])
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.TEMPORAL)
+    assert edge.basis == "sibling start_time ordering (tied, broken by node_id)"
+
+
+def test_a_strictly_ordered_edge_keeps_the_plain_basis():
+    graph = build([a_span("a", started=1000.0), a_span("b", started=1000.1)])
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.TEMPORAL)
+    assert edge.basis == "sibling start_time ordering"
+
+
+def test_a_chain_can_mix_tied_and_strict_edges():
+    graph = build(
+        [
+            a_span("a", started=1000.0),
+            a_span("b", started=1000.0),
+            a_span("c", started=1001.0),
+        ]
+    )
+    bases = {
+        (e.src, e.dst): e.basis for e in graph.edges() if e.kind is EdgeKind.TEMPORAL
+    }
+    assert "tied" in bases[("a", "b")]
+    assert "tied" not in bases[("b", "c")]
+
+
+def test_a_tie_broken_edge_is_still_derived_and_still_an_edge():
+    # Dropping it would break the sibling chain and leave the order partial,
+    # which is not deterministic. It is labelled, not suppressed.
+    graph = build([a_span("a", started=1.0), a_span("b", started=1.0)])
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.TEMPORAL)
+    assert edge.warrant is Warrant.DERIVED
+    assert (edge.src, edge.dst) == ("a", "b")
+
+
 def test_a_node_with_no_start_time_is_excluded_and_said_so():
     graph = build([a_span("a", started=1.0), a_span("b"), a_span("c", started=2.0)])
     assert temporal_of(graph) == [("a", "c")]
