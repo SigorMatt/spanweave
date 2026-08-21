@@ -4,18 +4,23 @@ The CLI is the thinnest possible layer over the library: argument parsing and
 I/O, nothing else (``DESIGN.md`` §2). It writes to stdout and to files the
 caller named, and to nothing else.
 
-At this stage the subcommands parse their full argument surface (``SPEC.md``
-§7) and exit with "not implemented". Declaring the surface before implementing
-it keeps the CLI honest about what it will accept, and keeps later tasks from
-quietly reshaping it.
+``inspect``'s output is a human summary and is **not** a stable contract; the
+graph file is. Everything it prints is a count of something the graph already
+says, so nothing there is a judgement about the trace.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import pathlib
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
+from spanweave import api, serialize
+from spanweave.adapters import registered
+from spanweave.errors import SpanweaveError
+from spanweave.model import JsonValue
 from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 
 # Exit codes. 0 success, 1 a refusal or an unimplemented path, 2 argparse's own
@@ -106,9 +111,126 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _not_implemented(command: str) -> int:
-    print(f"spanweave {command}: not implemented yet", file=sys.stderr)
-    return EXIT_FAILED
+def _read_document(path: str) -> JsonValue | None:
+    """A built graph, if that is what this file is. Otherwise ``None``.
+
+    Told apart by content rather than by extension: a graph document is a
+    single JSON object carrying a ``schema_version``. Anything else is a
+    trace, and is handed to the reader, which knows two container formats.
+    """
+    if path == "-":
+        return None
+    try:
+        document = json.loads(pathlib.Path(path).read_bytes())
+    except (ValueError, OSError):
+        return None
+    if isinstance(document, dict) and "schema_version" in document:
+        return document
+    return None
+
+
+def _do_build(args: argparse.Namespace) -> int:
+    graph = api.build(args.trace, adapter=args.adapter, temporal=not args.no_temporal)
+    if args.output:
+        serialize.dump(graph, pathlib.Path(args.output))
+        print(f"wrote {args.output}", file=sys.stderr)
+    else:
+        sys.stdout.buffer.write(serialize.dumps(graph))
+    return EXIT_OK
+
+
+def _do_inspect(args: argparse.Namespace) -> int:
+    document = _read_document(args.path)
+    if document is None:
+        graph = api.build(args.path, adapter=args.adapter)
+        document = serialize.to_document(graph)
+    for line in _summarize(document):
+        print(line)
+    return EXIT_OK
+
+
+def _do_validate(args: argparse.Namespace) -> int:
+    try:
+        document = json.loads(pathlib.Path(args.graph).read_bytes())
+    except ValueError as failure:
+        print(f"{args.graph}: not valid JSON ({failure})", file=sys.stderr)
+        return EXIT_FAILED
+    problems = serialize.validate(document)
+    for problem in problems:
+        print(f"{args.graph}: {problem}", file=sys.stderr)
+    if problems:
+        return EXIT_FAILED
+    print(f"{args.graph}: valid")
+    return EXIT_OK
+
+
+def _do_adapters(_: argparse.Namespace) -> int:
+    for adapter in registered():
+        print(f"{adapter.id}\t{adapter.version}")
+    return EXIT_OK
+
+
+def _summarize(document: JsonValue) -> list[str]:
+    """Counts, and only counts. Informational, never a stable contract."""
+    nodes = document.get("nodes", [])
+    edges = document.get("edges", [])
+    diagnostics = document.get("diagnostics", [])
+    meta = document.get("meta") or {}
+
+    lines = [
+        f"trace: {document.get('trace_id') or '(none reported)'}",
+        f"schema: {document.get('schema_version')}"
+        + ("  (NOT FROZEN)" if not SCHEMA_FROZEN else ""),
+        "adapters: "
+        + (
+            ", ".join(
+                f"{a.get('id')} {a.get('version')}" for a in meta.get("adapters", [])
+            )
+            or "(none)"
+        ),
+        "",
+        f"nodes: {len(nodes)}",
+    ]
+    lines.extend(_tally("  ", (str(node.get("kind")) for node in nodes)))
+
+    lines.append(f"edges: {len(edges)}")
+    lines.extend(
+        _tally(
+            "  ",
+            (f"{edge.get('kind')} ({edge.get('warrant')})" for edge in edges),
+        )
+    )
+
+    lines.append("payloads:")
+    lines.extend(
+        _tally(
+            "  inputs  ", (str(node.get("inputs", {}).get("state")) for node in nodes)
+        )
+    )
+    lines.extend(
+        _tally(
+            "  outputs ", (str(node.get("outputs", {}).get("state")) for node in nodes)
+        )
+    )
+
+    lines.append(f"diagnostics: {len(diagnostics)}")
+    lines.extend(_tally("  ", (str(item.get("code")) for item in diagnostics)))
+    return lines
+
+
+def _tally(indent: str, values: Iterable[str]) -> list[str]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return [f"{indent}{name}: {counts[name]}" for name in sorted(counts)]
+
+
+COMMANDS = {
+    "build": _do_build,
+    "inspect": _do_inspect,
+    "validate": _do_validate,
+    "adapters": _do_adapters,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -120,8 +242,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return EXIT_OK
 
-    command: str = args.command
-    return _not_implemented(command)
+    try:
+        return COMMANDS[args.command](args)
+    except SpanweaveError as failure:
+        # The deliberate refusals: an ambiguous input, a duplicate id. They
+        # are messages, not tracebacks -- the caller can act on them.
+        print(f"spanweave {args.command}: {failure}", file=sys.stderr)
+        return EXIT_FAILED
+    except OSError as failure:
+        print(f"spanweave {args.command}: {failure}", file=sys.stderr)
+        return EXIT_FAILED
 
 
 if __name__ == "__main__":  # pragma: no cover

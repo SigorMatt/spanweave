@@ -157,3 +157,86 @@ def test_canonical_writer_fails_without_a_trailing_newline():
 
     with pytest.raises(determinism.PropertyFailed, match="trailing newline"):
         determinism.assert_canonical_json(dumps)
+
+
+# --------------------------------------------------------------------------
+# The same four properties, now pointed at the real pipeline (TASKS.md 1.8)
+# --------------------------------------------------------------------------
+#
+# This is the half 0.6 could not do: at Phase 0 there was no reader, builder
+# or serializer to judge. The checks below are the ones above, unchanged.
+
+import pathlib  # noqa: E402
+
+import spanweave  # noqa: E402
+from spanweave.serialize import canonical_bytes  # noqa: E402
+
+WORKED_EXAMPLE = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl"
+)
+WORKED_RECORDS = [
+    json.loads(line)
+    for line in WORKED_EXAMPLE.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+
+
+def _bytes_of(records):
+    return b"".join(json.dumps(record).encode("utf-8") + b"\n" for record in records)
+
+
+def _document_of(records):
+    document = spanweave.to_document(spanweave.build(_bytes_of(records)))
+    # source_digest fingerprints the INPUT BYTES, not the graph (SPEC.md
+    # §3.9). Shuffling the input changes the bytes by definition; that it
+    # changes nothing else is exactly what is being tested here, and the
+    # digest's own behavior is asserted separately below.
+    document["meta"].pop("source_digest")
+    return document
+
+
+def test_building_the_worked_example_twice_is_byte_identical():
+    determinism.assert_repeatable(
+        lambda: spanweave.dumps(spanweave.build(WORKED_EXAMPLE))
+    )
+
+
+def test_shuffling_the_worked_example_changes_nothing():
+    determinism.assert_order_independent(WORKED_RECORDS, _document_of)
+
+
+def test_shuffling_produces_identical_bytes_too():
+    ordered = canonical_bytes(_document_of(WORKED_RECORDS))
+    reversed_input = canonical_bytes(_document_of(list(reversed(WORKED_RECORDS))))
+    assert ordered == reversed_input
+
+
+def test_the_digest_does_change_when_the_bytes_do():
+    # Proof that popping it above hides nothing: it is a real fingerprint of
+    # a real difference, and it is the only thing that differs.
+    forwards = spanweave.build(_bytes_of(WORKED_RECORDS))
+    backwards = spanweave.build(_bytes_of(list(reversed(WORKED_RECORDS))))
+    assert forwards.meta.source_digest != backwards.meta.source_digest
+
+
+def test_every_record_of_the_worked_example_is_accounted_for():
+    document = spanweave.to_document(spanweave.build(WORKED_EXAMPLE))
+    determinism.assert_every_record_accounted_for(WORKED_RECORDS, document)
+
+
+def test_a_record_the_library_cannot_map_is_still_accounted_for():
+    # Losslessness under duress: an unmappable record and a malformed line.
+    records = [*WORKED_RECORDS, {"span_id": "s9", "attributes": {"nonsense": 1}}]
+    document = spanweave.to_document(spanweave.build(_bytes_of(records)))
+    determinism.assert_every_record_accounted_for(records, document)
+
+
+def test_the_shipped_writer_is_canonical():
+    determinism.assert_canonical_json(canonical_bytes)
+
+
+def test_the_graph_file_is_one_line_and_ends_in_a_newline():
+    written = spanweave.dumps(spanweave.build(WORKED_EXAMPLE))
+    assert written.endswith(b"\n")
+    assert written.count(b"\n") == 1

@@ -357,13 +357,35 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > in `reachable`/`paths` for the same reason they are in the builder: a hang is
   > a denial of service when this runs in CI.
 
-- [ ] **1.8 Serialization + CLI.** `spanweave/serialize.py` (canonical
+- [x] **1.8 Serialization + CLI.** `spanweave/serialize.py` (canonical
   `schema_version` `0.1`, `sort_keys=True`, compact separators, trailing
   newline, `raw.source` byte-faithful round-trip; no timestamp/hostname/path in
   `meta`) and `spanweave/cli.py` (`build`, `inspect`, `validate`, `adapters`).
   `inspect` prints counts by node kind, edges by kind **and warrant**, and
   diagnostics grouped by code.
   *Done when `spanweave build` → `validate` round-trips and `make check` covers it.*
+  > **0.6's second half is done here, as promised.** The four property checks
+  > written at Phase 0 are now pointed at `spanweave.build` over the worked
+  > example, unchanged: build twice is byte-identical, shuffling the records
+  > produces identical bytes, every record is a node or a diagnostic, and the
+  > shipped writer is canonical. The shuffle comparison excludes
+  > `meta.source_digest` — it fingerprints the input *bytes*, which shuffling
+  > changes by definition (`SPEC.md` §3.9) — and a separate test proves the digest
+  > really does differ, so the exclusion hides nothing.
+  > `spanweave/api.py` is added as the public `spanweave.build(...)` the README
+  > has always shown, and is the second of the two modules permitted to reach the
+  > adapter registry.
+  > `inspect` tells a trace from a built graph by **content** (a JSON object with
+  > a `schema_version`) rather than by file extension, and prints the same summary
+  > either way — there is a test that the two are identical.
+  > `validate` allows a dangling `link` target and nothing else, per `SPEC.md` §4,
+  > and refuses `meta` keys that would leak the operator's environment. A
+  > `schema_version` from another build is **flagged, not rejected**: the schema is
+  > unfrozen, and refusing to read a neighbour's graph would be overclaiming
+  > stability we have not got.
+  > Deliberately **not** built: a deserializer. `inspect` summarizes the JSON
+  > document directly, so there is only one contract in this direction rather than
+  > two that could drift.
 
 - [ ] **1.9 Conformance corpus + captured trace.** Seed every scenario in
   `FIXTURES.md` §3 with the OpenInference rendering and its expected canonical

@@ -473,6 +473,8 @@ every registered adapter and picks the highest confidence.
 ### Outputs
 
 - **Graph JSON**, `schema_version` at the root, canonical encoding per §5.2.
+  Root keys: `schema_version`, `trace_id`, `meta`, `nodes`, `edges`,
+  `diagnostics`, `annotations`.
   **Unfrozen until Phase 4** — deliberately later than the `0.9.x` launch,
   because publishing is reversible and freezing is not (`ROADMAP.md`).
   Additive-only once frozen, with a version bump for any breaking change
