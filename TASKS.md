@@ -21,11 +21,17 @@ Code executes against.
 
 ## Phase 0 — Skeleton & contract
 
-- [ ] **0.1 Repo scaffold.** `pyproject.toml` (Python 3.11+, hatchling,
+- [x] **0.1 Repo scaffold.** `pyproject.toml` (Python 3.11+, hatchling,
   ruff/mypy/pytest, **zero runtime deps**), package layout `spanweave/` +
   `spanweave/cli.py`, `LICENSE` (MIT), `.gitignore`, the doc set, README.
   *Done when `uv sync --extra dev` succeeds and
   `uv run python -c "import spanweave"` exits 0.*
+  > Divergence: the seed commit already carried `pyproject.toml`, `LICENSE`,
+  > `.gitignore`, the doc set, and `README.md`, so this task added only the
+  > package itself (`spanweave/__init__.py`, holding `__version__`). The
+  > version is a literal rather than a read of installed metadata so that a
+  > source checkout reports one too; `tests/test_version.py` (0.3) keeps it in
+  > step with `pyproject.toml`.
 
 - [ ] **0.2 CLI entrypoint.** `console_scripts` → `spanweave`; `--version`
   prints the version; subcommand skeleton (`build`, `inspect`, `validate`,
