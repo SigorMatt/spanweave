@@ -108,6 +108,9 @@ class NormalizedSpan:
     #: Attribute **keys** the adapter saw and did not normalize. Keys only:
     #: the values are already in `raw`.
     unmapped: tuple[str, ...] = ()
+    #: Anything the adapter wants a human to know about this record. Ends up
+    #: on the node's `Provenance` (`SPEC.md` §3.5).
+    dialect_note: str | None = None
     #: What the adapter could not map confidently. The seam carries these
     #: because `parse()` returns spans and has nowhere else to put them.
     diagnostics: tuple[Diagnostic, ...] = ()

@@ -398,6 +398,7 @@ NormalizedSpan:
   attributes:  Mapping[str, JsonValue]
   unmapped:    tuple[str, ...]    # attribute keys seen and not normalized
   raw:         RawRecord
+  dialect_note: str | None       # anything a human should know; -> Provenance
   diagnostics: tuple[Diagnostic, ...]   # what this record could not map (§3.7)
 ```
 

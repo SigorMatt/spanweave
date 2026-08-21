@@ -282,12 +282,30 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > and the duplication is reported instead. Both docs are satisfied, and neither
   > case loses a record.
 
-- [ ] **1.5 Builder — nodes and explicit edges.** `spanweave/build.py`:
+- [x] **1.5 Builder — nodes and explicit edges.** `spanweave/build.py`:
   `NormalizedSpan[]` → nodes; `parent` edges (with `orphan_parent` diagnostics),
   `call_result` pairing by `call_id` (with `unpaired_call` / `unpaired_result`),
   `link` edges, adapter-declared `data` edges. **No dialect knowledge.**
   *Done when explicit edges match the expected graphs and every unpaired case is
   diagnosed rather than guessed.*
+  > The builder is handed an `AdapterInfo` — id, version, confidence — and never
+  > an adapter object, so `build.py` imports nothing from `adapters/` and the
+  > `no-adapter-imports` gate stays green.
+  > Node **order** is not final here: the topological sort is 1.6, so nodes come
+  > out in the `(started_at or +inf, node_id)` tie-break order that sort falls
+  > back to. Already total, already deterministic, just not yet topological.
+  > `spanweave/graph.py` is created here with the container and its id index
+  > only; the query surface is 1.7.
+  > Two judgement calls, both resolved toward *not guessing*: when two records
+  > claim one span id and both survive (distinct source keys), a `parent_id`
+  > pointing at that id resolves to **neither** — picking one would be a guess —
+  > so the child gets `orphan_parent`. And the multi-trace tie-break is stated
+  > (most common, then lowest id) rather than left to dict order, because an
+  > arbitrary rule still has to be a repeatable one.
+  > `nonmonotonic_time` lands here rather than in 1.6: it is a fact about one
+  > node, not about ordering. `NormalizedSpan` gains `dialect_note` (`SPEC.md` §6
+  > updated) so that `Provenance.dialect_note`, which §3.5 defines, is actually
+  > reachable — it had no path from any adapter before.
 
 - [ ] **1.6 Builder — temporal edges and ordering.** Sibling-consecutive
   `temporal` edges per `SPEC.md` §4.3 (`missing_timestamp` where excluded);
