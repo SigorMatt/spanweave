@@ -676,7 +676,7 @@ below:
 
 ### `[prereq]`
 
-- [ ] **2.1 Re-scope `AGENT.md` for Phase 2.** `[prereq]` `AGENT.md`'s *Scope of this run*
+- [x] **2.1 Re-scope `AGENT.md` for Phase 2.** `[prereq]` `AGENT.md`'s *Scope of this run*
   delivers through the 1.9 exit and then halts; it explicitly forbids a second
   adapter, `examples/`, and starting Phase 2 at all. A cold Phase 2 session
   reads that file first and is told to stop. Rewrite the scope block for Phase
@@ -692,6 +692,41 @@ below:
   **HALT** — the run scope is a human decision, not an agent's.
   *Artifact for the decision:* the diff of `AGENT.md`'s *Scope of this run* and
   *Halt-and-hand-back points* sections, side by side with the old text.
+  > **Scope change authorised explicitly by the human before this ran**, since
+  > `AGENT.md` forbade Phase 2 and this is the task that changes that. The
+  > **HALT still stands**: 2.2 has not been started, and the new scope wants
+  > approval before it does.
+  > Every pre-existing halt point is still there. Only one moved: the
+  > **phase-exit** halt, which is now Phase 2's (2.14) with Phase 1's recorded
+  > as discharged. Keeping "do not start Phase 2" verbatim would have made the
+  > list contradict the scope it sits under — a halt that is already false is
+  > how a list of halts stops being read. The three new ones are the capture
+  > runs (2.2 **and** 2.6 — the fleet is a credentialed run too, and volume is
+  > where synthesis is most tempting), the 2b timebox expiry, and the first
+  > cross-dialect equivalence run.
+  > Four things beyond the letter of the task, each because a cold session
+  > following the file literally would otherwise get it wrong:
+  > - The **"must not" list gained** what Phase 2 newly forbids — a third
+  >   dialect, the *confirmatory* consumers (Phase 3's, not this phase's), and
+  >   editing an `expected/graph.json` or weakening `canonical()` to make a
+  >   rendering pass. A scope section that only removes prohibitions reads as
+  >   open season.
+  > - **Run loop step 3 inverts for 2a**, and says so. As written it told the
+  >   session to author the fixture before the implementation; in 2a the
+  >   expected graph already exists and is not the session's to edit, and the
+  >   rendering is transcribed from a capture. Following the old step literally
+  >   is precisely the defect that cost Phase 1 four fixtures.
+  > - The captured-fixtures halt cited **`TASKS.md` 1.8**; captured fixtures
+  >   are **1.9**. Corrected, with the correction noted in place.
+  > - The doc map said `PREDICTIONS.md` was written before "the Phase 3 test"
+  >   and read-only "during Phase 1–2". **P5 resolves at the end of Phase 2b**,
+  >   and the file is read-only to the agent in *every* phase — a session
+  >   reading the old wording could conclude it may resolve P5 itself once
+  >   Phase 2 is over.
+  > `ENVIRONMENT.md`'s layout entry now says the adversarial consumer arrives
+  > in Phase 2b and the confirmatory ones in Phase 3. **Its no-network rule for
+  > `examples/` is untouched and still binding** — it is what forces 2.3's
+  > committed form to run against the corpus rather than against 2.2's fleet.
 
 ---
 
