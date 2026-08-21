@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
 
+# setup-uv resolves its version by fetching a manifest from
+# raw.githubusercontent.com. That fetch is a known intermittent failure
+# (astral-sh/setup-uv#849, #869). Passing github-token authenticates it.
+# The token is provided automatically by Actions -- nothing to create.
+# If this still flakes, drop the action entirely and use:
+#     run: curl -LsSf https://astral.sh/uv/install.sh | sh
+# and update ENVIRONMENT.md to match rather than leaving a stale reference.
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -20,9 +28,10 @@ jobs:
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: uv sync --extra dev --python ${{ matrix.python-version }}
       # make check wraps the exact toolchain commands (ruff, mypy, pytest)
-      # plus the invariant gates and phase done-whens — the acceptance
+      # plus the invariant gates and phase done-whens -- the acceptance
       # harness, task 0.8.
       - run: make check
 
@@ -37,9 +46,11 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v8.1.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: uv sync --extra dev
       - run: make conformance
       - run: uv run pytest tests/test_determinism.py -v
