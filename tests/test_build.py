@@ -50,7 +50,7 @@ def build(spans, **kwargs):
 
 
 def edges_of(graph, kind):
-    return [(e.src, e.dst) for e in graph.edges if e.kind is kind]
+    return [(e.src, e.dst) for e in graph.edges() if e.kind is kind]
 
 
 def codes_of(graph):
@@ -64,9 +64,9 @@ def codes_of(graph):
 
 def test_every_span_becomes_a_node_carrying_its_source():
     graph = build([a_span("s0"), a_span("s1", "s0", line=2)])
-    assert [n.id for n in graph.nodes] == ["s0", "s1"]
-    assert graph.nodes[0].raw.source == {"span_id": "s0"}
-    assert graph.nodes[0].provenance.adapter_id == "some_dialect"
+    assert [n.id for n in graph.nodes()] == ["s0", "s1"]
+    assert graph.nodes()[0].raw.source == {"span_id": "s0"}
+    assert graph.nodes()[0].provenance.adapter_id == "some_dialect"
 
 
 def test_the_node_reports_what_the_span_reported_and_nothing_more():
@@ -77,7 +77,7 @@ def test_the_node_reports_what_the_span_reported_and_nothing_more():
         ended_at=1001.0,
         inputs=Payload(state=PayloadState.EMPTY, mime="text/plain", value="", raw=""),
     )
-    node = build([span]).nodes[0]
+    node = build([span]).nodes()[0]
     assert node.operation == "lookup"
     assert node.inputs.state is PayloadState.EMPTY
     # Never invented on the way through.
@@ -87,7 +87,7 @@ def test_the_node_reports_what_the_span_reported_and_nothing_more():
 
 def test_an_empty_input_builds_an_empty_graph_rather_than_failing():
     graph = build([])
-    assert graph.nodes == () and graph.edges == ()
+    assert graph.nodes() == () and graph.edges() == ()
     assert graph.meta.node_count == 0
 
 
@@ -108,7 +108,7 @@ def test_the_adapters_own_diagnostics_are_attached_to_their_node():
 def test_parent_edges_come_from_the_stated_parent_id():
     graph = build([a_span("s0"), a_span("s1", "s0"), a_span("s2", "s0")])
     assert edges_of(graph, EdgeKind.PARENT) == [("s0", "s1"), ("s0", "s2")]
-    parent = graph.edges[0]
+    parent = graph.edges()[0]
     assert parent.warrant is Warrant.EXPLICIT
     assert parent.basis == "span.parent_span_id"
 
@@ -120,14 +120,14 @@ def test_a_parent_that_is_not_here_is_diagnosed_and_the_node_is_kept():
     assert graph.diagnostics[0].node_id == "s1"
     # A trace that starts mid-run is ordinary; dropping the record would lose
     # more than the missing parent did.
-    assert len(graph.nodes) == 1
+    assert len(graph.nodes()) == 1
 
 
 def test_a_parent_edge_is_never_derived():
     # parent is explicit-only (SPEC.md §4.1) and the model refuses otherwise;
     # this asserts the builder does not try.
     graph = build([a_span("s0"), a_span("s1", "s0")])
-    assert all(e.warrant is Warrant.EXPLICIT for e in graph.edges)
+    assert all(e.warrant is Warrant.EXPLICIT for e in graph.edges())
 
 
 # --------------------------------------------------------------------------
@@ -143,7 +143,7 @@ def test_a_call_and_its_result_are_joined_by_the_id_the_dialect_carried():
         ]
     )
     assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s1", "s2")]
-    assert graph.edges[0].basis == "tool_call_id"
+    assert graph.edges()[0].basis == "tool_call_id"
     assert codes_of(graph) == []
 
 
@@ -236,7 +236,7 @@ def test_a_declared_data_edge_is_transcribed_with_the_declared_basis():
         ]
     )
     assert edges_of(graph, EdgeKind.DATA) == [("s1", "s2")]
-    edge = next(e for e in graph.edges if e.kind is EdgeKind.DATA)
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.DATA)
     assert edge.warrant is Warrant.EXPLICIT
     assert edge.basis == "framework.produced_by"
 
@@ -283,7 +283,9 @@ def test_the_same_pair_may_carry_several_kinds_of_edge():
 
 def test_edges_are_sorted_by_kind_then_endpoints_then_basis():
     graph = build([a_span("s0"), a_span("s2", "s0"), a_span("s1", "s0")])
-    assert [e.sort_key for e in graph.edges] == sorted(e.sort_key for e in graph.edges)
+    assert [e.sort_key for e in graph.edges()] == sorted(
+        e.sort_key for e in graph.edges()
+    )
 
 
 # --------------------------------------------------------------------------
@@ -294,7 +296,7 @@ def test_edges_are_sorted_by_kind_then_endpoints_then_basis():
 def test_the_most_common_trace_id_wins_and_the_rest_are_kept_and_diagnosed():
     graph = build([a_span("s0"), a_span("s1"), a_span("s9", trace="t2")])
     assert graph.trace_id == "t1"
-    assert len(graph.nodes) == 3  # the foreign record is kept
+    assert len(graph.nodes()) == 3  # the foreign record is kept
     assert codes_of(graph) == [codes.MULTI_TRACE_INPUT]
     assert graph.diagnostics[0].node_id == "s9"
 
@@ -309,15 +311,15 @@ def test_a_tie_between_trace_ids_is_broken_by_the_id_itself():
 def test_an_input_with_no_trace_id_still_builds():
     graph = build([a_span("s0", trace=None)])
     assert graph.trace_id == ""
-    assert len(graph.nodes) == 1
+    assert len(graph.nodes()) == 1
 
 
 def test_a_backwards_clock_is_reported_and_left_alone():
     graph = build([a_span("s0", started_at=1002.0, ended_at=1000.0)])
     assert codes_of(graph) == [codes.NONMONOTONIC_TIME]
     # Reported, never repaired: the skew is a fact about the trace.
-    assert graph.nodes[0].started_at == 1002.0
-    assert graph.nodes[0].ended_at == 1000.0
+    assert graph.nodes()[0].started_at == 1002.0
+    assert graph.nodes()[0].ended_at == 1000.0
 
 
 def test_a_zero_length_span_is_not_skew():
@@ -339,7 +341,7 @@ def test_a_span_id_used_twice_with_distinct_source_keys_is_reported():
     ]
     graph = build(spans)
     assert codes_of(graph) == [codes.DUPLICATE_SOURCE_ID]
-    assert len(graph.nodes) == 2
+    assert len(graph.nodes()) == 2
 
 
 def test_a_reference_to_an_ambiguous_span_id_is_not_guessed():
@@ -373,7 +375,7 @@ def test_the_builder_works_on_spans_from_a_dialect_it_has_never_heard_of():
             a_span("x2", "x1", kind=NodeKind.EMBEDDING),
         ],
     )
-    assert [n.kind for n in graph.nodes] == [NodeKind.UNKNOWN, NodeKind.EMBEDDING]
+    assert [n.kind for n in graph.nodes()] == [NodeKind.UNKNOWN, NodeKind.EMBEDDING]
     assert edges_of(graph, EdgeKind.PARENT) == [("x1", "x2")]
 
 
@@ -397,7 +399,7 @@ def test_meta_records_the_adapter_and_the_digest_but_no_environment():
     assert not hasattr(graph.meta, "built_at")
 
 
-@pytest.mark.parametrize("field", ["nodes", "edges", "diagnostics"])
+@pytest.mark.parametrize("field", ["_nodes", "_edges", "diagnostics", "trace_id"])
 def test_the_graph_is_immutable(field):
     graph = build([a_span("s0")])
     with pytest.raises(dataclasses.FrozenInstanceError):

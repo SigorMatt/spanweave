@@ -331,12 +331,31 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > downstream of it) by the tie-break and names it in the diagnostic. A
   > self-parenting span is the one-node case and is covered.
 
-- [ ] **1.7 Graph surface + annotations.** `spanweave/graph.py`: `nodes(...)`,
+- [x] **1.7 Graph surface + annotations.** `spanweave/graph.py`: `nodes(...)`,
   `edges(kind=, warrant=)`, `node(id)`, `parents`/`children`, `ancestors`/
   `descendants`, `reachable`, `paths`, `subgraph(edge_kinds=)`, `topo_order`.
   `spanweave/annotate.py`: immutable `annotate()` returning a new graph,
   namespaced, JSON-serializable, round-tripping.
   *Done when `subgraph` projections are exercised and annotation never mutates.*
+  > **A contradiction inside `SPEC.md`, resolved toward the API.** §3.9 listed
+  > `nodes` and `edges` as *fields*; §8 and the README call them as *methods*
+  > (`graph.nodes(annotated=...)`, `graph.nodes(kind="tool")`). A Python object
+  > cannot have both under one name. Resolved in favour of the accessors — two
+  > documents and every usage example agree on those — with the tuples held
+  > privately and `Graph.of(...)` for construction. §3.9 updated to say so.
+  > `subgraph` keeps **all** nodes, including the ones a projection isolates:
+  > dropping them would be a judgement about which nodes matter, which belongs to
+  > whoever is projecting. There is a test that the three canonical projections
+  > (`parent`; `parent+call_result`; `temporal`) genuinely **disagree** about
+  > whether s1 reaches s2 — that disagreement is the design working.
+  > `reachable()` is where the transitive closure lives, which is what lets §4.3
+  > keep the temporal edge set linear.
+  > Annotation refuses three things rather than absorbing them: the reserved
+  > `spanweave` namespace, a value that is not JSON-serializable (checked by
+  > actually trying), and a node id that is not in the graph — an annotation
+  > nothing can ever read is a silent bug, not a convenience. Cycles are bounded
+  > in `reachable`/`paths` for the same reason they are in the builder: a hang is
+  > a denial of service when this runs in CI.
 
 - [ ] **1.8 Serialization + CLI.** `spanweave/serialize.py` (canonical
   `schema_version` `0.1`, `sort_keys=True`, compact separators, trailing

@@ -238,12 +238,18 @@ normal and informative.
 ```
 Graph:
   trace_id:    str
-  nodes:       ordered mapping NodeId -> Node      # topological, tie-broken (§5.2)
-  edges:       sorted tuple[Edge, ...]             # sorted (§5.2)
+  nodes(...):  -> tuple[Node, ...]                 # topological, tie-broken (§5.2)
+  edges(...):  -> tuple[Edge, ...]                 # sorted (§5.2)
   diagnostics: sorted tuple[Diagnostic, ...]
   annotations: AnnotationStore                     # §8
   meta:        Meta
 ```
+
+`nodes` and `edges` are **accessors, not attributes** — `graph.nodes(kind=...)`,
+`graph.edges(kind=, warrant=)`, as §8 and the README use them. Called with no
+arguments each returns the whole ordered tuple, so the ordering guarantees
+above are guarantees about what they return. Everything the graph holds is
+still immutable; `Graph.of(...)` builds one.
 
 ```
 Meta:

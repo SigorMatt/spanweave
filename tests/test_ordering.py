@@ -33,11 +33,11 @@ def build(spans, **kwargs):
 
 
 def temporal_of(graph):
-    return [(e.src, e.dst) for e in graph.edges if e.kind is EdgeKind.TEMPORAL]
+    return [(e.src, e.dst) for e in graph.edges() if e.kind is EdgeKind.TEMPORAL]
 
 
 def order_of(graph):
-    return [n.id for n in graph.nodes]
+    return [n.id for n in graph.nodes()]
 
 
 def codes_of(graph):
@@ -66,7 +66,7 @@ def test_consecutive_siblings_only():
 
 def test_temporal_edges_are_always_derived():
     graph = build([a_span("a", started=1.0), a_span("b", started=2.0)])
-    edge = next(e for e in graph.edges if e.kind is EdgeKind.TEMPORAL)
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.TEMPORAL)
     assert edge.warrant is Warrant.DERIVED
     assert edge.basis == "sibling start_time ordering"
 
@@ -128,8 +128,8 @@ def test_no_temporal_leaves_the_stated_relations_untouched():
     spans = [a_span("s0", started=1.0), a_span("s1", "s0", started=2.0)]
     with_derived = build(spans)
     without = build(spans, temporal=False)
-    explicit = [e for e in with_derived.edges if e.warrant is Warrant.EXPLICIT]
-    assert list(without.edges) == explicit
+    explicit = [e for e in with_derived.edges() if e.warrant is Warrant.EXPLICIT]
+    assert list(without.edges()) == explicit
 
 
 # --------------------------------------------------------------------------

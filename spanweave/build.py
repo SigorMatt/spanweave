@@ -93,7 +93,7 @@ def build_graph(
 
     nodes = _in_order(nodes, edges, collected)
 
-    return Graph(
+    return Graph.of(
         trace_id=trace_id or "",
         nodes=nodes,
         edges=edges,
