@@ -109,7 +109,7 @@ def test_a_tie_is_a_hard_error_that_names_the_candidates_and_the_way_out():
         registry.detect([{"m": 1}])
     message = str(failure.value)
     assert "one" in message and "two" in message
-    assert "0.90" in message  # the confidences, so the reader can judge
+    assert "0.90" in message  # what each declared, so the reader can judge
     assert "--adapter" in message  # and the escape hatch
 
 

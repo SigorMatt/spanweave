@@ -275,7 +275,11 @@ def test_meta_carries_the_adapter_and_its_confidence():
     meta = Meta(
         schema_version="0.1",
         spanweave_version="0.1.0",
-        adapters=(AdapterInfo(id="some_dialect", version="0.1.0", confidence=0.9),),
+        adapters=(
+            AdapterInfo(id="some_dialect", version="0.1.0", declared_confidence=0.9),
+        ),
     )
-    assert meta.adapters[0].confidence == 0.9
+    # Declared, not measured: nothing in the trace could compute it, and the
+    # name has to say so (SPEC.md §3.9).
+    assert meta.adapters[0].declared_confidence == 0.9
     assert meta.source_digest is None

@@ -85,7 +85,7 @@ def _meta(meta: Meta | None) -> dict[str, Any] | None:
             {
                 "id": adapter.id,
                 "version": adapter.version,
-                "confidence": adapter.confidence,
+                "declared_confidence": adapter.declared_confidence,
             }
             for adapter in sorted(meta.adapters, key=lambda item: item.sort_key)
         ],

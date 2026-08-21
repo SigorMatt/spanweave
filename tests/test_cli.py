@@ -74,8 +74,8 @@ def test_no_temporal_omits_the_derived_edges(capsysbinary):
 def test_naming_the_adapter_skips_detection(capsysbinary):
     main(["build", TRACE, "--adapter", "openinference"])
     document = json.loads(capsysbinary.readouterr().out)
-    # No detection happened, so there is no confidence to report.
-    assert document["meta"]["adapters"][0]["confidence"] is None
+    # No detection happened, so there is no claim to report.
+    assert document["meta"]["adapters"][0]["declared_confidence"] is None
 
 
 def test_naming_an_unknown_adapter_fails_with_a_message_not_a_traceback(capsys):

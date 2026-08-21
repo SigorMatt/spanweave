@@ -38,6 +38,11 @@ class Adapter(Protocol):
 Confidence in `[0.0, 1.0]` that this adapter handles the input. Called with up
 to the first 50 records (`SPEC.md` §6.1).
 
+It is a **declaration, not a measurement** — nothing in the trace computes it,
+you are asserting it — and the graph records it under that name
+(`meta.adapters[].declared_confidence`). Score it as something you will have to
+defend to someone reading a graph that came out wrong.
+
 - **Must be pure** and **must not raise** — wrap everything.
 - Key on **distinctive marker keys**, not on generic ones. `openinference.span.kind`
   is distinctive; `name` and `start_time` are not.

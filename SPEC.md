@@ -247,6 +247,17 @@ Edges are **unique** on `(src, dst, kind, basis)`. Duplicates are collapsed.
 The same pair MAY be connected by several edges of different kinds; that is
 normal and informative.
 
+> A cold reviewer of the first captured trace read `edge_count: 6` as a
+> double-count, having noticed that one pair carried both `call_result` and
+> `temporal`. The behavior is correct and stays: the two edges assert different
+> relations with different warrants, and collapsing them would destroy the
+> distinction the whole model is built on. But the misreading is worth
+> recording, because it was not careless — it is what a first-time reader
+> concludes from a bare total. It is an argument about **presentation**, not
+> about the model: `spanweave inspect` already breaks edges down by kind and
+> warrant, and a total printed above that breakdown may simply be inviting the
+> wrong reading.
+
 ### 3.9 Graph
 
 ```
@@ -276,12 +287,24 @@ Meta:
 AdapterInfo:
   id:         str
   version:    str
-  confidence: float | None     # from detection; None when named with --adapter
+  declared_confidence: float | None   # the adapter's own claim; None when named
 ```
 
-`AdapterInfo.confidence` is where §6.1's "the chosen adapter and its confidence
-are recorded in `meta`" lands. It is `None` when the caller named the adapter,
-because there was no detection to report.
+`AdapterInfo.declared_confidence` is where §6.1's "the chosen adapter and its
+confidence are recorded in `meta`" lands. It is `None` when the caller named the
+adapter, because there was no detection to report.
+
+The name says `declared_` because **it is not a measurement**. Nothing in the
+trace could produce it: an adapter self-reports a number from `detect()`, and
+that number is a claim about the input, not an observation of it. Every other
+figure in a graph is derived from the bytes that came in; this one is a fact
+about the *build*, which is why it lives in `meta` and not on a node. A bare
+`confidence` would read as measured, and a graph that presents a hard-coded
+constant as a measurement is doing the thing this library exists not to do.
+
+Whether it should remain adapter-declared at all is `OPEN_QUESTIONS.md` §3.
+Naming it honestly makes the current answer visible in the output rather than
+hiding it behind a plausible field name.
 
 `source_digest` fingerprints the **input bytes**, not the graph. Shuffling the
 input therefore changes it while the graph itself stays identical — which is
@@ -572,7 +595,9 @@ every registered adapter and picks the highest confidence.
 - Ties, or a top score below `0.5`, are a **hard error** with an actionable
   message listing the scores — never a silent fallback to a default adapter.
 - `--adapter <id>` bypasses detection entirely and is the escape hatch.
-- The chosen adapter and its confidence are recorded in `meta`.
+- The chosen adapter and the confidence it **declared** are recorded in `meta`
+  as `declared_confidence` (§3.9) — the adapter's own claim, not a measurement,
+  and named so that it cannot be mistaken for one.
 
 > Auto-selection is ergonomics, not evidence: it is the first thing cut if
 > Phase 2 slips, in which case `--adapter` becomes required and detection moves

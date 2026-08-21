@@ -282,9 +282,16 @@ class AdapterInfo:
 
     id: str
     version: str
-    #: The detection confidence, when the adapter was detected rather than
-    #: named with ``--adapter`` (`SPEC.md` §6.1).
-    confidence: float | None = None
+    #: What the adapter **claimed** about this input during detection, when it
+    #: was detected rather than named with ``--adapter`` (`SPEC.md` §6.1).
+    #:
+    #: `declared_`, not `confidence`, because there is nothing in the trace it
+    #: could be computed from: it is the adapter's own self-report, and every
+    #: other number in a graph is derived from the input. A bare `confidence`
+    #: reads as a measurement, and a measurement is what this is not
+    #: (`OPEN_QUESTIONS.md` §3, which is exactly the question of whether it
+    #: should stay that way).
+    declared_confidence: float | None = None
 
     @property
     def sort_key(self) -> tuple[str, str]:

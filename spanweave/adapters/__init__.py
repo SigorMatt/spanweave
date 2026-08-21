@@ -128,7 +128,7 @@ class AdapterRegistry:
 
 def _report(measured: Sequence[tuple[str, float]]) -> str:
     listed = ", ".join(f"{name} {confidence:.2f}" for name, confidence in measured)
-    return f"Confidence by adapter: {listed}."
+    return f"Confidence declared by each adapter: {listed}."
 
 
 #: The registry the CLI and the public API use.

@@ -28,14 +28,14 @@ def build(
 
     if adapter is not None:
         chosen = get(adapter)
-        confidence = None
+        declared = None
     else:
-        chosen, confidence = detect(records)
+        chosen, declared = detect(records)
 
     return build_graph(
         chosen.parse(records),
         adapter=AdapterInfo(
-            id=chosen.id, version=chosen.version, confidence=confidence
+            id=chosen.id, version=chosen.version, declared_confidence=declared
         ),
         collector=stream.diagnostics,
         source_digest=stream.digest,

@@ -58,6 +58,28 @@ from payloads alone, that is strong evidence spans are the right granularity.
 message-level layer, if ever built, would be an **additive** projection over the
 same graph — never a replacement, and never a second graph type.
 
+**Evidence — cold review of the first captured trace.** A reviewer with no
+knowledge of this project, given the trace and its graph, reported that
+*"reconstructing the dialogue means re-parsing the raw JSON, which is what
+normalization was supposed to spare you."*
+
+Measured on that trace: of **17** `llm.input_messages.*` / `llm.output_messages.*`
+attributes, **16 are unmapped**. The one exception is the requester's
+`tool_call.id`, mapped because `call_result` pairing needs it. So the entire
+dialogue — every role, every content string, every tool-call argument — reaches
+a consumer only inside `Payload.value` or `raw`, and the messages are already
+*flattened into dotted attributes* by the instrumentor, so a consumer that wants
+them must either re-parse `output.value` or re-assemble them from the dotted
+keys itself.
+
+This is the first evidence for this question that did not come from us, and it
+arrived as a usability complaint rather than a design argument — which is the
+form the answer is most likely to take. It does **not** settle whether messages
+should be *nodes*: mapping the message list into `Node.attributes` would answer
+the complaint without touching granularity at all, and that is §5's question.
+Recorded here because the two are easily confused and the evidence bears on
+both.
+
 ---
 
 ## 3. Should `detect()` confidence be adapter-declared or centrally computed?
@@ -119,6 +141,27 @@ isn't.
 **(d) Provisional:** narrow — only what the model itself consumes. Widen on
 demonstrated need, never on speculation.
 
+**Evidence — cold review of the first captured trace.** Three specific gaps,
+from a reviewer who did not know the stance above:
+
+- **The dialogue.** 16 of 17 message attributes are unmapped (see §2). The
+  complaint was that reconstructing the conversation means re-parsing raw JSON.
+- **`llm.tools.*.tool.json_schema` is dropped.** The graph can express *"a tool
+  ran"* but not *"these tools were on offer"* — so an **unused affordance is
+  invisible**. A consumer cannot ask which tools the model could have called and
+  did not, and the answer is present in the trace.
+- **`llm.system` (`"openai"`) is dropped.** Nodes keep `model` but not who
+  served it. On an OpenAI-compatible endpoint those are different facts, and the
+  captured trace is precisely a case where the model string and the provider do
+  not imply one another.
+
+Note what this evidence is worth. §5's stance is "widen on demonstrated need,
+never on speculation", and this is demonstrated need — but from **one** reviewer
+on **one** trace, which is a long way from the two-consumer test §5(c) actually
+specifies. It is also the kind of need that grows without limit: each of these
+is individually reasonable, and normalizing all three starts the unbounded
+surface §5(b) warns about. Recorded, not acted on.
+
 ---
 
 ## 6. Does `spanweave` ever gain a rendering surface?
@@ -175,6 +218,38 @@ becomes an ordinary operational option.
 **(d) Provisional:** keep the prohibition. If P3 fires, **do not wave it
 through** on the technicality that it reuses an existing `EdgeKind` and warrant
 — decide it here, deliberately, as the policy question it is.
+
+**Evidence — the premise of this entry is now in question. NOT resolved here.**
+
+This entry, and `PREDICTIONS.md` P3, both rest on an unstated premise:
+that `EdgeKind.data` is **near-vacuous in v1** because no supported dialect
+declares a producer→consumer relation, so the only way to get a `data` edge
+would be to infer one. `declared_data_edge` was seeded with no OpenInference
+rendering on exactly that ground.
+
+A cold review of the first captured trace says the premise may be false. On a
+follow-up LLM span, `llm.input_messages.N.message.tool_call_id` with
+`role="tool"` carries the same id as the tool span's `tool_call.id`. Verified in
+the raw spans: the role **is** present and distinguishes a tool-result message
+from an assistant message that merely echoes `tool_calls`; the two also differ
+in attribute form (`.message.tool_call_id` versus
+`.message.tool_calls.N.tool_call.id`). If that constitutes the instrumentor
+declaring that the output of one span became an input to another, then a `data`
+edge is available **by id linkage, with no value comparison** — and none of
+§4.2's objections (threshold, normalization rule, encoding policy) apply,
+because there is nothing to compare.
+
+What that would change here: this entry asks whether to permit *inferred* data
+edges. If declared ones turn out to be routinely available, the question changes
+shape — from "should we relax the prohibition" to "how much does the
+prohibition actually cost, now that the declared path is not empty". Those are
+different questions with different answers.
+
+**Deliberately not resolved.** Neither this entry nor P3 is being decided, and
+`PREDICTIONS.md` is not being edited — it records what was predicted *before*
+the test, and its value is entirely in its timestamps (`AGENT.md`). This note
+exists so that whoever resolves either one does so knowing the premise was
+challenged, by whom, and on what evidence.
 
 ---
 
@@ -258,3 +333,18 @@ reopened.
 
 **Recorded during the first captured-trace review**, alongside the fix it
 would corroborate.
+
+**Second, independent vote.** A cold reviewer of the same trace — with no
+knowledge of this file or of the pairing fix — called `llm.finish_reason` *"the
+single field that distinguishes a turn that requested a tool from one that
+terminated"*, and noted that it has no home in the graph. That is two votes from
+two directions: ours as corroboration for the pairing rule, theirs as a fact a
+consumer wants in its own right.
+
+It changes nothing yet, and deliberately so — two observations of one dialect
+from one instrumentor is still one dialect. But it moves `finish_reason` from
+"a signal we noticed" to "a field someone asked for", and if a third vote
+arrives it should probably be answered in §5 (normalize it into
+`Node.attributes`) rather than here (wire it into the pairing rule). Those are
+different fixes to different problems, and the second vote is for the first
+one.

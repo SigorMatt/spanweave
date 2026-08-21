@@ -24,7 +24,7 @@ from spanweave.model import (
 )
 from spanweave.seam import CallRole, DeclaredDataEdge, NormalizedSpan, SpanLink
 
-ADAPTER = AdapterInfo(id="some_dialect", version="0.1.0", confidence=0.9)
+ADAPTER = AdapterInfo(id="some_dialect", version="0.1.0", declared_confidence=0.9)
 
 
 def a_span(span_id, parent=None, *, trace="t1", line=1, **overrides):
