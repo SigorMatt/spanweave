@@ -266,9 +266,21 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > `<record>.events`), not only attribute keys — `events` is real telemetry that
   > Phase 1 does not model, and it should be visible rather than merely absent.
 
-- [ ] **1.4 Identity.** `spanweave/ids.py` per `SPEC.md` §3.6: prefer the
+- [x] **1.4 Identity.** `spanweave/ids.py` per `SPEC.md` §3.6: prefer the
   dialect span id; else the SHA-256 prefix. Collisions raise. No `hash()`.
   *Done when ids are stable across runs and processes, and a collision raises.*
+  > Stability across **processes** is tested by actually launching one — the
+  > failure a salted hash produces is invisible inside a single run, so a
+  > same-process assertion would not have caught it.
+  > Note how §3.6's two rules interlock on duplicate span ids, which is what
+  > makes `SPEC.md` §3.6 ("collisions are a hard error") and §3.7's
+  > `duplicate_source_id` diagnostic consistent rather than contradictory: a span
+  > id that is *not unique* fails rule 1's condition and falls to rule 2, where —
+  > because the adapter's source key is normally that same id — the two derive
+  > the same id and collide, and the collision raises. When an adapter gives the
+  > two records **distinct** source keys, they derive distinct ids, both survive,
+  > and the duplication is reported instead. Both docs are satisfied, and neither
+  > case loses a record.
 
 - [ ] **1.5 Builder — nodes and explicit edges.** `spanweave/build.py`:
   `NormalizedSpan[]` → nodes; `parent` edges (with `orphan_parent` diagnostics),
