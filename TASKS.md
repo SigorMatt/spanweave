@@ -645,6 +645,17 @@ below:
    declaration, or `llm_tool_llm` fails equivalence. This is the single most
    likely blocker in 2a and it is checked at three separate points below
    (2.5, 2.6, 2.9).
+   **Do not solve it now.** It may not fire at all — content capture may emit
+   the tool-result message with its id, and then there is nothing to solve.
+   Decide at the **2.9 HALT, with the capture in hand**. And decide it knowing
+   that **whichever way it goes, it is evidence about `EdgeKind.data`'s
+   generality**: a second dialect that declares the relation says the kind
+   generalizes beyond the dialect it was found in; one that cannot says the
+   kind currently rests on a single instrumentor's convention. Either finding
+   belongs in the 2.9 checkpoint artifact alongside `OPEN_QUESTIONS.md` §7 and
+   `PREDICTIONS.md` P3 — **as evidence, not as a resolution of either.**
+   Resolving §7 by implementation is precisely what that file exists to
+   prevent, and P3 resolves in Phase 3.
 2. **`parallel_tool_calls` and `tool_call_history_echo` did not exist when the
    cut order was written.** `tool_call_history_echo` is degenerate and
    therefore never-cut by the existing rule. `parallel_tool_calls` is
@@ -686,33 +697,57 @@ below:
 
 ### `[2b]` — the adversarial consumer  *(two days, starting at 2.3)*
 
-- [ ] **2.2 Scratch fleet generator.** `[2b]` **OPTIONAL — does not block 2.3.**
-  Add a repeat mode to `capture/` that runs the existing conversation N times
-  and writes `capture/_scratch/fleet/<i>.local.jsonl`. Vary only what makes the
-  runs differ as runs (the tool's stub answer, the city), never the model or
-  the instrumentor.
+- [ ] **2.2 Scratch fleet generator.** `[2b]` **REQUIRED — 2.3 does not start
+  without it.** P5 is *"one trace = one graph"*. An aggregator run over the
+  committed corpus tests **the aggregator**; run over a real heterogeneous
+  fleet it tests **the claim**. The traces are scratch and cost cents, so the
+  only thing that would ever skip this is timebox pressure — and skipping it
+  resolves P5 on weaker evidence than was available. That is exactly the
+  failure `ROADMAP.md`'s cut order exists to forbid, so it is not optional
+  here.
+  Add a fleet mode to `capture/` that runs N conversations and writes
+  `capture/_scratch/fleet/<i>.local.jsonl`. The model and the instrumentor stay
+  **fixed**; what varies is the shape of the runs, and the variation is the
+  point — a fleet of identical traces is one trace counted N times.
+  **Required heterogeneity** (a fleet missing any of these is not exercising
+  P5):
+  - **varied tools** — more than one tool in the inventory, so per-tool rollup
+    has something to roll up;
+  - **turns with no tool call at all** — the model answers directly;
+  - **turns with parallel tool calls** — several requested at once
+    (`parallel_tool_calls`' shape, from a real model rather than a fixture);
+  - **errors or refusals** — a tool that fails, and a prompt the model declines
+    or cannot answer, so `Status` and the diagnostic codes are populated by
+    something real.
+  Steer these with the prompt and the stub tools; do not fabricate them
+  post-hoc by editing exported spans, which would make the fleet synthetic
+  again while looking real.
   **These are scratch, and the distinction is absolute:** gitignored, no
   provenance file, **never** promoted to `fixtures/captured/` and never cited
-  as evidence for anything. `fixtures/captured/` holds human-reviewed,
-  redacted, provenance-bearing artifacts; a fleet of unreviewed traces in there
-  would destroy the only property that directory has.
-  *Done when `uv run pytest tests/test_capture.py` is green with no key set,
-  `make capture ARGS="--fleet 5"` fails with the same actionable
-  no-credential error as today rather than a traceback, and
-  `git status --porcelain capture/_scratch` is empty after a run.*
+  as evidence for anything beyond 2.3's own findings. `fixtures/captured/`
+  holds human-reviewed, redacted, provenance-bearing artifacts; a fleet of
+  unreviewed traces in there would destroy the only property that directory
+  has.
+  *Done when `uv run pytest tests/test_capture.py` is green with no key set and
+  covers each required shape against stub spans, `make capture
+  ARGS="--fleet 8"` fails with the same actionable no-credential error as
+  today rather than a traceback, and `git status --porcelain capture/_scratch`
+  is empty after a run.*
   **HALT** — running it needs a Nebius credential the agent does not have and
   must not have (`ENVIRONMENT.md`, credentials). `AGENT.md`'s fabrication halt
   point applies in full: the agent must not synthesize a fleet and describe it
   as captured.
-  *Artifact for the decision:* the generator plus its no-key test output, and a
-  one-line statement of what N traces would buy 2.3 over the 19 committed
-  fixtures. **Declining is a legitimate outcome and costs nothing** — record
-  the decline here and go to 2.3.
+  *Artifact for the decision:* the generator, its no-key test output, and the
+  list of required shapes above so the human can confirm the fleet that comes
+  out actually contains each one. If the fleet cannot be produced, **record
+  why here and say so at 2.4** — P5 then resolves on corpus-only evidence and
+  the resolution must state that limitation rather than absorb it silently.
 
 - [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
-  here.** Build the consumer most likely to break the model: a rollup over
-  **many** graphs — per-tool call counts and failure counts, per-diagnostic-code
-  counts, per-node-kind counts, across the whole corpus at once. It exists to
+  here, with 2.2's fleet in hand.** Build the consumer most likely to break the
+  model: a rollup over **many** graphs — per-tool call counts and failure
+  counts, per-diagnostic-code counts, per-node-kind counts, across every trace
+  at once. It exists to
   attack `PREDICTIONS.md` P5 ("one trace = one graph"), so build it the way a
   fleet consumer would actually want it and **write down every place the
   library fights you** — that friction is the entire deliverable.
@@ -720,8 +755,10 @@ below:
   only** (`spanweave/__init__.py` exports — reaching into an internal module
   would fake a generality the library does not have), and **no network**
   (`ENVIRONMENT.md`: examples consume committed fixtures so anyone can
-  reproduce them). If 2.2 ran, the scratch fleet is extra pressure during the
-  box, never a committed input.
+  reproduce them). **2.2's fleet is the pressure this task exists to apply** —
+  run the aggregator over it during the box — but it is never a committed
+  input, so what lands in `examples/` must still run for a stranger against the
+  corpus alone.
   Do **not** fix the library here. A change to `spanweave/` from this task is a
   finding to record at 2.4, not a patch to apply — that is the difference
   between falsifying the model and quietly accommodating the consumer.
