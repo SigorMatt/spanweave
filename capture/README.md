@@ -6,6 +6,7 @@ a file in `fixtures/captured/` (`AGENT.md` halt point).
 ```
 make capture                              # uses whichever backend you configured
 make capture ARGS="--backend openai"      # or name one
+make capture ARGS="--fleet 8"             # the scratch fleet -- see below
 ```
 
 ## Why this exists
@@ -150,6 +151,42 @@ finishes:
    version, SDK and version, model, endpoint, date, command, what was redacted
    and by whom, and **what this fixture may be used to claim**.
 
+## The scratch fleet (`--fleet N`)
+
+A different job with the same rules, only harder. `TASKS.md` 2.2 needs **many**
+traces for the Phase 2b adversarial consumer, because `PREDICTIONS.md` P5 is
+*"one trace = one graph"*: run over the committed corpus, an aggregator tests
+**the aggregator**; run over a real heterogeneous fleet, it tests **the
+claim**.
+
+```bash
+make capture ARGS="--fleet 8"     # -> capture/_scratch/fleet/01_weather.local.jsonl, ...
+```
+
+One file per run, because one trace is one graph (`SPEC.md` §7). The backend,
+the model and the instrumentor are **fixed** — the fleet is not a comparison
+between those. What varies is the shape of the run, steered by the prompt and
+the tool inventory (`capture/fleet.py`).
+
+**Why it is harder.** Eight traces nobody reads carefully are a better hiding
+place than one fixture under review. So the rules are stated rather than
+assumed: these are **scratch** — gitignored, no provenance file, never promoted
+to `fixtures/captured/`, never cited as evidence for anything beyond 2b's own
+findings. The `AGENT.md` fabrication halt point covers the fleet exactly as it
+covers a single capture.
+
+**What the fleet must contain**, or it is not exercising P5 — varied tools,
+turns with no tool call at all, turns with parallel calls, and a tool that
+failed. The harness does not *assume* it got them. A prompt steers a model; it
+does not command one. So it reads back what the exported records actually
+contain and prints a coverage table, then **exits non-zero if a required shape
+is missing** — an exit code is harder to skim past than a paragraph.
+
+When that happens: re-run, raise `--fleet`, or reword the run that was aimed at
+the missing shape. What you must **not** do is edit an exported span to add the
+shape. That makes the fleet synthetic while it still looks real, which is the
+one thing this whole directory exists to prevent.
+
 ## Testing
 
 `exporter.py` is duck-typed — it reads attributes off whatever it is handed
@@ -159,6 +196,15 @@ tested against stub spans with no SDK installed (`tests/test_capture.py`).
 rather than lucky: it reads the OTel `ReadableSpan` surface, which is the same
 class whichever instrumentor filled it, and copies the attribute keys
 verbatim. The dialect lives in those keys.
+
+The fleet is covered the same way — against stub spans, never a real call.
+Each required shape is built as stub spans, pushed through the real
+span-to-record conversion, and read back by `fleet.shapes_of`, so the coverage
+verdict is tested end to end from span to report. Plus: `converse` driven
+against a stub backend (the default prompt and inventory must not drift, since
+2.6's matched pair depends on it); a tool failure escaping its span before it
+is caught, which is what makes the tracer mark the span ERROR; and one file per
+run, with a non-zero exit when a shape is missing.
 
 The tests also cover backend selection, the attributes of the spans the
 harness emits itself, and — the strongest claim available without a key — that

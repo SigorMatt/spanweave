@@ -131,6 +131,15 @@ class JsonlSpanExporter:
     def force_flush(self, timeout_millis=30_000):
         return True
 
+    def drain(self):
+        """Forget what has been exported so far.
+
+        The fleet captures many runs through one provider, and one trace is
+        one graph (`SPEC.md` §7). Without this a run would inherit the
+        previous run's spans and the files would not be traces at all.
+        """
+        self.records = []
+
     def sorted_records(self):
         """Start-time order, which is the order a human will want to read."""
         return sorted(

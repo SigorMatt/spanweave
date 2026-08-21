@@ -20,6 +20,13 @@ way demonstrates is therefore *the OpenAI instrumentor*, not the provider
 behind it -- and the provenance file has to say so, because "captured against
 a real model" and "captured against OpenAI" are different claims.
 
+The **fleet** (``TASKS.md`` 2.2) drives the same backend and the same model
+repeatedly with different prompts and different tool inventories, so that the
+runs differ *as runs*. What varies is steered through the prompt and the stub
+tools and nothing else: a shape manufactured by editing an exported span
+afterwards would make the fleet synthetic again while looking real, which is
+the failure the whole capture harness exists to avoid.
+
 Nothing here is imported by ``spanweave``. Network, SDKs and API keys live in
 this directory and only here (``ENVIRONMENT.md``).
 """
@@ -53,18 +60,127 @@ WEATHER_SCHEMA = {
     "additionalProperties": False,
 }
 
+CITY_SCHEMA = {
+    "type": "object",
+    "properties": {"city": {"type": "string", "description": "City name"}},
+    "required": ["city"],
+    "additionalProperties": False,
+}
+
+MONEY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "amount": {"type": "number", "description": "How much to convert"},
+        "currency": {"type": "string", "description": "Three-letter code, e.g. EUR"},
+        "into": {"type": "string", "description": "Three-letter code, e.g. NOK"},
+    },
+    "required": ["amount", "currency", "into"],
+    "additionalProperties": False,
+}
+
+FLIGHT_SCHEMA = {
+    "type": "object",
+    "properties": {"flight": {"type": "string", "description": "Flight number"}},
+    "required": ["flight"],
+    "additionalProperties": False,
+}
+
+
+class ToolFailure(Exception):
+    """A tool that fails on purpose, so a fleet contains a failing tool span.
+
+    Raised, not returned: the exception has to escape the tool's span for the
+    tracer to mark that span ERROR the way a real failure would. Catching it
+    inside and returning a tidy error object would produce an OK span
+    describing a failure, which is a trace that lies.
+    """
+
 
 def get_weather(arguments: dict[str, Any]) -> dict[str, Any]:
     """The tool. Local, pure, and boring on purpose.
 
     A capture is evidence about an **instrumentor**, so the tool must not add
     anything of its own -- no network, no clock, nothing that would have to be
-    redacted or explained in the provenance file.
+    redacted or explained in the provenance file. Every tool below keeps that
+    rule, including the one that fails.
     """
     return {"city": arguments.get("city"), "celsius": 18, "summary": "clear"}
 
 
-TOOLS = {"get_weather": get_weather}
+def get_population(arguments: dict[str, Any]) -> dict[str, Any]:
+    """A second tool, so per-tool rollup in a consumer has something to roll up."""
+    table = {"paris": 2_100_000, "oslo": 700_000, "lisbon": 545_000}
+    city = str(arguments.get("city", ""))
+    return {"city": arguments.get("city"), "people": table.get(city.lower())}
+
+
+def convert_currency(arguments: dict[str, Any]) -> dict[str, Any]:
+    """A third tool, with a fixed rate table -- no clock, no market, no network."""
+    rates = {("EUR", "NOK"): 11.5, ("USD", "EUR"): 0.92, ("EUR", "USD"): 1.09}
+    currency = str(arguments.get("currency", "")).upper()
+    into = str(arguments.get("into", "")).upper()
+    rate = rates.get((currency, into))
+    amount = arguments.get("amount")
+    converted = None
+    if rate is not None and isinstance(amount, (int, float)):
+        converted = round(amount * rate, 2)
+    return {"amount": amount, "from": currency, "into": into, "converted": converted}
+
+
+def lookup_flight(arguments: dict[str, Any]) -> dict[str, Any]:
+    """The tool that fails, every time, deterministically.
+
+    A fleet with no failures exercises only the half of the model where
+    everything worked, and `Status` and the error-side diagnostics would never
+    be populated by anything real.
+    """
+    raise ToolFailure(f"no such flight: {arguments.get('flight')!r}")
+
+
+@dataclass(frozen=True)
+class Tool:
+    """One stub tool: what the model is told about it, and what it does."""
+
+    name: str
+    description: str
+    schema: dict[str, Any]
+    run: Any = field(repr=False)
+
+
+TOOLS: dict[str, Tool] = {
+    tool.name: tool
+    for tool in (
+        Tool(
+            "get_weather",
+            "Get the current weather for a city.",
+            WEATHER_SCHEMA,
+            get_weather,
+        ),
+        Tool(
+            "get_population",
+            "Get the population of a city.",
+            CITY_SCHEMA,
+            get_population,
+        ),
+        Tool(
+            "convert_currency",
+            "Convert an amount between two currencies.",
+            MONEY_SCHEMA,
+            convert_currency,
+        ),
+        Tool(
+            "lookup_flight",
+            "Look up the status of a flight by number.",
+            FLIGHT_SCHEMA,
+            lookup_flight,
+        ),
+    )
+}
+
+#: The single capture's inventory. Unchanged, deliberately: the matched pair
+#: 2.6 needs differs only in the instrumentor, so the reference conversation
+#: must not drift (`TASKS.md` 2.5).
+DEFAULT_TOOLS: tuple[str, ...] = ("get_weather",)
 
 
 class ToolCall(NamedTuple):
@@ -127,18 +243,22 @@ def _anthropic_client() -> Any:
     return anthropic.Anthropic()
 
 
-ANTHROPIC_TOOL = {
-    "name": "get_weather",
-    "description": "Get the current weather for a city.",
-    "input_schema": WEATHER_SCHEMA,
-}
+def _anthropic_tool(tool: Tool) -> dict[str, Any]:
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "input_schema": tool.schema,
+    }
 
 
 def _anthropic_request(
-    client: Any, model: str, messages: list[Any]
+    client: Any, model: str, messages: list[Any], tools: tuple[Tool, ...]
 ) -> tuple[Any, list[ToolCall]]:
     response = client.messages.create(
-        model=model, max_tokens=16000, tools=[ANTHROPIC_TOOL], messages=messages
+        model=model,
+        max_tokens=16000,
+        tools=[_anthropic_tool(tool) for tool in tools],
+        messages=messages,
     )
     # The whole content, not just the text: thinking blocks must be echoed
     # back unchanged on the same model.
@@ -191,24 +311,25 @@ def _openai_client() -> Any:
     )
 
 
-OPENAI_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "get_weather",
-        "description": "Get the current weather for a city.",
-        "parameters": WEATHER_SCHEMA,
-    },
-}
+def _openai_tool(tool: Tool) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.schema,
+        },
+    }
 
 
 def _openai_request(
-    client: Any, model: str, messages: list[Any]
+    client: Any, model: str, messages: list[Any], tools: tuple[Tool, ...]
 ) -> tuple[Any, list[ToolCall]]:
     # chat.completions rather than responses: it is the surface every
     # OpenAI-compatible provider implements, and a capture that only works
     # against one provider is not the evidence this harness is for.
     response = client.chat.completions.create(
-        model=model, messages=messages, tools=[OPENAI_TOOL]
+        model=model, messages=messages, tools=[_openai_tool(tool) for tool in tools]
     )
     message = response.choices[0].message
     calls = [
@@ -270,8 +391,20 @@ BACKENDS = {backend.id: backend for backend in (ANTHROPIC, OPENAI)}
 # --------------------------------------------------------------------------
 
 
-def converse(backend: Backend, model: str, tracer: Any) -> bool:
+def converse(
+    backend: Backend,
+    model: str,
+    tracer: Any,
+    prompt: str = QUESTION,
+    tool_names: tuple[str, ...] = DEFAULT_TOOLS,
+) -> bool:
     """One two-turn tool-using conversation: agent -> [llm, tool, llm].
+
+    ``prompt`` and ``tool_names`` default to the reference conversation, so a
+    plain ``make capture`` is byte-for-byte the run it always was -- 2.6's
+    matched pair depends on that not drifting. The fleet (`fleet.py`) varies
+    them, and varies **only** them: same backend, same model, same
+    instrumentor.
 
     **The agent and tool spans are emitted here, by this file.** Only the
     ``llm`` spans come from the instrumentor, because an instrumentor wraps an
@@ -286,20 +419,24 @@ def converse(backend: Backend, model: str, tracer: Any) -> bool:
     others, and the difference is exactly what a captured fixture is for.
     """
     client = backend.client()
+    tools = tuple(TOOLS[name] for name in tool_names)
 
     with tracer.start_as_current_span(
         "agent.run",
         attributes={
             SPAN_KIND: "AGENT",
-            INPUT_VALUE: QUESTION,
+            INPUT_VALUE: prompt,
             INPUT_MIME: TEXT_MIME,
         },
     ):
-        messages: list[Any] = [{"role": "user", "content": QUESTION}]
+        messages: list[Any] = [{"role": "user", "content": prompt}]
 
-        history, calls = backend.request(client, model, messages)
+        history, calls = backend.request(client, model, messages, tools)
         messages.append(history)
         if not calls:
+            # Not a failure. A turn the model answered directly is one of the
+            # shapes a fleet needs (`TASKS.md` 2.2); it is only a weak result
+            # for the *single* capture, and run.py says so there.
             return False
 
         payloads = []
@@ -307,19 +444,29 @@ def converse(backend: Backend, model: str, tracer: Any) -> bool:
             payloads.append(_run_tool(tracer, call))
         messages.extend(backend.results(calls, payloads))
 
-        backend.request(client, model, messages)
+        backend.request(client, model, messages, tools)
     return True
 
 
 def _run_tool(tracer: Any, call: ToolCall) -> Any:
-    """Execute one tool call inside a span the corpus would recognize."""
-    with tracer.start_as_current_span(
-        f"tool.{call.name}", attributes=tool_span_attributes(call)
-    ) as span:
-        payload = TOOLS[call.name](call.arguments)
-        span.set_attribute(OUTPUT_VALUE, json.dumps(payload))
-        span.set_attribute(OUTPUT_MIME, JSON_MIME)
-        return payload
+    """Execute one tool call inside a span the corpus would recognize.
+
+    A `ToolFailure` is deliberately allowed to **escape the span** before it is
+    caught: that is what makes the tracer mark the span ERROR and record the
+    exception, exactly as a real failing tool would. The error is then handed
+    back to the model as the tool's result, which is what a real application
+    does and what keeps the conversation going for a second turn.
+    """
+    try:
+        with tracer.start_as_current_span(
+            f"tool.{call.name}", attributes=tool_span_attributes(call)
+        ) as span:
+            payload = TOOLS[call.name].run(call.arguments)
+            span.set_attribute(OUTPUT_VALUE, json.dumps(payload))
+            span.set_attribute(OUTPUT_MIME, JSON_MIME)
+            return payload
+    except ToolFailure as failure:
+        return {"error": str(failure)}
 
 
 def tool_span_attributes(call: ToolCall) -> dict[str, Any]:

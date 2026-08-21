@@ -2,6 +2,7 @@
 
     make capture                      # picks the backend you have configured
     make capture ARGS="--backend openai"
+    make capture ARGS="--fleet 8"     # the scratch fleet for TASKS.md 2.2
 
 This is the step an autonomous agent must not take (``AGENT.md``). Everything
 else in this repository can be verified by running it; this one produces
@@ -18,6 +19,13 @@ What it does **not** do: put anything into ``fixtures/captured/``. That is a
 human act, performed after reading the trace, redacting whatever needs
 redacting, and writing the provenance file. The harness prints exactly what
 remains.
+
+``--fleet N`` is a different job with the same rule, only harder: it writes N
+deliberately unalike traces to ``capture/_scratch/fleet/`` for the adversarial
+consumer to aggregate (``capture/fleet.py``). Those are **scratch** — never
+promoted, never given provenance — and the reason the rule is harder there is
+that eight traces nobody reads carefully are a better hiding place than one
+fixture under review. The fabrication halt point in ``AGENT.md`` covers both.
 """
 
 from __future__ import annotations
@@ -30,12 +38,13 @@ import pathlib
 import sys
 from collections.abc import Mapping
 
-from capture import backends
+from capture import backends, fleet
 from capture.backends import BACKENDS, Backend
 from capture.exporter import JsonlSpanExporter
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SCRATCH = REPO / "capture/_scratch"
+FLEET_SCRATCH = SCRATCH / "fleet"
 TRACER_NAME = "spanweave.capture"
 
 
@@ -113,6 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--name", help="base name for the output file")
     parser.add_argument("--model", help="override the model this backend uses")
+    parser.add_argument(
+        "--fleet",
+        type=int,
+        metavar="N",
+        help=(
+            "capture N deliberately unalike runs into capture/_scratch/fleet/ "
+            "for TASKS.md 2.2. Scratch, never fixtures."
+        ),
+    )
     args = parser.parse_args(argv)
 
     environ = os.environ
@@ -144,6 +162,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.fleet is not None:
+        try:
+            return _fleet(args.fleet, backend, model, tracer, exporter)
+        finally:
+            provider.shutdown()
+
     try:
         called = backends.converse(backend, model, tracer)
     finally:
@@ -163,15 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    SCRATCH.mkdir(parents=True, exist_ok=True)
-    captured = SCRATCH / f"{name}.local.jsonl"
-    captured.write_text(
-        "".join(
-            json.dumps(record, separators=(",", ":")) + "\n"
-            for record in exporter.sorted_records()
-        ),
-        encoding="utf-8",
-    )
+    captured = write_trace(SCRATCH / f"{name}.local.jsonl", exporter.sorted_records())
 
     print(
         _next_steps(
@@ -185,6 +201,59 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def write_trace(path, records):
+    """One trace, one file, in the flat JSONL the corpus uses."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _fleet(count, backend, model, tracer, exporter):
+    """Capture N deliberately unalike runs. Scratch only -- see `fleet.py`.
+
+    One file per run, because one trace is one graph (`SPEC.md` §7) and the
+    consumer this exists for aggregates *across* graphs. The exporter is
+    drained between runs so a trace cannot pick up the previous one's spans.
+
+    Returns non-zero when a required shape is missing. That is deliberate: a
+    partial fleet is a real problem to fix by re-running, and an exit code is
+    harder to skim past than a paragraph. The files stay on disk either way.
+    """
+    if count < 1:
+        print("capture: --fleet needs at least 1 run", file=sys.stderr)
+        return 2
+
+    runs = fleet.specs(count)
+    traces = []
+    for position, spec in enumerate(runs, start=1):
+        exporter.drain()
+        backends.converse(backend, model, tracer, spec.prompt, spec.tools)
+        records = exporter.sorted_records()
+        if not records:
+            print(
+                "capture: no spans were exported; instrumentation did not attach",
+                file=sys.stderr,
+            )
+            return 2
+        path = write_trace(
+            FLEET_SCRATCH / f"{position:02d}_{spec.id}.local.jsonl", records
+        )
+        traces.append(records)
+        print(
+            f"  run {position:2d}/{count}  {spec.id:<20} {len(records):2d} spans"
+            f"  -> {path.name}"
+        )
+
+    found = fleet.coverage(traces)
+    absent = fleet.missing(found)
+    print(f"\nWrote {len(traces)} traces -> {FLEET_SCRATCH}")
+    print(fleet.report(found, absent))
+    return 1 if absent else 0
 
 
 def _next_steps(*, captured, name, backend, model, endpoint, today, count):

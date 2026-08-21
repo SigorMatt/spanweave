@@ -42,6 +42,11 @@ conformance:
 # Review and redact the output, write its provenance file, THEN commit it to
 # fixtures/captured/ (FIXTURES.md section 6).
 # ARGS passes flags through: make capture ARGS="--backend openai --name x"
+# ARGS="--fleet 8" captures the scratch fleet for TASKS.md 2.2 instead: many
+# deliberately unalike runs into capture/_scratch/fleet/, for the Phase 2b
+# adversarial consumer. Scratch -- gitignored, no provenance, NEVER promoted
+# to fixtures/captured/. Exits non-zero if the fleet is missing a shape P5
+# needs; re-run, never edit a trace to add one.
 capture:
 	uv run --extra dev python -m capture.run $(ARGS)
 

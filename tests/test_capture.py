@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from capture import backends, run
+from capture import backends, fleet, run
 from capture.backends import ANTHROPIC, BACKENDS, OPENAI
 from capture.exporter import JsonlSpanExporter, record_of
 from spanweave import diagnostics as codes
@@ -451,3 +451,411 @@ def test_without_the_harnesss_own_spans_there_would_be_no_pairing_at_all():
     assert graph.edges(kind="call_result") == ()
     assert graph.edges(kind="parent") == ()
     assert codes.UNPAIRED_CALL in {d.code for d in graph.diagnostics}
+
+
+# --------------------------------------------------------------------------
+# The scratch fleet (TASKS.md 2.2)
+# --------------------------------------------------------------------------
+#
+# The fleet is human-run and makes N real model calls, so what is testable
+# here is the same half as everywhere else in this file: the logic around the
+# call, verified against stub spans. In particular the coverage report -- the
+# thing that tells a human whether the fleet they just paid for actually
+# contains the shapes P5 needs -- is pure and is tested end to end, span to
+# verdict.
+
+
+class StubSpan:
+    """Enough of an OTel span for the harness's own emitting code."""
+
+    def __init__(self, name, attributes):
+        self.name = name
+        self.attributes = dict(attributes)
+        self.exited_with = None
+
+    def set_attribute(self, key, value):
+        self.attributes[key] = value
+
+
+class StubTracer:
+    """Records the spans the harness emits, and how each one ended."""
+
+    def __init__(self):
+        self.spans = []
+
+    def start_as_current_span(self, name, attributes=None):
+        span = StubSpan(name, attributes or {})
+        self.spans.append(span)
+
+        class _Scope:
+            def __enter__(self):
+                return span
+
+            def __exit__(self, kind, value, traceback):
+                span.exited_with = kind
+                return False  # never swallow: the tracer must see the failure
+
+        return _Scope()
+
+
+def a_tool_span(tool="get_weather", call_id="call_1", status=None, span_id=0xA2):
+    return a_span(
+        span_id=span_id,
+        name=f"tool.{tool}",
+        status=status,
+        attributes=backends.tool_span_attributes(
+            backends.ToolCall(call_id, tool, {"city": "Paris"})
+        ),
+    )
+
+
+def an_llm_span(span_id=0xA1):
+    return a_span(
+        span_id=span_id,
+        name="ChatCompletion",
+        attributes={"openinference.span.kind": "LLM"},
+    )
+
+
+ERROR_STATUS = SimpleNamespace(
+    status_code=SimpleNamespace(name="ERROR"), description="no such flight"
+)
+
+
+def records_of(*spans):
+    """Stub spans -> the dialect records a fleet file would actually hold."""
+    exporter = JsonlSpanExporter()
+    exporter.export(list(spans))
+    return exporter.sorted_records()
+
+
+# -- the four required shapes, each read back off records ------------------
+
+
+def test_an_ordinary_run_shows_a_tool_call_and_nothing_else():
+    shapes = fleet.shapes_of(records_of(an_llm_span(), a_tool_span()))
+    assert shapes == frozenset({fleet.TOOL_CALL})
+
+
+def test_a_run_with_no_tool_span_is_no_tool_call_not_an_empty_result():
+    # The distinction matters: "the model answered directly" is one of the
+    # shapes P5 needs, not a failed capture.
+    shapes = fleet.shapes_of(records_of(an_llm_span()))
+    assert fleet.NO_TOOL_CALL in shapes
+    assert fleet.TOOL_CALL not in shapes
+
+
+def test_two_tool_spans_in_one_trace_are_parallel_calls():
+    trace = records_of(
+        an_llm_span(),
+        a_tool_span(call_id="call_1", span_id=0xA2),
+        a_tool_span(tool="get_population", call_id="call_2", span_id=0xA3),
+    )
+    assert fleet.PARALLEL_TOOL_CALLS in fleet.shapes_of(trace)
+
+
+def test_a_failed_tool_span_is_the_error_shape():
+    trace = records_of(
+        an_llm_span(), a_tool_span(tool="lookup_flight", status=ERROR_STATUS)
+    )
+    assert fleet.TOOL_ERROR in fleet.shapes_of(trace)
+
+
+def test_an_error_on_a_non_tool_span_is_not_the_tool_error_shape():
+    # Otherwise a failed LLM call would quietly satisfy the requirement for a
+    # failing *tool*, and the fleet would be missing a shape it claims to have.
+    llm = a_span(
+        name="ChatCompletion",
+        status=ERROR_STATUS,
+        attributes={"openinference.span.kind": "LLM"},
+    )
+    assert fleet.TOOL_ERROR not in fleet.shapes_of(records_of(llm, a_tool_span()))
+
+
+# -- varied tools is a property of the fleet, not of a trace ---------------
+
+
+def test_one_trace_can_never_show_varied_tools():
+    assert fleet.VARIED_TOOLS not in fleet.shapes_of(
+        records_of(an_llm_span(), a_tool_span())
+    )
+
+
+def test_varied_tools_appears_only_once_two_runs_used_different_tools():
+    same = [records_of(an_llm_span(), a_tool_span()) for _ in range(2)]
+    assert fleet.VARIED_TOOLS not in fleet.coverage(same)
+
+    varied = [
+        records_of(an_llm_span(), a_tool_span(tool="get_weather")),
+        records_of(an_llm_span(), a_tool_span(tool="convert_currency")),
+    ]
+    assert fleet.coverage(varied)[fleet.VARIED_TOOLS] == (1, 2)
+
+
+# -- the coverage verdict --------------------------------------------------
+
+
+def a_complete_fleet():
+    """One trace per required shape, as records."""
+    return [
+        records_of(an_llm_span(), a_tool_span()),
+        records_of(an_llm_span()),
+        records_of(
+            an_llm_span(),
+            a_tool_span(call_id="call_1", span_id=0xA2),
+            a_tool_span(tool="get_population", call_id="call_2", span_id=0xA3),
+        ),
+        records_of(
+            an_llm_span(), a_tool_span(tool="lookup_flight", status=ERROR_STATUS)
+        ),
+    ]
+
+
+def test_a_complete_fleet_is_missing_nothing():
+    assert fleet.missing(fleet.coverage(a_complete_fleet())) == ()
+
+
+def test_a_fleet_of_only_the_reference_run_is_missing_three_shapes():
+    dull = [records_of(an_llm_span(), a_tool_span()) for _ in range(8)]
+    assert set(fleet.missing(fleet.coverage(dull))) == {
+        fleet.VARIED_TOOLS,
+        fleet.NO_TOOL_CALL,
+        fleet.PARALLEL_TOOL_CALLS,
+        fleet.TOOL_ERROR,
+    }
+
+
+def test_the_report_names_the_missing_shapes_and_refuses_the_shortcut():
+    dull = [records_of(an_llm_span(), a_tool_span())]
+    found = fleet.coverage(dull)
+    text = fleet.report(found, fleet.missing(found))
+    assert "MISSING" in text
+    for shape in fleet.missing(found):
+        assert shape in text
+    # The one thing a human under timebox pressure might otherwise do.
+    assert "edit an exported span" in text
+    assert "SCRATCH" in text
+
+
+def test_a_complete_fleets_report_says_it_is_usable():
+    found = fleet.coverage(a_complete_fleet())
+    assert "MISSING" not in fleet.report(found, fleet.missing(found))
+
+
+# -- the specs themselves --------------------------------------------------
+
+
+def test_the_fleet_is_steered_at_every_required_shape():
+    # A tripwire: delete or reword a spec and the fleet can silently stop
+    # aiming at a shape, which would show up only as a missing shape after a
+    # run that cost real money.
+    intended = fleet.intended_shapes(fleet.FLEET)
+    assert set(fleet.REQUIRED) <= intended
+
+
+def test_every_spec_names_tools_that_exist():
+    for spec in fleet.FLEET:
+        for name in spec.tools:
+            assert name in backends.TOOLS, f"{spec.id} wants unknown tool {name}"
+
+
+def test_specs_cycle_and_are_deterministic():
+    assert fleet.specs(3) == fleet.FLEET[:3]
+    assert fleet.specs(10)[8:] == fleet.FLEET[:2]
+    assert fleet.specs(5) == fleet.specs(5)
+
+
+def test_a_fleet_needs_at_least_one_run():
+    with pytest.raises(ValueError):
+        fleet.specs(0)
+
+
+# -- the tools, and the one that fails -------------------------------------
+
+
+def test_the_new_tools_reach_nothing_and_invent_nothing():
+    # Same rule as get_weather: a capture is evidence about an instrumentor,
+    # so no clock, no network, nothing that would need redacting.
+    for name in ("get_population", "convert_currency"):
+        tool = backends.TOOLS[name]
+        arguments = {"city": "Oslo", "amount": 100, "currency": "EUR", "into": "NOK"}
+        assert tool.run(arguments) == tool.run(arguments)
+
+
+def test_the_failing_tool_fails_the_same_way_every_time():
+    with pytest.raises(backends.ToolFailure):
+        backends.TOOLS["lookup_flight"].run({"flight": "BA117"})
+
+
+def test_a_tool_failure_escapes_its_span_before_it_is_caught():
+    # This is what makes the tracer mark the span ERROR and record the
+    # exception. Catching inside the span would produce an OK span describing
+    # a failure -- a trace that lies.
+    tracer = StubTracer()
+    call = backends.ToolCall("call_1", "lookup_flight", {"flight": "BA117"})
+    result = backends._run_tool(tracer, call)
+
+    assert tracer.spans[0].exited_with is backends.ToolFailure
+    # ...and the model is still told what happened, so the run has a second turn.
+    assert "error" in result
+
+
+def test_a_successful_tool_leaves_its_span_clean():
+    tracer = StubTracer()
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    result = backends._run_tool(tracer, call)
+
+    assert tracer.spans[0].exited_with is None
+    assert tracer.spans[0].attributes["output.mime_type"] == "application/json"
+    assert result["city"] == "Paris"
+
+
+# -- converse, driven against a stub backend -------------------------------
+
+
+def a_stub_backend(script):
+    """A Backend whose `request` replays a scripted list of (history, calls)."""
+    seen = []
+
+    def request(client, model, messages, tools):
+        seen.append(SimpleNamespace(messages=list(messages), tools=tools))
+        return script[len(seen) - 1]
+
+    backend = backends.Backend(
+        id="stub",
+        packages=("stub",),
+        api_key_env="STUB_KEY",
+        base_url_env=None,
+        model_env="STUB_MODEL",
+        default_model="stub-1",
+        instrument=lambda provider: None,
+        client=lambda: object(),
+        request=request,
+        results=backends._openai_results,
+    )
+    return backend, seen
+
+
+def test_converse_defaults_to_the_reference_conversation_unchanged():
+    # 2.6's matched pair differs only in the instrumentor, so the default
+    # prompt and inventory must not drift when the fleet varies them.
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    backend, seen = a_stub_backend([("assistant", [call]), ("assistant", [])])
+    assert backends.converse(backend, "stub-1", StubTracer()) is True
+
+    assert seen[0].messages[0]["content"] == backends.QUESTION
+    assert tuple(tool.name for tool in seen[0].tools) == backends.DEFAULT_TOOLS
+
+
+def test_converse_passes_a_specs_prompt_and_inventory_through():
+    spec = next(s for s in fleet.FLEET if len(s.tools) > 1)
+    backend, seen = a_stub_backend([("assistant", []), ("assistant", [])])
+    backends.converse(backend, "stub-1", StubTracer(), spec.prompt, spec.tools)
+
+    assert seen[0].messages[0]["content"] == spec.prompt
+    assert tuple(tool.name for tool in seen[0].tools) == spec.tools
+
+
+def test_a_turn_with_no_tool_call_ends_the_run_without_a_tool_span():
+    tracer = StubTracer()
+    backend, seen = a_stub_backend([("assistant", [])])
+    assert backends.converse(backend, "stub-1", tracer, "hello", ("get_weather",)) is (
+        False
+    )
+    assert [span.name for span in tracer.spans] == ["agent.run"]
+    assert len(seen) == 1  # no second turn to make
+
+
+def test_a_failing_tool_still_produces_a_second_turn():
+    tracer = StubTracer()
+    call = backends.ToolCall("call_9", "lookup_flight", {"flight": "BA117"})
+    backend, seen = a_stub_backend([("assistant", [call]), ("assistant", [])])
+    backends.converse(backend, "stub-1", tracer, "look it up", ("lookup_flight",))
+
+    assert [span.name for span in tracer.spans] == ["agent.run", "tool.lookup_flight"]
+    assert len(seen) == 2
+    assert json.loads(seen[1].messages[-1]["content"])["error"]
+
+
+def test_parallel_calls_produce_one_tool_span_each():
+    tracer = StubTracer()
+    calls = [
+        backends.ToolCall("call_1", "get_weather", {"city": "Paris"}),
+        backends.ToolCall("call_2", "get_population", {"city": "Paris"}),
+    ]
+    backend, _ = a_stub_backend([("assistant", calls), ("assistant", [])])
+    backends.converse(
+        backend, "stub-1", tracer, "both please", ("get_weather", "get_population")
+    )
+    assert [span.name for span in tracer.spans] == [
+        "agent.run",
+        "tool.get_weather",
+        "tool.get_population",
+    ]
+
+
+# -- one trace per file ----------------------------------------------------
+
+
+def test_the_exporter_can_be_drained_between_runs():
+    # One trace is one graph (SPEC.md §7). Without draining, run 2's file
+    # would contain run 1's spans and the fleet would not be a fleet.
+    exporter = JsonlSpanExporter()
+    exporter.export([an_llm_span()])
+    assert len(exporter.records) == 1
+    exporter.drain()
+    assert exporter.records == []
+    exporter.export([a_tool_span()])
+    assert len(exporter.sorted_records()) == 1
+
+
+class ScriptedExporter:
+    """An exporter that hands back prepared traces, one per drained run."""
+
+    def __init__(self, traces):
+        self.traces = list(traces)
+        self.current = []
+        self.drains = 0
+
+    def drain(self):
+        self.drains += 1
+        self.current = self.traces.pop(0) if self.traces else []
+
+    def sorted_records(self):
+        return self.current
+
+
+def _fleet_over(traces, tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "fleet")
+    backend, _ = a_stub_backend([("assistant", [])] * (len(traces) * 2))
+    return run._fleet(
+        len(traces), backend, "stub-1", StubTracer(), ScriptedExporter(traces)
+    )
+
+
+def test_the_fleet_writes_one_file_per_run(tmp_path, monkeypatch):
+    # One trace is one graph, so one trace is one file. A single file holding
+    # eight runs would be a multi-trace input, which is a different question
+    # (SPEC.md §7) and not the one 2.3 is asking.
+    code = _fleet_over(a_complete_fleet(), tmp_path, monkeypatch)
+    written = sorted(p.name for p in (tmp_path / "fleet").iterdir())
+    assert len(written) == 4
+    assert written[0].startswith("01_")
+    assert all(name.endswith(".local.jsonl") for name in written)
+    assert code == 0
+
+
+def test_a_fleet_missing_a_required_shape_exits_non_zero(tmp_path, monkeypatch):
+    # Deliberate: a partial fleet is a real problem to fix by re-running, and
+    # an exit code is harder to skim past than a paragraph of output.
+    dull = [records_of(an_llm_span(), a_tool_span()) for _ in range(3)]
+    assert _fleet_over(dull, tmp_path, monkeypatch) == 1
+    # The traces still exist -- the human re-runs, they do not edit these.
+    assert len(list((tmp_path / "fleet").iterdir())) == 3
+
+
+def test_each_fleet_file_is_one_trace_worth_of_jsonl(tmp_path, monkeypatch):
+    _fleet_over(a_complete_fleet(), tmp_path, monkeypatch)
+    for path in (tmp_path / "fleet").iterdir():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert lines and all(json.loads(line)["span_id"] for line in lines)

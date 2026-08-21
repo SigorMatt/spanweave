@@ -732,7 +732,7 @@ below:
 
 ### `[2b]` — the adversarial consumer  *(two days, starting at 2.3)*
 
-- [ ] **2.2 Scratch fleet generator.** `[2b]` **REQUIRED — 2.3 does not start
+- [x] **2.2 Scratch fleet generator.** `[2b]` **REQUIRED — 2.3 does not start
   without it.** P5 is *"one trace = one graph"*. An aggregator run over the
   committed corpus tests **the aggregator**; run over a real heterogeneous
   fleet it tests **the claim**. The traces are scratch and cost cents, so the
@@ -777,6 +777,59 @@ below:
   out actually contains each one. If the fleet cannot be produced, **record
   why here and say so at 2.4** — P5 then resolves on corpus-only evidence and
   the resolution must state that limitation rather than absorb it silently.
+  > **The generator is built; the fleet is not captured.** `make capture
+  > ARGS="--fleet 8"` writes one file per run to `capture/_scratch/fleet/`
+  > (`capture/fleet.py`), and with no credential set it refuses with the same
+  > actionable error as a single capture and exits 2. **The HALT stands.**
+  > `AGENT.md`'s run loop step 3 does not apply literally here — there is no
+  > expected output to author before the implementation — so the verification
+  > is against **stub spans**, as 2.5 will be: each required shape is built as
+  > stub spans, pushed through the real span→record conversion, and read back
+  > by `fleet.shapes_of`, so the coverage verdict is tested end to end from
+  > span to report without a model call.
+  > **The design decision that shaped everything else: steering is not
+  > guaranteeing.** A prompt steers a model; it does not command one. So the
+  > harness never asserts that a run produced the shape it was aimed at. Each
+  > `RunSpec` carries an `intends` tuple, but that is documentation plus a
+  > tripwire (a test fails if the fleet stops *aiming* at a required shape) —
+  > never evidence. What a run actually produced is read back off its exported
+  > records, the fleet's coverage is printed as a table, and a missing required
+  > shape **exits non-zero**. That last part is deliberate: a partial fleet is
+  > a real problem to fix by re-running, and an exit code is harder to skim
+  > past than a paragraph. The report names the one shortcut a human under
+  > timebox pressure might otherwise take, and there is a test that it does.
+  > Five smaller decisions worth naming:
+  > - **The failing tool raises, and the exception escapes its span before it
+  >   is caught.** That is what makes the tracer mark the span `ERROR` and
+  >   record the exception, exactly as a real failure would. Catching it inside
+  >   the span would have produced an `OK` span describing a failure — a trace
+  >   that lies, in the fixture directory of a library whose whole claim is
+  >   that it does not. The error is then handed back to the model as the
+  >   tool's result, which is what a real application does and what keeps the
+  >   second turn alive.
+  > - **The reference conversation did not move.** `converse()` gained a
+  >   `prompt` and a `tool_names` argument, both defaulting to what they always
+  >   were (`QUESTION`, `DEFAULT_TOOLS`). 2.6's matched pair differs only in
+  >   the instrumentor, so a drifting default would quietly invalidate it;
+  >   there is a test pinning both.
+  > - **One file per run**, and `JsonlSpanExporter.drain()` between runs. One
+  >   trace is one graph (`SPEC.md` §7), and without the drain run 2's file
+  >   would inherit run 1's spans — a multi-trace input, which is a different
+  >   question and not the one 2.3 is asking.
+  > - **Two shape detections are sound only because of how `converse` is
+  >   built**, so the reasoning is written into `shapes_of` rather than
+  >   assumed: every tool span is a child of the run's one `agent.run` span and
+  >   the harness executes tools for exactly one assistant turn, so two tool
+  >   spans mean two calls requested at once; and a tool span is emitted for
+  >   every call requested, so no tool span means none was requested rather
+  >   than one was lost.
+  > - **An error on a non-tool span is not the tool-error shape.** Otherwise a
+  >   failed LLM call would silently satisfy the requirement for a failing
+  >   *tool*, and the fleet would be missing a shape it reported as present.
+  > Three tools were added beside `get_weather` — `get_population`,
+  > `convert_currency`, and `lookup_flight`, which always fails. All keep the
+  > existing rule: no clock, no network, nothing that would have to be redacted
+  > or explained.
 
 - [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
   here, with 2.2's fleet in hand.** Build the consumer most likely to break the
