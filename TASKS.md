@@ -438,6 +438,36 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
 
 ---
 
+### Phase 1 review — outcomes
+
+Human review of the Phase 1 exit. Sixteen scenarios signed off unchanged; six
+items came back. All six are implemented; **1.9 stays unchecked** for the same
+reason as before — the captured trace is a human step.
+
+| # | Outcome |
+|---|---|
+| 1 | `SPEC.md` §5.2 now states the `meta.source_digest` exclusion. It lived only in a test, so an independent checker written against the spec alone reported a failure the spec did not intend — which is how it was found. The spec also requires the exclusion to carry its own proof, since an exclusion nobody can see through is indistinguishable from excusing a field that never varies. |
+| 2 | `SPEC.md` §3.2 now defines `attributes.reported_kind`, invented during implementation and part of the schema that freezes at Phase 4. `redacted_payload/scenario.md` records the upstream corroboration for `__REDACTED__` — the same absent-vs-hidden argument, reached independently by the people emitting the data. |
+| 3 | The corpus can now say "no expected graph", **two ways, because they are two statements**: `expected/error.json` for a refusal (behavior, all dialects, permanent) and `expected/coverage.json` for an unrenderable dialect (coverage, per-dialect, temporary — the file deletes itself when a dialect can render). `FIXTURES.md` §4.2/§4.3 define equivalence for each, and silence is now a failure: every scenario × dialect is either rendered or declared. Refusals are matched by **type + error code, never message text**; errors therefore gained stable codes (`SPEC.md` §3.10), mirroring diagnostic codes. |
+| 4 | The seam carries `call_ids` (plural). Parallel tool calls are ubiquitous, so the first captured trace would have shown one pairing where there should be several. No schema, serializer or expected-graph change — the seam is not a public contract and the graph model already allowed many `call_result` edges from one node. New scenario `parallel_tool_calls`; the adapter got **smaller**. `OPEN_QUESTIONS.md` §8 records agent-as-tool as the concrete shape that would force `(id, role)` pairs. |
+| 5 | `temporal` asserted a precedence that is false for equal start times, and that false claim was frozen into `parallel_tools`. Fixed both ways: §4 now claims an **order**, and a tie-broken edge carries its own `basis`, so a consumer can tell the two apart from the graph rather than by re-deriving timestamps. The edge is labelled, not suppressed — dropping it would break the sibling chain and leave the order partial. |
+| 6 | The `link`/`parent` dangling-reference asymmetry is stated in `SPEC.md` §4.0 and back-referenced from the `orphan_parent` row. Dangling ids are **kept** (the edge names its target; dropping it would hide a stated relation) with `node() -> None` as the documented contract. No new diagnostic: a cross-trace link is confidently mapped, and using that channel for an inventory fact would dilute it. The duplicate-entry finding was a **defect** and is fixed — node-returning queries report each node once. Coverage added for `descendants` / `reachable` / `ancestors` / `paths` / `parents` / `subgraph` / `topo_order` against a dangling target. |
+
+**Two notes for whoever picks this up next.**
+
+The reviewer's `review_corpus.py` flags `declared_data_edge` and
+`duplicate_span_ids` as "no expected/graph.json". That is now their *correct*
+state; the tool predates the convention and wants teaching about `error.json`
+and `coverage.json` (`FIXTURES.md` §4.2, §4.3).
+
+Item 3's strictness (type + error code) was chosen by the reviewer after the
+first implementation had already gone in under a different assumption. The
+codes are a public contract from `0.9.x`, so `SPEC.md` §3.10 is the place to
+argue with them, and `tests/test_codes.py` parses that table out of the spec
+and fails if the library drifts from it.
+
+---
+
 ## Phase 2 — Falsify the model  *(provisional — sharpen after 1.9)*
 
 Two independent pressures on the same question, run in parallel while nothing is
