@@ -238,13 +238,33 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > order is proven not to decide anything — two registries built in opposite
   > orders must refuse an ambiguous input identically.
 
-- [ ] **1.3 OpenInference adapter.** `adapters/openinference.py`. Maps
+- [x] **1.3 OpenInference adapter.** `adapters/openinference.py`. Maps
   `openinference.span.kind` → `NodeKind`; `tool.name` → `operation`;
   `input.value`/`input.mime_type` and `output.value`/`output.mime_type` →
   `Payload` (all five states distinguished); `llm.token_count.*` → `Usage`;
   tool-call ids → `call_id`/`call_role`. Everything else it sees goes in
   `unmapped` (keys only). Follows `ADAPTERS.md` exactly.
   *Done when the seeded scenarios parse and unmapped keys are reported, not lost.*
+  > **A model finding, recorded rather than patched.** The seam carries **one**
+  > `call_id` per span (`SPEC.md` §6), but a single LLM span can request several
+  > tool calls at once — a real and common shape. The adapter pairs the first and
+  > reports the rest as `unmapped_attributes` (keys/ids only), so nothing is
+  > dropped silently; it does **not** widen the seam, because that is a model
+  > question for Phase 2 rather than a patch to sneak in here.
+  > Requester recognition: an id is read from the dotted message attributes
+  > (`llm.output_messages.*.tool_calls.*.tool_call.id`) **and** from a
+  > `tool_calls[].id` stated inside a JSON `output.value` — which is the form the
+  > seeded fixture uses. Both are the dialect stating an id, not a comparison of
+  > values; §4.2's prohibition is on concluding a flow from matching *content*,
+  > and no content is compared here.
+  > `truncated` is never produced by this adapter: OpenInference signals
+  > redaction (the literal `__REDACTED__`, which is why `redacted` and `absent`
+  > stay distinguishable) but has no truncation signal. Claiming one would be
+  > claiming the instrumentor said something it did not. There is a test asserting
+  > the absence.
+  > Unmapped reporting covers unrecognized **record** keys too (as
+  > `<record>.events`), not only attribute keys — `events` is real telemetry that
+  > Phase 1 does not model, and it should be visible rather than merely absent.
 
 - [ ] **1.4 Identity.** `spanweave/ids.py` per `SPEC.md` §3.6: prefer the
   dialect span id; else the SHA-256 prefix. Collisions raise. No `hash()`.

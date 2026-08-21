@@ -138,3 +138,11 @@ def get(adapter_id: str) -> Adapter:
 
 def detect(records: Sequence[JsonValue]) -> tuple[Adapter, float]:
     return REGISTRY.detect(records)
+
+
+# Registered here, at the end of the module, so that importing the registry
+# also makes the shipped dialects available -- and so that an adapter file
+# never has to import the registry back (ADAPTERS.md §4).
+from spanweave.adapters.openinference import OpenInferenceAdapter  # noqa: E402
+
+REGISTRY.register(OpenInferenceAdapter())
