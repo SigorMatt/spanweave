@@ -862,19 +862,54 @@ below:
   > unsupported keyword. Detection is on the status code, never the message
   > text (`SPEC.md` §3.10's rule, applied to the harness).
   >
-  > **A second finding from the same traces, recorded not acted on.** In
-  > `08_three_at_once` the *follow-up* LLM span has
-  > `llm.finish_reason: tool_calls` and requests `get_population` — the model
-  > is calling tools **sequentially across turns**, not refusing to call
-  > several. `converse` executes tools for one turn only, so that second call
-  > has no tool span and the trace carries an unpaired call. Whether the
-  > harness should loop until the model stops calling tools is a real
-  > question and a larger change than 2.2; it is not made here.
+  > **Resolved: the model calls tools sequentially.** Four fleet attempts —
+  > `--fleet 8` twice, `--fleet 12` twice, the last with
+  > `parallel_tool_calls=True` — **32 runs, three specs aimed at the shape,
+  > not one parallel call.** The endpoint accepted the parameter: no 400
+  > retry was reported, so the capability was asked for and granted.
+  > The evidence for *why* is in `08_three_at_once`: the **follow-up** LLM
+  > span carries `llm.finish_reason: tool_calls` and requests a second tool.
+  > `openai/gpt-oss-120b` is not declining to call several tools — it is
+  > calling them **sequentially, across turns**. That is a fact about the
+  > model. It is not a harness defect and not an endpoint limitation, and both
+  > of those were ruled out rather than assumed: the parameter was sent, and
+  > the spans show the model going on to request more.
   >
-  > **One attempt remains.** If parallel calls still do not appear with the
-  > parameter set, that is the gap — record it at 2.4 as evidence that the
-  > fleet's `parallel_tool_calls` coverage came from a fixture and not from a
-  > model, and let P5 resolve on what the fleet does contain.
+  > **Two limitations this puts on the fleet as evidence. Neither may be
+  > absorbed silently at 2.4.**
+  >
+  > 1. **`parallel_tool_calls` coverage comes from a hand-authored fixture,
+  >    not from a model.** Every other required shape in the fleet was
+  >    produced by a real run; this one exists in the corpus only. P5's
+  >    resolution must **state which kind of evidence it rests on for this
+  >    shape** — a fixture and a captured trace are different claims
+  >    (`FIXTURES.md` §6), and a resolution that reports "all four shapes
+  >    present" without that distinction would be overclaiming exactly where
+  >    the fleet was weakest.
+  > 2. **Every fleet trace is at most `agent -> llm -> tool -> llm`, and this
+  >    is the broader limitation.** `converse()` executes tools for one turn
+  >    only. Real agent runs loop until done, so P5 — *one trace = one graph*
+  >    — is being tested against traces **structurally shallower** than the
+  >    ones a fleet aggregator would meet in the wild. A model that would have
+  >    exposed a shape problem at depth cannot do so here. **Whether
+  >    `converse()` should loop is a decision for the 2.4 HALT, with the
+  >    aggregator's experience in hand — it is not changed now**, because
+  >    changing the harness mid-timebox to chase a shape is how a two-day box
+  >    becomes a week.
+  >
+  > **An unpaired call nobody designed.** The truncated loop leaves
+  > `08_three_at_once` with a real `unpaired_call`: the follow-up span
+  > requests a tool that never ran. `spanweave inspect` on it reports 4 nodes,
+  > 7 edges and `unpaired_call: 1` — alongside a declared `data` edge
+  > (`SPEC.md` §4.2.1), which is the second time that relation has shown up in
+  > real telemetry rather than in a fixture.
+  > The corpus carries `unpaired_tool_call` as a **hand-authored degenerate
+  > scenario**, built from a mismatched id. Here the identical diagnostic
+  > arises from real telemetry by a **different cause** — a truncated agent
+  > loop. That is worth recording on its own terms: it is evidence that the
+  > degenerate scenarios describe **real situations** and not just the ways we
+  > imagined a trace could be malformed, which is the thing hand-authored
+  > fixtures can never establish about themselves.
 
 - [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
   here, with 2.2's fleet in hand.** Build the consumer most likely to break the
