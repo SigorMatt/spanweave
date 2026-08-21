@@ -107,7 +107,7 @@ Code executes against.
   > directory over, under `adapters/`, since the rule locates dialect knowledge
   > rather than forbidding it.
 
-- [ ] **0.6 Determinism + losslessness gates.** Property tests, wired into
+- [x] **0.6 Determinism + losslessness gates.** Property tests, wired into
   `make check`, that will grow with the fixture corpus:
   - build twice → byte-identical serialization;
   - **shuffle input lines → byte-identical graph**;
@@ -116,6 +116,20 @@ Code executes against.
   - serialization uses `sort_keys=True` (assert on the writer, not by eyeballing).
   *Done when all four run against the worked example and fail on a planted
   violation.*
+  > **Done in two halves, and only the first is here.** At Phase 0 there is no
+  > reader, no builder and no serializer, so there is nothing to run against the
+  > worked example yet. This change lands all four properties as reusable checks
+  > (`tests/determinism.py`) and watches **every one of them fail** against a
+  > deliberately broken fake (`tests/test_determinism.py`): a counter leaking into
+  > the output, a builder that trusts file order, a group-by emitting in dict
+  > insertion order, a silently dropped record, a record prettified on the way in,
+  > and four ways for a writer to be non-canonical. **Task 1.8 points the same
+  > four checks at `spanweave build` over the worked example, unchanged** — and
+  > 1.8 is not done until it does. Writing the properties before the code they
+  > judge is deliberate: a determinism property invented afterwards tends to
+  > describe the implementation rather than test it.
+  > Also: the `gates` target now runs `tests/test_determinism.py` too, so `make
+  > gates` covers 0.4–0.6 exactly as the seeded `Makefile` comment says it does.
 
 - [ ] **0.7 Model types.** `spanweave/model.py`: `NodeKind`, `EdgeKind`,
   `Warrant`, `Status`, `Payload`, `Usage`, `Provenance`, `RawRecord`, `Node`,

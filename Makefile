@@ -24,7 +24,7 @@ test:
 #   0.5  neutrality / no-dialect-in-builder     (CLAUDE.md 1, 6)
 #   0.6  determinism / losslessness             (CLAUDE.md 2, 4)
 gates:
-	uv run pytest tests/test_gates.py -v
+	uv run pytest tests/test_gates.py tests/test_determinism.py -v
 
 # The cross-dialect equivalence suite (FIXTURES.md). Every scenario, in every
 # dialect, must produce that scenario's ONE canonical graph. This is the
