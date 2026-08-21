@@ -1044,7 +1044,18 @@ below:
   > the kind of evidence only real traces produce, since a corpus can only
   > test the shapes someone thought to write down.
 
-- [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
+- [ ] **2.3 Fleet aggregator in `examples/`.**
+  **The fleet is evidence, and reading how it was made destroys it.** The 14
+  traces in `capture/_scratch/fleet/` are telemetry from someone else's
+  system. Do **not** read `capture/` to learn how they were produced — not
+  `fleet.py`, not `backends.py`, not the 2.2 record in this file. If you need
+  to know something about a trace, the graph is where you find it, and **if
+  the graph does not carry it, that is the finding.** This task measures
+  whether the graph is sufficient for a consumer; knowing the answer from the
+  producer's side makes the measurement meaningless. This constraint survives
+  compaction only because it is written here — re-read it if the session runs
+  long.
+ `[2b]` **The timebox starts
   here, with 2.2's fleet in hand.** Build the consumer most likely to break the
   model: a rollup over **many** graphs — per-tool call counts and failure
   counts, per-diagnostic-code counts, per-node-kind counts, across every trace
