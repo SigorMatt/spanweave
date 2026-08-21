@@ -897,19 +897,45 @@ below:
   >    changing the harness mid-timebox to chase a shape is how a two-day box
   >    becomes a week.
   >
-  > **An unpaired call nobody designed.** The truncated loop leaves
-  > `08_three_at_once` with a real `unpaired_call`: the follow-up span
-  > requests a tool that never ran. `spanweave inspect` on it reports 4 nodes,
-  > 7 edges and `unpaired_call: 1` — alongside a declared `data` edge
-  > (`SPEC.md` §4.2.1), which is the second time that relation has shown up in
-  > real telemetry rather than in a fixture.
+  > **An unpaired call nobody designed — and it is systematic.** A sweep of
+  > all twelve traces: **five carry `unpaired_call`** — `02_two_cities`,
+  > `03_weather_and_people`, `08_three_at_once`, `10_two_cities`,
+  > `11_weather_and_people` — and those are **exactly** the specs that asked
+  > for more than one tool. Every one requested a second tool on the follow-up
+  > turn and got no span for it, because `converse()` stops after one turn.
+  > That, not `08` alone, is the evidence for the sequential-calls reading
+  > above: it is a reproducible behavior tied to a property of the prompt, not
+  > one model response that happened to go that way.
   > The corpus carries `unpaired_tool_call` as a **hand-authored degenerate
   > scenario**, built from a mismatched id. Here the identical diagnostic
   > arises from real telemetry by a **different cause** — a truncated agent
   > loop. That is worth recording on its own terms: it is evidence that the
   > degenerate scenarios describe **real situations** and not just the ways we
   > imagined a trace could be malformed, which is the thing hand-authored
-  > fixtures can never establish about themselves.
+  > fixtures can never establish about themselves. The same traces also carry
+  > a declared `data` edge (`SPEC.md` §4.2.1) — the second time that relation
+  > has turned up outside a fixture.
+  >
+  > **The fleet has exactly two shapes.** Nine traces are 4 nodes / 7 edges;
+  > three are 2 nodes / 1 edge. Nothing in between, no variation in depth or
+  > breadth at all. That is limitation 2 above seen from the outside, and it
+  > sharpens it: **the aggregator may find P5 holds simply because nothing in
+  > this fleet stresses it.** *"P5 survived this fleet"* is a weak claim when
+  > the fleet has two shapes, and **2.4's resolution must say so explicitly**
+  > rather than reporting survival. A negative result from an unstressed test
+  > is not evidence of generality; it is absence of evidence, and the whole
+  > point of `PREDICTIONS.md` is not to let those two be written down the same
+  > way.
+  >
+  > **One thing the library got right that nothing had tested.** `04_no_tool`
+  > and `07_out_of_scope` are the **first traces it has ever seen with no tool
+  > span at all** — the model answered directly. Both build to 2 nodes and a
+  > single `parent` edge: no spurious `temporal` edge between a parent and its
+  > only child, no invented `tool` node, no diagnostic beyond the ordinary
+  > `unmapped_attributes`. The corpus contains no such scenario, so this is
+  > the pipeline handling a shape it was never shown, correctly — and it is
+  > the kind of evidence only real traces produce, since a corpus can only
+  > test the shapes someone thought to write down.
 
 - [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
   here, with 2.2's fleet in hand.** Build the consumer most likely to break the
