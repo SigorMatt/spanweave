@@ -58,7 +58,7 @@ Code executes against.
   > ahead of the checks it names. `uv run ruff check`, `ruff format --check`,
   > `mypy spanweave`, and `pytest` are all green here.
 
-- [ ] **0.4 Safety gates.** Three AST/lexical checks over `spanweave/`, each
+- [x] **0.4 Safety gates.** Three AST/lexical checks over `spanweave/`, each
   proven by a deliberately planted violation:
   - **no-network** — fails on `requests`, `httpx`, `socket`, `urllib.request`,
     `http.client`, `aiohttp`.
@@ -67,6 +67,15 @@ Code executes against.
   - **no-`hash()`** — fails on any call to the builtin `hash`.
   Encodes `CLAUDE.md` 4 and 5. *Done when each fails on a planted violation and
   passes otherwise.*
+  > Rules live in `tests/gates.py` so each can be run against a synthetic
+  > planted module as well as against the package; `tests/test_gates.py`
+  > asserts both directions. They are AST checks, not greps, so a comment or a
+  > docstring mentioning a banned word does not fire them — there is a test for
+  > that too, because the first false positive is what gets a gate switched
+  > off. Two additions beyond the letter of the task: violations are deduped to
+  > one per rule per line (`from urllib.request import x` matches the ban twice
+  > and saying so twice adds nothing), and a tripwire asserts the scan actually
+  > visited files, since a gate that silently scans nothing passes forever.
 
 - [ ] **0.5 Neutrality + layering gates.** Two more checks, both **module-scoped**
   (`DESIGN.md` §3):
