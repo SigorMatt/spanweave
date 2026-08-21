@@ -159,10 +159,27 @@ Code executes against.
   > denial from an assertion, and that is the right trade; the sentence was
   > reworded rather than the gate weakened.
 
-- [ ] **0.8 Acceptance harness (`make check`).** The phase done-whens as runnable
+- [x] **0.8 Acceptance harness (`make check`).** The phase done-whens as runnable
   checks, not prose: lint, types, tests, `spanweave --version`, and the gates.
   Wired into CI. *Done when `make check` passes on the Phase 0 deliverables.*
   **(Phase 0 exit.)**
+  > `make check` is green. The `Makefile` and the workflow came with the seed
+  > commit, so this task made the harness **self-checking** instead: a suite that
+  > reads the `Makefile` and `ci.yml` and asserts `check` still depends on lint,
+  > types, test and gates, still smoke-tests the installed entrypoint, that
+  > `gates` still names both gate suites, and that CI runs `make check` on 3.11,
+  > 3.12 and 3.13. A gate quietly dropped from the harness is indistinguishable
+  > from a gate that passes, and this is the only thing that would notice.
+  > Added beyond the task: a **zero-dependencies gate**. "Core has zero runtime
+  > dependencies" was a hard constraint (`ENVIRONMENT.md`) with nothing enforcing
+  > it; it is now an AST check that every import under `spanweave/` resolves to
+  > the standard library or to `spanweave` itself, watched failing on planted
+  > `yaml` / `pydantic` / `networkx` imports. The installed console script is run
+  > as a real subprocess, so packaging is proven rather than assumed.
+  > **Still open at the phase exit** (recorded at 0.3, unchanged): CI's second
+  > job runs `make conformance` and `tests/test_determinism.py`; the latter
+  > exists, the former's `tests/test_conformance.py` arrives at 1.9. That job is
+  > red until then. `make check` — the job that gates a change — is green.
 
 ---
 

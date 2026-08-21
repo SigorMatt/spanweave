@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import sys
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 
@@ -295,7 +296,40 @@ def no_dialect_outside_adapters(
 
 
 NEUTRALITY_RULES = (neutrality, no_dialect_outside_adapters)
-ALL_RULES = (*SAFETY_RULES, *NEUTRALITY_RULES)
+
+
+# --------------------------------------------------------------------------
+# 0.8 -- the dependency gate (ENVIRONMENT.md, CLAUDE.md coding conventions)
+# --------------------------------------------------------------------------
+
+
+def zero_dependencies(path: str, source: str, tree: ast.AST) -> list[Violation]:
+    """Core imports the standard library and itself. Nothing else.
+
+    "Zero runtime dependencies" is a hard constraint, not a current state
+    (`DESIGN.md` §7): a library meant to sit underneath other people's tools
+    must not drag a tree into them. Adding one is a halt point (`AGENT.md`),
+    so it is worth more than a line in `pyproject.toml` that nothing reads.
+    """
+    found = []
+    for imported, line in _imported_modules(tree):
+        top = imported.split(".")[0]
+        if top in ("spanweave", "__future__") or top in sys.stdlib_module_names:
+            continue
+        found.append(
+            Violation(
+                "zero-dependencies",
+                path,
+                line,
+                f"imports {top!r}, which is neither the standard library nor "
+                f"spanweave itself; core has zero runtime dependencies and "
+                f"adding one is a halt point (ENVIRONMENT.md)",
+            )
+        )
+    return found
+
+
+ALL_RULES = (*SAFETY_RULES, *NEUTRALITY_RULES, zero_dependencies)
 
 
 # --------------------------------------------------------------------------
