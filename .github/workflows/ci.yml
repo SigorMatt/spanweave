@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # A library that sits underneath other people's tools must not narrow
+        # their runtime (ENVIRONMENT.md).
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        # @v8 / @v8.0 moving tags no longer resolve; pin a full version tag.
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.25"
+      - run: uv sync --extra dev --python ${{ matrix.python-version }}
+      # make check wraps the exact toolchain commands (ruff, mypy, pytest)
+      # plus the invariant gates and phase done-whens — the acceptance
+      # harness, task 0.8.
+      - run: make check
+
+  determinism:
+    # Determinism is a cross-machine claim (CLAUDE.md 4), so it is worth
+    # proving on more than one OS rather than only on the machine that
+    # generated the expected outputs.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.25"
+      - run: uv sync --extra dev
+      - run: make conformance
+      - run: uv run pytest tests/test_determinism.py -v

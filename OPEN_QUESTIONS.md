@@ -1,0 +1,177 @@
+# OPEN_QUESTIONS.md — deferred design decisions
+
+Questions the seed specs deliberately did **not** answer. Each is a real fork
+where the right answer depends on evidence the project does not yet have —
+usually "what the second dialect does" or "what a real consumer needs."
+
+**These must be resolved deliberately in planning, not silently in code.**
+Deciding one by writing an implementation is exactly the failure mode this file
+prevents: the specs are the source of truth (`CLAUDE.md`, spec-first), and code
+that quietly picks a side leaves the contradiction in the documents for the next
+reader to trip over. Touching one is a halt point (`AGENT.md`).
+
+For each: **(a)** the question, **(b)** why it matters, **(c)** what evidence
+would settle it, **(d)** the provisional stance the seed specs take.
+
+---
+
+## 1. Should `unknown` nodes be promotable?
+
+**(a)** When a dialect reports a span kind we don't map, we emit an `unknown`
+node plus a diagnostic. Should there be a mechanism — an adapter hint, a
+consumer override, a mapping file — to later classify it?
+
+**(b)** `NodeKind` is a closed enum, deliberately (`SPEC.md` §3.2). But real
+dialects invent kinds constantly (`guardrail`, `reranker`, `router`, `handoff`).
+If every new kind requires a spec change, adapters stall behind us. If kinds are
+open, cross-dialect equivalence gets much weaker and consumers can no longer
+exhaustively match.
+
+**(c)** Phase 2 and 4. Count how many kinds real dialects emit that don't map,
+and whether consumers actually need them distinguished or are happy to see
+`unknown` with the original string preserved in `attributes`.
+
+**(d) Provisional:** closed enum, `unknown` is terminal, original kind string
+preserved in `attributes` and in the diagnostic. Revisit at Phase 4 with counts.
+
+---
+
+## 2. Are individual LLM messages nodes, or payload content?
+
+**(a)** A single LLM span carries a message list — system, user, assistant, tool
+results. Are those nodes in the graph, or do they stay inside the span's
+`Payload`?
+
+**(b)** This is the single largest open question about the model's granularity,
+and it is where the security-analysis use case pulls hardest away from the cost
+and latency use cases. Message-level nodes make in-context provenance
+expressible (which retrieved document ended up in which prompt). They also
+multiply node counts by an order of magnitude, make cross-dialect equivalence
+much harder (dialects disagree far more about messages than about spans), and
+serve no purpose at all for cost or latency work.
+
+**(c)** Phase 2's adversarial consumer and Phase 3's confirmatory ones, plus a
+real consumer that needs in-context provenance. If the trajectory dumper can work
+from payloads alone, that is strong evidence spans are the right granularity.
+
+**(d) Provisional:** spans are nodes; messages live in `Payload.value`. A
+message-level layer, if ever built, would be an **additive** projection over the
+same graph — never a replacement, and never a second graph type.
+
+---
+
+## 3. Should `detect()` confidence be adapter-declared or centrally computed?
+
+**(a)** Adapters currently self-report confidence. An adapter can inflate its
+score and win inputs it shouldn't. Alternative: a central scorer over
+adapter-declared marker keys, so the library computes confidence uniformly.
+
+**(b)** Adapter-declared is simple and lets an adapter use dialect-specific
+knowledge no central rule could encode. It is also unenforceable, and a
+mis-detected input produces a **plausible but wrong graph** — the worst failure
+mode this library has, because nothing downstream can tell.
+
+**(c)** Phase 2, when there are two adapters and detection actually has to
+choose. If they conflict on any realistic input, centralize.
+
+**(d) Provisional:** adapter-declared, with a hard error on ties or sub-0.5
+confidence and `--adapter` as the escape hatch (`SPEC.md` §6.1). The hard error
+is what makes the weaker mechanism survivable: ambiguity fails loudly instead of
+guessing.
+
+---
+
+## 4. Multi-trace inputs: tolerate, split, or reject?
+
+**(a)** A file may contain several traces. Current stance: use the most common
+`trace_id`, keep foreign records as nodes, emit `multi_trace_input`. Should
+there instead be a `spanweave split`, or a `Graph` per trace, or a hard error?
+
+**(b)** Real exports are frequently multi-trace, so rejecting is hostile. But
+"most common trace_id" is an arbitrary rule that silently makes some records
+second-class, and a consumer may not read the diagnostic.
+
+**(c)** Phase 2/4, from real captured exports. If multi-trace files are the norm
+rather than the exception, a first-class `build_all()` returning several graphs
+is probably right.
+
+**(d) Provisional:** tolerate + diagnose, as specified. Do not build `split`
+yet.
+
+---
+
+## 5. How much attribute normalization is too much?
+
+**(a)** `Node.attributes` holds a "normalized, typed subset." Which keys are in
+it? Only ones the model uses, or a broader normalized set (model name,
+temperature, tool schema, framework version)?
+
+**(b)** Too narrow and every consumer reaches into `raw`, re-implementing dialect
+knowledge — which is precisely the duplicated work the library exists to
+eliminate. Too broad and we are making judgement calls about what matters,
+drifting toward semantics (`CLAUDE.md` 1) and taking on an unbounded
+normalization surface.
+
+**(c)** Phase 3. Watch what the example consumers reach into `raw` for. Anything
+both consumers need is a normalization gap; anything only one needs probably
+isn't.
+
+**(d) Provisional:** narrow — only what the model itself consumes. Widen on
+demonstrated need, never on speculation.
+
+---
+
+## 6. Does `spanweave` ever gain a rendering surface?
+
+**(a)** A graph is far more useful when you can look at it. Should there be an
+SVG/HTML/DOT output?
+
+**(b)** Rendering requires layout, and layout requires deciding what is
+important — which is semantics wearing a hat. It is also an unbounded surface
+(interactivity, filtering, styling) that would dominate maintenance of a library
+whose value is being small and neutral.
+
+**(c)** Post-launch, from demand. If several consumers each build their own
+viewer, a neutral DOT export may be justified; a *styled* one probably never is.
+
+**(d) Provisional:** no rendering in core. A stable DOT export is the most that
+would ever be considered, and a viewer is a separate repo consuming the frozen
+schema like any other consumer (`ROADMAP.md` north star).
+
+---
+
+## 7. Is the ban on inferred `data` edges architecture, or territory?
+
+**(a)** `SPEC.md` §4.2 forbids emitting a `data` edge unless the instrumentor
+declared one — absolutely, with no opt-in. Should there be a
+`--infer-data-edges` mode that emits value-match edges as `kind=data`,
+`warrant=derived`, `basis="normalized value containment"`?
+
+**(b)** The warrant system was built precisely so that computed relations could
+be published safely: anything derived is labeled derived, consumers filter on
+warrant, and nothing is presented as observed when it was inferred. By that
+logic, an inferred `data` edge is **already expressible honestly**, and the
+absolute prohibition is stricter than the architecture requires.
+
+So why is it there? Because value-matching is the core analysis of the
+library's first consumer, and the seed spec reserved that territory for it.
+That is a product decision, and it was written up as an architectural one.
+Naming it plainly is the point of this entry.
+
+The counter-argument is not nothing: a `data` edge is the most *consequential*
+edge kind — it is what downstream tools will treat as evidence — and matching
+requires a threshold, a normalization rule, and an encoding policy, none of
+which are opinion-free. Shipping one default set of those choices is closer to
+semantics than anything else in the library (`CLAUDE.md` 1). The warrant label
+tells a consumer *that* we inferred; it does not tell them whether our
+threshold was right for their data.
+
+**(c)** Phase 3 (`PREDICTIONS.md` P3), plus any real consumer that asks for it.
+The decisive question is whether the matching parameters can be made fully
+consumer-supplied — the library providing the traversal, the consumer providing
+the predicate. If so, the neutrality objection mostly dissolves and this
+becomes an ordinary operational option.
+
+**(d) Provisional:** keep the prohibition. If P3 fires, **do not wave it
+through** on the technicality that it reuses an existing `EdgeKind` and warrant
+— decide it here, deliberately, as the policy question it is.

@@ -1,0 +1,202 @@
+# FIXTURES.md — the conformance corpus
+
+The corpus is this project's executable spec and its contribution surface. It
+encodes the library's central claim in a form that can fail:
+
+> **The same run, described by any supported instrumentor, produces the same
+> canonical graph.**
+
+If that claim is false, the library has no reason to exist. So it is a test.
+
+## 1. Layout
+
+```
+fixtures/
+  conformance/
+    <scenario_id>/
+      scenario.md                 # what happens, described semantics-free
+      dialects/
+        openinference.jsonl
+        otel_genai.jsonl
+        langfuse.json
+        ...
+      expected/
+        graph.json                # THE canonical graph — one per scenario
+        diagnostics.json          # expected diagnostics (codes + counts)
+  captured/
+    <name>.jsonl
+    <name>.provenance.md          # §6 — mandatory
+```
+
+One canonical graph per scenario. Not one per dialect. That asymmetry is the
+whole point.
+
+## 2. Writing `scenario.md`
+
+Describe **structure and telemetry facts only**. No semantics — no "the agent
+leaks a secret", no "an attacker injects". A scenario is a shape, not a story.
+
+```markdown
+# llm_tool_llm
+
+An agent span containing: an LLM call that requests one tool call, a tool span
+that fulfils it (joined by tool_call_id), and a second LLM call.
+
+Nodes: 1 agent, 2 llm, 1 tool.
+Edges: 3 parent (explicit), 1 call_result (explicit), 2 temporal (derived).
+Payloads: all present.
+Diagnostics: none.
+```
+
+That header block is the human-readable statement of what `expected/graph.json`
+asserts, and reviewing it is how a reader checks the expectation is *right*
+rather than merely *what the code currently does*.
+
+## 3. Seed scenarios
+
+Phase 1 seeds all of these. The degenerate ones are not optional — they are
+where honesty is actually tested, and they are the cases every naive
+implementation gets wrong.
+
+**Structural**
+
+| Scenario | Exercises |
+|---|---|
+| `single_tool_call` | the minimum viable trace |
+| `llm_tool_llm` | `call_result` pairing across an LLM/tool boundary |
+| `parallel_tools` | sibling ordering and tie-breaks |
+| `nested_agents` | multi-level `parent`, sub-agent containment |
+| `retriever_and_embedding` | the less common node kinds |
+| `span_links` | `link` edges |
+| `declared_data_edge` | an `explicit` `data` edge from a dialect that emits one |
+
+**Degenerate — the honesty cases**
+
+| Scenario | Exercises | Must produce |
+|---|---|---|
+| `missing_payloads` | tool spans with no payload attributes | `Payload.absent`, never `empty` |
+| `empty_payload` | a genuinely empty payload | `Payload.empty`, distinct from above |
+| `redacted_payload` | source-signalled redaction | `Payload.redacted`, content untouched |
+| `unpaired_tool_call` | a requested call with no fulfilling span | `unpaired_call`, **no invented edge** |
+| `orphan_parent` | `parent_id` referencing an absent span | `orphan_parent`, node retained |
+| `clock_skew` | `ended_at` before `started_at`; missing timestamps | `nonmonotonic_time`, `missing_timestamp` |
+| `unknown_kind` | a span kind we do not map | `unknown` node **plus** diagnostic |
+| `malformed_payload_json` | JSON mime, unparseable value | `payload_parse_failed`, `raw` preserved |
+| `duplicate_span_ids` | two records claiming one id | hard error, not silent overwrite |
+| `cyclic_parents` | a parent cycle | graph still built, diagnostic, no hang |
+| `shuffled_order` | the same trace, lines reordered | byte-identical to its ordered twin |
+
+Every new adapter must render **all** of these, including the degenerate ones.
+An adapter that only handles happy paths is not done.
+
+## 4. The equivalence rule
+
+For a scenario with dialects D₁…Dₙ:
+
+```
+canonical(build(D₁)) == canonical(build(D₂)) == … == expected/graph.json
+```
+
+`canonical()` erases what is legitimately dialect-specific and nothing else:
+
+- **Erased:** `provenance` (adapter id/version, dialect note), `Node.raw` (the
+  source record differs by construction), `Payload.raw` (the *encoding* of a
+  payload is dialect-specific even when its parsed value is not),
+  `meta.adapters`, `meta.source_digest`, `meta.spanweave_version`, and node
+  `name` **only where** `scenario.md` explicitly lists it as dialect-varying.
+- **Compared:** node ids, kinds, operations, timestamps, statuses, payload
+  **states and values**, usage, all edges (`src`, `dst`, `kind`, `warrant`,
+  `basis`), node order, and diagnostics by code and count.
+
+If two dialects genuinely cannot agree on a compared field, that is a **finding
+about the model**, not a reason to widen the erasure. Bring it to
+`OPEN_QUESTIONS.md`.
+
+> **Never weaken `canonical()` to make a test pass.** That inverts the corpus:
+> instead of the fixtures testing the code, the code would be editing the
+> fixtures. If an adapter fails equivalence, either the adapter is wrong or the
+> model is — and finding out which is exactly the value the corpus provides.
+
+### 4.1 Node ids across dialects
+
+Node ids are compared, so dialects must agree on them. Two rules make that work:
+
+- When a dialect carries native span ids, scenario renderings **use the same
+  span id strings** across dialects. This is a fixture-authoring convention, and
+  it is deliberate: it isolates the equivalence test to the *model*, not to
+  id-generation trivia.
+- When a dialect has no span ids, the derived id (`SPEC.md` §3.6) will differ.
+  Such a scenario must say so in `scenario.md`, and `canonical()` maps ids to
+  positional labels (`n0`, `n1`, …) in topological order before comparing.
+
+## 5. Hand-authored fixtures
+
+Dialect renderings in `conformance/` are **hand-authored, and that is correct**.
+They are format specimens: their job is to state precisely what a dialect looks
+like so the adapter can be tested against it. They make no claim about anything
+having really happened.
+
+Keep them minimal — the smallest trace that exercises the property. A fixture
+that is hard to read is a fixture nobody will check.
+
+## 6. Captured fixtures — different rules
+
+A hand-authored fixture proves the adapter matches **our understanding** of a
+dialect. Only a captured one proves it matches **the instrumentor**. Those are
+different claims, and the second is the one that matters when someone points the
+library at their own stack.
+
+Therefore: **every adapter requires at least one captured trace from real
+instrumentation.**
+
+- Captured traces live in `fixtures/captured/`, never in `conformance/`.
+- They are **never hand-authored or synthesized**. An autonomous agent must not
+  produce one (`AGENT.md` halt point). A human runs the capture and commits it.
+- Each requires a `<name>.provenance.md` recording: the instrumentor and its
+  exact version, the framework/SDK and version, the model or runtime if
+  relevant, the date, the command run, what was redacted before committing and
+  by whom, and **what this fixture is allowed to be used to claim**.
+- Redaction is a human act performed *before* commit, and it must be recorded.
+  Never commit real credentials, customer data, or personal information — see
+  `SECURITY.md`.
+
+If a captured trace and a hand-authored one disagree, the **captured one is
+right** and the adapter is wrong.
+
+## 7. Worked example — `llm_tool_llm` (OpenInference)
+
+```jsonl
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1000.0,"end_time":1004.0,"attributes":{"openinference.span.kind":"AGENT","input.value":"Look up the order status.","input.mime_type":"text/plain"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"llm.plan","start_time":1000.2,"end_time":1001.0,"attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.token_count.prompt":42,"llm.token_count.completion":17,"output.value":"{\"tool_calls\":[{\"id\":\"call_a\",\"name\":\"lookup\"}]}","output.mime_type":"application/json"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"tool.lookup","start_time":1001.2,"end_time":1002.0,"attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup","tool_call.id":"call_a","input.value":"{\"order\":\"A-1\"}","input.mime_type":"application/json","output.value":"{\"status\":\"shipped\"}","output.mime_type":"application/json"}}
+{"trace_id":"t1","span_id":"s3","parent_id":"s0","name":"llm.answer","start_time":1002.2,"end_time":1003.0,"attributes":{"openinference.span.kind":"LLM","llm.model_name":"demo-model","llm.token_count.prompt":61,"llm.token_count.completion":12,"output.value":"Your order has shipped.","output.mime_type":"text/plain"}}
+```
+
+Expected canonical graph:
+
+- **Nodes** (topological order): `s0` `agent`, `s1` `llm`, `s2` `tool`, `s3` `llm`.
+- **Edges:**
+  - `parent` explicit, basis `span.parent_span_id`: s0→s1, s0→s2, s0→s3
+  - `call_result` explicit, basis `tool_call_id`: s1→s2
+  - `temporal` derived, basis `sibling start_time ordering`: s1→s2, s2→s3
+- **Payloads:** s0 inputs present / outputs absent; s1 inputs absent / outputs
+  present (JSON); s2 both present (JSON); s3 inputs absent / outputs present.
+- **Usage:** on s1 and s3 only.
+- **Diagnostics:** none.
+
+Note what is *not* there: no edge from s2 to s3 asserting the tool result
+reached the second LLM call, even though a reader can see that it did. The
+telemetry did not state it, so the library does not either. A consumer that
+wants that conclusion draws it — and owns it.
+
+## 8. Fixture hygiene
+
+- Keep line counts small; one property per scenario.
+- Use stable, obviously-fake values (`A-1`, `demo-model`, `1000.0`). Never
+  paste real data into a hand-authored fixture.
+- Timestamps: start at `1000.0` and increment by tenths. Round numbers make
+  ordering bugs visible on sight.
+- Expected graphs are **generated once, then reviewed by a human, then frozen**.
+  Regenerating an expected graph to match new code is how a corpus dies —
+  changing one requires an explicit note in the PR saying why the *expectation*
+  was wrong.

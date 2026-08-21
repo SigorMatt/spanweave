@@ -1,0 +1,194 @@
+# PREDICTIONS.md — where this model is probably wrong
+
+Committed **before** the falsification work begins, so Phases 2–3 confirm or
+refute something stated in advance instead of ratifying a design after the fact.
+
+## Why this file exists
+
+`DESIGN.md` §1 sets the shape test: *the library's shape is right when a use it
+wasn't designed for needs no changes to it.* `ROADMAP.md` turns that into a gate
+— run in Phase 2, confirmed in Phase 3, and decided at the Phase 4 freeze.
+
+But every judgement call in the seed specs was reached by asking what **one**
+consumer — a security analyzer over agent traces — needed. Origin doesn't
+determine generality: plenty of good abstractions were extracted from a single
+use case. It does, however, determine *where to look for the bias*, and it is
+the whole reason the gate exists at all.
+
+There is a specific failure mode this file guards against: **the designer also
+picks the exam.** Consumers chosen after the model exists, by the process that
+built the model, are the uses already known to work. Writing the predictions down
+first is what makes Phase 3 a test rather than a demonstration.
+
+## How a prediction resolves
+
+Each is marked at the phase named in *When predictions resolve* (below):
+
+- **CONFIRMED** — the predicted friction occurred.
+- **REFUTED** — it didn't; the model was more general than expected here.
+- **WORSE** — friction occurred, and it was a *shape* problem, not the
+  operational one predicted. This is the outcome that blocks the freeze.
+
+## The shape / operational distinction (binding)
+
+Not every change a consumer wants is a model failure. The line — and it must be
+drawn **now**, because drawn later it becomes a rationalization for whatever
+happened:
+
+- **Shape change** — a new field, `NodeKind`, `EdgeKind`, warrant, `Payload`
+  state, `Diagnostic` code, or query primitive. Something the model cannot
+  currently express. **This is a model failure. Hard gate: zero, or the model is
+  fixed before the schema freezes.**
+- **Operational option** — payload retention, multi-trace handling, laziness,
+  output verbosity. Changes what you *keep* or *how you get it*, never what a
+  graph *is*. Permitted, additive, and recorded here.
+
+The test for which one you're looking at: *could an existing graph.json express
+the consumer's need, if it had been built with different options?* If yes,
+operational. If the consumer needs a field that cannot exist, shape.
+
+---
+
+## P1 — Mandatory losslessness will be pure cost to some consumers
+
+**Prediction.** `CLAUDE.md` 2 requires every node to retain its verbatim source
+record. A cost/latency attributor needs `usage` and timestamps and nothing else;
+retaining full payloads for a 100k-span trace is memory it has no use for. It
+will want `retain_payloads=False` or `retain_raw=False`.
+
+**Origin bias.** Losslessness is load-bearing for an *audit* consumer, which must
+be able to show its work. It is dead weight for an aggregation consumer.
+
+**Class if it occurs:** operational. The graph's shape is unchanged; a field is
+elided by request.
+
+**What would make it WORSE:** if a consumer needs losslessness to be *selective*
+per node kind, or needs a "was this elided?" marker that doesn't exist. That is
+a `Payload` state or `Meta` field — shape.
+
+**Status:** open.
+
+---
+
+## P2 — The five payload states are over-specified for most consumers
+
+**Prediction.** `absent` / `empty` / `redacted` / `truncated` / `present` exists
+because a security analyzer must distinguish "we weren't told" from "there was
+nothing" in order to degrade honestly. Most consumers will collapse all five to
+"did I get a string or not" and never look at the state field.
+
+**Origin bias.** The distinction is load-bearing for exactly one kind of claim —
+honest unavailability — and that claim is trifecta-lens's.
+
+**Class if it occurs:** none. An unused field is not a design failure; it is a
+cost paid by the model, not by the consumer. Predicted outcome is REFUTED-as-
+harmless rather than friction.
+
+**What would make it WORSE:** if a consumer wants a state the enum lacks —
+`sampled_out`, `deferred`, `elided_by_option` (see P1). Shape.
+
+**Status:** open.
+
+---
+
+## P3 — The prohibition on inferred `data` edges is stricter than the architecture requires
+
+**Prediction.** `SPEC.md` §4.2 forbids inferring a `data` edge from value
+comparison, absolutely. But the warrant system already makes inference safe:
+anything computed is labeled `derived`, and consumers filter on warrant. A
+consumer that wants "output of A appears verbatim in input of B" as a `derived`
+`data` edge is asking for something the model can already express honestly.
+
+**Origin bias — and this is the sharpest one.** The prohibition is not there
+because the architecture demanded it. It is there because value-matching is
+trifecta-lens's core analysis, and the seed spec reserved that territory for it.
+That is a product decision wearing an architectural argument's clothes, and it
+should be named as such.
+
+**Class if it occurs:** boundary case, and deliberately flagged as one. Adding
+`--infer-data-edges` uses an existing `EdgeKind` and an existing warrant, so by
+the letter of the rule it is operational. But it changes what the library is
+*willing to assert*, which is closer to policy than to plumbing. **If this one
+fires, do not wave it through on the operational technicality** — take it to
+`OPEN_QUESTIONS.md` §7 and decide it deliberately.
+
+**Status:** open. Tracked as `OPEN_QUESTIONS.md` §7.
+
+---
+
+## P4 — Byte-identical determinism is unnecessary for most consumers
+
+**Prediction.** Determinism is a hard invariant because CI gating and
+cross-run diffing require it. A viewer, a dashboard, or an exploratory notebook
+does not care and will never notice.
+
+**Origin bias.** Determinism serves auditability, which serves the security
+consumer.
+
+**Class if it occurs:** none. This is a cost the library pays to keep a property
+that is expensive to add later and cheap to maintain now. Keep it regardless of
+the finding — but record honestly that it was not what made the consumers work.
+
+**Status:** open.
+
+---
+
+## P5 — "One trace = one graph" is the most likely genuine shape failure
+
+**Prediction.** `SPEC.md` §7 fixes one input to one trace to one graph. Any
+fleet- or cohort-level consumer — "how often does this tool fail across 10,000
+runs", "did latency regress after the prompt change" — needs many traces at once.
+It will want `build_all()` returning several graphs, or cross-trace linking, or
+an aggregate type.
+
+**Origin bias.** trifecta-lens analyzes one run at a time. Single-trace scope was
+never questioned because its only consumer never needed anything else.
+
+**Class if it occurs:** **shape**, most likely. A multi-graph return type or
+cross-trace edges cannot be expressed by an existing `graph.json`. This is the
+prediction that would block the freeze, and it is therefore the one that must be
+deliberately provoked rather than avoided — which is why the adversarial
+consumer that attacks it runs in **Phase 2**, alongside the second dialect,
+while nothing is frozen and every fix is a diff (`ROADMAP.md` Phase 2b).
+
+**Status:** open. **Resolve at the end of the Phase 2b timebox**, whatever the
+outcome.
+
+---
+
+## When predictions resolve
+
+- **P5** — end of Phase 2b (two-day timebox), regardless of what the aggregator
+  achieved. A timebox that expires without a verdict is still a verdict.
+- **P1, P2, P3, P4** — Phase 3, with the confirmatory consumers.
+- **All five must be marked before the freeze**, which is Phase 4. The freeze is
+  the decision these predictions exist to inform; marking them afterwards would
+  be documentation, not evidence.
+
+Resolving all five costs roughly an hour — five entries, three possible markers.
+**"No time" can therefore never be the true reason to skip them.** If they get
+dropped, the stated reason will be schedule and the real reason will be that
+writing **WORSE** next to your own design is uncomfortable. `ROADMAP.md`'s cut
+order names them as never-cut for exactly that reason: a `PREDICTIONS.md` with
+predictions and no outcomes is worse than never having written one — a visible
+promise of rigor, unkept, read as theater by precisely the audience it was meant
+to persuade.
+
+---
+
+## Related, tracked elsewhere
+
+- **Node granularity** — whether LLM messages are nodes or payload content is the
+  largest open question about the model's shape, and it pulls hardest between the
+  security use case and the cost/eval ones. Tracked as `OPEN_QUESTIONS.md` §2;
+  not duplicated here.
+- **Attribute normalization breadth** — `OPEN_QUESTIONS.md` §5 already names
+  Phase 3 as its evidence source: whatever both example consumers reach into
+  `raw` for is a normalization gap.
+
+## Adding a prediction
+
+Anyone may add one, at any time, **before the phase that would test it**. A
+prediction added after its test has run is not a prediction and must be recorded
+as an observation instead — in a separate section, plainly labeled. The value of
+this file is entirely in its timestamps.

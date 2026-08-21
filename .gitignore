@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# uv: uv.lock IS committed (reproducibility invariant, ENVIRONMENT.md) --
+# do not ignore it.
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Secrets -- never commit. Capture-harness API keys live only in the human env.
+.env
+*.key
+
+# CLI output (`spanweave build -o out/...`). Generated, deterministic, and
+# reproducible from the committed fixtures -- not source.
+out/
+
+# Scratch captures from capture-harness smoke runs. NEVER the authoritative
+# fixtures/captured/*.jsonl -- those are human-reviewed, redacted, and
+# committed on purpose with a provenance file (FIXTURES.md section 6).
+*.local.jsonl
+*.local.json
+capture/_scratch/

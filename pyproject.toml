@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spanweave"
+version = "0.1.0"
+description = "Normalize agentic-system telemetry into a deterministic, semantically neutral graph."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["telemetry", "tracing", "opentelemetry", "agents", "llm", "graph"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+# CORE HAS ZERO RUNTIME DEPENDENCIES. This is a hard constraint, not a current
+# state (ENVIRONMENT.md). Adding one is a halt point (AGENT.md). A library that
+# sits underneath other people's tools must not drag a tree into them.
+dependencies = []
+
+[project.scripts]
+spanweave = "spanweave.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8",
+]
+# Phase 4 only: the binary OTLP form. Core must work fully without it and
+# `make check` never installs it.
+otlp = [
+    "protobuf>=4.25",
+]
+
+[project.urls]
+Homepage = "https://github.com/YOUR_ORG/spanweave"
+Issues = "https://github.com/YOUR_ORG/spanweave/issues"
+
+[tool.hatch.build.targets.wheel]
+# Ship the library only. capture/, examples/, fixtures/, and tests/ are
+# development or human-run and are not part of the distributed package.
+packages = ["spanweave"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures, examples, and the capture harness are not the library.
+"tests/**" = ["ANN"]
+"examples/**" = ["ANN"]
+"capture/**" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+disallow_any_explicit = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "examples.*", "capture.*"]
+strict = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
