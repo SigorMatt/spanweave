@@ -175,6 +175,18 @@ to `fixtures/captured/`, never cited as evidence for anything beyond 2b's own
 findings. The `AGENT.md` fabrication halt point covers the fleet exactly as it
 covers a single capture.
 
+**Enabling is not steering.** Fleet runs send `parallel_tool_calls=True` on the
+OpenAI backend; the reference capture does not. Asking the API to *permit*
+several calls in one turn is not the same as steering the model toward making
+them, and the difference is not academic: the first fleet produced no parallel
+call while recording `llm.invocation_parameters` as `{"model": ...}` alone, so
+the question had never been put. It is scoped to the fleet because the
+parameter changes what the instrumentor records, and 2.6's matched pair must
+differ from its twin only in the instrumentor. vLLM-served endpoints do not
+reliably honour it, so it may change nothing — and if an endpoint rejects it
+outright with a 400, the harness says so and retries once without it rather
+than losing a credentialed run.
+
 **What the fleet must contain**, or it is not exercising P5 — varied tools,
 turns with no tool call at all, turns with parallel calls, and a tool that
 failed. The harness does not *assume* it got them. A prompt steers a model; it

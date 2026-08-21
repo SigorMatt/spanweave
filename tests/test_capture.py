@@ -717,8 +717,10 @@ def a_stub_backend(script):
     """A Backend whose `request` replays a scripted list of (history, calls)."""
     seen = []
 
-    def request(client, model, messages, tools):
-        seen.append(SimpleNamespace(messages=list(messages), tools=tools))
+    def request(client, model, messages, tools, parallel=False):
+        seen.append(
+            SimpleNamespace(messages=list(messages), tools=tools, parallel=parallel)
+        )
         return script[len(seen) - 1]
 
     backend = backends.Backend(
@@ -745,6 +747,11 @@ def test_converse_defaults_to_the_reference_conversation_unchanged():
 
     assert seen[0].messages[0]["content"] == backends.QUESTION
     assert tuple(tool.name for tool in seen[0].tools) == backends.DEFAULT_TOOLS
+    # And it does not enable parallel tool calls. Sending that parameter
+    # changes `llm.invocation_parameters`, so a reference capture taken with
+    # it would differ from 2.6's GenAI capture by more than the instrumentor
+    # and the matched pair would be matched on nothing.
+    assert all(turn.parallel is False for turn in seen)
 
 
 def test_converse_passes_a_specs_prompt_and_inventory_through():
@@ -859,3 +866,108 @@ def test_each_fleet_file_is_one_trace_worth_of_jsonl(tmp_path, monkeypatch):
     for path in (tmp_path / "fleet").iterdir():
         lines = path.read_text(encoding="utf-8").splitlines()
         assert lines and all(json.loads(line)["span_id"] for line in lines)
+
+
+# -- enabling parallel tool calls (fleet only) -----------------------------
+
+
+class Rejected(Exception):
+    """An endpoint refusing a parameter it does not implement."""
+
+    status_code = 400
+
+
+class StubClient:
+    """A chat.completions client that records requests, and may refuse one."""
+
+    def __init__(self, reject_parallel=False):
+        self.requests = []
+
+        def create(**request):
+            self.requests.append(request)
+            if reject_parallel and "parallel_tool_calls" in request:
+                raise Rejected("unknown parameter")
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[]))]
+            )
+
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+
+
+def test_the_openai_backend_asks_the_api_to_permit_parallel_calls():
+    # Enabling a capability, not steering toward an outcome. Before this the
+    # spans recorded llm.invocation_parameters as {"model": ...} alone, so
+    # "the model does not make parallel calls" was a claim about a question
+    # nobody had asked.
+    client = StubClient()
+    backends._openai_request(
+        client, "m", [], (backends.TOOLS["get_weather"],), parallel=True
+    )
+    assert client.requests[0]["parallel_tool_calls"] is True
+
+
+def test_it_is_not_sent_unless_asked_for():
+    client = StubClient()
+    backends._openai_request(client, "m", [], (backends.TOOLS["get_weather"],))
+    assert "parallel_tool_calls" not in client.requests[0]
+
+
+def test_an_endpoint_that_rejects_the_parameter_does_not_lose_the_run(capsys):
+    # An OpenAI-compatible endpoint is not the OpenAI API. A fleet is a
+    # credentialed run with a budget of attempts; losing all of it to one
+    # unsupported keyword would be expensive.
+    client = StubClient(reject_parallel=True)
+    backends._openai_request(
+        client, "m", [], (backends.TOOLS["get_weather"],), parallel=True
+    )
+    assert len(client.requests) == 2
+    assert "parallel_tool_calls" not in client.requests[1]
+    # Reported, never silent: the next fleet's parallel calls, if any, are
+    # then the model's own doing and the provenance of the claim differs.
+    assert "rejected parallel_tool_calls" in capsys.readouterr().err
+
+
+def test_a_failure_that_is_not_a_rejected_parameter_is_not_retried():
+    class Broken(Exception):
+        status_code = 500
+
+    client = StubClient()
+
+    def explode(**request):
+        client.requests.append(request)
+        raise Broken("upstream")
+
+    client.chat.completions.create = explode
+    with pytest.raises(Broken):
+        backends._openai_request(
+            client, "m", [], (backends.TOOLS["get_weather"],), parallel=True
+        )
+    assert len(client.requests) == 1
+
+
+def test_the_fleet_enables_it_and_the_reference_run_does_not(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "fleet")
+    backend, seen = a_stub_backend([("assistant", [])] * 8)
+    run._fleet(2, backend, "stub-1", StubTracer(), ScriptedExporter(a_complete_fleet()))
+    assert seen and all(turn.parallel is True for turn in seen)
+
+    other, reference = a_stub_backend([("assistant", [])])
+    backends.converse(other, "stub-1", StubTracer())
+    assert all(turn.parallel is False for turn in reference)
+
+
+def test_the_anthropic_backend_accepts_the_flag_and_sends_nothing_extra():
+    # Anthropic permits parallel tool use by default, so there is no
+    # capability to enable -- and a tool_choice sent anyway would change
+    # llm.invocation_parameters for no gain.
+    sent = {}
+
+    def create(**request):
+        sent.update(request)
+        return SimpleNamespace(content=[])
+
+    client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    backends._anthropic_request(
+        client, "m", [], (backends.TOOLS["get_weather"],), parallel=True
+    )
+    assert "tool_choice" not in sent

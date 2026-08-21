@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
@@ -252,8 +253,17 @@ def _anthropic_tool(tool: Tool) -> dict[str, Any]:
 
 
 def _anthropic_request(
-    client: Any, model: str, messages: list[Any], tools: tuple[Tool, ...]
+    client: Any,
+    model: str,
+    messages: list[Any],
+    tools: tuple[Tool, ...],
+    parallel: bool = False,
 ) -> tuple[Any, list[ToolCall]]:
+    # `parallel` is accepted and deliberately not acted on. Anthropic permits
+    # parallel tool use by default (`tool_choice.disable_parallel_tool_use`
+    # defaults false), so there is no capability to enable here -- and sending
+    # a `tool_choice` anyway would change what the instrumentor records in
+    # `llm.invocation_parameters` for no gain.
     response = client.messages.create(
         model=model,
         max_tokens=16000,
@@ -323,14 +333,37 @@ def _openai_tool(tool: Tool) -> dict[str, Any]:
 
 
 def _openai_request(
-    client: Any, model: str, messages: list[Any], tools: tuple[Tool, ...]
+    client: Any,
+    model: str,
+    messages: list[Any],
+    tools: tuple[Tool, ...],
+    parallel: bool = False,
 ) -> tuple[Any, list[ToolCall]]:
     # chat.completions rather than responses: it is the surface every
     # OpenAI-compatible provider implements, and a capture that only works
     # against one provider is not the evidence this harness is for.
-    response = client.chat.completions.create(
-        model=model, messages=messages, tools=[_openai_tool(tool) for tool in tools]
-    )
+    request: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "tools": [_openai_tool(tool) for tool in tools],
+    }
+    if parallel:
+        # ENABLING a capability, not steering toward an outcome -- which is
+        # why this is allowed here at all (`capture/fleet.py`). The fleet
+        # needs runs where the model requested several calls at once, and
+        # until this is sent there is no evidence about whether the API was
+        # ever asked to permit that: the first fleet produced no parallel
+        # call, but its spans recorded `llm.invocation_parameters` as
+        # `{"model": ...}` alone -- so the question had not been put. Sending
+        # it turns "the model would not" into a claim that can be made.
+        #
+        # It may still change nothing. vLLM-served endpoints -- which is what
+        # `openai/gpt-oss-120b` is behind Nebius -- do not reliably honour
+        # this parameter, and a model that prefers sequential calls will make
+        # them anyway. That is a finding, and it is a *different* finding from
+        # "we never asked".
+        request["parallel_tool_calls"] = True
+    response = _create(client, request)
     message = response.choices[0].message
     calls = [
         ToolCall(
@@ -341,6 +374,34 @@ def _openai_request(
         for call in (message.tool_calls or [])
     ]
     return message, calls
+
+
+def _create(client: Any, request: dict[str, Any]) -> Any:
+    """One chat.completions call, surviving an endpoint that rejects a param.
+
+    An OpenAI-compatible endpoint is not the OpenAI API, and some reject a
+    parameter they do not implement with a 400 rather than ignoring it. A
+    fleet is a credentialed run with a budget of attempts, so losing all of it
+    to one unsupported keyword would be expensive.
+
+    The retry is **reported, never silent**, and it drops only the parameter
+    that is optional by construction. Detection is on the status *code*, not
+    on message text -- the same rule the library applies to its own errors
+    (`SPEC.md` §3.10), because a message is not a matching surface.
+    """
+    try:
+        return client.chat.completions.create(**request)
+    except Exception as failure:
+        rejected = getattr(failure, "status_code", None) == 400
+        if not (rejected and "parallel_tool_calls" in request):
+            raise
+        print(
+            "capture: the endpoint rejected parallel_tool_calls (400); retrying "
+            "without it. Any parallel calls are then the model's own doing.",
+            file=sys.stderr,
+        )
+        without = {k: v for k, v in request.items() if k != "parallel_tool_calls"}
+        return client.chat.completions.create(**without)
 
 
 def _openai_results(calls: list[ToolCall], payloads: list[Any]) -> list[Any]:
@@ -397,14 +458,22 @@ def converse(
     tracer: Any,
     prompt: str = QUESTION,
     tool_names: tuple[str, ...] = DEFAULT_TOOLS,
+    parallel: bool = False,
 ) -> bool:
     """One two-turn tool-using conversation: agent -> [llm, tool, llm].
 
     ``prompt`` and ``tool_names`` default to the reference conversation, so a
     plain ``make capture`` is byte-for-byte the run it always was -- 2.6's
     matched pair depends on that not drifting. The fleet (`fleet.py`) varies
-    them, and varies **only** them: same backend, same model, same
-    instrumentor.
+    them, and varies **only** them plus ``parallel``: same backend, same
+    model, same instrumentor.
+
+    ``parallel`` defaults **off**, and that default is load-bearing rather
+    than cautious. Sending ``parallel_tool_calls`` changes what the
+    instrumentor records in ``llm.invocation_parameters``, so a reference
+    capture taken with it would no longer differ from 2.6's GenAI capture only
+    in the instrumentor -- the matched pair would be matched on nothing. The
+    fleet sets it; the reference conversation must not.
 
     **The agent and tool spans are emitted here, by this file.** Only the
     ``llm`` spans come from the instrumentor, because an instrumentor wraps an
@@ -431,7 +500,7 @@ def converse(
     ):
         messages: list[Any] = [{"role": "user", "content": prompt}]
 
-        history, calls = backend.request(client, model, messages, tools)
+        history, calls = backend.request(client, model, messages, tools, parallel)
         messages.append(history)
         if not calls:
             # Not a failure. A turn the model answered directly is one of the
@@ -444,7 +513,7 @@ def converse(
             payloads.append(_run_tool(tracer, call))
         messages.extend(backend.results(calls, payloads))
 
-        backend.request(client, model, messages, tools)
+        backend.request(client, model, messages, tools, parallel)
     return True
 
 

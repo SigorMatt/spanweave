@@ -19,6 +19,17 @@ varies is the *shape of the run*: which tools exist, whether the model calls
 one, several, or none, and whether a tool fails. A fleet of identical traces is
 one trace counted N times.
 
+**Enabling a capability is not steering.** The fleet sends
+``parallel_tool_calls=True`` on the OpenAI backend (`backends.py`). That is
+allowed, and it is not the thing this module prohibits: it asks the API to
+*permit* several calls in one turn, and leaves entirely open whether the model
+makes any. The distinction is worth holding precisely, because the first fleet
+produced no parallel call while its spans recorded
+``llm.invocation_parameters`` as ``{"model": ...}`` alone — so "the model will
+not do it" was a conclusion about a question nobody had put. It is scoped to
+fleet runs: the parameter changes what the instrumentor records, and the
+reference conversation must not move (``TASKS.md`` 2.5, 2.6).
+
 **Steering is not guaranteeing, and that gap is handled honestly.** A prompt
 steers a model; it does not command it. So this module never asserts that a
 run produced the shape it was aimed at. It reads back what the exported

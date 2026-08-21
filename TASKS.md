@@ -830,6 +830,51 @@ below:
   > `convert_currency`, and `lookup_flight`, which always fails. All keep the
   > existing rule: no clock, no network, nothing that would have to be redacted
   > or explained.
+  >
+  > **First fleet run (human, 12 traces): three of four required shapes.**
+  > `varied_tools`, `no_tool_call` and `tool_error` all appeared. **No run
+  > produced parallel calls** — never more than one tool span in a trace, even
+  > for the prompts that asked for three things at once.
+  >
+  > **Before recording that as a gap: the harness had never asked.** The
+  > `chat.completions` call set neither `parallel_tool_calls` nor
+  > `tool_choice`, and the captured spans record
+  > `llm.invocation_parameters` as `{"model": "openai/gpt-oss-120b"}` alone.
+  > So the evidence was three attempts of *the model not doing it unprompted*
+  > and nothing at all about whether the API had been asked to permit it.
+  > Those are different claims and only one of them was supported.
+  > **`parallel_tool_calls=True` is now sent on fleet runs**, explicitly and
+  > with the reason in the code. Enabling a capability is not steering toward
+  > an outcome, so it is not what `fleet.py` prohibits — it asks the API to
+  > permit several calls and leaves entirely open whether the model makes any.
+  > It may change nothing: vLLM-served endpoints (which is what
+  > `openai/gpt-oss-120b` is behind Nebius) do not reliably honour it.
+  > **Resolved toward scoping, not toward moving the reference.** The
+  > parameter changes `llm.invocation_parameters`, so a reference capture
+  > taken with it would differ from 2.6's GenAI capture by more than the
+  > instrumentor and the matched pair would be matched on nothing. `converse`
+  > therefore takes `parallel=False` by default and only `_fleet` passes
+  > `True`. The pinning test still holds and was **extended** to assert the
+  > reference run does not enable it — the property is now pinned in both
+  > directions.
+  > If an endpoint rejects the parameter with a 400 the harness reports that
+  > and retries once without it, rather than losing a credentialed run to one
+  > unsupported keyword. Detection is on the status code, never the message
+  > text (`SPEC.md` §3.10's rule, applied to the harness).
+  >
+  > **A second finding from the same traces, recorded not acted on.** In
+  > `08_three_at_once` the *follow-up* LLM span has
+  > `llm.finish_reason: tool_calls` and requests `get_population` — the model
+  > is calling tools **sequentially across turns**, not refusing to call
+  > several. `converse` executes tools for one turn only, so that second call
+  > has no tool span and the trace carries an unpaired call. Whether the
+  > harness should loop until the model stops calling tools is a real
+  > question and a larger change than 2.2; it is not made here.
+  >
+  > **One attempt remains.** If parallel calls still do not appear with the
+  > parameter set, that is the gap — record it at 2.4 as evidence that the
+  > fleet's `parallel_tool_calls` coverage came from a fixture and not from a
+  > model, and let P5 resolve on what the fleet does contain.
 
 - [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
   here, with 2.2's fleet in hand.** Build the consumer most likely to break the

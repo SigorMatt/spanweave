@@ -232,7 +232,12 @@ def _fleet(count, backend, model, tracer, exporter):
     traces = []
     for position, spec in enumerate(runs, start=1):
         exporter.drain()
-        backends.converse(backend, model, tracer, spec.prompt, spec.tools)
+        # parallel=True for fleet runs ONLY: it enables a capability the
+        # fleet needs and changes `llm.invocation_parameters`, which would
+        # unmatch 2.6's pair if it reached the reference capture.
+        backends.converse(
+            backend, model, tracer, spec.prompt, spec.tools, parallel=True
+        )
         records = exporter.sorted_records()
         if not records:
             print(
