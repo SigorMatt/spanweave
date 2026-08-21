@@ -53,10 +53,12 @@ model — by default a **fleet aggregator** over many traces, which attacks
 `PREDICTIONS.md` P5 ("one trace = one graph"), the prediction most likely to be
 a genuine *shape* failure.
 
-It lives in `examples/`, needs only one adapter, and therefore does not depend on
-2a — run them in parallel. **Timebox it to two days.** It does not need to be a
-good tool; it needs to be real enough to hit the shape question. Whatever it
-teaches in two days is the finding.
+It lives in `examples/` and needs only one adapter, so nothing in it waits on
+2a. **Run it first and alone, not alongside 2a** — the sequencing note below is
+the operative instruction, and `TASKS.md` Phase 2 encodes it as strictly serial.
+**Timebox it to two days.** It does not need to be a good tool; it needs to be
+real enough to hit the shape question. Whatever it teaches in two days is the
+finding.
 
 **Sequencing: start 2b first.** It is two days against a phase measured in
 weeks, and its finding changes what 2a should be testing. If the aggregator
@@ -109,7 +111,13 @@ ones carry least.
 - **`llm_tool_llm` in dialect two.** `call_result` pairing is the structural
   relation dialects most disagree about, and the one an adapter is uniquely able
   to get wrong (`ADAPTERS.md` §3). It is a happy-path scenario that behaves like
-  a degenerate one.
+  a degenerate one. It also carries the declared `data` edge added in Phase 1
+  (`SPEC.md` §4.2.1), which did not exist when this list was written.
+- **`parallel_tool_calls` in dialect two.** Added during Phase 1 review, after
+  this list was written, so the list was silent about it. Classified never-cut
+  on the list's own grounds: it is the multi-call form of the same
+  `call_result` pairing, and the shape that made a real captured trace disagree
+  with the corpus.
 - **The degenerate renderings** — `missing_payloads`, `empty_payload`,
   `redacted_payload`, `unpaired_tool_call`, `orphan_parent`, `clock_skew`,
   `unknown_kind`, `malformed_payload_json`. This is where dialect conventions

@@ -598,56 +598,396 @@ and fails if the library drifts from it.
 
 ---
 
-## Phase 2 — Falsify the model  *(provisional — sharpen after 1.9)*
+## Phase 2 — Falsify the model
 
-Two independent pressures on the same question, run in parallel while nothing is
-frozen. **2b does not depend on 2a** — it needs many traces in one dialect, not
-two dialects.
+Sharpened from the provisional bullets after the 1.9 exit, per this file's
+resolution rule. Two pressures on one question — *is this model general, or is
+it just shaped like its first consumer?* — applied while nothing is frozen.
 
-**Start with 2b.** Two days against a phase measured in weeks, and its finding
-changes what 2a should be testing: if P5 becomes a shape failure, every
-dialect-two rendering written beforehand has to be rewritten afterwards.
+**Read before starting any task here:** `ROADMAP.md` Phase 2 and its cut order,
+`PREDICTIONS.md` P5, `FIXTURES.md` §4 / §5.1 / §6, `ADAPTERS.md` §5–§6, and the
+Phase 1 review records above. Several decisions below are what they are
+*because* of what those records found.
 
-**2b — the adversarial consumer**
+**Workstreams. Never mix them in one session's context.** Every task is tagged
+`[2b]`, `[2a]`, or `[prereq]`. A cold session picks the lowest-numbered
+unchecked task and works only that tag.
 
-- Build the consumer most likely to break the model: by default a **fleet
-  aggregator** over many traces, attacking `PREDICTIONS.md` P5.
-- Lives in `examples/`, outside the package, public API only.
-- **Timeboxed to two days.** It does not need to be a good tool; it needs to be
-  real enough to hit the shape question. Whatever it teaches in two days is the
-  finding — same stop-loss discipline as a capture run. **Do not extend the box**
-  because the work got interesting; that is a Phase 4 follow-up.
-- Resolve **P5** in `PREDICTIONS.md` at the end of the timebox, whatever the
-  outcome.
+**Ordering — decided, do not re-litigate.** 2b runs **before** 2a, strictly
+serial, not in parallel. If P5 turns out to be a shape failure the model
+changes, and every dialect-two rendering written beforehand would have to be
+redone afterwards. Two days of de-risking buys the larger workstream a stable
+target. (`ROADMAP.md` said "run them in parallel" *and* "start 2b first"; the
+serial reading is the one that survives, and `ROADMAP.md` has been corrected.)
 
-**2a — second dialect**
+**The timebox is a limit, not a target.** 2b is two days. It does not need to
+be a good tool; it needs to be real enough to hit the shape question. Whatever
+it teaches in two days is the finding. **Do not extend it** because the work
+got interesting — that is a Phase 4 follow-up with its own scope
+(`ROADMAP.md`, *Never extend*).
 
-- OTel GenAI adapter; express every scenario in the second dialect.
-- Turn on the **cross-dialect equivalence test** (`FIXTURES.md` §4).
-- Implement/harden `detect()` for both adapters; prove selection is unambiguous.
-- Capture one real trace from the second instrumentor, with provenance
-  (`FIXTURES.md` §6). **HALT** — human-run, as in 1.9.
+**HALT markers.** A task marked **HALT** ends the session. It names the
+artifact the human needs in order to decide. Do not proceed past one alone.
+The standing halt points in `AGENT.md` still apply on top of these — any model
+change, anything in `OPEN_QUESTIONS.md`, any edit to `PREDICTIONS.md`, any
+credentialed or networked step.
 
-**If the phase slips** (full reasoning in `ROADMAP.md`): cut `detect()`
-auto-selection first — require `--adapter` and defer to Phase 4, since it is
-ergonomics and yields **zero** evidence about the model. Then cut structural
-renderings in reverse order of expected disagreement: `declared_data_edge`,
-`span_links`, `retriever_and_embedding`, `nested_agents`, `parallel_tools`,
-`single_tool_call`.
+### What Phase 1 changed that Phase 2's plan predates
 
-**Never cut:** `llm_tool_llm` in dialect two (it behaves like a degenerate
-scenario — dialects disagree most about `call_result` pairing); any degenerate
-rendering (where dialect conventions actually diverge, and where P2 is tested);
-the equivalence harness; the second adapter's captured trace; 2b's timebox;
-P5's resolution.
+`ROADMAP.md`'s Phase 2 was written before the last three commits of Phase 1.
+Three things it could not have accounted for, each carried into the tasks
+below:
 
-**Both**
+1. **The declared `data` edge (`SPEC.md` §4.2.1) is now in the canonical graph
+   of three never-cut scenarios** — `llm_tool_llm`, `shuffled_order`,
+   `tool_call_history_echo` — plus `declared_data_edge` itself. So dialect two
+   must be able to express a message-granularity producer→consumer
+   declaration, or `llm_tool_llm` fails equivalence. This is the single most
+   likely blocker in 2a and it is checked at three separate points below
+   (2.5, 2.6, 2.9).
+2. **`parallel_tool_calls` and `tool_call_history_echo` did not exist when the
+   cut order was written.** `tool_call_history_echo` is degenerate and
+   therefore never-cut by the existing rule. `parallel_tool_calls` is
+   structural and the cut list is silent about it; `ROADMAP.md` has been
+   corrected to name it never-cut, on the list's own stated grounds (it is the
+   multi-call form of the `call_result` pairing the list already refuses to
+   cut). Reverse that classification if you disagree — but do it in
+   `ROADMAP.md`, not by quietly cutting the scenario.
+3. **`FIXTURES.md` §4.3 has no "not rendered yet" state**, and its "silence is
+   a failure" tripwire fires for every scenario the moment a dialect id is
+   added to `tests/conformance.py:DIALECTS`. `renderable: false` means *cannot
+   express*, not *not done*. Tasks 2.7–2.13 work around this by adding the
+   dialect id **last** (2.13) and building whatever renderings exist in the
+   meantime. If that transitional gap proves uncomfortable, the alternative is
+   a `pending` state in §4.3 — a spec conversation, not a patch.
 
-- **Record every model change either pressure forces, with its cause.** That
-  record is the evidence for or against the model's generality, and it is the
-  input to the freeze decision in Phase 4.
-- **Exit:** identical canonical graphs across both dialects for every scenario
-  still in scope; P5 resolved; findings recorded; any deferral recorded here.
+---
+
+### `[prereq]`
+
+- [ ] **2.1 Re-scope `AGENT.md` for Phase 2.** `AGENT.md`'s *Scope of this run*
+  delivers through the 1.9 exit and then halts; it explicitly forbids a second
+  adapter, `examples/`, and starting Phase 2 at all. A cold Phase 2 session
+  reads that file first and is told to stop. Rewrite the scope block for Phase
+  2, **keeping every halt point** and adding the three new ones (the 2b timebox
+  expiry, the second capture run, the first cross-dialect equivalence run).
+  Also correct `ENVIRONMENT.md`'s repo layout, which annotates `examples/` as
+  Phase 3 — 2b puts a consumer there in Phase 2, and its no-network rule for
+  `examples/` still binds and is load-bearing for 2.3.
+  *Done when `AGENT.md`'s scope section names Phase 2, its "must not" list no
+  longer forbids the second adapter or `examples/`, its halt list still
+  contains every entry it had plus the three new ones, and `make check` is
+  green.*
+  **HALT** — the run scope is a human decision, not an agent's.
+  *Artifact for the decision:* the diff of `AGENT.md`'s *Scope of this run* and
+  *Halt-and-hand-back points* sections, side by side with the old text.
+
+---
+
+### `[2b]` — the adversarial consumer  *(two days, starting at 2.3)*
+
+- [ ] **2.2 Scratch fleet generator.** `[2b]` **OPTIONAL — does not block 2.3.**
+  Add a repeat mode to `capture/` that runs the existing conversation N times
+  and writes `capture/_scratch/fleet/<i>.local.jsonl`. Vary only what makes the
+  runs differ as runs (the tool's stub answer, the city), never the model or
+  the instrumentor.
+  **These are scratch, and the distinction is absolute:** gitignored, no
+  provenance file, **never** promoted to `fixtures/captured/` and never cited
+  as evidence for anything. `fixtures/captured/` holds human-reviewed,
+  redacted, provenance-bearing artifacts; a fleet of unreviewed traces in there
+  would destroy the only property that directory has.
+  *Done when `uv run pytest tests/test_capture.py` is green with no key set,
+  `make capture ARGS="--fleet 5"` fails with the same actionable
+  no-credential error as today rather than a traceback, and
+  `git status --porcelain capture/_scratch` is empty after a run.*
+  **HALT** — running it needs a Nebius credential the agent does not have and
+  must not have (`ENVIRONMENT.md`, credentials). `AGENT.md`'s fabrication halt
+  point applies in full: the agent must not synthesize a fleet and describe it
+  as captured.
+  *Artifact for the decision:* the generator plus its no-key test output, and a
+  one-line statement of what N traces would buy 2.3 over the 19 committed
+  fixtures. **Declining is a legitimate outcome and costs nothing** — record
+  the decline here and go to 2.3.
+
+- [ ] **2.3 Fleet aggregator in `examples/`.** `[2b]` **The timebox starts
+  here.** Build the consumer most likely to break the model: a rollup over
+  **many** graphs — per-tool call counts and failure counts, per-diagnostic-code
+  counts, per-node-kind counts, across the whole corpus at once. It exists to
+  attack `PREDICTIONS.md` P5 ("one trace = one graph"), so build it the way a
+  fleet consumer would actually want it and **write down every place the
+  library fights you** — that friction is the entire deliverable.
+  Constraints: `examples/fleet_aggregate/`, outside the package, **public API
+  only** (`spanweave/__init__.py` exports — reaching into an internal module
+  would fake a generality the library does not have), and **no network**
+  (`ENVIRONMENT.md`: examples consume committed fixtures so anyone can
+  reproduce them). If 2.2 ran, the scratch fleet is extra pressure during the
+  box, never a committed input.
+  Do **not** fix the library here. A change to `spanweave/` from this task is a
+  finding to record at 2.4, not a patch to apply — that is the difference
+  between falsifying the model and quietly accommodating the consumer.
+  *Done when `uv run python -m examples.fleet_aggregate fixtures/conformance/*/dialects/openinference.jsonl`
+  prints a deterministic rollup over every buildable scenario, running it twice
+  is byte-identical, `uv run ruff check .` is clean, `uv run mypy examples` is
+  clean (add the target to `make types`), and a test runs the example over the
+  committed corpus so it cannot rot.*
+
+- [ ] **2.4 Timebox close: the findings record.** `[2b]` **NEVER CUT**
+  (`ROADMAP.md`: "cutting a timeboxed item means the box was never real").
+  At the end of day two, whatever state 2.3 is in, write the record here:
+  every place the aggregator wanted something the model would not give, each
+  classified **shape** or **operational** by `PREDICTIONS.md`'s binding test —
+  *could an existing `graph.json` express this need, if it had been built with
+  different options?* Yes → operational. No → shape. Do not widen the
+  distinction to fit what happened; that is the rationalization the file exists
+  to prevent. State plainly what the aggregator did **not** get to, so the
+  finding is not read as broader than it is.
+  *Done when this file carries the findings record, each item classified with
+  its reasoning, and the aggregator's state at expiry is described honestly.*
+  **HALT** — **P5 is resolved by a human**, in `PREDICTIONS.md`, which the
+  agent must not edit (`AGENT.md`). The human also decides go/no-go on 2a: a
+  **WORSE** on P5 means the model changes first and every 2a task below is
+  re-planned against the changed model.
+  *Artifact for the decision:* the findings record above, the aggregator as it
+  stands, and — for each shape-classified item — the exact field, `NodeKind`,
+  `EdgeKind`, warrant, `Payload` state, `Diagnostic` code or query primitive
+  that would have to exist.
+
+---
+
+### `[2a]` — the second dialect  *(begins only after 2.4's HALT clears)*
+
+> **This workstream inverts Phase 1's order on purpose: capture first, then
+> render from what the capture shows, then write the adapter.** Phase 1
+> rendered from a *reading* of OpenInference and produced four fixtures that
+> were confidently wrong about the dialect in three separate ways — invisible
+> to 593 tests, six gates and two review scripts, because the fixtures and the
+> adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
+> disagreed. Do not repeat it.
+
+- [ ] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
+  backend to `capture/` emitting **OTel GenAI** semantic conventions.
+  Four things this task must get right:
+  - **The package moved, and the agent must not guess which one works.**
+    `opentelemetry-instrumentation-openai-v2` in `opentelemetry-python-contrib`
+    now carries a migration note pointing at
+    `opentelemetry-instrumentation-genai-openai` in the newer
+    `open-telemetry/opentelemetry-python-genai` repository. These conventions
+    are still moving. The backend must be written against whichever package
+    **actually works when 2.6 runs it**, and the exact package name and version
+    must land in the provenance file. Where the two disagree, record the
+    disagreement rather than picking silently.
+  - **Content capture is opt-in and the capture is useless without it.**
+    Without it there are no `gen_ai.input.messages` /
+    `gen_ai.output.messages` attributes — so no payloads, no tool-call ids, no
+    `call_result`, and no §4.2.1 declaration. Enable it **explicitly** in the
+    backend (do not rely on an ambient default), and make the harness **fail
+    loudly** if the exported spans carry no message attributes rather than
+    writing a useless trace.
+  - **Same model, same prompt as the OpenInference capture** —
+    `openai/gpt-oss-120b` via Nebius, the Paris weather conversation — so the
+    *only* difference between the two traces is the instrumentor. Otherwise an
+    equivalence failure cannot be attributed to the dialect rather than to the
+    model behaving differently, and the whole comparison is worthless.
+  - **The harness's own spans must speak GenAI**, not OpenInference. Only the
+    `llm` spans come from the instrumentor; `capture/backends.py` emits the
+    `agent` and tool spans itself (Phase 1 review). Emitting those in
+    OpenInference keys would produce a mixed-dialect file that no adapter
+    honestly reads. GenAI defines an `execute_tool` span, so unlike
+    OpenInference the tool span here is convention-defined — say so in the
+    printed provenance template.
+  *Done when `uv run pytest tests/test_capture.py` is green with no key and no
+  instrumentor installed (stub spans, as today), `make capture
+  ARGS="--backend genai"` refuses with the actionable no-credential error,
+  backend selection still refuses ambiguity by naming `--backend`, and a test
+  asserts the harness's own spans carry `gen_ai.*` keys and no
+  `openinference.*` ones.*
+
+- [ ] **2.6 The GenAI capture run.** `[2a]` **NEVER CUT** (`ROADMAP.md`: a
+  hand-authored fixture proves the adapter matches our *understanding* of a
+  dialect; only a captured one proves it matches the instrumentor).
+  **HALT — human-run, exactly as 1.9 was.** The agent must not synthesize a
+  file and label it captured (`AGENT.md`, `FIXTURES.md` §6).
+  Before the trace is treated as usable, verify **in the file**:
+  1. `gen_ai.input.messages` / `gen_ai.output.messages` are present — content
+     capture really was on;
+  2. tool-call **ids** are present on both the requesting and the fulfilling
+     span, or there is no `call_result` to recover;
+  3. the follow-up turn's input carries the tool-result message with the same
+     id — the `SPEC.md` §4.2.1 declaration. **If it does not, stop and say so:**
+     `llm_tool_llm` is never-cut and its canonical graph contains that edge, so
+     a dialect that cannot declare it is a finding about the corpus's
+     equivalence rule, not a rendering to fudge (see 2.9's HALT).
+  Then the usual three steps: read it, redact and record the redaction, move it
+  to `fixtures/captured/` with `<name>.provenance.md`. The provenance must
+  record the exact instrumentor package **and version** (per 2.5), and **both**
+  provenance files must state that the two traces are a **matched pair** — same
+  model, same prompt, different instrumentor — because that is the property
+  that makes the equivalence comparison mean anything, and it is invisible from
+  either file alone.
+  *Done when `fixtures/captured/` holds the GenAI trace and its provenance,
+  both provenance files carry the matched-pair statement, and the three
+  verifications above are recorded as performed.*
+  *Artifact for the decision:* the scratch trace from `make capture
+  ARGS="--backend genai"`, plus the three-point verification checklist above
+  answered against it.
+
+- [ ] **2.7 Equivalence harness: build every rendering.** `[2a]` **NEVER CUT**
+  (`ROADMAP.md`: "without it, renderings are decoration").
+  `tests/test_conformance.py` builds `scenario.dialects[0]` only — with one
+  dialect that proves the pipeline reproduces the reviewed expectation, but it
+  is not yet the cross-dialect claim. Parametrize over **every** rendering
+  present whose dialect has a **registered adapter**, each asserted against the
+  scenario's one unmodified canonical graph. Extend the same rule to the
+  refusal scenarios: every rendering of `duplicate_span_ids` must raise the
+  same error **type and code** (`FIXTURES.md` §4.2).
+  The "has a registered adapter" clause is the transitional state 2.8 needs and
+  2.9 closes, so make it **visible**: the suite must report which renderings it
+  skipped and why, and a tripwire must assert that the set of adapter-backed
+  dialects equals `DIALECTS` — which is what 2.13 finally flips. A silent skip
+  is how a dialect's coverage rots one file at a time.
+  *Done when the suite is green and unchanged in effect with one dialect, a
+  planted second rendering that disagrees with the canonical graph **fails**,
+  a planted rendering for an adapterless dialect is reported as skipped rather
+  than passing silently, and `make conformance` is green.*
+
+- [ ] **2.8 Dialect-two renderings — the pairing set.** `[2a]` **NEVER CUT.**
+  Transcribe from the 2.6 capture, in this order: `llm_tool_llm`,
+  `tool_call_history_echo`, `parallel_tool_calls`. These three are the
+  `call_result` relation — the structural relation dialects disagree about most
+  and the one an adapter is uniquely able to get wrong (`ADAPTERS.md` §3) — and
+  `llm_tool_llm` additionally carries the §4.2.1 `data` edge.
+  **`FIXTURES.md` §5.1 is the rule: derive from observed output, never from a
+  reading.** Every attribute in a rendering must be traceable to a line of the
+  captured trace. Trim afterwards, and only by omission: *omission is fine,
+  misstatement is not* — leaving out a key whose absence changes what the
+  expected graph asserts is not simplification, it is a false claim about the
+  dialect. Keep span id strings identical to the OpenInference renderings
+  (`FIXTURES.md` §4.1) so equivalence tests the model and not id trivia.
+  Do **not** touch any `expected/graph.json`. If a rendering cannot produce the
+  existing expectation, that is 2.9's HALT, not an edit here.
+  *Done when the three renderings exist under `dialects/otel_genai.jsonl`, each
+  line is annotated in `scenario.md` (or a sibling note) with the captured
+  record it came from, the suite reports them as skipped-pending-adapter per
+  2.7, and `make check` is green.*
+
+- [ ] **2.9 The OTel GenAI adapter — and the first equivalence run.** `[2a]`
+  Single file under `spanweave/adapters/`, registered; nothing else in the
+  package touched (`ADAPTERS.md` §6 checklist applies in full). Requester ids
+  taken only from what a span itself **produced** — history echoes do not pair
+  (`SPEC.md` §4.4, and the defect that rule came from). All five payload states
+  distinguished; `absent` ≠ `empty`; no inferred pairings, no inferred data
+  edges, no invented ids; `unmapped` keys recorded; `raw` verbatim.
+  The **first cross-dialect equivalence run** happens here, and it is the
+  moment this whole phase exists for.
+  *Done when the three 2.8 renderings each produce their scenario's
+  **unmodified** `expected/graph.json`, `make conformance` is green, and the
+  captured GenAI trace from 2.6 builds cleanly.*
+  **HALT** — whatever the result. **Never weaken `canonical()` to make this
+  pass** (`FIXTURES.md` §4): if a dialect fails equivalence, either the adapter
+  is wrong or the model is, and finding out which is the entire value on offer.
+  Two outcomes need a human before anything else happens:
+  - **The graphs match.** That is the phase's central claim, first evidence.
+    Hand back the diff-that-isn't.
+  - **They do not.** Especially the §4.2.1 `data` edge: if GenAI declares no
+    message-granularity producer→consumer relation, `llm_tool_llm`'s canonical
+    graph contains an edge dialect two cannot produce, and `FIXTURES.md` §4.3's
+    per-scenario `coverage.json` cannot express "this dialect renders the
+    scenario but not that one edge". That is a gap in the equivalence rule, a
+    spec conversation, and a candidate finding about the model.
+  *Artifact for the decision:* `make conformance` output, and for any
+  mismatch, the canonical-graph diff plus the captured lines that do or do not
+  carry the contested attribute.
+
+- [ ] **2.10 Dialect-two renderings — the degenerate set.** `[2a]` **NEVER
+  CUT** (`ROADMAP.md`: this is where dialect conventions actually diverge and
+  where `PREDICTIONS.md` P2 gets tested; cutting these keeps the pleasant half
+  of the corpus and discards the informative half).
+  `missing_payloads`, `empty_payload`, `redacted_payload`,
+  `unpaired_tool_call`, `orphan_parent`, `clock_skew`, `unknown_kind`,
+  `malformed_payload_json`, `duplicate_span_ids`, `cyclic_parents`,
+  `shuffled_order`. Dialects broadly agree about spans, parents and tool calls;
+  they diverge sharply about how they signal **absence**, truncation,
+  redaction, errors and unmatched calls — so expect adapter work here, not just
+  transcription. In particular GenAI's redaction and truncation conventions are
+  a different set from OpenInference's `__REDACTED__`; claim only what the
+  instrumentor actually says, and where it says nothing, emit nothing and
+  record the gap.
+  §5.1 still binds: a degenerate rendering is still derived from observed
+  output, degraded by hand — not imagined.
+  *Done when every scenario above has an `otel_genai` rendering producing its
+  unmodified canonical graph (or its `expected/error.json` with the same type
+  and code), `make conformance` is green, and any scenario the dialect
+  genuinely cannot express carries a `coverage.json` entry with a reason that
+  has been checked against observed output rather than assumed
+  (`FIXTURES.md` §4.3 — a `renderable: false` is an invitation to check the
+  reason, not a settled fact).*
+
+- [ ] **2.11 Dialect-two renderings — the structural set.** `[2a]`
+  **CUT 2 IF THE PHASE SLIPS** (`ROADMAP.md`). Render in this order — the
+  reverse of the cut order, so the tail is what gets dropped:
+  `single_tool_call`, `parallel_tools`, `nested_agents`,
+  `retriever_and_embedding`, `span_links`, `declared_data_edge`.
+  Cut from the end. Each cut costs a little coverage and no principle; record
+  each one here with the reason. Two notes: `retriever_and_embedding` is the
+  most likely `coverage.json` candidate, since GenAI's operation vocabulary may
+  not name a retriever — check that against observed output before declaring
+  it. And cutting `declared_data_edge` no longer removes §4.2.1 from dialect
+  two, because `llm_tool_llm` carries the same edge and is never cut.
+  *Done when each rendered scenario produces its unmodified canonical graph,
+  `make conformance` is green, and every scenario not rendered is recorded here
+  as cut, with its reason, or declared in `coverage.json`.*
+
+- [ ] **2.12 `detect()` for both adapters.** `[2a]` **CUT 1 IF THE PHASE
+  SLIPS** — the first thing to go, and the only item in this phase that can be
+  removed without losing information (`ROADMAP.md`: it is ergonomics and yields
+  **zero** evidence about whether the model is general).
+  Harden `detect()` on both adapters per `SPEC.md` §6.1: pure, non-raising,
+  keyed on distinctive markers (`gen_ai.*` vs `openinference.*`), honestly
+  scored. Prove selection is unambiguous over the whole corpus and both
+  captured traces, and that registration order decides nothing.
+  *Done when `spanweave build` with no `--adapter` picks the right adapter for
+  every rendering in `fixtures/conformance/` and both files in
+  `fixtures/captured/`, two registries built in opposite orders agree, and a
+  deliberately ambiguous input raises `adapter_ambiguous` rather than falling
+  back.*
+  **If cut:** make `--adapter` required, update `SPEC.md` §6.1 and `--help` to
+  say so, move detection to Phase 4, and record the deferral here. `SPEC.md`
+  §6.1's hard-error behavior is what makes that deferral safe.
+
+- [ ] **2.13 Close the corpus: flip `DIALECTS`.** `[2a]` **NEVER CUT** — this
+  is the task that makes coverage un-rottable.
+  Add `otel_genai` to `tests/conformance.py:DIALECTS`. That single line turns
+  on `FIXTURES.md` §4.3's "silence is a failure" rule for the whole corpus:
+  every scenario must now either render the dialect or declare in
+  `coverage.json` that it cannot, with a reason. Retire 2.7's
+  skipped-pending-adapter state and its tripwire in the same change — a
+  transitional mechanism left in place outlives its transition.
+  Also here, because they are the same closure: update
+  `fixtures/conformance/README.md` (which still says `declared_data_edge` has
+  no rendering — stale since the cold review) and `ADAPTERS.md` where it speaks
+  of one adapter, and teach `review_corpus.py` about `error.json` and
+  `coverage.json`, which it predates and currently misreports as missing
+  expectations (recorded at the end of Phase 1).
+  *Done when `make conformance` is green with both dialects in `DIALECTS`, no
+  scenario is silent for either dialect, the transitional skip is gone, and
+  `review_corpus.py` reports no false findings against the corpus as it stands.*
+
+- [ ] **2.14 Phase 2 exit: the model-change record.** `[2a]`
+  Record **every** model change either pressure forced, with its cause — the
+  2b findings from 2.4, anything 2.9–2.11 forced, and every deferral. That
+  record is the evidence for or against the model's generality and it is the
+  direct input to the Phase 4 freeze decision; a change absorbed without being
+  written down is a change the freeze will be made blind to. Note explicitly
+  which changes were **shape** and which **operational**, using
+  `PREDICTIONS.md`'s binding test and not a widened version of it.
+  *Done when both dialects produce identical canonical graphs for every
+  scenario still in scope, P5 is resolved in `PREDICTIONS.md`, every model
+  change and every cut is recorded here with its cause, and `make check` and
+  `make conformance` are green.*
+  **HALT — Phase 2 exit, for human review, as 1.9 was.** Do not start Phase 3.
+  *Artifact for the decision:* the model-change record, `make conformance`
+  output over both dialects, and the "same run, two instrumentors, one graph"
+  comparison for `llm_tool_llm`.
 
 ## Phase 3 — Confirm, package, launch  *(provisional)*
 
