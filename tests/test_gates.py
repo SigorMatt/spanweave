@@ -198,3 +198,31 @@ def test_dialect_gate_catches_a_dialect_keyed_table_a_lexical_scan_would_miss():
 def test_package_names_no_dialect_outside_adapters():
     found = gates.check_package([gates.no_dialect_outside_adapters])
     assert found == [], "\n".join(str(v) for v in found)
+
+
+def test_the_layering_gate_fails_when_the_builder_reaches_for_the_registry():
+    for source in [
+        "from spanweave.adapters import detect",
+        "import spanweave.adapters",
+        "from spanweave import adapters",
+    ]:
+        found = gates.check_source(
+            "spanweave/build.py", source, [gates.no_adapter_imports_below_the_top]
+        )
+        assert [v.rule for v in found] == ["no-adapter-imports"], source
+
+
+@pytest.mark.parametrize("path", ["spanweave/api.py", "spanweave/cli.py"])
+def test_the_top_layer_may_reach_the_registry(path):
+    # Someone has to select an adapter. The rule says who, not that nobody.
+    found = gates.check_source(
+        path,
+        "from spanweave.adapters import detect",
+        [gates.no_adapter_imports_below_the_top],
+    )
+    assert found == []
+
+
+def test_nothing_below_the_top_layer_imports_adapters():
+    found = gates.check_package([gates.no_adapter_imports_below_the_top])
+    assert found == [], "\n".join(str(v) for v in found)

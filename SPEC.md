@@ -284,6 +284,12 @@ A **closed** enum. Adding one is a spec change (halt point).
 | `link` | source → linked | an OTel span link (often cross-trace) | `explicit` only |
 | `temporal` | earlier → later | one operation started before another | `derived` only |
 
+`link` is the one kind whose `dst` may name a span that has **no node in this
+graph**: links are routinely cross-trace, and requiring the target to be
+present would make the kind useless for the case it exists to describe. A
+consumer that only wants intra-trace structure filters on kind, which it is
+already doing.
+
 ### 4.1 Warrant
 
 - **`explicit`** — the telemetry asserted this relation. The adapter is
@@ -392,7 +398,13 @@ NormalizedSpan:
   attributes:  Mapping[str, JsonValue]
   unmapped:    tuple[str, ...]    # attribute keys seen and not normalized
   raw:         RawRecord
+  diagnostics: tuple[Diagnostic, ...]   # what this record could not map (§3.7)
 ```
+
+`diagnostics` is on the span because `parse()` returns spans and has nowhere
+else to put them: an adapter that cannot map something must be able to say so
+(`ADAPTERS.md` §2) without a side channel. The seam is internal, so carrying
+them here costs nothing publicly.
 
 ```
 Adapter (Protocol):

@@ -210,12 +210,33 @@ Build the whole pipeline for **one** dialect. No second adapter — that is Phas
   > place it can survive — it never became a record — and it is the one case
   > where a diagnostic legitimately carries content rather than keys.
 
-- [ ] **1.2 Adapter protocol + registry.** `spanweave/adapters/base.py`
+- [x] **1.2 Adapter protocol + registry.** `spanweave/adapters/base.py`
   (`NormalizedSpan`, `Adapter` protocol, `SpanLink`, `DeclaredDataEdge`) and
   `adapters/__init__.py` (registry, `detect()` dispatch per `SPEC.md` §6.1 —
   including the hard error on ties or sub-0.5 confidence).
   *Done when a stub adapter registers and is selected, and ambiguity errors
   actionably.*
+  > **Divergence, to keep `DESIGN.md` §2 literally true.** That section says
+  > "`build.py` importing from `adapters/` is a layering violation", but the
+  > builder must still be able to *name* `NormalizedSpan`. So the seam types
+  > (`NormalizedSpan`, `SpanLink`, `DeclaredDataEdge`, `CallRole`) live in
+  > `spanweave/seam.py` — they belong to neither side of the seam — and
+  > `adapters/base.py` re-exports them, so an adapter author still has one
+  > import and the builder imports nothing from `adapters/`. A new gate,
+  > `no-adapter-imports`, enforces it: only `spanweave/api.py` and
+  > `spanweave/cli.py` may reach the registry.
+  > `NormalizedSpan` gains `diagnostics` (`SPEC.md` §6 updated): `parse()`
+  > returns spans and has nowhere else to put what it could not map. The seam is
+  > internal, so this costs nothing publicly.
+  > `SPEC.md` §4 now states what the `link` row implied — a `link` edge's `dst`
+  > may name a span with no node in this graph, because links are routinely
+  > cross-trace and requiring the target to be present would make the kind
+  > useless for the case it exists for.
+  > An adapter whose `detect()` **raises** is reported as a hard error naming it,
+  > not scored 0.0: swallowing it would let another adapter win by default, which
+  > is the silent-wrong-graph outcome this module exists to prevent. Registration
+  > order is proven not to decide anything — two registries built in opposite
+  > orders must refuse an ambiguous input identically.
 
 - [ ] **1.3 OpenInference adapter.** `adapters/openinference.py`. Maps
   `openinference.span.kind` → `NodeKind`; `tool.name` → `operation`;

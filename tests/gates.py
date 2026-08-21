@@ -295,7 +295,41 @@ def no_dialect_outside_adapters(
     return found
 
 
-NEUTRALITY_RULES = (neutrality, no_dialect_outside_adapters)
+# `build.py` importing from `adapters/` is a layering violation: the registry
+# hands the builder an iterator of NormalizedSpan, never an adapter object it
+# can interrogate (DESIGN.md 2). Only the top layer -- the CLI and the public
+# API facade -- may reach the registry at all.
+MAY_IMPORT_ADAPTERS = ("spanweave/api.py", "spanweave/cli.py")
+
+
+def no_adapter_imports_below_the_top(
+    path: str, source: str, tree: ast.AST
+) -> list[Violation]:
+    if _under_adapters(path) or path.replace("\\", "/") in MAY_IMPORT_ADAPTERS:
+        return []
+    found = []
+    for imported, line in _imported_modules(tree):
+        if imported == "spanweave.adapters" or imported.startswith(
+            "spanweave.adapters."
+        ):
+            found.append(
+                Violation(
+                    "no-adapter-imports",
+                    path,
+                    line,
+                    f"imports {imported!r}; below the top layer nothing may "
+                    f"reach the registry, and the builder never holds an "
+                    f"adapter object it could interrogate (DESIGN.md 2)",
+                )
+            )
+    return found
+
+
+NEUTRALITY_RULES = (
+    neutrality,
+    no_dialect_outside_adapters,
+    no_adapter_imports_below_the_top,
+)
 
 
 # --------------------------------------------------------------------------
