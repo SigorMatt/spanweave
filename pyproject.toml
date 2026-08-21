@@ -53,6 +53,11 @@ packages = ["spanweave"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# Ruff >=0.16 lints and formats Python code blocks inside markdown. The blocks
+# in these docs are illustrative: aligned for readability, and in SPEC.md not
+# valid Python at all (type sketches, not definitions). Formatting prose is not
+# ruff's job in this repo -- the library code is.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
