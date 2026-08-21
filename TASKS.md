@@ -453,6 +453,34 @@ reason as before — the captured trace is a human step.
 | 5 | `temporal` asserted a precedence that is false for equal start times, and that false claim was frozen into `parallel_tools`. Fixed both ways: §4 now claims an **order**, and a tie-broken edge carries its own `basis`, so a consumer can tell the two apart from the graph rather than by re-deriving timestamps. The edge is labelled, not suppressed — dropping it would break the sibling chain and leave the order partial. |
 | 6 | The `link`/`parent` dangling-reference asymmetry is stated in `SPEC.md` §4.0 and back-referenced from the `orphan_parent` row. Dangling ids are **kept** (the edge names its target; dropping it would hide a stated relation) with `node() -> None` as the documented contract. No new diagnostic: a cross-trace link is confidently mapped, and using that channel for an inventory fact would dilute it. The duplicate-entry finding was a **defect** and is fixed — node-returning queries report each node once. Coverage added for `descendants` / `reachable` / `ancestors` / `paths` / `parents` / `subgraph` / `topo_order` against a dangling target. |
 
+### Capture harness — second backend, and a defect it exposed
+
+`capture/` now drives **two** backends: the Anthropic SDK, and the OpenAI SDK
+against any OpenAI-compatible endpoint (`NEBIUS_BASE_URL` / `NEBIUS_API_KEY`,
+default model `openai/gpt-oss-120b`). Neither replaced the other. Selection uses
+the configured one, and refuses on ambiguity naming `--backend` — the same
+posture as `SPEC.md` §6.1, for the same reason: a capture that ran against the
+backend you did not mean is a fixture whose provenance file is wrong.
+
+**`exporter.py` needed no change**, and that is structural rather than lucky: it
+reads the OTel `ReadableSpan` surface, which is the same class whichever
+instrumentor filled it, and copies attribute keys verbatim. The dialect lives in
+the keys. Both instrumentors emit OpenInference semantic conventions, so one
+`record_of` handles both — there is now a test asserting the two records differ
+only in `attributes`.
+
+**A defect in what 1.9 shipped, found while adding the second backend.** The
+harness executed the tool as plain Python between two SDK calls and created no
+spans of its own, so a capture would have been two **sibling root LLM spans** —
+no `parent` edges, no `tool` node, and **no `call_result` pairing**, which is the
+one relation the harness exists to demonstrate. Its docstring claimed the
+`llm -> tool -> llm` shape that its code could not produce. Fixed for both
+backends: `capture/backends.py` now emits the `agent` and `tool` spans itself,
+because executing a tool is not an SDK call and no instrumentor would record it.
+Only the `llm` spans come from the instrumentor, and the printed provenance
+template says so — "captured from real instrumentation" is otherwise true of
+some spans and not others.
+
 **Two notes for whoever picks this up next.**
 
 The reviewer's `review_corpus.py` flags `declared_data_edge` and

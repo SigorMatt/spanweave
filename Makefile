@@ -33,13 +33,17 @@ conformance:
 	uv run pytest tests/test_conformance.py -v
 
 # Human-run only (TASKS.md 1.9). Captures a trace from real instrumentation:
-# needs framework dependencies and possibly a model API key in YOUR environment.
+# needs framework dependencies and a model API key in YOUR environment. Two
+# backends: the Anthropic SDK, or the OpenAI SDK against any OpenAI-compatible
+# endpoint. It picks whichever one you have configured and refuses if that is
+# ambiguous -- see capture/README.md.
 # Lives in capture/, outside the package, so its network use never trips the
 # no-network gate. The build agent runs with no key and never runs this.
 # Review and redact the output, write its provenance file, THEN commit it to
 # fixtures/captured/ (FIXTURES.md section 6).
+# ARGS passes flags through: make capture ARGS="--backend openai --name x"
 capture:
-	uv run --extra dev python -m capture.run
+	uv run --extra dev python -m capture.run $(ARGS)
 
 clean:
 	rm -rf .mypy_cache .ruff_cache .pytest_cache out/
