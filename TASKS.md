@@ -1125,7 +1125,7 @@ below:
   > - **Nothing under `spanweave/` was changed.** Per the task, every place
   >   the library fought back is a finding at 2.4, not a patch.
 
-- [ ] **2.4 Timebox close: the findings record.** `[2b]` **NEVER CUT**
+- [x] **2.4 Timebox close: the findings record.** `[2b]` **NEVER CUT**
   (`ROADMAP.md`: "cutting a timeboxed item means the box was never real").
   At the end of day two, whatever state 2.3 is in, write the record here:
   every place the aggregator wanted something the model would not give, each
@@ -1145,6 +1145,361 @@ below:
   stands, and — for each shape-classified item — the exact field, `NodeKind`,
   `EdgeKind`, warrant, `Payload` state, `Diagnostic` code or query primitive
   that would have to exist.
+
+  > ## The 2b findings record
+  >
+  > **State of the aggregator at close.** Complete and green against both
+  > corpora. `examples/fleet_aggregate/` rolls up node kinds, diagnostic
+  > codes, per-tool calls and status, per-model `llm` calls, unfulfilled calls
+  > by model, unfulfilled results, and unbuildable inputs, over any number of
+  > traces, in text or JSON. Seven tests, `make check` green (656 tests).
+  >
+  > **The timebox did not bind, and that is part of the record.** The work
+  > finished inside the box; nothing below is missing because time ran out.
+  > Everything missing is missing for a *stated* reason — a scope rule, one
+  > dialect, or the fleet's own shape — and those reasons are named. A record
+  > that blamed the box for its gaps would be hiding the real limits behind an
+  > acceptable-sounding one.
+  >
+  > **Nothing under `spanweave/` was changed.** Per 2.3, every item below is a
+  > finding, not a patch.
+  >
+  > ### Index
+  >
+  > | # | What the aggregator wanted | Class |
+  > |---|---|---|
+  > | F1 | A multi-graph entry point (`build_all`) / a fleet type | **operational** — and it never hurt |
+  > | F2 | Cross-trace edges | *not wanted* — refutes one of P5's predicted symptoms |
+  > | F3 | A non-building trace representable inside the rollup | **operational** |
+  > | F4 | To `except` the library's own error type | **operational** — spec/surface inconsistency |
+  > | F5 | Which **tool** an unfulfilled call asked for | **SHAPE** |
+  > | F6 | A success signal on tool spans that have one | *not a model finding* — a **corpus** finding |
+  > | F7 | To know which diagnostic codes are node-scoped | **operational** |
+  > | F8 | A graph-level annotation, for cohorting | **shape**, but anticipated, never encountered in anger |
+  > | F9 | A trace identity usable as a fleet key | **operational** — and largely a corpus artifact |
+  >
+  > ---
+  >
+  > ### F1 — no multi-graph entry point. **Operational.** It never hurt.
+  >
+  > `build()` is one source → one graph, so the aggregator wrote its own loop
+  > and its own accumulator (`aggregate()`, `Fleet`). That is the literal
+  > subject of P5, so it is reported first and reported honestly: **it was
+  > about eight lines and it cost nothing.** Every number in the rollup came
+  > out of existing `graph.json` documents, unchanged, built with default
+  > options.
+  >
+  > Binding test: could an existing `graph.json` express the need? **Yes** —
+  > it *did*, nineteen and then fourteen times over. A `build_all()` would be
+  > a convenience on the API, not a change to the document. **Operational.**
+  >
+  > ### F2 — cross-trace edges were never wanted. *Refutes a predicted symptom.*
+  >
+  > P5 names three anticipated remedies: `build_all()`, **cross-trace
+  > linking**, or an aggregate type. The aggregator wanted the first as a
+  > convenience and never wanted the second at all. A fleet rollup is counts
+  > over a *set* of traces; there is no relation between trace 3 and trace 9
+  > to draw. This is a negative result and it belongs in the record: one of
+  > the three things P5 predicted would be needed was not needed, and the
+  > `EdgeKind` enum was never under pressure from this consumer.
+  >
+  > ### F3 — a trace that does not build cannot join the rollup. **Operational.**
+  >
+  > `duplicate_span_ids` raises `DuplicateNodeIdError`. In a fleet, one bad
+  > trace must not cost the other ten thousand, so the consumer wraps every
+  > build and invents its own record (`TraceFailure`) to hold what the library
+  > raised. There is no graph-shaped or diagnostic-shaped representation of
+  > "this input did not build", so unbuildable traces cannot be counted in the
+  > same structure as everything else.
+  >
+  > Binding test: the *information* the consumer needed — which input, which
+  > exception, which code — was fully available from what was raised. Nothing
+  > had to be guessed or inferred. What is missing is a container, not a fact,
+  > and `graph.json` is untouched by the fix. **Operational.**
+  >
+  > `SPEC.md` §3.10's choice to raise here rather than emit a partial graph is
+  > *right* and this finding does not argue with it: a graph that quietly
+  > holds three of your four tool calls is worse than no graph, and a fleet is
+  > exactly where that would go unnoticed.
+  >
+  > ### F4 — the error types are not on the public API. **Operational.**
+  >
+  > The sharpest of the operational findings, because it is a plain
+  > inconsistency between the spec and the shipped surface. `SPEC.md` §3.10
+  > says error codes are "a public contract from `0.9.x`" and instructs
+  > callers to "**match on the code, never on the message**". But
+  > `spanweave/__init__.py` exports neither `SpanweaveError` nor any of the
+  > five subclasses in that table. A public-API-only consumer therefore
+  > **cannot** `except SpanweaveError`. It must `except Exception` and
+  > duck-type `getattr(error, "code", None)` — which is what
+  > `TraceFailure.__init__` does, with a comment saying why.
+  >
+  > The cost is not cosmetic: a missing file, a permissions error and a
+  > `MemoryError` all land in the same branch as a trace the library
+  > deliberately refused, and the consumer cannot tell them apart. The one
+  > distinguishing signal is `.code` being `None`, which is an absence, not a
+  > statement.
+  >
+  > Binding test: needs no change to any `graph.json` and no build option —
+  > it needs an export. **Operational.**
+  > *Concrete:* add `SpanweaveError` and the subclasses named in the §3.10
+  > table to `spanweave/__init__.py` and `__all__`. Worth doing regardless of
+  > how P5 resolves, and cheap while the surface is unfrozen.
+  >
+  > ### F5 — an unfulfilled call cannot be attributed to the tool it asked for. **SHAPE.**
+  >
+  > **This is the finding.** It was predicted as a candidate at the start of
+  > 2.3 and it is recorded here because the aggregator hit it, not because it
+  > was expected to.
+  >
+  > The rollup a fleet consumer actually wants is *"which tools get requested
+  > and never run"* — that is the fleet-scale version of the question
+  > `unpaired_call` exists to answer. The graph can attribute an unfulfilled
+  > call to the **model that asked**: the diagnostic carries `node_id`, the
+  > node is the `llm` that requested it, and `Node.operation` is the model
+  > name (`SPEC.md` §3.1). The aggregator does exactly that, and over the
+  > fleet it reports `openai/gpt-oss-120b: 3` with no producer-side knowledge.
+  >
+  > It **cannot** attribute the call to the **tool it named**. A call that was
+  > requested and never fulfilled has **no node**, so the operation it asked
+  > for exists nowhere in the model. `Diagnostic.source` carries the bare call
+  > id (`"chatcmpl-tool-8aee0472ff5742cd"`) and nothing else.
+  >
+  > The two halves sit side by side in the output on purpose, because the
+  > boundary is the finding: **the graph knows who asked, and not what for.**
+  > Both are pinned by `test_the_boundary_the_task_exists_to_find_is_in_the_output`,
+  > in both directions, so a change that made `by_tool` answerable fails a
+  > test and gets read here rather than passing silently.
+  >
+  > Binding test: could an existing `graph.json` express it, built with
+  > different options? The only options are `adapter` and `temporal`, and
+  > neither is relevant. The tool name is present in the input bytes and
+  > **preserved verbatim** — losslessness holds, this is not a losslessness
+  > bug — inside the requesting node's `outputs` payload, at
+  > `value["choices"][0]["message"]["tool_calls"][…]["function"]["name"]`.
+  > It is preserved but not **modeled**. **SHAPE.**
+  >
+  > **Would the aggregator break on a second dialect if it reached in?**
+  > **Yes, and silently — which is the worse failure.** That path is the
+  > OpenAI chat-completion response shape as OpenInference records it. An
+  > OTel GenAI rendering of the same scenario puts the fact somewhere else, or
+  > does not carry it. A consumer that walked it would produce correct numbers
+  > for dialect one and, for dialect two, either a `KeyError` or — far more
+  > likely, since the code would have to be defensive to survive absent
+  > payloads at all — **a confident zero**. A fleet dashboard reading
+  > "0 unfulfilled calls" because its payload path missed is indistinguishable
+  > from one reading "0 unfulfilled calls" because there were none.
+  > This is why the aggregator declines and emits `limits` instead.
+  > **2a can settle it directly:** render `unpaired_tool_call` in
+  > `otel_genai` and check whether *any single* payload path yields the tool
+  > name in both dialects. If none does, F5 is confirmed as shape by
+  > independent evidence.
+  >
+  > **What would have to exist.** Three options, and the human's decision is
+  > which — or whether the rollup is simply not owed.
+  >
+  > - **A. A convention on `Diagnostic.source`.** `source` is `JsonValue`, so
+  >   an adapter could already put `{"call_id": …, "operation": …}` there
+  >   instead of a bare string. **No schema change, no halt point** — which
+  >   means F5 has a schema-legal shortcut, and the record must say so rather
+  >   than present the shape reading as the only one. The cost: it is a
+  >   per-adapter *convention*, not a contract. A consumer cannot rely on it,
+  >   cannot tell a dialect that does it from one that does not, and would be
+  >   right back to duck-typing. It buys the number and gives up the guarantee.
+  > - **B. A node for the request.** A `tool` node — **no new `NodeKind`
+  >   needed** — with `operation` set, `inputs` from the requested arguments,
+  >   `outputs` `PayloadState.absent`, and the existing `call_result` edge from
+  >   the `llm` with warrant `explicit`. This makes `by_tool` fall out of the
+  >   normal rollup with no special case at all. **But it needs a way to say
+  >   "this node is a request, not an observation"**, and the model has no such
+  >   distinction. `Status.UNSET` cannot carry it — F6 shows `unset` already
+  >   means "the telemetry did not say", and real tool spans use it constantly.
+  >   So B needs a new `Status` member (or a `Payload` state, or a node-level
+  >   flag), and **every one of those is a halt point** (`AGENT.md`: adding or
+  >   renaming a `NodeKind`, `EdgeKind`, `Payload` state, warrant, or
+  >   `Diagnostic` code). B is also the option most at risk of breaking
+  >   invariant 2 in spirit: a node that was never observed is the library
+  >   asserting something the telemetry did not.
+  > - **C. A dangling edge.** A `call_result` edge with no `dst`. Dead end, and
+  >   instructive: `SPEC.md` §4.0 lets a `link` dangle and forbids `parent` to.
+  >   A dangling `call_result` is a **third** case the model does not have, and
+  >   inventing one to solve a rollup would be the tail wagging the dog.
+  >
+  > *Recommendation, offered as input and not as a decision:* **A is the
+  > cheapest and B is the honest one**, and the choice is really a question
+  > about what `Diagnostic` is *for* — a report to a human, or a queryable
+  > part of the graph. That question is bigger than this rollup, which is why
+  > it stops here.
+  >
+  > ### F6 — successful tool spans have no success signal, and the corpus hides it. *Corpus finding.*
+  >
+  > Over the 14-trace fleet: `get_weather` 12 calls — **0 error, 0 ok, 12
+  > `unset`**. `get_population` 4, all `unset`. `convert_currency` 3, all
+  > `unset`. `lookup_flight` 1 call, 1 **error**. So a fleet "tool failure
+  > rate" has a real numerator and a denominator complement that is
+  > **unknowable**: 19 of 20 fleet tool calls never said whether they
+  > succeeded.
+  >
+  > This is **not** a finding against the model. No build option can add a
+  > status the trace does not carry, and inferring `ok` from "the span did not
+  > error" is precisely the inference `CLAUDE.md` 2 forbids. The library is
+  > right, and visibly so — which is why the aggregator prints `error`, `ok`
+  > and `unset` as three separate columns rather than folding two of them.
+  >
+  > **The finding is about the corpus.** Every tool node in
+  > `fixtures/conformance/` is `status: "ok"` — 18 of 18. Not one real tool
+  > span in the fleet is. The corpus therefore encodes *our idea* of what a
+  > tool span looks like, and a consumer written against the corpus alone
+  > would compute a success rate that silently reads zero against real
+  > telemetry. This is the same family as `FIXTURES.md` §5.1's Phase 1
+  > defect — fixtures agreeing with the adapter because both came from one
+  > reading of the dialect — and it was invisible until real traces
+  > disagreed. **Recommend a conformance scenario whose tool span carries no
+  > status**, so `unset` is somewhere in the corpus. Filed here rather than
+  > acted on: 2.3 must not touch the corpus, and 2a owns the next fixtures.
+  >
+  > ### F7 — diagnostics are not uniformly node-scoped, and nothing says which are. **Operational.**
+  >
+  > Across both corpora, every observed code carries a `node_id` except
+  > `ordering_cycle`, which is graph-scoped and carries `None`.
+  > `malformed_record` and `multi_trace_input` are very likely the same, but
+  > neither appears in either corpus so this is unverified. A fleet dashboard
+  > cross-tabbing diagnostics by model or by node kind therefore has a
+  > partial answer, and **the only way to learn which codes are attributable
+  > is to try them.** The aggregator handles it by naming the two ways
+  > attribution can fail (`(no node on the diagnostic)`,
+  > `(node not in this graph)`) as buckets rather than dropping them.
+  >
+  > Binding test: for every code that carries a node, the attribution the
+  > consumer wanted is already expressible from today's `graph.json`. What is
+  > missing is a *statement of which codes those are* — contract, not schema.
+  > **Operational.**
+  > *Concrete:* a **node-scoped** column on the `SPEC.md` §3.7 code table,
+  > with a test pinning each code's answer against the corpus.
+  >
+  > ### F8 — no graph-level annotation. **Shape — but anticipated, not encountered.**
+  >
+  > `graph.annotate(node_id, …)` is node-scoped, and the serialized
+  > `annotations` list is node-keyed. There is nowhere to hang a fact about
+  > **the trace as a whole** — "fleet run 3", "prompt v2", "cohort A" — which
+  > is the natural way to carry a cohort through a fleet analysis. The
+  > workaround is to annotate the root node, and the root is not a given: the
+  > two corpora hold graphs with 1 root (30), **0** roots (`cyclic_parents`),
+  > 2, and 3. There is also no `roots()` primitive; a consumer recomputes it
+  > from `parents()`.
+  >
+  > Binding test: no option produces a place in the document for it. **Shape.**
+  > *Concrete:* a graph-scoped namespace in `AnnotationStore` and a
+  > corresponding root key in the serialized document — additive, and
+  > therefore cheap **now** and expensive after the freeze.
+  >
+  > **The honest weight, which must not be lost:** the aggregator **never
+  > needed this.** It keyed the rollup on the input it was handed and lost
+  > nothing. F8 is a gap noticed while deliberately looking for gaps, not one
+  > that stopped the work. It is listed because omitting it would be worse,
+  > and it is marked because reading it at the same weight as F5 would
+  > overstate the evidence.
+  >
+  > ### F9 — no trace identity usable as a fleet key. **Operational.**
+  >
+  > Two candidate keys, with complementary weaknesses. `Graph.trace_id` is
+  > **`"t1"` for all nineteen buildable corpus scenarios** — a fleet keyed on
+  > it collapses the entire corpus into one trace. `meta.source_digest`
+  > fingerprints the input *bytes*, so the same trace re-exported with its
+  > lines in a different order gets a different digest while the graph is
+  > byte-identical (`SPEC.md` §3.9 states this and calls it correct — it is).
+  > So one key can collide for different traces and the other can differ for
+  > the same graph.
+  >
+  > Binding test: both fields are already in today's `graph.json`; the
+  > aggregator keyed on the input path and lost nothing. **Operational.**
+  >
+  > Recorded despite being minor because 2.2's own near-miss is exactly this
+  > failure — 26 files in the fleet directory, nine of them stale duplicates
+  > that would have read as *real variation* rather than as double-counting.
+  > The aggregator now **reports the collision** in its output
+  > (`distinct_trace_ids`, plus a note when it is fewer than the traces built)
+  > rather than silently collapsing, and a test pins that behavior against the
+  > corpus. Mostly a corpus artifact: all 14 real fleet trace ids are distinct.
+  >
+  > ---
+  >
+  > ### What the aggregator did **not** get to
+  >
+  > Stated plainly so no finding above is read as broader than it is.
+  >
+  > - **Latency and token rollups were not built.** `started_at` / `ended_at`
+  >   and `Usage` are on every node and either would have been trivial. They
+  >   are Phase 3's confirmatory consumer and `AGENT.md` forbids writing it
+  >   here. The consequence is real: P5 is **untested against the consumer
+  >   most likely to want cross-trace numeric aggregation**, which is arguably
+  >   the one it was written about. Everything above is counts.
+  > - **No statistic beyond a count.** No percentiles, no distributions, no
+  >   per-trace vectors, no comparison between cohorts.
+  > - **One dialect.** Every number here is OpenInference. The claim "a
+  >   dialect-neutral fleet rollup is possible" is a property of code written
+  >   to be neutral, **not** a property tested by a second rendering. 2a is
+  >   what turns it into evidence — see F5's test.
+  > - **The query primitives were never used.** `paths`, `reachable`,
+  >   `descendants`, `subgraph`, `annotate` — the aggregator called none of
+  >   them. It needed `nodes()`, `edges()`, `node()`, `parents()` and
+  >   `diagnostics`. Nothing is known about how the traversal surface behaves
+  >   under fleet pressure.
+  > - **Depth was never tested**, and this is 2.2's standing limitation
+  >   carried forward, not a new one. No fleet trace is deeper than
+  >   `agent → llm → tool* → llm`, because `converse()` executes tools for one
+  >   turn. A shape problem that only appears at depth could not have surfaced
+  >   here. **The honest claim is "P5 survived a one-turn fleet."**
+  > - **Scale was never tested.** 14 traces and 19 scenarios. `build()` reads
+  >   whole files and `Fleet` accumulates counters rather than graphs, so it
+  >   would *probably* hold at 10,000 — and "probably" is the accurate word.
+  >
+  > ### What this fleet cannot tell you, however good the graph is
+  >
+  > Carried here so it is not mistaken for a model finding at the HALT.
+  >
+  > All three unfulfilled calls are `openai/gpt-oss-120b`, and the graphs
+  > support that attribution completely. What the graphs **cannot** separate
+  > is *the model requesting tools one at a time* from *the harness serving
+  > one turn* — those two variables move together across all fourteen traces,
+  > so the correlation is **confounded**. That is a limitation of **the
+  > evidence**, not of the graph: no field on any `graph.json` could separate
+  > them, because a trace does not record the loop policy of the application
+  > that produced it. Only a fleet that varied the loop could. **Do not read
+  > this as something a better model would have expressed.**
+  >
+  > ### The evidence P5 rests on — not a resolution
+  >
+  > P5 is resolved by a human, in `PREDICTIONS.md`, which this agent must not
+  > edit. What the two days produced, stated for that decision:
+  >
+  > - **P5's headline — "one trace = one graph" — did not break the
+  >   aggregator.** The rollup was written against unmodified `graph.json`
+  >   documents, built with default options, and every count it publishes came
+  >   out of them. Of the three remedies P5 anticipated, one (`build_all`) was
+  >   a convenience, one (cross-trace edges) was never wanted, and one (an
+  >   aggregate type) the consumer wrote for itself in a few lines.
+  > - **One shape finding, and it is not the one P5 predicted.** F5 is not
+  >   about multiplicity at all. It is about a single graph failing to model
+  >   something it *reports* — a requested call with no node — and it would
+  >   have been just as true of a single-trace consumer that asked the same
+  >   question. The fleet did not cause it; the fleet made someone ask.
+  > - **The claim's honest scope.** "P5 survived a **one-turn** fleet of
+  >   fourteen traces across three models, tested by a **counting** consumer
+  >   in **one** dialect." Every qualifier in that sentence is load-bearing
+  >   and each is justified above.
+  > - **Retired from 2.2's limitations:** `parallel_tool_calls` no longer
+  >   rests on a hand-authored fixture — Qwen3-235B and Kimi-K3 produce it,
+  >   and the aggregator counts 20 real tool calls across the fleet.
+  >   **Still standing:** the depth limit.
+  > - **A `converse()` loop is not recommended.** 2.2 left the decision to
+  >   this HALT. The aggregator's experience does not argue for it: the shape
+  >   it would fix (the unpaired call) is specific to sequentially-calling
+  >   models, two of the three models here do not produce it, and F5 — the one
+  >   shape finding — would be **unchanged** by looping, since a fulfilled
+  >   call has a node either way. Looping would buy depth, which is the real
+  >   untested axis, but that is a Phase 4 scope with its own budget, not a
+  >   mid-timebox harness change.
 
 ---
 
