@@ -47,7 +47,10 @@ happened:
   nothing populates because no document asks for it. Neither shape nor
   operational: the remedy is a spec change plus an adapter change, not a model
   change. Found in practice at Phase 2b (see O1 below); use it where it fits
-  rather than forcing the binary.
+  rather than forcing the binary. A candidate already exists: 2.4's F7 (nothing states which diagnostic
+  codes are node-scoped) has the same structure and was classified
+  operational only because this category did not yet exist. Re-read it
+  against this definition once 2a has exercised the category.
 
 The test for which one you're looking at: *could an existing graph.json express
 the consumer's need, if it had been built with different options?* If yes,
