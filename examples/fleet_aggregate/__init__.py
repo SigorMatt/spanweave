@@ -1,0 +1,202 @@
+"""A fleet rollup: many traces in, one set of counts out.
+
+This is the Phase 2b **adversarial** consumer (`TASKS.md` 2.3). It exists to
+attack `PREDICTIONS.md` P5 -- *one trace = one graph* -- by being the thing
+that prediction says will hurt: a consumer that wants every trace at once.
+
+Two rules it keeps, because breaking either would fake a generality the
+library has not earned:
+
+* **Public API only** -- exactly what ``spanweave/__init__.py`` exports.
+  Reaching into an internal module would answer a question nobody asked.
+* **Dialect-neutral** -- it reads the *model* (kinds, statuses, operations,
+  diagnostic codes) and never a dialect's payload shape. Where that costs it
+  an answer, it says so in ``limits`` rather than reaching into
+  ``Payload.value`` and quietly becoming an OpenInference tool.
+"""
+
+from __future__ import annotations
+
+import collections
+from collections.abc import Iterable, Mapping
+from typing import Any
+
+from spanweave import Diagnostic, Graph, NodeKind, Status, build
+
+#: Why a rollup line is missing, in the output, machine-readable. The library
+#: degrades honestly (`CLAUDE.md` 2); a consumer that swallowed the gap would
+#: undo that one layer up.
+UNATTRIBUTED_CALLS = (
+    "unfulfilled_calls.by_tool is empty: `unpaired_call` names the requesting "
+    "node and the call id, and a call that was requested but never ran has no "
+    "node, so the tool it asked for is not on the graph. Recovering it means "
+    "parsing the requesting node's outputs payload -- one dialect's shape, in "
+    "a consumer that must not know one."
+)
+
+
+class TraceFailure:
+    """A trace that did not build.
+
+    A fleet consumer needs failures *in* the rollup, not raised out of it: one
+    malformed trace must not cost you the other ten thousand. The library has
+    no such record -- a structural problem raises (`SPEC.md` §3.10) rather than
+    producing a graph plus a diagnostic -- so the consumer invents one.
+    """
+
+    def __init__(self, source: str, error: BaseException) -> None:
+        self.source = source
+        self.error = error
+        # `SPEC.md` §3.10: match on the code, never on the message. The
+        # exception *types* are not exported from `spanweave/__init__.py`, so
+        # a public-API-only consumer cannot `except SpanweaveError` and reads
+        # the documented attribute off whatever it caught.
+        self.code = getattr(error, "code", None)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "error": type(self.error).__name__,
+            "code": self.code,
+            "message": str(self.error),
+        }
+
+
+class Fleet:
+    """Counts across many graphs.
+
+    Deliberately accumulating rather than holding every graph: a real fleet is
+    larger than memory, and the shape of the API you *want* shows up more
+    clearly when you cannot cheat by keeping everything.
+    """
+
+    def __init__(self) -> None:
+        self.given = 0
+        self.built = 0
+        self.trace_ids: collections.Counter[str] = collections.Counter()
+        self.node_kinds: collections.Counter[str] = collections.Counter()
+        self.diagnostics: collections.Counter[str] = collections.Counter()
+        self.tool_calls: collections.Counter[str] = collections.Counter()
+        self.tool_status: collections.Counter[tuple[str, str]] = collections.Counter()
+        self.models: collections.Counter[str] = collections.Counter()
+        self.unfulfilled_calls = 0
+        self.unfulfilled_calls_by_model: collections.Counter[str] = (
+            collections.Counter()
+        )
+        self.unfulfilled_results = 0
+        self.failures: list[TraceFailure] = []
+
+    # -- accumulation ------------------------------------------------------
+
+    def add(self, source: str, graph: Graph) -> None:
+        self.built += 1
+        self.trace_ids[graph.trace_id] += 1
+
+        for node in graph.nodes():
+            self.node_kinds[str(node.kind)] += 1
+            operation = node.operation
+            if operation is None:
+                continue
+            if node.kind is NodeKind.TOOL:
+                self.tool_calls[operation] += 1
+                self.tool_status[(operation, str(node.status))] += 1
+            elif node.kind is NodeKind.LLM:
+                self.models[operation] += 1
+
+        for diagnostic in graph.diagnostics:
+            self.diagnostics[diagnostic.code] += 1
+            # Counted separately because these two are the fleet questions
+            # people actually ask -- "what got requested and never ran" and
+            # "what came back that nobody asked for".
+            if diagnostic.code == "unpaired_call":
+                self.unfulfilled_calls += 1
+                self.unfulfilled_calls_by_model[_asker(graph, diagnostic)] += 1
+            elif diagnostic.code == "unpaired_result":
+                self.unfulfilled_results += 1
+
+    def fail(self, source: str, error: BaseException) -> None:
+        self.failures.append(TraceFailure(source, error))
+
+    # -- output ------------------------------------------------------------
+
+    def as_dict(self) -> dict[str, Any]:
+        """The rollup, in a form that sorts the same way every time."""
+        limits: list[str] = []
+        if self.unfulfilled_calls:
+            limits.append(UNATTRIBUTED_CALLS)
+
+        return {
+            "traces": {
+                "given": self.given,
+                "built": self.built,
+                "unbuildable": len(self.failures),
+                "distinct_trace_ids": len(self.trace_ids),
+            },
+            # Every kind, including the zeros: a fleet's rollup schema must not
+            # change shape because one fleet happened to contain no retrievers.
+            "node_kinds": {
+                str(kind): self.node_kinds[str(kind)] for kind in sorted(NodeKind)
+            },
+            "diagnostics": _sorted(self.diagnostics),
+            "tools": {
+                name: {
+                    "calls": self.tool_calls[name],
+                    "errors": self.tool_status[(name, str(Status.ERROR))],
+                    "ok": self.tool_status[(name, str(Status.OK))],
+                    "unset": self.tool_status[(name, str(Status.UNSET))],
+                }
+                for name in sorted(self.tool_calls)
+            },
+            "models": _sorted(self.models),
+            "unfulfilled_calls": {
+                "total": self.unfulfilled_calls,
+                # Answerable: the diagnostic names the node that asked, and
+                # `Node.operation` on an `llm` is the model (`SPEC.md` §3.1).
+                "by_model": _sorted(self.unfulfilled_calls_by_model),
+                # Not answerable. See UNATTRIBUTED_CALLS -- and note that the
+                # two live side by side on purpose, because the boundary is
+                # the finding: the graph knows who asked, not what for.
+                "by_tool": {},
+            },
+            "unfulfilled_results": self.unfulfilled_results,
+            "unbuildable": [
+                failure.as_dict()
+                for failure in sorted(self.failures, key=lambda f: f.source)
+            ],
+            "limits": limits,
+        }
+
+
+def _asker(graph: Graph, diagnostic: Diagnostic) -> str:
+    """Which model left this call unfulfilled.
+
+    A diagnostic may carry no node at all (`ordering_cycle` is graph-scoped),
+    and `Graph.node` returns `None` for an id the graph does not hold, so both
+    are named rather than assumed away.
+    """
+    if diagnostic.node_id is None:
+        return "(no node on the diagnostic)"
+    node = graph.node(diagnostic.node_id)
+    if node is None:
+        return "(node not in this graph)"
+    return node.operation or f"(unnamed {node.kind})"
+
+
+def _sorted(counter: Mapping[str, int]) -> dict[str, int]:
+    return {key: counter[key] for key in sorted(counter)}
+
+
+def aggregate(sources: Iterable[str]) -> Fleet:
+    """Build every trace and roll the results up. Never raises for one trace."""
+    fleet = Fleet()
+    for source in sources:
+        fleet.given += 1
+        try:
+            graph = build(source)
+        # Broad on purpose: one bad trace must not cost the other 10,000,
+        # and the exception types are not on the public API to catch.
+        except Exception as error:
+            fleet.fail(source, error)
+            continue
+        fleet.add(source, graph)
+    return fleet

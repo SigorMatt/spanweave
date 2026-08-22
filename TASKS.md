@@ -1043,8 +1043,22 @@ below:
   > the pipeline handling a shape it was never shown, correctly — and it is
   > the kind of evidence only real traces produce, since a corpus can only
   > test the shapes someone thought to write down.
+  >
+  > **Correction, made at 2.3: three traces carry `unpaired_call`, not five.**
+  > The "five" above — `02`, `03`, `08`, `10`, `11` — is a count of the
+  > **12-trace** fleet under the old naming. In the final 14-trace fleet the
+  > files at `10` and `11` are Qwen re-runs and are clean, so the traces that
+  > carry the diagnostic are `02_two_cities`, `03_weather_and_people` and
+  > `08_three_at_once` — **three, all `openai/gpt-oss-120b`, one diagnostic
+  > each**. Verified from the graphs, not the traces: the aggregator's
+  > `unfulfilled_calls.by_model` reports `openai/gpt-oss-120b: 3`.
+  > The number was carried forward across the re-run without rechecking. It
+  > changes nothing in the reading above — the correlation it supports is
+  > *stronger* at 3-of-6 gpt-oss traces than it looked at 5-of-14 — but a
+  > stale count in the evidence record is exactly the kind of thing 2.4 must
+  > not build on.
 
-- [ ] **2.3 Fleet aggregator in `examples/`.**
+- [x] **2.3 Fleet aggregator in `examples/`.**
   **The fleet is evidence, and reading how it was made destroys it.** The 14
   traces in `capture/_scratch/fleet/` are telemetry from someone else's
   system. Do **not** read `capture/` to learn how they were produced — not
@@ -1079,6 +1093,37 @@ below:
   is byte-identical, `uv run ruff check .` is clean, `uv run mypy examples` is
   clean (add the target to `make types`), and a test runs the example over the
   committed corpus so it cannot rot.*
+  > **Built and run against both corpora.** `examples/fleet_aggregate/` rolls
+  > up node kinds, diagnostic codes, per-tool calls/status, per-model llm
+  > calls, and unfulfilled calls, over any number of traces. Public API only;
+  > no import from `spanweave` outside `__init__`'s exports. All five
+  > done-when clauses are green and `make check` passes (656 tests).
+  > **The friction is recorded at 2.4** — that is the deliverable, and it is
+  > written there rather than here so the whole timebox reads in one place.
+  > Four things about *this* task that belong here:
+  > - **Run-loop step 3, adapted the way 2.2 adapted it.** There is no new
+  >   conformance fixture and no expected canonical graph to author: the
+  >   corpus already exists and 2.3 must not touch it. The expected output
+  >   written first is `tests/test_example_fleet_aggregate.py`, committed red
+  >   before the implementation existed. Its oracle is **recomputed from
+  >   `fixtures/conformance/*/expected/`** rather than snapshotted from the
+  >   aggregator: a golden file would agree with whatever the code printed,
+  >   where this disagrees when the code is wrong. Six of seven checks passed
+  >   on the first run of the implementation; the seventh failed because the
+  >   oracle had not yet been widened to the per-status tool breakdown.
+  > - **Two rollups beyond the three the task names**, both free from
+  >   `Node.operation` (`SPEC.md` §3.1 defines it as tool name / model name):
+  >   per-model `llm` counts, and `unfulfilled_calls.by_model`. The second is
+  >   not decoration — it is the exact contrast that makes the task's central
+  >   finding legible, and it is pinned by a test in **both** directions
+  >   (`by_model` sums to the total; `by_tool` is empty).
+  > - **The aggregator is dialect-neutral by construction**, and that was a
+  >   decision with a cost. Where reading a payload's shape would have bought
+  >   an answer, it declines and emits the reason into a machine-readable
+  >   `limits` list instead. An example that quietly became an OpenInference
+  >   tool would have reported a generality the library does not have.
+  > - **Nothing under `spanweave/` was changed.** Per the task, every place
+  >   the library fought back is a finding at 2.4, not a patch.
 
 - [ ] **2.4 Timebox close: the findings record.** `[2b]` **NEVER CUT**
   (`ROADMAP.md`: "cutting a timeboxed item means the box was never real").

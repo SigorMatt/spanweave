@@ -13,6 +13,7 @@ lint:
 
 types:
 	uv run mypy spanweave
+	uv run mypy examples
 
 test:
 	uv run pytest
