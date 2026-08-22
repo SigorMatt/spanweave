@@ -6,6 +6,7 @@ a file in `fixtures/captured/` (`AGENT.md` halt point).
 ```
 make capture                              # uses whichever backend you configured
 make capture ARGS="--backend openai"      # or name one
+make capture ARGS="--backend genai"       # the OTel GenAI half of the pair
 make capture ARGS="--fleet 8"             # the scratch fleet -- see below
 ```
 
@@ -30,23 +31,38 @@ is what makes the library's "never touches the network" claim structural
 rather than aspirational. The no-network gate scans `spanweave/`; this
 directory is deliberately out of its blast radius, and out of the wheel.
 
-## Two backends
+## Three backends
 
-Both are first-class. Neither replaced the other, and a capture from each is
-worth more than two captures from one: two independent instrumentors emitting
-the same semantic conventions is the only way to find out whether
-"OpenInference" means one thing or two.
+All are first-class. None replaced another, and a capture from each is worth
+more than three captures from one: two independent instrumentors emitting the
+same semantic conventions is the only way to find out whether "OpenInference"
+means one thing or two.
 
-| Backend | SDK | Instrumentor | Credential | Endpoint | Model |
-|---|---|---|---|---|---|
-| `anthropic` | `anthropic` | `openinference-instrumentation-anthropic` | `ANTHROPIC_API_KEY` | fixed | `ANTHROPIC_MODEL`, default `claude-opus-5` |
-| `openai` | `openai` | `openinference-instrumentation-openai` | `NEBIUS_API_KEY` | `NEBIUS_BASE_URL` | `NEBIUS_MODEL`, default `openai/gpt-oss-120b` |
+| Backend | SDK | Instrumentor | Emits | Credential | Endpoint | Model |
+|---|---|---|---|---|---|---|
+| `anthropic` | `anthropic` | `openinference-instrumentation-anthropic` | OpenInference | `ANTHROPIC_API_KEY` | fixed | `ANTHROPIC_MODEL`, default `claude-opus-5` |
+| `openai` | `openai` | `openinference-instrumentation-openai` | OpenInference | `NEBIUS_API_KEY` | `NEBIUS_BASE_URL` | `NEBIUS_MODEL`, default `openai/gpt-oss-120b` |
+| `genai` | `openai` | `opentelemetry-instrumentation-genai-openai` | OTel GenAI | `NEBIUS_API_KEY` | `NEBIUS_BASE_URL` | `NEBIUS_MODEL`, default `openai/gpt-oss-120b` |
+
+### `genai` is not a third dialect to collect — it is the other half of a pair
+
+`openai` and `genai` are **deliberately identical** in SDK, credential,
+endpoint, model, prompt, tool inventory and conversation. The only thing that
+differs is the instrumentor. That identity is the point: the cross-dialect
+equivalence test (`FIXTURES.md` §4) claims two dialects of one scenario produce
+one canonical graph, and a pair differing by more than the instrumentor could
+not attribute a failure of that claim to the dialect. A test pins every shared
+field, so the pair cannot drift quietly.
+
+If the GenAI instrumentor ever requires something that would change what the
+`openai` half records, that is a finding to report — **not** a change to absorb
+into both sides.
 
 ### Which one runs
 
-1. `--backend anthropic|openai` wins outright.
+1. `--backend anthropic|genai|openai` wins outright.
 2. Otherwise, whichever backend's **credential is set** is used.
-3. If **both** are set, or **neither** is, that is a **hard error** naming
+3. If **more than one** is set, or **none** is, that is a **hard error** naming
    `--backend` and listing what it looked for.
 
 The refusal is deliberate, and it is the same posture as the library's own
@@ -54,8 +70,15 @@ adapter selection (`SPEC.md` §6.1): a capture that quietly ran against the
 backend you did not mean is a fixture whose provenance file is wrong, which is
 worse than no fixture at all.
 
+**One consequence, stated because it changes an old habit:** `genai` shares
+`NEBIUS_API_KEY` with `openai`, so exporting that one variable now configures
+**two** backends and a bare `make capture` refuses as ambiguous. Name the one
+you mean. This is the right refusal to be given — the two differ only in the
+instrumentor, so a wrong guess produces a trace that looks entirely plausible
+beside a provenance file naming the wrong dialect.
+
 Model resolution, in order: `--model`, then `SPANWEAVE_CAPTURE_MODEL` (works
-for either backend), then the backend's own variable, then its default.
+for any backend), then the backend's own variable, then its default.
 
 ### What to install
 
@@ -68,10 +91,68 @@ export NEBIUS_API_KEY=...
 export NEBIUS_BASE_URL=https://api.studio.nebius.com/v1/     # your endpoint
 export NEBIUS_MODEL=openai/gpt-oss-120b                      # optional
 
+# genai backend — the same endpoint and model, a different instrumentor
+uv pip install openai opentelemetry-instrumentation-genai-openai opentelemetry-sdk
+
 # anthropic backend
 uv pip install anthropic openinference-instrumentation-anthropic opentelemetry-sdk
 export ANTHROPIC_API_KEY=...
 ```
+
+### Which GenAI package — settled by running both, not by reading
+
+`opentelemetry-instrumentation-openai-v2`, in `opentelemetry-python-contrib`,
+was the first OTel-official OpenAI instrumentation. The work has since moved to
+`opentelemetry-instrumentation-genai-openai` in the newer
+`open-telemetry/opentelemetry-python-genai` repository. Both still publish to
+PyPI, so "which one" is not answerable from the names, and the answer will
+change again — record the version you used, and do not trust this section past
+its date.
+
+Checked on **2026-08-22**, by installing each into a throwaway environment and
+driving a two-turn tool-calling conversation through it:
+
+| | `…-genai-openai` 1.1b0 | `…-openai-v2` 2.4b0 |
+|---|---|---|
+| Imports against `openai` 3.3.1 | yes | **no** — `from httpx import URL`, and `openai` 3.x depends on `httpx2`, so `httpx` is absent unless something else pulled it in |
+| With `httpx` installed alongside | — | works |
+| `gen_ai.input.messages` / `gen_ai.output.messages` | identical (both delegate to `opentelemetry-util-genai`) | identical |
+| Also emits | `server.address`, `server.port`, `gen_ai.tool.definitions` | — |
+| Content flag values | `span_only` / `event_only` / `span_and_event` | same, **plus** its docs say `true`, which is not a valid value and is silently downgraded |
+
+So: the newer package, because the older one does not import against a current
+`openai` without an extra install its metadata does not ask for. The
+disagreement is recorded rather than tidied away, which is what `TASKS.md` 2.5
+asks for.
+
+One more thing that is moving underneath all of this: in
+`opentelemetry-semantic-conventions` 0.65b0 the whole `gen_ai.*` attribute set
+is marked *"Deprecated: moved to the OpenTelemetry GenAI semantic conventions
+repository"*. The **names are unchanged**; the conventions moved house. That is
+why `capture/backends.py` writes the attribute names out as string literals
+instead of importing the constants — a future rename should be a visible diff
+in one file, not a silent change of behaviour underneath the harness.
+
+### Content capture is opt-in, and without it the capture is worthless
+
+GenAI does not record prompts, completions, tool arguments or tool results
+unless you ask. Without them there is no `gen_ai.input.messages` and no
+`gen_ai.output.messages` — so no payloads, **no tool-call ids**, no
+`call_result` edge and no `SPEC.md` §4.2.1 declaration. Those two relations are
+the entire reason the second dialect is being captured.
+
+The backend therefore sets
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=span_only` **explicitly**
+rather than relying on an ambient default, and then **reads the resolved mode
+back** from the library that will act on it. The read-back is not a habit: on
+this path `true` — which the older package's own documentation tells you to set
+— is not a valid value. It is rejected with one line on stderr and silently
+downgraded to `NO_CONTENT`, and the run then spends a credential producing a
+trace with no messages in it. If the mode does not resolve to a span-capturing
+one, the harness refuses **before the model call**.
+
+`span_only` and not `event_only`, because this harness exports spans: the event
+modes put the messages in log records that never reach the JSONL.
 
 None of these are in `pyproject.toml`, not even as an extra. Core has zero
 runtime dependencies, and the lockfile that pins the build should not move for
@@ -100,9 +181,24 @@ capture that only works against one provider is not the evidence this is for.
 ## Which spans come from where
 
 **Only the `llm` spans come from the instrumentor.** The `agent` and `tool`
-spans are emitted by `capture/backends.py`, using OpenInference conventions,
-because executing a tool is **not an SDK call** — no instrumentor would record
-it, since there is nothing for it to wrap.
+spans are emitted by `capture/backends.py`, because executing a tool is **not
+an SDK call** — no instrumentor would record it, since there is nothing for it
+to wrap.
+
+**They speak the backend's dialect, not a fixed one.** The emitted keys are a
+property of the backend, chosen alongside the instrumentor and never
+independently of it (`SpanDialect` in `backends.py`). Emitting OpenInference
+keys into a GenAI trace would produce a **mixed-dialect file that no adapter
+reads honestly**: detection would see both, one adapter would win, and
+whichever lost would take its spans' meaning with it.
+
+One asymmetry between the two halves, and it belongs in both provenance files:
+**OpenInference defines no tool-execution span, and GenAI does.** On the
+OpenInference side `agent.run` and `tool.<name>` are this harness's own
+convention. On the GenAI side the tool span is `execute_tool <name>` with
+`gen_ai.tool.name` and `gen_ai.tool.call.id` — still emitted by us, but *named
+and shaped by the conventions*. The `invoke_agent` span's attributes remain a
+judgement call on both sides.
 
 Without them a capture would be two sibling root LLM spans: no containment, no
 tool node, and **no `call_result` pairing at all** — which is the one relation
@@ -227,10 +323,20 @@ one thing this whole directory exists to prevent.
 `exporter.py` is duck-typed — it reads attributes off whatever it is handed
 and imports nothing from opentelemetry — so the span-to-dialect conversion is
 tested against stub spans with no SDK installed (`tests/test_capture.py`).
-**It needed no change for the second instrumentor**, and that is structural
-rather than lucky: it reads the OTel `ReadableSpan` surface, which is the same
-class whichever instrumentor filled it, and copies the attribute keys
-verbatim. The dialect lives in those keys.
+**It needed no change for the second instrumentor, and none for the third**,
+and that is structural rather than lucky: it reads the OTel `ReadableSpan`
+surface, which is the same class whichever instrumentor filled it, and copies
+the attribute keys verbatim. The dialect lives in those keys.
+
+For the `genai` backend the tests also cover the parts that decide whether a
+credentialed run is worth anything: that the harness's own spans carry only
+`gen_ai.*` keys and no OpenInference ones; that content capture is set
+explicitly and the **resolved** mode read back, refusing before the model call
+if it did not take (including the `true`-is-silently-`NO_CONTENT` trap); that a
+trace with no message content is **refused rather than written**; and that
+`TASKS.md` 2.6's three verifications are answered against the exported records,
+each failing case included. Plus the matched pair itself: every field the two
+halves must share is asserted equal, so the pair cannot drift quietly.
 
 The fleet is covered the same way — against stub spans, never a real call.
 Each required shape is built as stub spans, pushed through the real

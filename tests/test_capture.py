@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from capture import backends, fleet, run
-from capture.backends import ANTHROPIC, BACKENDS, OPENAI
+from capture.backends import ANTHROPIC, BACKENDS, GENAI, OPENAI
 from capture.exporter import JsonlSpanExporter, record_of
 from spanweave import diagnostics as codes
 from spanweave.adapters.openinference import OpenInferenceAdapter
@@ -177,8 +177,8 @@ def test_the_exporter_keeps_everything_it_is_given():
 # --------------------------------------------------------------------------
 
 
-def test_both_backends_are_registered_and_neither_replaced_the_other():
-    assert sorted(BACKENDS) == ["anthropic", "openai"]
+def test_all_three_backends_are_registered_and_none_replaced_another():
+    assert sorted(BACKENDS) == ["anthropic", "genai", "openai"]
 
 
 def test_the_openai_backend_reads_its_endpoint_and_model_from_the_environment():
@@ -198,15 +198,36 @@ def test_the_anthropic_backend_is_unchanged_by_the_addition():
 @pytest.mark.parametrize(
     ("environ", "explicit", "expected"),
     [
-        ({"NEBIUS_API_KEY": "k"}, None, "openai"),
         ({"ANTHROPIC_API_KEY": "k"}, None, "anthropic"),
         # An explicit choice wins even against a configured other one.
         ({"ANTHROPIC_API_KEY": "k"}, "openai", "openai"),
         ({}, "anthropic", "anthropic"),
+        ({}, "genai", "genai"),
+        # NEBIUS_API_KEY alone no longer selects anything -- see below.
+        ({"NEBIUS_API_KEY": "k"}, "openai", "openai"),
+        ({"NEBIUS_API_KEY": "k"}, "genai", "genai"),
     ],
 )
 def test_the_configured_backend_is_the_one_selected(environ, explicit, expected):
     assert run.select(explicit, environ).id == expected
+
+
+def test_one_credential_now_configures_two_backends_so_it_must_be_named():
+    # A consequence of the matched pair, recorded rather than smoothed over:
+    # `genai` deliberately shares NEBIUS_API_KEY, NEBIUS_BASE_URL, NEBIUS_MODEL
+    # and the default model with `openai`, because that identity is the whole
+    # point (TASKS.md 2.5). So one exported credential configures both, and a
+    # bare `make capture` refuses instead of picking.
+    #
+    # Which is the right refusal to get: the two differ ONLY in the
+    # instrumentor, so a wrong guess produces a trace that looks entirely
+    # plausible and a provenance file that names the wrong dialect.
+    with pytest.raises(run.CaptureError) as failure:
+        run.select(None, {"NEBIUS_API_KEY": "k"})
+    message = str(failure.value)
+    assert "ambiguous" in message
+    assert "--backend" in message
+    assert "genai" in message and "openai" in message
 
 
 def test_two_configured_backends_are_a_hard_error_naming_the_way_out():
@@ -231,7 +252,7 @@ def test_no_configured_backend_says_exactly_what_to_export():
 
 
 def test_an_unknown_backend_lists_the_known_ones():
-    with pytest.raises(run.CaptureError, match="anthropic, openai"):
+    with pytest.raises(run.CaptureError, match="anthropic, genai, openai"):
         run.select("nebius", {})
 
 
@@ -1132,3 +1153,432 @@ def test_clearing_leaves_files_the_harness_did_not_write(tmp_path, monkeypatch):
 def test_clearing_an_absent_directory_is_not_an_error(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "FLEET_SCRATCH", tmp_path / "never-made")
     assert run.clear_fleet_dir() == 0
+
+
+# --------------------------------------------------------------------------
+# The GenAI backend (TASKS.md 2.5)
+# --------------------------------------------------------------------------
+#
+# Same rule as everywhere else in this file: the model call is not tested and
+# must not be. What is tested is everything around it -- and for this backend
+# that is more than usual, because two of its properties are the difference
+# between a useful capture and a wasted credential.
+
+
+def test_the_genai_backend_differs_from_openai_only_in_the_instrumentor():
+    # The matched pair, asserted as a property rather than left to a comment.
+    # Every field that decides WHAT is captured is identical; only the field
+    # that decides HOW it is recorded differs. If this test ever fails, the
+    # two traces stop being comparable and an equivalence failure at 2.9 can
+    # no longer be attributed to the dialect.
+    assert GENAI.api_key_env == OPENAI.api_key_env
+    assert GENAI.base_url_env == OPENAI.base_url_env
+    assert GENAI.model_env == OPENAI.model_env
+    assert GENAI.default_model == OPENAI.default_model
+    assert GENAI.client is OPENAI.client
+    assert GENAI.request is OPENAI.request
+    assert GENAI.results is OPENAI.results
+
+    assert GENAI.packages == ("openai", "opentelemetry-instrumentation-genai-openai")
+    assert GENAI.instrument is not OPENAI.instrument
+    assert GENAI.dialect is not OPENAI.dialect
+
+
+def test_the_reference_conversation_is_the_same_run_on_both_halves():
+    # The other half of "matched": not just the same configuration, the same
+    # conversation. `converse` defaults are shared, so this holds by
+    # construction -- which is exactly the kind of thing that silently stops
+    # holding, so it is pinned.
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    seen = {}
+    for backend_id, dialect in (
+        ("openai", backends.OPENINFERENCE),
+        ("genai", backends.GENAI_DIALECT),
+    ):
+        backend, turns = a_stub_backend([("assistant", [call]), ("assistant", [])])
+        backends.converse(replace(backend, dialect=dialect), "stub-1", StubTracer())
+        seen[backend_id] = (
+            turns[0].messages[0]["content"],
+            tuple(tool.name for tool in turns[0].tools),
+            turns[0].parallel,
+        )
+    assert seen["openai"] == seen["genai"]
+    assert seen["genai"][0] == backends.QUESTION
+
+
+# -- the harness's own spans speak the backend's dialect, not a mixture -----
+
+
+def a_genai_run():
+    """The spans the harness itself emits, driven through the GenAI backend."""
+    tracer = StubTracer()
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    backend, _ = a_stub_backend([("assistant", [call]), ("assistant", [])])
+    backends.converse(
+        replace(backend, dialect=backends.GENAI_DIALECT), "stub-1", tracer
+    )
+    return tracer.spans
+
+
+def test_the_harnesss_own_spans_speak_genai_and_not_openinference():
+    # The done-when of 2.5, and not a formality. Only the `llm` spans come
+    # from the instrumentor; the agent and tool spans are ours. Emitting those
+    # in OpenInference keys would produce a mixed-dialect file: detection sees
+    # both, one adapter wins, and whichever loses takes its spans' meaning
+    # with it. No adapter reads such a file honestly.
+    for span in a_genai_run():
+        assert span.attributes, f"{span.name} carries no attributes at all"
+        assert all(key.startswith("gen_ai.") for key in span.attributes), (
+            f"{span.name} -> {sorted(span.attributes)}"
+        )
+        assert not any("openinference" in key for key in span.attributes)
+        assert not any(key in span.attributes for key in ("tool.name", "tool_call.id"))
+
+
+def test_the_genai_agent_and_tool_spans_are_named_by_the_conventions():
+    assert [span.name for span in a_genai_run()] == [
+        "invoke_agent agent.run",
+        "execute_tool get_weather",
+    ]
+
+
+def test_the_genai_tool_span_carries_what_the_adapter_needs_to_pair_it():
+    # `gen_ai.tool.call.id` does the job `tool_call.id` does on the other
+    # half: without it there is a tool that ran and nothing joining it to the
+    # call, and the library would be right to refuse to guess.
+    tool = a_genai_run()[1]
+    assert tool.attributes["gen_ai.operation.name"] == "execute_tool"
+    assert tool.attributes["gen_ai.tool.name"] == "get_weather"
+    assert tool.attributes["gen_ai.tool.call.id"] == "call_1"
+    assert json.loads(tool.attributes["gen_ai.tool.call.arguments"]) == {
+        "city": "Paris"
+    }
+    assert json.loads(tool.attributes["gen_ai.tool.call.result"])["celsius"] == 18
+
+
+def test_the_genai_agent_span_carries_the_prompt_the_way_the_instrumentor_does():
+    agent = a_genai_run()[0]
+    assert agent.attributes["gen_ai.operation.name"] == "invoke_agent"
+    assert json.loads(agent.attributes["gen_ai.input.messages"]) == [
+        {"role": "user", "parts": [{"content": backends.QUESTION, "type": "text"}]}
+    ]
+
+
+def test_the_openinference_spans_are_byte_for_byte_what_they_were():
+    # The refactor that made the emitted dialect selectable must not have
+    # moved the other half of the pair. Phase 1's capture is committed and its
+    # provenance describes these exact keys.
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    assert backends.tool_span_attributes(call) == {
+        "openinference.span.kind": "TOOL",
+        "tool.name": "get_weather",
+        "tool_call.id": "call_1",
+        "input.value": '{"city": "Paris"}',
+        "input.mime_type": "application/json",
+    }
+    assert backends.agent_span_attributes("hi") == {
+        "openinference.span.kind": "AGENT",
+        "input.value": "hi",
+        "input.mime_type": "text/plain",
+    }
+    tracer = StubTracer()
+    backend, _ = a_stub_backend([("assistant", [call]), ("assistant", [])])
+    backends.converse(backend, "stub-1", tracer)
+    assert [span.name for span in tracer.spans] == ["agent.run", "tool.get_weather"]
+
+
+def test_a_fleet_note_on_a_genai_span_does_not_pretend_to_be_a_convention():
+    # GenAI defines no free-form metadata attribute. Minting a `gen_ai.`-
+    # prefixed name for one would put a key in the file that the conventions
+    # do not define while looking as though they did; an adapter will report
+    # this one as unmapped, which is the honest outcome.
+    attributes = backends.genai_agent_span_attributes("hi", {"model": "m"})
+    assert "spanweave.capture.note" in attributes
+    assert not any(key.startswith("gen_ai.") for key in attributes if "note" in key)
+
+
+# -- content capture: opt-in, set explicitly, and verified -----------------
+
+
+def a_fake_genai_util(monkeypatch, mode_name):
+    """Stand in for opentelemetry.util.genai, which is not installed here.
+
+    The real function reads the environment variable at CALL time and returns
+    the mode it resolved to -- which is the behaviour being relied on, so the
+    stand-in does the same.
+    """
+    import sys
+    import types
+
+    utils = types.ModuleType("opentelemetry.util.genai.utils")
+    utils.get_content_capturing_mode = lambda: SimpleNamespace(name=mode_name)
+    for name, module in (
+        ("opentelemetry", types.ModuleType("opentelemetry")),
+        ("opentelemetry.util", types.ModuleType("opentelemetry.util")),
+        ("opentelemetry.util.genai", types.ModuleType("opentelemetry.util.genai")),
+        ("opentelemetry.util.genai.utils", utils),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+
+
+def test_content_capture_is_enabled_explicitly_not_left_to_an_ambient_default(
+    monkeypatch,
+):
+    a_fake_genai_util(monkeypatch, "SPAN_ONLY")
+    environ = {}
+    notices = GENAI.enable(environ)
+    assert environ[backends.CONTENT_CAPTURE_ENV] == "span_only"
+    assert any("SPAN_ONLY" in notice for notice in notices)
+
+
+def test_a_content_setting_that_did_not_take_refuses_before_the_model_call(
+    monkeypatch,
+):
+    # The failure this exists to catch is real and quiet: setting the variable
+    # to `true` -- which the older package's own documentation tells you to do
+    # -- is not a valid value on this path. It is rejected with one line on
+    # stderr and silently downgraded to NO_CONTENT, and the run then produces
+    # a trace with no messages. So the resolved mode is read back rather than
+    # assumed, and a bad resolution costs nothing because it refuses first.
+    a_fake_genai_util(monkeypatch, "NO_CONTENT")
+    with pytest.raises(backends.CaptureError) as failure:
+        GENAI.enable({})
+    message = str(failure.value)
+    assert "NO_CONTENT" in message
+    assert "4.2.1" in message or "pairing" in message
+
+
+def test_event_only_content_is_refused_because_the_harness_exports_spans(
+    monkeypatch,
+):
+    a_fake_genai_util(monkeypatch, "EVENT_ONLY")
+    with pytest.raises(backends.CaptureError):
+        GENAI.enable({})
+
+
+def test_an_existing_setting_is_overridden_and_the_override_is_reported(
+    monkeypatch,
+):
+    a_fake_genai_util(monkeypatch, "SPAN_ONLY")
+    notices = GENAI.enable({backends.CONTENT_CAPTURE_ENV: "event_only"})
+    assert any("event_only" in notice for notice in notices)
+
+
+# -- reading back what was actually exported -------------------------------
+
+
+TOOL_CALL_PART = {
+    "role": "assistant",
+    "parts": [
+        {
+            "arguments": {"city": "Paris"},
+            "name": "get_weather",
+            "id": "call_1",
+            "type": "tool_call",
+        }
+    ],
+    "finish_reason": "tool_calls",
+}
+TOOL_RESULT_PART = {
+    "role": "tool",
+    "parts": [
+        {"response": '{"celsius":18}', "id": "call_1", "type": "tool_call_response"}
+    ],
+}
+
+
+def a_genai_llm_span(span_id=0xA1, inputs=None, outputs=None):
+    attributes = {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.request.model": "openai/gpt-oss-120b",
+        "gen_ai.provider.name": "openai",
+    }
+    if inputs is not None:
+        attributes["gen_ai.input.messages"] = json.dumps(inputs)
+    if outputs is not None:
+        attributes["gen_ai.output.messages"] = json.dumps(outputs)
+    return a_span(
+        span_id=span_id, name="chat openai/gpt-oss-120b", attributes=attributes
+    )
+
+
+def a_genai_capture():
+    """What one `make capture --backend genai` is meant to export."""
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    return records_of(
+        a_span(
+            span_id=0xA0,
+            name="invoke_agent agent.run",
+            attributes=backends.genai_agent_span_attributes(backends.QUESTION),
+        ),
+        a_genai_llm_span(
+            span_id=0xA1,
+            inputs=[{"role": "user", "parts": [{"content": "q", "type": "text"}]}],
+            outputs=[TOOL_CALL_PART],
+        ),
+        a_span(
+            span_id=0xA2,
+            name="execute_tool get_weather",
+            attributes={
+                **backends.genai_tool_span_attributes(call),
+                **backends.genai_tool_result_attributes({"celsius": 18}),
+            },
+        ),
+        a_genai_llm_span(
+            span_id=0xA3,
+            inputs=[
+                {"role": "user", "parts": [{"content": "q", "type": "text"}]},
+                TOOL_CALL_PART,
+                TOOL_RESULT_PART,
+            ],
+            outputs=[
+                {"role": "assistant", "parts": [{"content": "18C", "type": "text"}]}
+            ],
+        ),
+    )
+
+
+def test_a_trace_with_no_message_content_is_refused_rather_than_written():
+    # "Fail loudly rather than write a useless trace" (TASKS.md 2.5). Writing
+    # it with a warning would leave a file on disk that looks exactly like a
+    # usable capture while the warning scrolls away.
+    stripped = [
+        {
+            **record,
+            "attributes": {
+                key: value
+                for key, value in record["attributes"].items()
+                if key not in backends.GEN_AI_MESSAGE_KEYS
+            },
+        }
+        for record in a_genai_capture()
+    ]
+    reasons = GENAI.require(stripped)
+    assert reasons and "gen_ai.input.messages" in reasons[0]
+    assert GENAI.require(a_genai_capture()) == ()
+
+
+def test_the_checklist_answers_all_three_of_2_6s_verifications():
+    checks = GENAI.checklist(a_genai_capture())
+    assert len(checks) == 3
+    assert all(check.ok for check in checks)
+    assert "call_1" in checks[1].detail and "call_1" in checks[2].detail
+
+
+def test_the_checklist_fails_when_the_fulfilling_span_has_no_id():
+    # Point 2 of 2.6: the id must be on BOTH sides or there is no call_result
+    # to recover. Our own tool span is the fulfilling side here.
+    without = [
+        record
+        for record in a_genai_capture()
+        if "gen_ai.tool.call.id" not in record["attributes"]
+    ]
+    checks = GENAI.checklist(without)
+    assert checks[0].ok and not checks[1].ok
+
+
+def test_the_checklist_fails_when_the_follow_up_declares_no_tool_result():
+    # Point 3, and the one that must NOT be worked around: `llm_tool_llm` is
+    # never-cut and its canonical graph contains the SPEC.md 4.2.1 data edge.
+    # A dialect that cannot declare it is a finding for 2.9, not a rendering
+    # to fudge -- so the harness reports it and exits non-zero.
+    records = a_genai_capture()
+    records[-1]["attributes"]["gen_ai.input.messages"] = json.dumps([TOOL_CALL_PART])
+    checks = GENAI.checklist(records)
+    assert checks[1].ok and not checks[2].ok
+
+
+def test_the_checklist_survives_a_message_payload_it_cannot_parse():
+    # It reads back what an instrumentor wrote. A checklist that crashed on an
+    # unexpected shape would be worse than one reporting nothing found --
+    # nothing found IS the answer the human needs.
+    records = a_genai_capture()
+    records[1]["attributes"]["gen_ai.output.messages"] = "not json at all"
+    checks = GENAI.checklist(records)
+    assert not checks[1].ok
+
+
+# -- the CLI refuses without a credential ----------------------------------
+
+
+def test_the_genai_backend_refuses_without_a_credential(monkeypatch, capsys):
+    # The agent runs with no key and must not have one (ENVIRONMENT.md). The
+    # refusal has to be actionable: which variable, and what to install.
+    for variable in ("NEBIUS_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
+    assert run.main(["--backend", "genai"]) == 2
+    message = capsys.readouterr().err
+    assert "NEBIUS_API_KEY is not set" in message
+    assert "opentelemetry-instrumentation-genai-openai" in message
+    assert "human-run" in message
+
+
+def test_a_trace_that_names_the_endpoint_says_so_before_redaction():
+    # A real difference between the two halves, and one a human would
+    # otherwise carry a wrong sentence across. The OpenInference capture's
+    # provenance says "the Nebius endpoint does not appear in the file at
+    # all" -- true of that instrumentor. The GenAI one emits `server.address`
+    # and `server.port`, so it is not true here, and the harness says where
+    # to look rather than removing anything itself.
+    hosts = run.endpoints_in(a_genai_capture())
+    assert hosts == ()
+
+    with_host = a_genai_capture()
+    with_host[1]["attributes"]["server.address"] = "api.example.invalid"
+    with_host[1]["attributes"]["server.port"] = 443
+    assert run.endpoints_in(with_host) == (
+        ("server.address", "api.example.invalid"),
+        ("server.port", 443),
+    )
+    steps = run._next_steps(
+        captured="x.jsonl",
+        name="x",
+        backend=GENAI,
+        model="m",
+        endpoint="https://example.invalid/v1/",
+        today="2026-01-01",
+        count=4,
+        hosts=run.endpoints_in(with_host),
+    )
+    assert "api.example.invalid" in steps
+    assert "NAMES THE SERVICE THAT ANSWERED" in steps
+
+
+def test_the_provenance_template_names_the_exact_installed_versions():
+    # TASKS.md 2.5: the fixture must record the exact package and version.
+    # Read from the environment that produced the trace, never transcribed --
+    # these conventions are moving fast enough that a stale version string in
+    # a provenance file is worth less every month.
+    steps = run._next_steps(
+        captured="x.jsonl",
+        name="x",
+        backend=GENAI,
+        model="openai/gpt-oss-120b",
+        endpoint="",
+        today="2026-01-01",
+        count=4,
+    )
+    assert "opentelemetry-instrumentation-genai-openai" in steps
+    assert "dialect emitted: otel_genai" in steps
+    assert "matched pair" in steps
+    assert "execute_tool" in steps  # the tool span here is convention-defined
+    # Nothing is installed in the agent's environment, so the template says so
+    # rather than printing a plausible number.
+    assert "NOT INSTALLED" in steps
+
+
+def test_the_openinference_half_carries_the_matched_pair_statement_too():
+    # 2.6 requires it in BOTH files: the property is invisible from either
+    # one alone, and it is the property that makes the comparison mean
+    # anything.
+    steps = run._next_steps(
+        captured="x.jsonl",
+        name="x",
+        backend=OPENAI,
+        model="openai/gpt-oss-120b",
+        endpoint="",
+        today="2026-01-01",
+        count=4,
+    )
+    assert "matched pair" in steps
+    assert "dialect emitted: openinference" in steps

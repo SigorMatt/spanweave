@@ -1,17 +1,30 @@
 """The model backends the capture harness can drive, and the run it drives.
 
-Two backends, deliberately kept side by side:
+Three backends, deliberately kept side by side:
 
 * **anthropic** — the Anthropic SDK, instrumented by
   ``openinference-instrumentation-anthropic``.
 * **openai** — the OpenAI SDK, instrumented by
   ``openinference-instrumentation-openai``, pointed at any OpenAI-compatible
   endpoint through ``base_url``.
+* **genai** — the *same* SDK, the *same* endpoint and the *same* model as
+  ``openai``, instrumented instead by ``opentelemetry-instrumentation-genai-openai``
+  so the spans speak **OTel GenAI** rather than OpenInference (`TASKS.md` 2.5).
 
-They exist for the same reason the library has adapters: two independent
-instrumentors emitting the same semantic conventions is the only way to find
-out whether "OpenInference" means one thing or two. A capture from one proves
-that one instrumentor's output parses. A capture from each proves rather more.
+The first two exist for the same reason the library has adapters: two
+independent instrumentors emitting the same semantic conventions is the only
+way to find out whether "OpenInference" means one thing or two. A capture from
+one proves that one instrumentor's output parses. A capture from each proves
+rather more.
+
+**``genai`` exists for the opposite reason.** It is deliberately identical to
+``openai`` in every respect except the instrumentor, so that the two traces are
+a **matched pair**: same SDK, same endpoint, same model, same prompt, same tool
+inventory, same conversation. The cross-dialect equivalence test (`FIXTURES.md`
+§4) claims that two dialects of one scenario produce one canonical graph. A pair
+that differed by more than the instrumentor could not attribute a failure of
+that claim to the dialect, and the comparison would be worth nothing. Every
+default below that looks redundant with ``openai`` is redundant on purpose.
 
 **The instrumentor patches the SDK client, not the endpoint.** It wraps
 ``openai.OpenAI``'s methods, so it emits identical spans whichever
@@ -52,6 +65,60 @@ OUTPUT_MIME = "output.mime_type"
 METADATA = "metadata"
 JSON_MIME = "application/json"
 TEXT_MIME = "text/plain"
+
+# OTel GenAI semantic conventions, for the same reason and with one difference
+# worth stating: these attribute names are, as of the versions pinned in
+# `capture/README.md`, marked *"Deprecated: moved to the OpenTelemetry GenAI
+# semantic conventions repository"* in `opentelemetry-semantic-conventions`.
+# The names are unchanged; the conventions moved house. They are written out
+# here rather than imported so that the harness has no dependency on which
+# house they are currently in -- and so that a future rename is a visible diff
+# in this file rather than a silent change of behaviour underneath it.
+GEN_AI_OPERATION = "gen_ai.operation.name"
+GEN_AI_AGENT_NAME = "gen_ai.agent.name"
+GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages"
+GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages"
+GEN_AI_TOOL_NAME = "gen_ai.tool.name"
+GEN_AI_TOOL_TYPE = "gen_ai.tool.type"
+GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"
+GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments"
+GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result"
+INVOKE_AGENT = "invoke_agent"
+EXECUTE_TOOL = "execute_tool"
+
+#: Where the fleet's model/spec stamp goes on a GenAI trace. **Not** a
+#: ``gen_ai.*`` key, and deliberately not: GenAI defines no free-form metadata
+#: attribute, and minting a plausible-looking ``gen_ai.`` name for one would
+#: put a key in the file that the conventions do not define while looking as
+#: though they did. An adapter will report it as unmapped, which is the honest
+#: outcome (`SPEC.md` §3.7).
+CAPTURE_NOTE = "spanweave.capture.note"
+
+#: The two attributes that decide whether a GenAI capture is worth anything.
+#: Without content capture there are no messages, so no tool-call ids, so no
+#: ``call_result`` edge and no §4.2.1 declaration -- the two relations the
+#: second dialect exists to test (`TASKS.md` 2.5).
+GEN_AI_MESSAGE_KEYS = (GEN_AI_INPUT_MESSAGES, GEN_AI_OUTPUT_MESSAGES)
+
+#: Content capture is **opt-in**, and the harness sets it explicitly rather
+#: than hoping for an ambient default. ``span_only`` because the harness
+#: exports spans: the ``event_only`` mode puts the messages in log records,
+#: which never reach the JSONL and would produce a trace that looks captured
+#: and carries nothing.
+CONTENT_CAPTURE_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
+CONTENT_CAPTURE_MODE = "span_only"
+
+#: The modes that actually put message content on a **span**. ``true`` is not
+#: one of them -- it is not a valid value at all on this path, and setting it
+#: is accepted with a warning on stderr and silently downgraded to
+#: ``NO_CONTENT``. That is precisely why `enable` below re-reads the resolved
+#: mode instead of trusting that the assignment worked.
+CONTENT_ON_SPANS = ("SPAN_ONLY", "SPAN_AND_EVENT")
+
+
+class CaptureError(Exception):
+    """Something the human has to fix before a capture can run."""
+
 
 QUESTION = "What is the weather in Paris? Use the tool."
 
@@ -193,6 +260,186 @@ class ToolCall(NamedTuple):
     arguments: dict[str, Any]
 
 
+# --------------------------------------------------------------------------
+# The spans the harness emits itself, and the dialect they speak
+# --------------------------------------------------------------------------
+#
+# Only the `llm` spans come from an instrumentor. The `agent` and `tool` spans
+# are emitted here, because executing a tool is not an SDK call and there is
+# nothing for an instrumentor to wrap (Phase 1 review).
+#
+# Which means they have to speak the SAME dialect as the instrumentor that
+# produced the rest of the file. Emitting OpenInference keys beside GenAI ones
+# would produce a mixed-dialect trace that no adapter honestly reads: detection
+# would see both, one adapter would win, and whichever lost would take its
+# spans' meaning with it. So the emitted keys are a property of the backend,
+# selected alongside the instrumentor and never independently of it.
+
+
+def agent_span_attributes(
+    prompt: str, note: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The `agent.run` span, in OpenInference."""
+    attributes: dict[str, Any] = {
+        SPAN_KIND: "AGENT",
+        INPUT_VALUE: prompt,
+        INPUT_MIME: TEXT_MIME,
+    }
+    if note:
+        attributes[METADATA] = json.dumps(note, sort_keys=True)
+    return attributes
+
+
+def tool_span_attributes(call: ToolCall) -> dict[str, Any]:
+    """The attributes a tool span needs for the adapter to pair it.
+
+    ``tool_call.id`` is the whole point: it is what lets the builder join this
+    span to the LLM span that requested it. Without it the capture would show
+    a tool that ran and nothing connecting it to the call -- and the library
+    would be right to refuse to guess.
+    """
+    return {
+        SPAN_KIND: "TOOL",
+        TOOL_NAME: call.name,
+        TOOL_CALL_ID: call.id,
+        INPUT_VALUE: json.dumps(call.arguments),
+        INPUT_MIME: JSON_MIME,
+    }
+
+
+def tool_result_attributes(payload: Any) -> dict[str, Any]:
+    """What a *successful* tool span records on the way out, in OpenInference."""
+    return {OUTPUT_VALUE: json.dumps(payload), OUTPUT_MIME: JSON_MIME}
+
+
+def _genai_message(role: str, parts: list[dict[str, Any]]) -> str:
+    """One `gen_ai.*.messages` value, encoded the way the instrumentor encodes it.
+
+    Matching the instrumentor's encoding is not cosmetic. These attributes sit
+    on the harness's spans beside the instrumentor's, and an adapter reading
+    the file should not have to know which of the two wrote a given line.
+    """
+    return json.dumps([{"role": role, "parts": parts}], separators=(",", ":"))
+
+
+def genai_agent_span_attributes(
+    prompt: str, note: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The `agent.run` span, in OTel GenAI.
+
+    GenAI names this operation: ``invoke_agent``. Unlike the tool span below
+    the *attributes* are a judgement call -- the conventions describe an agent
+    invocation but the harness is not an agent framework -- so it carries the
+    operation, a name, and the prompt in the same message encoding the
+    instrumentor uses for the LLM spans, and nothing else.
+    """
+    attributes: dict[str, Any] = {
+        GEN_AI_OPERATION: INVOKE_AGENT,
+        GEN_AI_AGENT_NAME: "agent.run",
+        GEN_AI_INPUT_MESSAGES: _genai_message(
+            "user", [{"content": prompt, "type": "text"}]
+        ),
+    }
+    if note:
+        attributes[CAPTURE_NOTE] = json.dumps(note, sort_keys=True)
+    return attributes
+
+
+def genai_tool_span_attributes(call: ToolCall) -> dict[str, Any]:
+    """The `execute_tool` span, in OTel GenAI.
+
+    **GenAI defines this span; OpenInference does not.** ``execute_tool`` is a
+    named operation in the conventions, with ``gen_ai.tool.name`` and
+    ``gen_ai.tool.call.id`` on it. So on this side of the pair the tool span is
+    *convention-defined* even though it is still the harness that emits it --
+    which is a real difference between the two traces, and one the provenance
+    file has to state rather than let a reader infer symmetry that is not there.
+
+    ``gen_ai.tool.call.id`` does the same job ``tool_call.id`` does on the
+    OpenInference side: it is what lets the builder join this span to the LLM
+    span that requested it.
+    """
+    return {
+        GEN_AI_OPERATION: EXECUTE_TOOL,
+        GEN_AI_TOOL_NAME: call.name,
+        GEN_AI_TOOL_TYPE: "function",
+        GEN_AI_TOOL_CALL_ID: call.id,
+        GEN_AI_TOOL_CALL_ARGUMENTS: json.dumps(call.arguments),
+    }
+
+
+def genai_tool_result_attributes(payload: Any) -> dict[str, Any]:
+    """What a *successful* `execute_tool` span records on the way out."""
+    return {GEN_AI_TOOL_CALL_RESULT: json.dumps(payload)}
+
+
+class Check(NamedTuple):
+    """One line of a verification checklist: what was asked, and the answer.
+
+    ``detail`` carries what the answer was read off, so a human confirming the
+    claim against the file knows where to look rather than being asked to take
+    a tick on trust.
+    """
+
+    question: str
+    ok: bool
+    detail: str
+
+
+@dataclass(frozen=True)
+class SpanDialect:
+    """How the harness writes its **own** spans, for one backend.
+
+    Not an abstraction for its own sake: it is the seam that keeps a trace
+    single-dialect. Add an instrumentor and you must answer, here, what the
+    agent and tool spans it never emits should say.
+    """
+
+    id: str
+    #: The key prefix that identifies this dialect in an exported record. Used
+    #: by the tests that assert a capture is not a mixture of two.
+    prefix: str
+    agent_span_name: str
+    agent: Any = field(repr=False)
+    tool_span_name: Any = field(repr=False)
+    tool: Any = field(repr=False)
+    tool_result: Any = field(repr=False)
+    #: One sentence for the provenance file, about the spans the harness emits.
+    provenance_note: str = ""
+
+
+OPENINFERENCE = SpanDialect(
+    id="openinference",
+    prefix="openinference.",
+    agent_span_name="agent.run",
+    agent=agent_span_attributes,
+    tool_span_name=lambda call: f"tool.{call.name}",
+    tool=tool_span_attributes,
+    tool_result=tool_result_attributes,
+    provenance_note=(
+        "OpenInference defines no tool-execution span, so `agent.run` and the "
+        "tool span are this harness's own convention, not the dialect's."
+    ),
+)
+
+GENAI_DIALECT = SpanDialect(
+    id="otel_genai",
+    prefix="gen_ai.",
+    agent_span_name=f"{INVOKE_AGENT} agent.run",
+    agent=genai_agent_span_attributes,
+    tool_span_name=lambda call: f"{EXECUTE_TOOL} {call.name}",
+    tool=genai_tool_span_attributes,
+    tool_result=genai_tool_result_attributes,
+    provenance_note=(
+        "GenAI DOES define a tool-execution span (`execute_tool`), so unlike "
+        "the OpenInference trace the tool span here is convention-defined -- "
+        "still emitted by this harness, but named and shaped by the "
+        "conventions rather than by us. The `invoke_agent` span's attributes "
+        "remain a judgement call."
+    ),
+)
+
+
 @dataclass(frozen=True)
 class Backend:
     """What the harness needs to know to drive one SDK."""
@@ -214,6 +461,18 @@ class Backend:
     client: Any = field(default=None, repr=False)
     request: Any = field(default=None, repr=False)
     results: Any = field(default=None, repr=False)
+    #: What the harness's OWN spans say. Defaults to OpenInference, which is
+    #: what the two Phase 1 backends emit and must keep emitting unchanged.
+    dialect: SpanDialect = OPENINFERENCE
+    #: Optional. `(environ) -> tuple[str, ...]` of notices, run before
+    #: instrumenting; raises `CaptureError` if a required option did not take.
+    enable: Any = field(default=None, repr=False)
+    #: Optional. `(records) -> tuple[str, ...]` of reasons this trace is not
+    #: worth writing at all.
+    require: Any = field(default=None, repr=False)
+    #: Optional. `(records) -> tuple[Check, ...]`, printed after the trace is
+    #: written and answered against the file the human is about to read.
+    checklist: Any = field(default=None, repr=False)
 
     def configured(self, environ: dict[str, str]) -> bool:
         return bool(environ.get(self.api_key_env))
@@ -420,6 +679,174 @@ def _openai_results(calls: list[ToolCall], payloads: list[Any]) -> list[Any]:
     ]
 
 
+# --------------------------------------------------------------------------
+# genai (the same SDK and endpoint, a different instrumentor)
+# --------------------------------------------------------------------------
+#
+# WHICH PACKAGE. `opentelemetry-instrumentation-openai-v2`, in
+# `opentelemetry-python-contrib`, was the first OTel-official OpenAI
+# instrumentation; the work has since moved to
+# `opentelemetry-instrumentation-genai-openai` in the newer
+# `open-telemetry/opentelemetry-python-genai` repository. Both still publish to
+# PyPI, so "which one" is not answerable from the names.
+#
+# It was settled by installing both and running them, not by reading. Against
+# `openai` 3.3.1, `opentelemetry-instrumentation-openai-v2` 2.4b0 **does not
+# import at all**: it does `from httpx import URL`, and `openai` 3.x depends on
+# `httpx2` rather than `httpx`, so the module is simply absent unless something
+# else dragged it in. That is a hard blocker, not a preference. Install `httpx`
+# alongside and it works, and then emits the same message attributes as the new
+# package (both delegate to `opentelemetry-util-genai`) minus `server.address`,
+# `server.port` and `gen_ai.tool.definitions`.
+#
+# So: the newer package, and the disagreement recorded rather than tidied away.
+# `capture/README.md` carries the full comparison, and the harness prints the
+# exact installed version into the provenance template so the fixture names
+# what actually ran (`TASKS.md` 2.5).
+
+
+def _genai_enable(environ: Any) -> tuple[str, ...]:
+    """Turn message-content capture on, then check that it took.
+
+    **This is the difference between a useful capture and a useless one.**
+    Content capture is opt-in. Without it there is no `gen_ai.input.messages`
+    and no `gen_ai.output.messages`, which means no payloads and no tool-call
+    ids -- so no `call_result` edge and no `SPEC.md` §4.2.1 declaration, which
+    are the two relations the second dialect exists to test.
+
+    The re-read is not defensive habit. Setting the variable to ``true`` is
+    what the older package's own documentation tells you to do, and on this
+    path it is not a valid value: it is rejected with a line on stderr and
+    **silently downgraded to NO_CONTENT**. A run that trusted the assignment
+    would spend a credential and produce a trace with no messages in it. So the
+    value is set, and then the resolved mode is read back from the library that
+    will act on it.
+    """
+    notices = []
+    previous = environ.get(CONTENT_CAPTURE_ENV)
+    if previous is not None and previous != CONTENT_CAPTURE_MODE:
+        notices.append(
+            f"{CONTENT_CAPTURE_ENV} was {previous!r}; overriding with "
+            f"{CONTENT_CAPTURE_MODE!r}. This harness exports spans, and any "
+            f"other mode puts the messages somewhere the JSONL never sees."
+        )
+    environ[CONTENT_CAPTURE_ENV] = CONTENT_CAPTURE_MODE
+
+    from opentelemetry.util.genai.utils import get_content_capturing_mode
+
+    mode = get_content_capturing_mode()
+    if mode.name not in CONTENT_ON_SPANS:
+        raise CaptureError(
+            f"content capture did not take: {CONTENT_CAPTURE_ENV} is set to "
+            f"{CONTENT_CAPTURE_MODE!r} but the instrumentation resolved it to "
+            f"{mode.name}. Without message content the trace has no payloads "
+            f"and no tool-call ids, so it cannot show call/result pairing or "
+            f"the SPEC.md 4.2.1 declaration -- which is the whole reason for "
+            f"this capture. Refusing to spend a model call on it."
+        )
+    notices.append(f"message content capture: {CONTENT_CAPTURE_ENV}={mode.name}")
+    return tuple(notices)
+
+
+def _genai_instrument(provider: Any) -> None:
+    from opentelemetry.instrumentation.genai.openai import OpenAIInstrumentor
+
+    OpenAIInstrumentor().instrument(tracer_provider=provider)
+
+
+def _messages_in(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every exported record carrying either message attribute."""
+    return [
+        record
+        for record in records
+        if any(key in record["attributes"] for key in GEN_AI_MESSAGE_KEYS)
+    ]
+
+
+def _genai_require(records: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Refuse to write a trace with no message content in it at all."""
+    if _messages_in(records):
+        return ()
+    return (
+        "not one exported span carries "
+        + " or ".join(GEN_AI_MESSAGE_KEYS)
+        + ". Content capture was requested and verified before the run, so "
+        "either the instrumentor did not attach or it changed behaviour. "
+        "The trace would contain no payloads, no tool-call ids, no pairing "
+        "and no data declaration -- nothing this capture exists to show.",
+    )
+
+
+def _parts(value: Any) -> list[dict[str, Any]]:
+    """Every message part in a `gen_ai.*.messages` value, flattened.
+
+    Tolerant on purpose: this reads back what an instrumentor wrote, and a
+    checklist that crashed on an unexpected shape would be worse than one that
+    reports nothing found. Reporting nothing found is itself the answer the
+    human needs.
+    """
+    try:
+        messages = json.loads(value)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(messages, list):
+        return []
+    parts = []
+    for message in messages:
+        if isinstance(message, dict) and isinstance(message.get("parts"), list):
+            parts.extend(part for part in message["parts"] if isinstance(part, dict))
+    return parts
+
+
+def _ids_of(records: list[dict[str, Any]], key: str, part_type: str) -> set[str]:
+    found = set()
+    for record in records:
+        for part in _parts(record["attributes"].get(key)):
+            if part.get("type") == part_type and isinstance(part.get("id"), str):
+                found.add(part["id"])
+    return found
+
+
+def _genai_checklist(records: list[dict[str, Any]]) -> tuple[Check, ...]:
+    """`TASKS.md` 2.6's three verifications, answered against the exported records.
+
+    The harness answers them so the human is checking a claim rather than
+    hunting through JSON, and the human still confirms them against the file:
+    a checklist that both produces the trace and certifies it is not evidence
+    (`capture/README.md`).
+    """
+    requested = _ids_of(records, GEN_AI_OUTPUT_MESSAGES, "tool_call")
+    fulfilled = {
+        record["attributes"][GEN_AI_TOOL_CALL_ID]
+        for record in records
+        if isinstance(record["attributes"].get(GEN_AI_TOOL_CALL_ID), str)
+    }
+    declared = _ids_of(records, GEN_AI_INPUT_MESSAGES, "tool_call_response")
+    with_messages = _messages_in(records)
+
+    return (
+        Check(
+            "content capture really was on",
+            bool(with_messages),
+            f"{len(with_messages)} of {len(records)} spans carry "
+            f"{' / '.join(GEN_AI_MESSAGE_KEYS)}",
+        ),
+        Check(
+            "tool-call ids on the requesting AND the fulfilling span",
+            bool(requested and requested & fulfilled),
+            f"requested {sorted(requested)}; fulfilled {sorted(fulfilled)}; "
+            f"both {sorted(requested & fulfilled)}",
+        ),
+        Check(
+            "the follow-up turn declares the tool result with the same id "
+            "(SPEC.md 4.2.1)",
+            bool(declared and declared & requested),
+            f"declared {sorted(declared)}; matching a requested id "
+            f"{sorted(declared & requested)}",
+        ),
+    )
+
+
 ANTHROPIC = Backend(
     id="anthropic",
     packages=("anthropic", "openinference-instrumentation-anthropic"),
@@ -450,7 +877,35 @@ OPENAI = Backend(
     results=_openai_results,
 )
 
-BACKENDS = {backend.id: backend for backend in (ANTHROPIC, OPENAI)}
+GENAI = Backend(
+    id="genai",
+    packages=("openai", "opentelemetry-instrumentation-genai-openai"),
+    # The same credential, the same endpoint variable, the same model. That is
+    # what makes the two traces a matched pair -- and it is also why plain
+    # `make capture` now refuses as ambiguous when NEBIUS_API_KEY is set: two
+    # backends really can run, and guessing which one you meant would produce a
+    # fixture whose provenance file names the wrong instrumentor.
+    api_key_env="NEBIUS_API_KEY",
+    base_url_env="NEBIUS_BASE_URL",
+    model_env="NEBIUS_MODEL",
+    default_model="openai/gpt-oss-120b",
+    note=(
+        "the OTel GenAI half of the matched pair: identical to `openai` in "
+        "SDK, endpoint, model, prompt and tools -- only the instrumentor "
+        "differs, which is what lets an equivalence failure be attributed to "
+        "the dialect"
+    ),
+    instrument=_genai_instrument,
+    client=_openai_client,
+    request=_openai_request,
+    results=_openai_results,
+    dialect=GENAI_DIALECT,
+    enable=_genai_enable,
+    require=_genai_require,
+    checklist=_genai_checklist,
+)
+
+BACKENDS = {backend.id: backend for backend in (ANTHROPIC, GENAI, OPENAI)}
 
 
 # --------------------------------------------------------------------------
@@ -503,19 +958,14 @@ def converse(
     """
     client = backend.client(base_url)
     tools = tuple(TOOLS[name] for name in tool_names)
+    dialect = backend.dialect
 
-    attributes: dict[str, Any] = {
-        SPAN_KIND: "AGENT",
-        INPUT_VALUE: prompt,
-        INPUT_MIME: TEXT_MIME,
-    }
-    if note:
-        # Not mapped by any adapter, and that is fine: the library reports it
-        # as an unmapped attribute and keeps it verbatim in `raw`, so the
-        # attribution survives without the model pretending to understand it.
-        attributes[METADATA] = json.dumps(note, sort_keys=True)
+    # `note` is not mapped by any adapter, and that is fine: the library
+    # reports it as an unmapped attribute and keeps it verbatim in `raw`, so
+    # the attribution survives without the model pretending to understand it.
+    attributes = dialect.agent(prompt, note)
 
-    with tracer.start_as_current_span("agent.run", attributes=attributes):
+    with tracer.start_as_current_span(dialect.agent_span_name, attributes=attributes):
         messages: list[Any] = [{"role": "user", "content": prompt}]
 
         history, calls = backend.request(client, model, messages, tools, parallel)
@@ -528,14 +978,14 @@ def converse(
 
         payloads = []
         for call in calls:
-            payloads.append(_run_tool(tracer, call))
+            payloads.append(_run_tool(tracer, call, dialect))
         messages.extend(backend.results(calls, payloads))
 
         backend.request(client, model, messages, tools, parallel)
     return True
 
 
-def _run_tool(tracer: Any, call: ToolCall) -> Any:
+def _run_tool(tracer: Any, call: ToolCall, dialect: SpanDialect = OPENINFERENCE) -> Any:
     """Execute one tool call inside a span the corpus would recognize.
 
     A `ToolFailure` is deliberately allowed to **escape the span** before it is
@@ -546,28 +996,11 @@ def _run_tool(tracer: Any, call: ToolCall) -> Any:
     """
     try:
         with tracer.start_as_current_span(
-            f"tool.{call.name}", attributes=tool_span_attributes(call)
+            dialect.tool_span_name(call), attributes=dialect.tool(call)
         ) as span:
             payload = TOOLS[call.name].run(call.arguments)
-            span.set_attribute(OUTPUT_VALUE, json.dumps(payload))
-            span.set_attribute(OUTPUT_MIME, JSON_MIME)
+            for key, value in dialect.tool_result(payload).items():
+                span.set_attribute(key, value)
             return payload
     except ToolFailure as failure:
         return {"error": str(failure)}
-
-
-def tool_span_attributes(call: ToolCall) -> dict[str, Any]:
-    """The attributes a tool span needs for the adapter to pair it.
-
-    ``tool_call.id`` is the whole point: it is what lets the builder join this
-    span to the LLM span that requested it. Without it the capture would show
-    a tool that ran and nothing connecting it to the call -- and the library
-    would be right to refuse to guess.
-    """
-    return {
-        SPAN_KIND: "TOOL",
-        TOOL_NAME: call.name,
-        TOOL_CALL_ID: call.id,
-        INPUT_VALUE: json.dumps(call.arguments),
-        INPUT_MIME: JSON_MIME,
-    }

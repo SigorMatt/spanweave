@@ -2,6 +2,7 @@
 
     make capture                      # picks the backend you have configured
     make capture ARGS="--backend openai"
+    make capture ARGS="--backend genai"   # the OTel GenAI half of the pair
     make capture ARGS="--fleet 8"     # the scratch fleet for TASKS.md 2.2
 
 This is the step an autonomous agent must not take (``AGENT.md``). Everything
@@ -11,9 +12,17 @@ evidence. A hand-authored fixture proves the adapter matches **our
 understanding** of a dialect. Only a captured one proves it matches **the
 instrumentor** (``FIXTURES.md`` §6).
 
-Two backends are supported and both are first-class: the Anthropic SDK, and
-the OpenAI SDK pointed at any OpenAI-compatible endpoint. See
+Three backends are supported and all are first-class: the Anthropic SDK, and
+the OpenAI SDK pointed at any OpenAI-compatible endpoint, under either of two
+instrumentors -- ``openai`` (OpenInference) and ``genai`` (OTel GenAI). See
 ``capture/README.md`` for what to install and export.
+
+The last two share a credential on purpose: they are the **matched pair**
+``TASKS.md`` 2.6 needs, identical but for the instrumentor. A consequence is
+that a bare ``make capture`` with ``NEBIUS_API_KEY`` set is now genuinely
+ambiguous and refuses, naming ``--backend``. That is the same posture as
+everywhere else here: a capture that quietly ran as the backend you did not
+mean is a fixture whose provenance file is wrong.
 
 What it does **not** do: put anything into ``fixtures/captured/``. That is a
 human act, performed after reading the trace, redacting whatever needs
@@ -32,24 +41,22 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import importlib.metadata
 import json
 import os
 import pathlib
 import sys
+import textwrap
 from collections.abc import Mapping
 
 from capture import backends, fleet
-from capture.backends import BACKENDS, Backend
+from capture.backends import BACKENDS, Backend, CaptureError
 from capture.exporter import JsonlSpanExporter
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SCRATCH = REPO / "capture/_scratch"
 FLEET_SCRATCH = SCRATCH / "fleet"
 TRACER_NAME = "spanweave.capture"
-
-
-class CaptureError(Exception):
-    """Something the human has to fix before a capture can run."""
 
 
 def select(explicit: str | None, environ: Mapping[str, str]) -> Backend:
@@ -153,7 +160,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     exporter = JsonlSpanExporter()
+    notices: tuple[str, ...] = ()
     try:
+        # Whatever this backend has to switch on BEFORE instrumenting -- and
+        # then verify actually switched on. `genai` turns message-content
+        # capture on here; without it the run would be a credential spent on a
+        # trace with no payloads and no tool-call ids (`TASKS.md` 2.5).
+        if backend.enable is not None:
+            notices = backend.enable(environ)
         provider, tracer = _instrument(backend, exporter)
     except ImportError as failure:
         print(
@@ -161,6 +175,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    except CaptureError as failure:
+        print(f"capture: {failure}", file=sys.stderr)
+        return 2
+
+    for notice in notices:
+        print(f"capture: {notice}")
 
     if args.fleet is not None:
         try:
@@ -187,7 +207,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    captured = write_trace(SCRATCH / f"{name}.local.jsonl", exporter.sorted_records())
+    records = exporter.sorted_records()
+
+    # A trace this backend says is not worth having is not written. The
+    # alternative -- writing it with a warning -- leaves a file on disk that
+    # looks exactly like a usable capture, and the warning scrolls away.
+    blocking = backend.require(records) if backend.require is not None else ()
+    for reason in blocking:
+        print(f"capture: {reason}", file=sys.stderr)
+    if blocking:
+        print(
+            "capture: nothing was written. Fix the above and re-run.",
+            file=sys.stderr,
+        )
+        return 2
+
+    captured = write_trace(SCRATCH / f"{name}.local.jsonl", records)
+
+    checks = backend.checklist(records) if backend.checklist is not None else ()
+    hosts = endpoints_in(records)
+    if checks:
+        print(_checklist(checks))
 
     print(
         _next_steps(
@@ -198,9 +238,84 @@ def main(argv: list[str] | None = None) -> int:
             endpoint=environ.get(backend.base_url_env or "", ""),
             today=datetime.date.today().isoformat(),
             count=len(exporter.records),
+            hosts=hosts,
         )
     )
-    return 0
+    # Non-zero when a verification failed, and the file stays: the same
+    # posture as the fleet's coverage report. An exit code is harder to skim
+    # past than a paragraph, and the trace is the evidence for WHY it failed.
+    return 0 if all(check.ok for check in checks) else 1
+
+
+#: Attributes that record WHERE the call went, rather than what it said.
+#: OTel's HTTP/network conventions; an OpenInference instrumentor does not
+#: emit them, and a GenAI one does -- which makes them a real difference in
+#: what the two halves of the matched pair need reading for before commit.
+ENDPOINT_KEYS = ("server.address", "server.port", "url.full", "http.url")
+
+
+def endpoints_in(records):
+    """Every `key=value` in the trace that names the service that answered.
+
+    Reported rather than removed. Redaction is a human act (`FIXTURES.md` §6),
+    and the harness's job is to make sure the human is told where to look --
+    the Phase 1 capture's provenance could say "the endpoint does not appear
+    in the file at all" because with that instrumentor it genuinely did not,
+    and repeating the sentence for a trace where it does would be a false
+    claim in a file whose whole purpose is being true.
+    """
+    found = {}
+    for record in records:
+        for key in ENDPOINT_KEYS:
+            if key in record["attributes"]:
+                found[key] = record["attributes"][key]
+    return tuple(sorted(found.items()))
+
+
+def _checklist(checks):
+    """The pre-promotion verifications, answered against the exported records.
+
+    Printed BEFORE the next-steps block, because a human who reads only the
+    first screen should see a failure rather than instructions for committing.
+    """
+    lines = [
+        "",
+        "Verification (TASKS.md 2.6) -- the harness's reading of what it just",
+        "wrote. Confirm each against the file; a harness that both produces a",
+        "trace and certifies it is not evidence.",
+        "",
+    ]
+    for check in checks:
+        lines.append(f"  [{'OK' if check.ok else '--'}] {check.question}")
+        lines.append(f"       {check.detail}")
+    if not all(check.ok for check in checks):
+        lines += [
+            "",
+            "At least one verification FAILED, and this run exits non-zero.",
+            "The trace was still written -- it is the evidence for why.",
+            "",
+            "If it is the SPEC.md 4.2.1 declaration that is missing, do NOT",
+            "work around it. `llm_tool_llm` is never-cut and its canonical",
+            "graph contains that edge, so a dialect that cannot declare it is",
+            "a finding about the corpus's equivalence rule (TASKS.md 2.9),",
+            "not a rendering to fudge.",
+        ]
+    return "\n".join(lines)
+
+
+def installed(package):
+    """The exact installed version, or a placeholder the human must fill in.
+
+    Printed straight into the provenance template. `TASKS.md` 2.5 requires the
+    fixture to name the exact package and version, and these conventions are
+    moving fast enough that a transcription step is a place for the record to
+    go stale or wrong. Reading it from the environment that just produced the
+    trace removes that step.
+    """
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return "<exact version -- NOT INSTALLED, fill this in>"
 
 
 def write_trace(path, records):
@@ -327,12 +442,56 @@ def _slug(model: str) -> str:
     return "".join(c if c.isalnum() or c in "-." else "-" for c in model).strip("-")
 
 
-def _next_steps(*, captured, name, backend, model, endpoint, today, count):
+def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts=()):
     where = f"\n     - endpoint: {endpoint}" if endpoint else ""
     caution = (
         "\n   If the endpoint URL embeds a credential, redact it. It is the one\n"
         "   thing here that can carry a secret without looking like one.\n"
         if endpoint
+        else ""
+    )
+    if hosts:
+        named = "".join(f"\n     {key} = {value}" for key, value in hosts)
+        caution += (
+            "\n   This trace NAMES THE SERVICE THAT ANSWERED, which not every"
+            "\n   instrumentor does:"
+            f"{named}"
+            "\n   Decide whether that is public, and say what you decided. Do not"
+            "\n   copy another fixture's sentence about the endpoint not appearing"
+            "\n   in the file -- here it does.\n"
+        )
+    instrumentor = backend.packages[-1]
+    sdk = backend.packages[0]
+    dialect_note = textwrap.fill(
+        backend.dialect.provenance_note,
+        width=72,
+        initial_indent="",
+        subsequent_indent="       ",
+    )
+    versions = "\n".join(
+        f"     - {label}: {package} {installed(package)}"
+        for label, package in (
+            ("instrumentor", instrumentor),
+            ("SDK", sdk),
+            ("OTel SDK", "opentelemetry-sdk"),
+        )
+    )
+    # 2.6's matched-pair statement. It has to appear in BOTH provenance files,
+    # because the property it records -- same model, same prompt, same tools,
+    # different instrumentor -- is what makes the cross-dialect comparison mean
+    # anything, and it is invisible from either file on its own.
+    pair = (
+        f"""
+   AND, because this backend is half of a matched pair, the sentence that
+   makes the pair legible from either side:
+
+     - matched pair: same model ({model}), same prompt, same tool
+       inventory as the other half of the pair -- differing ONLY in the
+       instrumentor. Add the same statement to the other half's provenance
+       file, naming this one. Neither file can be read as evidence about
+       the dialect without it.
+"""
+        if backend.dialect.id != "openinference" or backend.id == "openai"
         else ""
     )
     return f"""
@@ -354,14 +513,17 @@ remain, and all three are yours (FIXTURES.md §6):
 
    and write fixtures/captured/{name}.provenance.md recording:
 
-     - instrumentor: {backend.packages[-1]} <exact version>
-     - SDK: {backend.packages[0]} <exact version>; opentelemetry-sdk <version>
+{versions}
+     - dialect emitted: {backend.dialect.id}
      - model: {model}{where}
      - captured: {today}
      - command: make capture --backend {backend.id}
      - redacted: <what, by whom> (or: nothing, and why that was safe)
      - this fixture may be used to claim: <what it actually demonstrates>
 
+   The versions above are read from the environment that just produced this
+   trace, not typed from memory. Copy them verbatim.
+{pair}
    On that last line, two things this capture does NOT demonstrate:
 
      * Only the `llm` spans come from the instrumentor. The `agent` and `tool`
@@ -369,8 +531,10 @@ remain, and all three are yours (FIXTURES.md §6):
        not an SDK call and no instrumentor would record it. That is what a
        real application's trace looks like too -- but "captured from real
        instrumentation" is then true of some spans and not others.
+
+       {dialect_note}
      * The instrumentor patches the SDK client, not the endpoint. This
-       demonstrates {backend.packages[-1]}, whatever service answered.
+       demonstrates {instrumentor}, whatever service answered.
 
 Then check that it builds, and that what it says about itself is true:
 

@@ -33,11 +33,14 @@ gates:
 conformance:
 	uv run pytest tests/test_conformance.py -v
 
-# Human-run only (TASKS.md 1.9). Captures a trace from real instrumentation:
-# needs framework dependencies and a model API key in YOUR environment. Two
-# backends: the Anthropic SDK, or the OpenAI SDK against any OpenAI-compatible
-# endpoint. It picks whichever one you have configured and refuses if that is
-# ambiguous -- see capture/README.md.
+# Human-run only (TASKS.md 1.9, and again at 2.6). Captures a trace from real
+# instrumentation: needs framework dependencies and a model API key in YOUR
+# environment. Three backends: the Anthropic SDK, or the OpenAI SDK against any
+# OpenAI-compatible endpoint under either of two instrumentors -- `openai`
+# (OpenInference) and `genai` (OTel GenAI), which are the matched pair 2.6
+# needs. It picks whichever one you have configured and refuses if that is
+# ambiguous, which -- because `genai` shares NEBIUS_API_KEY with `openai` -- is
+# now the case whenever that variable alone is set. See capture/README.md.
 # Lives in capture/, outside the package, so its network use never trips the
 # no-network gate. The build agent runs with no key and never runs this.
 # Review and redact the output, write its provenance file, THEN commit it to

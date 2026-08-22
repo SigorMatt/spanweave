@@ -1569,7 +1569,7 @@ below:
 >    status — but only if the instrumentor actually emits one that way. §5.1
 >    binds here too: do not hand-author the absence into existence.
 
-- [ ] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
+- [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
   Four things this task must get right:
   - **The package moved, and the agent must not guess which one works.**
@@ -1606,6 +1606,87 @@ below:
   backend selection still refuses ambiguity by naming `--backend`, and a test
   asserts the harness's own spans carry `gen_ai.*` keys and no
   `openinference.*` ones.*
+
+  > ### 2.5 — what it settled, and what it changed
+  >
+  > **Done.** `make check` green (680 tests). All four done-when clauses hold,
+  > and five things are worth carrying forward.
+  >
+  > **1. The package question, settled by running both rather than reading.**
+  > Checked 2026-08-22 by installing each into a throwaway environment and
+  > driving a two-turn tool-calling conversation through it against a local
+  > stub endpoint. The result is not a preference:
+  >
+  > | | `opentelemetry-instrumentation-genai-openai` **1.1b0** | `opentelemetry-instrumentation-openai-v2` **2.4b0** |
+  > |---|---|---|
+  > | Imports against `openai` 3.3.1 | yes | **no** — `from httpx import URL`, and `openai` 3.x depends on `httpx2`, so `httpx` is simply absent |
+  > | With `httpx` installed alongside | — | works |
+  > | Message attributes | identical — both delegate to `opentelemetry-util-genai` | identical |
+  > | Also emits | `server.address`, `server.port`, `gen_ai.tool.definitions` | — |
+  >
+  > So: the newer package, because the older one **does not import at all**
+  > against a current `openai` without an install its own metadata does not
+  > ask for. The disagreement is recorded rather than tidied away, in
+  > `capture/README.md` with its date. Neither package's PyPI metadata
+  > actually carries the migration note the task text describes — what *is*
+  > present is broader: in `opentelemetry-semantic-conventions` 0.65b0 the
+  > whole `gen_ai.*` attribute set is marked *"Deprecated: moved to the
+  > OpenTelemetry GenAI semantic conventions repository"*. **The names are
+  > unchanged; the conventions moved house.** That is why `backends.py`
+  > writes the attribute names as string literals instead of importing the
+  > constants: a future rename should be a visible diff in one file.
+  >
+  > **2. A behaviour change to an existing command, not a new flag beside it.**
+  > `genai` shares `NEBIUS_API_KEY`, `NEBIUS_BASE_URL`, `NEBIUS_MODEL` and the
+  > default model with `openai` — that identity is the matched pair and is
+  > pinned by a test. The consequence is that **one exported credential now
+  > configures two backends, so a bare `make capture` refuses as ambiguous.**
+  > That is the right refusal to be given: the two differ only in the
+  > instrumentor, so a wrong guess produces an entirely plausible trace beside
+  > a provenance file naming the wrong dialect. Both halves must now be named
+  > explicitly. `capture/README.md` says so under *Which one runs*.
+  >
+  > **3. The emitted dialect is now a seam (`SpanDialect`), not a constant.**
+  > Required by the fourth bullet, but worth naming as structure: the keys the
+  > harness puts on its *own* agent and tool spans are a property of the
+  > backend, chosen alongside the instrumentor and never independently of it.
+  > The OpenInference emission is unchanged byte-for-byte and a test pins it,
+  > because Phase 1's capture is committed and its provenance describes those
+  > exact keys.
+  >
+  > **4. Three things added beyond the task text, each in service of 2.6.**
+  > - The provenance template now prints the **exact installed versions**,
+  >   read from the environment that produced the trace rather than typed from
+  >   memory. 2.5 requires the fixture to name package and version, and these
+  >   conventions move fast enough that a transcription step is where a
+  >   provenance file goes quietly stale.
+  > - The harness prints **2.6's three-point checklist answered against the
+  >   records it just wrote**, and exits non-zero if any point fails (the file
+  >   stays — it is the evidence for why). Same posture as the fleet's
+  >   coverage report. It does not certify anything: a harness that both
+  >   produces a trace and certifies it is not evidence, so the printed block
+  >   says to confirm each point against the file.
+  > - The harness reports any attribute that **names the service that
+  >   answered** (`server.address`, `server.port`, `url.full`, `http.url`)
+  >   before the redaction step. This is a real asymmetry, found by running
+  >   it: the OpenInference instrumentor emits none of them, and
+  >   `openai_tool_call.provenance.md` accordingly says *"The Nebius endpoint
+  >   does not appear in the file at all."* **The GenAI instrumentor emits
+  >   `server.address` and `server.port`.** Copying that sentence across would
+  >   put a false claim in the one kind of file whose whole purpose is being
+  >   true.
+  >
+  > **5. Verified end to end without a credential.** The harness was driven
+  > through `run.main(["--backend", "genai"])` against a local stub
+  > OpenAI-compatible endpoint in a throwaway venv with the real instrumentor
+  > installed — no key, no model, no outside network, and nothing written into
+  > the repository. It produced the `llm_tool_llm` shape in a single dialect,
+  > all three verifications green, exit 0; and with content capture defeated
+  > it refused **before any request reached the endpoint**, writing nothing.
+  > That is the "verify it against stub spans, then STOP" `AGENT.md` sanctions,
+  > and it is as far as it goes: a stub is not a model, so it says nothing
+  > about what `openai/gpt-oss-120b` will actually emit. **2.6 is still a
+  > HALT.**
 
 - [ ] **2.6 The GenAI capture run.** `[2a]` **NEVER CUT** (`ROADMAP.md`: a
   hand-authored fixture proves the adapter matches our *understanding* of a
