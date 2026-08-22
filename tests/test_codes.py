@@ -74,3 +74,71 @@ def test_the_message_is_not_the_matching_surface():
     error = DuplicateNodeIdError("anything at all")
     assert error.code == "duplicate_node_id"
     assert str(error) == "anything at all"
+
+
+# --------------------------------------------------------------------------
+# The rule has to be followable through the public API (TASKS.md F4)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.10 instructs callers to match on the code and never on the
+# message. A caller can only do that if it can get hold of an error object it
+# knows carries one -- which means `except SpanweaveError`. Until these were
+# exported the instruction was impossible to obey through the public API: the
+# only route was `except Exception` plus `getattr(error, "code", None)`, which
+# puts a missing file, a permissions error and a trace the library
+# deliberately refused in one branch and distinguishes them by an absence.
+#
+# Found by the Phase 2b consumer, which had written exactly that workaround.
+
+TYPE_COLUMN = re.compile(r"^\|\s*`[a-z_]+`\s*\|\s*`([A-Za-z]+)`\s*\|", re.MULTILINE)
+
+
+def types_named_in_the_spec() -> set[str]:
+    start = SPEC.index("### 3.10 Errors")
+    return set(TYPE_COLUMN.findall(SPEC[start : SPEC.index("## 4.", start)]))
+
+
+def test_every_error_type_the_spec_names_is_on_the_public_api():
+    import spanweave
+
+    named = types_named_in_the_spec()
+    assert named, "the §3.10 table named no types -- the regex has gone stale"
+    for name in named | {"SpanweaveError"}:
+        assert hasattr(spanweave, name), f"{name} is in SPEC.md §3.10 but not exported"
+        assert name in spanweave.__all__, f"{name} is importable but not in __all__"
+
+
+def test_a_public_api_only_caller_can_obey_the_rule_as_written():
+    # The whole point, written the way a consumer would write it: catch the
+    # library's own error, read the code, never touch the message.
+    from spanweave import AdapterSelectionError, SpanweaveError
+
+    def build_a_trace():
+        raise AdapterSelectionError("two adapters tied", code="adapter_ambiguous")
+
+    try:
+        build_a_trace()
+    except SpanweaveError as error:
+        assert error.code == "adapter_ambiguous"
+    else:  # pragma: no cover - the raise above is unconditional
+        raise AssertionError("the library's error type did not catch it")
+
+
+def test_the_exported_types_are_the_same_objects_as_the_internal_ones():
+    # An export that shadowed the real class would make `except` silently
+    # miss -- the exact failure this fix exists to remove.
+    import spanweave
+    from spanweave import errors
+
+    assert spanweave.SpanweaveError is errors.SpanweaveError
+    assert spanweave.AdapterSelectionError is errors.AdapterSelectionError
+    assert spanweave.UnknownAdapterError is errors.UnknownAdapterError
+    assert spanweave.DuplicateNodeIdError is errors.DuplicateNodeIdError
+
+
+def test_something_that_is_not_the_librarys_error_is_not_caught_by_it():
+    # The distinction that was unavailable before: a missing file is not a
+    # trace the library refused, and a consumer is entitled to say so.
+    from spanweave import SpanweaveError
+
+    assert not isinstance(FileNotFoundError("no such file"), SpanweaveError)

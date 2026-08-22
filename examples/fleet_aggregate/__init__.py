@@ -21,7 +21,7 @@ import collections
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from spanweave import Diagnostic, Graph, NodeKind, Status, build
+from spanweave import Diagnostic, Graph, NodeKind, SpanweaveError, Status, build
 
 #: Why a rollup line is missing, in the output, machine-readable. The library
 #: degrades honestly (`CLAUDE.md` 2); a consumer that swallowed the gap would
@@ -47,16 +47,23 @@ class TraceFailure:
     def __init__(self, source: str, error: BaseException) -> None:
         self.source = source
         self.error = error
-        # `SPEC.md` §3.10: match on the code, never on the message. The
-        # exception *types* are not exported from `spanweave/__init__.py`, so
-        # a public-API-only consumer cannot `except SpanweaveError` and reads
-        # the documented attribute off whatever it caught.
-        self.code = getattr(error, "code", None)
+        # `SPEC.md` §3.10: match on the code, never on the message -- and the
+        # type is what says whether there IS a code. A trace the library
+        # deliberately refused and a file that was not there are different
+        # facts about a fleet, and before `SpanweaveError` was exported this
+        # consumer could not tell them apart: it read `.code` off whatever it
+        # caught, and an absent attribute is not a statement (`TASKS.md` F4).
+        self.refused = isinstance(error, SpanweaveError)
+        self.code = error.code if isinstance(error, SpanweaveError) else None
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "error": type(self.error).__name__,
+            # True: the library read this trace and refused it, and `code`
+            # says why. False: something else went wrong -- a missing file, a
+            # permissions error -- and there is no code to match on.
+            "refused": self.refused,
             "code": self.code,
             "message": str(self.error),
         }
@@ -193,8 +200,10 @@ def aggregate(sources: Iterable[str]) -> Fleet:
         fleet.given += 1
         try:
             graph = build(source)
-        # Broad on purpose: one bad trace must not cost the other 10,000,
-        # and the exception types are not on the public API to catch.
+        # Still broad on purpose -- one bad trace must not cost the other
+        # 10,000, and `build` can meet an unreadable file as easily as an
+        # unreadable trace. What changed is that `TraceFailure` can now tell
+        # the two apart, because `SpanweaveError` is on the public API.
         except Exception as error:
             fleet.fail(source, error)
             continue

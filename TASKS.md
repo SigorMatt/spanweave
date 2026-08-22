@@ -1560,6 +1560,21 @@ below:
 >    **impossible to obey**. Export the type and the five subclasses in the
 >    §3.10 table, with a test. Small, and it makes a written spec rule
 >    followable. Fold it into whichever 2a task touches the public surface.
+>
+>    **DONE (2026-08-22), in its own commit rather than folded into 2.5** —
+>    2.5 touches `capture/`, not the public surface, and this belongs in the
+>    diff a reader of `spanweave/__init__.py` will look at. Two corrections to
+>    the finding as written: the §3.10 table names **three** subclasses, not
+>    five (seven *codes* across three types plus the base), and the fix is not
+>    only an export. `examples/fleet_aggregate` — the consumer that reported
+>    this — now distinguishes `refused` (the library read the trace and said
+>    no, and `code` says why) from every other reason a build can fail, which
+>    is the distinction F4 says was unavailable; its rollup carries a
+>    `refused` boolean per failure. The catch stays broad, because a fleet
+>    must survive an unreadable file as well as an unreadable trace.
+>    `tests/test_codes.py` derives the required type names **from the §3.10
+>    table itself**, so a type added to the spec and not exported fails the
+>    build rather than reintroducing the same gap.
 > 3. **Finding F6 is a corpus gap, and 2a owns the next fixtures.** Every
 >    tool node in `fixtures/conformance/` is `status: "ok"` (18 of 18); not
 >    one real tool span in the 14-trace fleet is (19 `unset`, 1 `error`). A
