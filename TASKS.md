@@ -1732,6 +1732,89 @@ below:
   ARGS="--backend genai"`, plus the three-point verification checklist above
   answered against it.
 
+  > ### 2.6 — HALTED, awaiting the human. Everything up to the credential is done.
+  >
+  > **Session stopped here (2026-08-22).** The agent has no model API key and
+  > must not have one (`ENVIRONMENT.md`, `AGENT.md`). Nothing was written into
+  > `fixtures/captured/`, and no file anywhere was labelled captured.
+  >
+  > **The runbook.** In an environment with `NEBIUS_API_KEY` and
+  > `NEBIUS_BASE_URL` exported:
+  >
+  > ```bash
+  > uv pip install openai opentelemetry-instrumentation-genai-openai opentelemetry-sdk
+  > make capture ARGS="--backend genai"
+  > ```
+  >
+  > `--backend genai` is now **required**, not optional: that backend shares
+  > `NEBIUS_API_KEY` with `openai`, so a bare `make capture` refuses as
+  > ambiguous (2.5, point 2).
+  >
+  > **The three-point checklist is answered for you, and you still confirm
+  > it.** The harness reads the exported records back and prints all three
+  > verifications with what each was read off, then exits non-zero if any
+  > failed — the trace is still written, because it is the evidence for why. A
+  > harness that both produces a trace and certifies it is not evidence, so
+  > check each line against the file before promoting anything.
+  >
+  > **If point 3 fails — the follow-up turn does not declare the tool result
+  > with the same id — stop.** Do not render around it. `llm_tool_llm` is
+  > never-cut and its canonical graph contains that `data` edge, so a dialect
+  > that cannot declare it is a finding about the corpus's equivalence rule
+  > and belongs at 2.9's HALT, alongside `OPEN_QUESTIONS.md` §7 and
+  > `PREDICTIONS.md` P3 — as evidence, never as a resolution of either. The
+  > harness prints this sentence too.
+  >
+  > **Redaction differs from the first capture, and the difference is easy to
+  > carry across wrongly.** `openai_tool_call.provenance.md` says *"The Nebius
+  > endpoint does not appear in the file at all"* — true of the OpenInference
+  > instrumentor. **The GenAI instrumentor emits `server.address` and
+  > `server.port`.** The harness lists every such attribute with its value
+  > before the redaction step; decide whether the host is public and say what
+  > you decided. Do not reuse the other file's sentence.
+  >
+  > **Both provenance files need the matched-pair statement**, and the second
+  > one is an edit to a file already committed:
+  > `fixtures/captured/openai_tool_call.provenance.md` must gain a sentence
+  > naming the GenAI capture as its pair. It was left alone deliberately —
+  > asserting a pair before the other half exists would be a claim about a
+  > file that is not there. The harness prints the sentence to copy.
+  >
+  > **Asked and answered: does the GenAI instrumentor require anything that
+  > would change what the reference records?** No — and this was checked
+  > rather than assumed, because absorbing such a change quietly is the
+  > failure that would make the comparison worthless.
+  >
+  > - Same SDK object, same `client`/`request`/`results` functions, same
+  >   credential, endpoint, model, prompt, tool inventory and conversation.
+  >   Pinned by `test_the_genai_backend_differs_from_openai_only_in_the_instrumentor`.
+  > - Neither half sends `parallel_tool_calls`; that stays scoped to the fleet.
+  > - Content capture is a GenAI-only environment variable and has no effect
+  >   on the OpenInference instrumentor.
+  > - The OpenInference emission in `capture/backends.py` is unchanged
+  >   byte-for-byte by the refactor, pinned by
+  >   `test_the_openinference_spans_are_byte_for_byte_what_they_were`.
+  >
+  > **One asymmetry that cannot be removed, stated rather than hidden.** The
+  > pair differs by the instrumentor *and* by what the two conventions define
+  > for the spans no instrumentor emits. GenAI defines `execute_tool`;
+  > OpenInference defines nothing for a tool execution. So on the GenAI half
+  > the tool span is convention-defined (`execute_tool <name>`,
+  > `gen_ai.tool.name`, `gen_ai.tool.call.id`) while on the OpenInference half
+  > it is this harness's own invention. That is not a choice made here and
+  > could not be avoided by any choice: it is a property of the two dialects,
+  > and therefore part of what the equivalence test is for. Both provenance
+  > files must say it, and the printed template does.
+  >
+  > **What was verified without a credential, and what that does not prove.**
+  > The harness was driven end to end against a local stub OpenAI-compatible
+  > endpoint with the real instrumentor installed: it produced the
+  > `llm_tool_llm` shape in a single dialect, all three verifications green,
+  > exit 0 — and with content capture defeated it refused **before any request
+  > reached the endpoint**, writing nothing. A stub is not a model. It says
+  > nothing about what `openai/gpt-oss-120b` will actually emit through this
+  > instrumentor, which is the entire reason 2.6 exists.
+
 - [ ] **2.7 Equivalence harness: build every rendering.** `[2a]` **NEVER CUT**
   (`ROADMAP.md`: "without it, renderings are decoration").
   `tests/test_conformance.py` builds `scenario.dialects[0]` only — with one
