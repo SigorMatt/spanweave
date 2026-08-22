@@ -1500,6 +1500,35 @@ below:
   >   call has a node either way. Looping would buy depth, which is the real
   >   untested axis, but that is a Phase 4 scope with its own budget, not a
   >   mid-timebox harness change.
+  >
+  > ### HALT cleared — the human's decision, recorded here for the next session
+  >
+  > **P5: REFUTED, scoped.** In `PREDICTIONS.md` (commit `200c22d`), which
+  > this agent may now read and still may not edit. The refutation is scoped
+  > and the human recorded the scope as **their** error, not the agent's: a
+  > *counting* rollup structurally cannot need cross-trace linking, so the
+  > consumer 2.3 directed could not have falsified the prediction it was aimed
+  > at. **What reopens P5** is written into the entry — a consumer that
+  > *relates* traces rather than counting over them (retry detection, session
+  > reconstruction, or comparing one prompt across models, for which this
+  > fleet already holds `two_cities` under three models).
+  >
+  > **A third classification now exists: SPEC GAP.** F5 is recorded as **O1**
+  > in `PREDICTIONS.md` under it — the model *could* express the fact today
+  > (`Diagnostic.source` is `JsonValue`), but nothing populates it and no
+  > document asks for one. Neither shape nor operational fits: the schema does
+  > not need to change, and no build option helps either. The binary in this
+  > file's classification test was insufficient, and **later phases should use
+  > the third category where it fits rather than forcing a fit.** O1 is filed
+  > as an *observation*, not a prediction, because it was found after the work
+  > that tested it began.
+  >
+  > **GO on 2a**, against the unchanged model. No model change is owed first,
+  > so 2.5–2.14 stand as planned.
+  >
+  > **Accepted: `converse()` does not loop.** 2.2's deferred decision is
+  > closed. Depth stays untested in Phase 2 and that limitation is carried in
+  > the honest claim above.
 
 ---
 
@@ -1512,6 +1541,33 @@ below:
 > to 593 tests, six gates and two review scripts, because the fixtures and the
 > adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
 > disagreed. Do not repeat it.
+
+> **Three things 2b handed to this workstream.** Assigned here so a cold
+> session finds them without reading the 2b record.
+>
+> 1. **O1 / finding F5 is settled at 2.10, by evidence, not by patch.** Do
+>    **not** fix it first. Render `unpaired_tool_call` in `otel_genai` and
+>    check whether *any single* payload path yields the requested tool's name
+>    in **both** dialects. The risk that makes this worth settling with
+>    evidence is that a consumer reaching into payloads does not fail loudly
+>    against dialect two — it reports a **confident zero**, indistinguishable
+>    from "there were none." The remedy (a spec change plus an adapter change)
+>    is decided **after** that rendering says what is actually there.
+> 2. **Finding F4 is fixed in this workstream, not deferred.** `SPEC.md`
+>    §3.10 instructs callers to match on the error `code` and never the
+>    message, but `spanweave/__init__.py` exports neither `SpanweaveError` nor
+>    any subclass — so through the public API that rule is currently
+>    **impossible to obey**. Export the type and the five subclasses in the
+>    §3.10 table, with a test. Small, and it makes a written spec rule
+>    followable. Fold it into whichever 2a task touches the public surface.
+> 3. **Finding F6 is a corpus gap, and 2a owns the next fixtures.** Every
+>    tool node in `fixtures/conformance/` is `status: "ok"` (18 of 18); not
+>    one real tool span in the 14-trace fleet is (19 `unset`, 1 `error`). A
+>    consumer written against the corpus alone computes a success rate that
+>    silently reads zero against real telemetry. When the degenerate set is
+>    rendered at 2.10, consider a scenario whose tool span carries **no**
+>    status — but only if the instrumentor actually emits one that way. §5.1
+>    binds here too: do not hand-author the absence into existence.
 
 - [ ] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
