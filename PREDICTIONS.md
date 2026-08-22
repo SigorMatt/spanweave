@@ -42,6 +42,12 @@ happened:
 - **Operational option** — payload retention, multi-trace handling, laziness,
   output verbosity. Changes what you *keep* or *how you get it*, never what a
   graph *is*. Permitted, additive, and recorded here.
+- **Spec gap** — a need the model *could* express with no new field, kind,
+  warrant, `Payload` state, `Diagnostic` code or query primitive, but which
+  nothing populates because no document asks for it. Neither shape nor
+  operational: the remedy is a spec change plus an adapter change, not a model
+  change. Found in practice at Phase 2b (see O1 below); use it where it fits
+  rather than forcing the binary.
 
 The test for which one you're looking at: *could an existing graph.json express
 the consumer's need, if it had been built with different options?* If yes,
@@ -151,8 +157,27 @@ deliberately provoked rather than avoided — which is why the adversarial
 consumer that attacks it runs in **Phase 2**, alongside the second dialect,
 while nothing is frozen and every fix is a diff (`ROADMAP.md` Phase 2b).
 
-**Status:** open. **Resolve at the end of the Phase 2b timebox**, whatever the
-outcome.
+**Status: REFUTED — scoped.** Resolved at 2.4, Phase 2b.
+
+A fleet aggregator over 14 real traces (3 models, 5 graph shapes) required
+none of P5's predicted remedies. Cross-trace edges were not merely unused but
+never wanted (2.4 finding F2). `build_all()` and an aggregate type were not
+needed: the consumer built each graph independently and summed over them.
+
+**Scope of the refutation.** The consumer was a counting rollup, which
+*structurally* cannot need cross-trace linking — it sums over graphs and never
+relates them. The adversarial consumer was chosen by the same person who wrote
+the prediction, and it could not have falsified it. The fleet was also
+one-turn, so depth is untested.
+
+**What would falsify this refutation:** a consumer that *relates* traces
+rather than counting over them — retry detection, session reconstruction, or
+comparing the same prompt across models (this fleet contains `two_cities`
+under three models). If any such consumer needs a cross-trace representation,
+P5 reopens.
+
+Honest claim: *P5 survived a one-turn fleet of fourteen traces across three
+models, tested by a counting consumer in one dialect.*
 
 ---
 
@@ -192,3 +217,35 @@ Anyone may add one, at any time, **before the phase that would test it**. A
 prediction added after its test has run is not a prediction and must be recorded
 as an observation instead — in a separate section, plainly labeled. The value of
 this file is entirely in its timestamps.
+
+---
+
+## Observations — found after the test, not predicted
+
+These are **not predictions.** They were found during Phase 2b, after the work
+that would have tested them began, and are recorded separately because a
+prediction written after its test is an observation and this file's value is
+entirely in its timestamps.
+
+### O1 — a requested-but-unfulfilled call has no representation
+
+Found at 2.4 (finding F5). An unfulfilled call can be attributed to the model
+that asked (diagnostic `node_id` → llm node → `operation`) but **not to the
+tool it named**, because a call that never ran has no node. Per-tool
+requested-vs-fulfilled rollup — a question a fleet tool obviously asks — is
+not answerable from `graph.json`.
+
+A consumer must instead walk
+`outputs.value["choices"][0]["message"]["tool_calls"][…]["function"]["name"]`,
+re-implementing the adapter's pairing logic against one dialect's payload
+shape. Against a second dialect this does not raise — it reports a confident
+zero, indistinguishable from "there were none."
+
+**Classification: spec gap, not shape.** `Diagnostic.source` is `JsonValue`, so
+an adapter could carry `{call_id, operation}` today with no new field, kind, or
+halt point. The model permits it; nothing populates it; no document asks for
+one. That is a third category the shape/operational test above does not cover,
+and it should be used where it fits rather than forcing a binary.
+
+Deferred to 2a: render `unpaired_tool_call` in `otel_genai` and check whether
+any single path yields the tool name in both dialects.
