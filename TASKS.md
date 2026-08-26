@@ -1534,6 +1534,18 @@ below:
 
 ### `[2a]` — the second dialect  *(begins only after 2.4's HALT clears)*
 
+> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7 is done and committed. **2.8
+> is HALTED before any rendering was written**, and its box is unchecked: the
+> two captured traces disagree about `Payload.value` and `Payload.mime` on
+> every `llm` and `agent` span, `FIXTURES.md` §4 compares both, and no faithful
+> adapter reconciles them. Three resolutions are written out at 2.8 with
+> measured costs; **none is picked, and picking one is a human's call.** Do not
+> start 2.8 without that decision — the renderings themselves are
+> resolution-independent, but writing them first would put the decision under
+> pressure from work already committed. 2.9's own HALT is unchanged and still
+> ahead; what 2.8 found about the §4.2.1 `data` edge (it is **not** at risk —
+> GenAI declares the relation) is recorded there too.
+
 > **This workstream inverts Phase 1's order on purpose: capture first, then
 > render from what the capture shows, then write the adapter.** Phase 1
 > rendered from a *reading* of OpenInference and produced four fixtures that
@@ -1913,6 +1925,214 @@ below:
   line is annotated in `scenario.md` (or a sibling note) with the captured
   record it came from, the suite reports them as skipped-pending-adapter per
   2.7, and `make check` is green.*
+
+  > **HALTED BEFORE TRANSCRIBING (2026-08-27). The two captured traces disagree
+  > about `Payload.value` on every `llm` and `agent` span, and `FIXTURES.md` §4
+  > compares payload values. Picking a way out is a spec conversation.**
+  >
+  > ### What was checked
+  >
+  > Both files in `fixtures/captured/`, attribute by attribute, comparing
+  > values rather than reading conventions. Four spans each, same shape
+  > (agent → llm → tool → llm), the 2.6 matched pair.
+  >
+  > **TOOL spans agree byte-for-byte.** `gen_ai.tool.call.arguments` ==
+  > `input.value` == `{"city": "Paris"}`; `gen_ai.tool.call.result` ==
+  > `output.value` == `{"city": "Paris", "celsius": 18, "summary": "clear"}`.
+  > Verified as string equality, not as "the same thing in different words".
+  >
+  > **LLM spans disagree, in both directions:**
+  >
+  > | | OpenInference | OTel GenAI |
+  > |---|---|---|
+  > | in | `input.value` = `{"messages":[…],"model":…,"tools":[…]}` | `gen_ai.input.messages` = `[{"role":"user","parts":[{"content":…,"type":"text"}]}]` |
+  > | out | `output.value` = the whole provider response envelope | `gen_ai.output.messages` = `[{"role":"assistant","parts":[…],"finish_reason":…}]` |
+  >
+  > **The `agent` span disagrees too, which the collision report did not
+  > predict.** OpenInference: `input.value` = `"What is the weather in Paris?
+  > Use the tool."` with `input.mime_type` = `text/plain`. GenAI:
+  > `gen_ai.input.messages` = the same text wrapped in the normalized message
+  > array, no mime. So the clean line is **not** "only LLM spans diverge" — it
+  > is **"only TOOL span payloads agree."** Restated that way, the corrected
+  > blast radius over the whole corpus is **8 of 19 scenarios** carrying at
+  > least one non-`absent` `llm`/`agent` payload: `llm_tool_llm`,
+  > `tool_call_history_echo`, `parallel_tool_calls`, `parallel_tools`,
+  > `declared_data_edge`, `shuffled_order`, `unpaired_tool_call`,
+  > `redacted_payload`. The other 11 are immune — their `llm`/`agent` payloads
+  > are `absent`, or they have only `tool` nodes.
+  >
+  > **A third divergence, unmentioned so far and worse than the other two:
+  > `Payload.mime`.** OTel GenAI emits **no mime attribute of any kind** — the
+  > only `*.type`-shaped key in the capture is `gen_ai.tool.type` =
+  > `"function"`, which is the tool's type, not a content type. `canonical()`
+  > erases only `Payload.raw`, so `mime` **is compared**, and a faithful
+  > adapter reporting what the dialect said would set it to `None` on every
+  > payload — including the tool payloads whose *values* agree. This one has
+  > an adapter-level answer (derive the mime from the convention: these keys
+  > are defined to be JSON), but it is a judgement the OpenInference adapter
+  > never had to make, and it does not survive the `agent` span, where the two
+  > dialects genuinely disagree `text/plain` vs `application/json`.
+  >
+  > ### Why this is not "the encoding is dialect-specific"
+  >
+  > That argument is what §4 already uses to erase `Payload.raw`, and it is the
+  > obvious reach here. **It is false on the evidence.** These are not two
+  > encodings of one fact. OpenInference records the **request envelope** —
+  > messages *plus* model *plus* tool definitions *plus* invocation parameters,
+  > and on the output side the entire provider response including
+  > `system_fingerprint`, `usage`, `stop_reason`, `prompt_logprobs` and
+  > vLLM-specific fields. GenAI records the **conversation**, normalized. One
+  > strictly contains the other plus more. Re-encoding cannot get you from the
+  > second to the first, because the information is not there.
+  >
+  > So the disagreement is about **content**, and the reason the model permits
+  > it is that the model never said what the content should be. `SPEC.md` §3.3
+  > defines `value` as *"parsed when mime is JSON, else str"* — a statement
+  > about `raw`'s **parse**, and nothing about what the payload should
+  > *contain*. Both adapters would be faithful. `FIXTURES.md` §4 comparing
+  > `value` across dialects therefore asserts a cross-dialect property
+  > `SPEC.md` never promised.
+  >
+  > **That is the finding, and it is a finding about the model, not the
+  > adapter** — which is exactly the outcome `AGENT.md` says this phase exists
+  > to produce, arriving one task earlier than the 2.9 HALT expected it.
+  >
+  > ### Three resolutions. NOT picked — this needs a human.
+  >
+  > Measured, not argued: each row is "how many of the 8 payload-carrying
+  > scenarios still detect a perturbed payload value", by rebuilding every
+  > OpenInference rendering with its payload strings altered and comparing
+  > against the expectation **as it would be regenerated under that option**.
+  >
+  > | | expected graphs moved | `comparison.json` moved | detects a perturbed payload |
+  > |---|---|---|---|
+  > | today | — | — | **8 / 8** |
+  > | **A** erase `Payload.value` | 0 (regenerated, all 19) | 0 | **0 / 8** |
+  > | **B** normalize in adapters | **8** | 0 | 8 / 8 |
+  > | **C** per-scenario declaration | 0 | 8 | **5 / 8** |
+  >
+  > **A — extend `canonical()`'s erasure from `Payload.raw` to
+  > `Payload.value`,** on the "encoding is dialect-specific" argument.
+  > *Moves:* no expected graph changes meaning, but all 19 are regenerated
+  > without payload values. *Cost:* the measured 8→0. After it, `state` is the
+  > only payload field compared, so `present` matches `present` whatever it
+  > holds. It pays for a disagreement on `llm`/`agent` spans by **discarding
+  > the agreement on `tool` spans** — the byte-for-byte match above, the single
+  > strongest piece of cross-dialect evidence the corpus has. It also silently
+  > disarms 2.7's own teeth test
+  > (`test_a_second_rendering_that_disagrees_with_the_canonical_graph_fails`
+  > perturbs a payload string; under A it goes green while asserting the
+  > comparison has teeth). **And `FIXTURES.md` §4 forbids it in the sentence
+  > immediately after the erasure list:** *"If two dialects genuinely cannot
+  > agree on a compared field, that is a finding about the model, not a reason
+  > to widen the erasure."* `AGENT.md`'s scope-of-run names weakening
+  > `canonical()` as not permitted. Listed for completeness and because it is
+  > the tempting one; recommending it would be the failure mode this phase is
+  > designed to catch.
+  >
+  > **B — normalize messages in the adapters** so both emit a common message
+  > shape in `Payload.value`. *Moves:* 8 expected graphs, plus a message schema
+  > in `SPEC.md`. *Keeps all the teeth.* *Cost:* it decides `OPEN_QUESTIONS.md`
+  > §5 (and brushes §2) by implementation, which `AGENT.md` names as the
+  > failure those files exist to prevent. It is also not clearly **possible**
+  > faithfully: to reach a normalized list from OpenInference's `output.value`
+  > the adapter must parse a **provider** response envelope, so the surface
+  > becomes one adapter per (dialect × provider) rather than per dialect, and
+  > `Payload.value` stops being the parse of `raw` — contradicting `SPEC.md`
+  > §3.3 — and becomes our re-rendering of it. Choosing a canonical message
+  > schema is choosing what a message *is*; that is close to the
+  > `CLAUDE.md` 1 line even if it stays structural. Large, and a spec
+  > conversation before it is a patch.
+  >
+  > **C — per-scenario dialect-varying declarations,** extending the mechanism
+  > `expected/comparison.json` already carries for node `name`, from node
+  > fields to named payload fields on named nodes. *Moves:* 0 expected graphs,
+  > 8 `comparison.json` files. *Keeps 5/8 of the teeth* — and is blind in
+  > exactly the three scenarios (`parallel_tool_calls`, `parallel_tools`,
+  > `unpaired_tool_call`) whose only present payloads sit on `llm`/`agent`
+  > nodes, **per scenario and on the record**, rather than corpus-wide and
+  > silently. §4 already blesses this mechanism and its rationale — *"so the
+  > erasure is a reviewable fact in the corpus rather than a branch in the
+  > comparison code"*. *Cost:* it is still a widening of the erasure, and the
+  > §4 sentence quoted under A still applies to it; §4 sanctions the mechanism
+  > for `name` specifically, not for payload values. Its honest advantage over
+  > A is that it **preserves the finding instead of erasing it**: each
+  > declaration is a written statement that these two dialects record different
+  > facts here, which is the thing a Phase 4 freeze decision needs to read.
+  >
+  > **Considered and rejected: §4.3 coverage.** Declaring `otel_genai`
+  > `renderable: false` for the 8 scenarios. `coverage.json` is all-or-nothing
+  > per scenario — the same shortcoming 2.9's HALT text raises for the §4.2.1
+  > `data` edge — so it would discard the three most valuable renderings
+  > wholesale to express a disagreement about one field.
+  >
+  > ### A documentation gap found on the way
+  >
+  > `FIXTURES.md` §4's **Compared:** list names *"payload states and values"*
+  > and does not mention `mime`; `canonical()` compares it anyway, since it
+  > erases only `raw`. Whichever option is chosen, §4's two lists should be
+  > made to agree with the code, because `mime` is one of the three fields in
+  > dispute.
+  >
+  > ### What 2.9 will and will not find
+  >
+  > Checked early, because it changes what the 2.9 HALT is likely to be about:
+  > **the §4.2.1 `data` edge is NOT at risk.** GenAI does carry a
+  > message-granularity producer→consumer declaration — `gen_ai.input.messages`
+  > on the second LLM span holds `{"role":"tool","parts":[{"type":
+  > "tool_call_response","id":"chatcmpl-tool-ba26764988bf8aa9",…}]}`, and that
+  > `id` is the tool call id. So `llm_tool_llm`'s `s2 -> s3` `data` edge is
+  > derivable **explicitly** from dialect two, and the feared "canonical graph
+  > contains an edge dialect two cannot produce" does not materialise. Two
+  > dialects independently declaring this relation is also a second data point
+  > for `OPEN_QUESTIONS.md` §7 and `PREDICTIONS.md` P3 — carried as evidence,
+  > resolving neither.
+  >
+  > One thing 2.9 must still settle: `canonical()` compares `Edge.basis`, and
+  > `basis` is a rule name written by the adapter. `llm_tool_llm` expects
+  > `"tool_call_id in tool-result message"`. Both adapters must therefore emit
+  > the **same** basis string for the same relation, which makes `basis`
+  > cross-dialect vocabulary rather than adapter-local prose. Nothing in
+  > `SPEC.md` or `ADAPTERS.md` currently says so.
+
+  > ### Recorded, not acted on: three fields two independent dialects both model
+  >
+  > Read off the 2.6 GenAI attribute dump while checking the above. Written
+  > here rather than in `OPEN_QUESTIONS.md`, which is a halt point and not the
+  > agent's to edit, and rather than `PREDICTIONS.md`, which is read-only in
+  > every phase. **No action taken and none owed by 2.9.**
+  >
+  > The test these three now meet: *what two independent dialects, written by
+  > different people for different purposes, both bothered to model* is a
+  > principled signal that a field is a property of the **domain** rather than
+  > of one convention — which is a much better argument for normalizing it
+  > than "a reviewer asked for it".
+  >
+  > - **Finish reason.** `gen_ai.response.finish_reasons` = `["tool_calls"]`
+  >   then `["stop"]`; `llm.finish_reason` = `tool_calls` then `stop`. We model
+  >   neither. `OPEN_QUESTIONS.md` §9 currently records it as available and
+  >   deliberately unwired, on the explicit ground that *"two observations of
+  >   one dialect from one instrumentor is still one dialect"*, and §9(c) names
+  >   **the second adapter** as the thing to watch. It arrived. §9 also says in
+  >   advance that a further vote *"should probably be answered in §5
+  >   (normalize it into `Node.attributes`) rather than here (wire it into the
+  >   pairing rule)"* — worth honouring, since the vote is again for the field
+  >   existing, not for a second pairing rule.
+  > - **The tool inventory.** `gen_ai.tool.definitions` /
+  >   `llm.tools.*.tool.json_schema`. Unmapped in both. This is the
+  >   *unused-affordance* gap `OPEN_QUESTIONS.md` §5 already records from the
+  >   cold review — the graph can say "a tool ran" but not "these tools were on
+  >   offer". Now two dialects, not one reviewer.
+  > - **The provider.** `gen_ai.provider.name` = `openai` /
+  >   `llm.system` = `openai`. Unmapped in both. Also already in §5, and the
+  >   captured trace is again the case that makes it non-redundant: `model` is
+  >   `openai/gpt-oss-120b` and `server.address` is
+  >   `api.tokenfactory.nebius.com`, so provider, model and endpoint are three
+  >   different facts.
+  >
+  > §5's own bar is the two-consumer test in §5(c), and this is not that — it
+  > is a two-*dialect* test, which §5 does not currently name. Whether that
+  > counts is §5's to decide, and 2.14 is where it should be argued, not here.
 
 - [ ] **2.9 The OTel GenAI adapter — and the first equivalence run.** `[2a]`
   Single file under `spanweave/adapters/`, registered; nothing else in the
