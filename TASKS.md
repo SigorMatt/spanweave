@@ -1815,7 +1815,7 @@ below:
   > nothing about what `openai/gpt-oss-120b` will actually emit through this
   > instrumentor, which is the entire reason 2.6 exists.
 
-- [ ] **2.7 Equivalence harness: build every rendering.** `[2a]` **NEVER CUT**
+- [x] **2.7 Equivalence harness: build every rendering.** `[2a]` **NEVER CUT**
   (`ROADMAP.md`: "without it, renderings are decoration").
   `tests/test_conformance.py` builds `scenario.dialects[0]` only — with one
   dialect that proves the pipeline reproduces the reviewed expectation, but it
@@ -1833,6 +1833,66 @@ below:
   planted second rendering that disagrees with the canonical graph **fails**,
   a planted rendering for an adapterless dialect is reported as skipped rather
   than passing silently, and `make conformance` is green.*
+
+  > **Done (2026-08-27).** The suite now parametrizes over `Rendering`
+  > objects — one dialect file of one scenario — rather than over scenarios,
+  > and `built()` skips loudly rather than the parametrization filtering
+  > quietly: *a filtered-out rendering leaves no trace in the run, and "we
+  > chose not to check this" must not look like "there was nothing to check".*
+  > `duplicate_span_ids` gets the same treatment, so §4.2's equivalence half
+  > (same error type **and** code from every dialect) is now parametrized too.
+  > 190 conformance tests, up from 106; with one dialect the effect is
+  > unchanged, as required.
+  >
+  > Visibility is `tests/conftest.py`: a `pytest_report_header` naming the
+  > declared dialects, the adapter-backed ones, and every skipped rendering
+  > with its dialect — on **every** pytest run, not only under `-v`. Verified
+  > by planting `otel_genai.jsonl` into `llm_tool_llm`: 5 skips, each reported
+  > with the reason, header line `conformance SKIPPING 1 rendering(s) of
+  > 'otel_genai'`. Both other done-when plants are permanent tests
+  > (`test_a_second_rendering_that_disagrees_with_the_canonical_graph_fails`,
+  > `test_a_rendering_for_an_adapterless_dialect_is_skipped_not_passed`), and
+  > they write to `tmp_path` — a fixture planted to prove a test has teeth is
+  > a fixture someone later mistakes for a real one.
+  >
+  > **DIVERGED — the tripwire as specified is unreachable at 2.9, so it is
+  > declared rather than absolute.** This task says "a tripwire must assert
+  > that the set of adapter-backed dialects equals `DIALECTS` — which is what
+  > 2.13 finally flips." Taken literally that tripwire goes **red the moment
+  > 2.9 registers the `otel_genai` adapter**, because 2.13 (not 2.9) is what
+  > adds `otel_genai` to `DIALECTS`, and flipping it early fires §4.3's
+  > "silence is a failure" rule against the ~17 scenarios 2.10–2.11 have not
+  > rendered yet. But 2.9's done-when requires `make conformance` green, and
+  > so does 2.10, 2.11 and 2.12. The plan as written has no green state
+  > between 2.9 and 2.13.
+  >
+  > Resolved by giving the gap the shape `FIXTURES.md` §4.3 already gives a
+  > scenario a dialect cannot render — **declared, with the declaration itself
+  > under test** — rather than by dropping the tripwire or by leaving four
+  > tasks red:
+  > - `test_no_adapter_reads_a_dialect_the_corpus_does_not_account_for`
+  >   asserts `adapter_backed() == set(DIALECTS) | set(DIALECTS_PENDING_CORPUS_COVERAGE)`.
+  > - `DIALECTS_PENDING_CORPUS_COVERAGE` is `()` today, so **right now this is
+  >   literally the specified equality**. It is not an exemption switch: two
+  >   further tests forbid a stale entry and an entry that is also in
+  >   `DIALECTS`, and its docstring says empty is the only correct long-term
+  >   value.
+  > - `test_every_declared_dialect_has_an_adapter_that_can_read_it` adds the
+  >   other direction, which was never at risk of going red but is the half
+  >   that keeps `DIALECTS` from claiming coverage nothing can check.
+  >
+  > **2.9 must add `"otel_genai"` to `DIALECTS_PENDING_CORPUS_COVERAGE` in the
+  > same commit that registers the adapter, and 2.13 must delete the constant,
+  > both tests that guard it, and the `conftest.py` header** — 2.13 already
+  > says "retire 2.7's skipped-pending-adapter state and its tripwire in the
+  > same change". If a future session finds itself adding an entry to that
+  > tuple for any reason other than 2.9, the tripwire is doing its job and the
+  > answer is to stop, not to append.
+  >
+  > Not touched, and worth knowing: `test_a_shuffled_trace_is_byte_identical_
+  > to_its_ordered_twin` still names `dialects/openinference.jsonl` directly.
+  > It is a determinism claim rather than an equivalence one, so it is outside
+  > this task, but it will not extend to a second dialect on its own.
 
 - [ ] **2.8 Dialect-two renderings — the pairing set.** `[2a]` **NEVER CUT.**
   Transcribe from the 2.6 capture, in this order: `llm_tool_llm`,

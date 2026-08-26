@@ -16,14 +16,25 @@ diagnostics by code and count -- is compared.
 the fixtures testing the code, the code would be editing the fixtures. If a
 dialect fails equivalence, either the adapter is wrong or the model is, and
 finding out which is the entire value on offer.
+
+A rendering is only *buildable* if its dialect has a registered adapter. That
+gap is transitional -- `TASKS.md` 2.8 lands renderings before 2.9 lands the
+adapter that reads them -- and it is the one place this suite could go quiet
+without going red. So the gap is named (`Rendering.supported`), reported
+(`tests/conftest.py` puts it in the pytest header, and each such rendering is
+an explicitly skipped test rather than an absent one), and fenced by the
+tripwire in `test_conformance.py`.
 """
 
 from __future__ import annotations
 
 import json
 import pathlib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+from spanweave.adapters import registered
 
 CORPUS = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
 
@@ -83,6 +94,16 @@ def _by_code(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
 #: (`FIXTURES.md` §4.3). Phase 2 adds the second entry here, and that addition
 #: is what makes every scenario account for it.
 DIALECTS = ("openinference",)
+
+#: Dialects a registered adapter can read but `DIALECTS` does not yet name --
+#: so the corpus is NOT yet requiring any scenario to cover them.
+#:
+#: Transitional and declared, in the shape `FIXTURES.md` §4.3 already uses for
+#: a scenario a dialect cannot render, and for the same reason: a declared gap
+#: is reviewable, a silent one rots. **Empty is the only correct long-term
+#: value.** `TASKS.md` 2.13 flips `DIALECTS` and deletes this. Never add an
+#: entry to make a test green.
+DIALECTS_PENDING_CORPUS_COVERAGE: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,3 +182,63 @@ def scenarios() -> tuple[Scenario, ...]:
             Scenario(name=path.name, path=path, dialects=tuple(dialects), erase=erase)
         )
     return tuple(found)
+
+
+def adapter_backed() -> frozenset[str]:
+    """Dialect ids the library can actually build a rendering of, today.
+
+    Read from the registry rather than listed here, so it cannot disagree with
+    what is installed.
+    """
+    return frozenset(adapter.id for adapter in registered())
+
+
+@dataclass(frozen=True)
+class Rendering:
+    """One dialect file of one scenario -- the unit equivalence compares.
+
+    The suite parametrizes over these rather than over scenarios, because
+    "every dialect of this scenario agrees" is the claim, and a per-scenario
+    parametrization can only ever check the first one.
+    """
+
+    scenario: Scenario
+    dialect: str
+    path: pathlib.Path
+
+    @property
+    def supported(self) -> bool:
+        return self.dialect in adapter_backed()
+
+    @property
+    def skip_reason(self) -> str:
+        return (
+            f"no registered adapter for dialect {self.dialect!r}: "
+            f"{self.scenario.name} renders it, but nothing can read it yet "
+            f"(TASKS.md 2.8 renders, 2.9 adapts, 2.13 closes)"
+        )
+
+    @property
+    def label(self) -> str:
+        return f"{self.scenario.name}[{self.dialect}]"
+
+
+def renderings(collection: Sequence[Scenario]) -> tuple[Rendering, ...]:
+    """Every dialect file present, adapter-backed or not.
+
+    Deliberately *not* filtered to the supported ones: a rendering nothing can
+    build must still appear in the suite, as a skip with a reason. Filtering
+    here is precisely how a dialect's coverage would rot one file at a time.
+    """
+    return tuple(
+        Rendering(scenario=scenario, dialect=path.stem, path=path)
+        for scenario in collection
+        for path in scenario.dialects
+    )
+
+
+def unsupported(collection: Sequence[Scenario]) -> tuple[Rendering, ...]:
+    """The renderings the suite is currently skipping, in a stable order."""
+    return tuple(
+        rendering for rendering in renderings(collection) if not rendering.supported
+    )

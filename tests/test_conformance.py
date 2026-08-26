@@ -1,11 +1,15 @@
 """The conformance corpus (TASKS.md 1.9) -- the executable spec.
 
-Every scenario in `fixtures/conformance/` is built from its dialect rendering
-and compared against the **one** canonical graph that scenario declares. In
-Phase 1 there is a single dialect, so what this proves is that the pipeline
-produces the reviewed expectation; the cross-dialect equivalence the corpus
-exists for switches on with the second adapter (Phase 2), against these same
-unmodified expectations.
+Every rendering in `fixtures/conformance/` is built and compared against the
+**one** canonical graph its scenario declares — *every* rendering, not the
+first one, which is what makes this the cross-dialect claim rather than a
+round-trip of a single dialect (`TASKS.md` 2.7).
+
+A rendering whose dialect has no registered adapter cannot be built. It is
+**skipped with a reason**, never quietly dropped, and the header line from
+`conftest.py` names it on every run. That state is transitional — 2.8 renders
+a dialect, 2.9 adapts it — and the tripwire below is what stops it becoming
+permanent.
 
 If a scenario fails, the fix is upstream. Editing an expected graph to match
 new code is how a corpus dies (`FIXTURES.md` §4, §8).
@@ -19,12 +23,28 @@ import spanweave
 from spanweave.errors import ERROR_CODES, SpanweaveError
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
-from tests.conformance import CORPUS, DIALECTS, canonical, scenarios
+from tests.conformance import (
+    CORPUS,
+    DIALECTS,
+    DIALECTS_PENDING_CORPUS_COVERAGE,
+    Rendering,
+    adapter_backed,
+    canonical,
+    renderings,
+    scenarios,
+    unsupported,
+)
 
 SCENARIOS = scenarios()
 BUILDABLE = [s for s in SCENARIOS if s.dialects and s.expected_error is None]
 FAILING = [s for s in SCENARIOS if s.expected_error is not None]
 PENDING = [s for s in SCENARIOS if not s.dialects]
+
+# The unit of the equivalence claim: one dialect file of one scenario. Both
+# lists carry EVERY rendering present, including ones no adapter can read --
+# those become visible skips inside `built()`, which is the point (§4.3).
+BUILDABLE_RENDERINGS = renderings(BUILDABLE)
+FAILING_RENDERINGS = renderings(FAILING)
 
 # The seed corpus, from FIXTURES.md §3. Listed here as well so that a scenario
 # quietly disappearing from the corpus fails a test rather than nothing.
@@ -58,8 +78,20 @@ def ids(collection):
     return [scenario.name for scenario in collection]
 
 
-def built(scenario):
-    return spanweave.build(scenario.dialects[0])
+def labels(collection):
+    return [rendering.label for rendering in collection]
+
+
+def built(rendering):
+    """Build one rendering, or skip loudly if nothing can read its dialect.
+
+    The skip is inside the test rather than a filter on the parametrization on
+    purpose: a filtered-out rendering leaves no trace in the run, and "we chose
+    not to check this" must not look like "there was nothing to check".
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    return spanweave.build(rendering.path)
 
 
 # --------------------------------------------------------------------------
@@ -134,42 +166,157 @@ def test_a_scenario_expects_exactly_one_outcome(scenario):
 
 
 # --------------------------------------------------------------------------
+# The transitional gap: renderings no adapter can read (TASKS.md 2.7)
+# --------------------------------------------------------------------------
+
+
+def test_every_declared_dialect_has_an_adapter_that_can_read_it():
+    # `DIALECTS` is what drives §4.3's "silence is a failure" rule. Naming a
+    # dialect there that nothing can build would make the corpus demand
+    # renderings no test could ever check -- coverage on paper only.
+    missing = sorted(set(DIALECTS) - adapter_backed())
+    assert missing == [], f"DIALECTS names {missing}, which no adapter reads"
+
+
+def test_no_adapter_reads_a_dialect_the_corpus_does_not_account_for():
+    """The tripwire 2.13 finally clears.
+
+    An adapter whose dialect is absent from `DIALECTS` is an adapter the corpus
+    does not require any scenario to cover: its renderings can be added, or
+    quietly not added, and nothing goes red. That is the rot this whole
+    mechanism exists to prevent.
+
+    `DIALECTS_PENDING_CORPUS_COVERAGE` is the only way to hold that state, and
+    it is a *declaration*, not an exemption -- the same shape §4.3 already uses
+    for a scenario a dialect cannot render, and for the same reason: a declared
+    gap is reviewable, a silent one is not. Empty is the only correct
+    long-term value. **Do not add an entry to get a test green** -- add one
+    only when a task explicitly says the corpus is not yet covering a new
+    dialect, and delete it in the task that covers it.
+    """
+    assert adapter_backed() == set(DIALECTS) | set(DIALECTS_PENDING_CORPUS_COVERAGE)
+
+
+def test_the_pending_list_holds_nothing_stale():
+    # A dialect listed as pending that no adapter provides is a leftover, and
+    # a leftover here silently widens the exemption above.
+    assert set(DIALECTS_PENDING_CORPUS_COVERAGE) <= adapter_backed()
+    assert not (set(DIALECTS_PENDING_CORPUS_COVERAGE) & set(DIALECTS))
+
+
+def test_the_suite_reports_every_rendering_it_skipped_and_why():
+    # The skip has to be *visible*, not merely correct: `conftest.py` puts it
+    # in the pytest header on every run, and each skipped rendering is a
+    # reported skip rather than an absent test.
+    from tests import conftest
+
+    header = "\n".join(conftest.pytest_report_header(None))
+    skipped = unsupported(SCENARIOS)
+    if not skipped:
+        assert "skipping nothing" in header
+        return
+    for rendering in skipped:
+        assert rendering.dialect in header
+        assert rendering.scenario.name in header
+
+
+def _planted(scenario, dialect, tmp_path, text=None):
+    """A rendering that does not live in the corpus, for the two proofs below.
+
+    Written to tmp rather than into `fixtures/`, because a fixture planted to
+    prove a test has teeth is a fixture someone later mistakes for a real one.
+    """
+    source = scenario.rendering("openinference")
+    path = tmp_path / f"{dialect}.jsonl"
+    path.write_text(
+        text if text is not None else source.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    return Rendering(scenario=scenario, dialect=dialect, path=path)
+
+
+def test_a_second_rendering_that_disagrees_with_the_canonical_graph_fails(tmp_path):
+    # Teeth. Without this the parametrization could be comparing nothing: with
+    # one dialect per scenario today, "every rendering agrees" is vacuously
+    # true, and would stay green if the comparison were broken.
+    scenario = next(s for s in BUILDABLE if s.name == "llm_tool_llm")
+    disagreeing = _planted(
+        scenario,
+        "openinference",
+        tmp_path,
+        text=scenario.rendering("openinference")
+        .read_text(encoding="utf-8")
+        .replace("Look up the order status.", "Look up something else."),
+    )
+    document = to_document(built(disagreeing))
+    assert canonical(document, scenario.erase) != scenario.expected_graph
+
+
+def test_a_rendering_for_an_adapterless_dialect_is_skipped_not_passed(tmp_path):
+    # The failure mode this guards is not a wrong answer but a confident
+    # silence: a rendering nothing can read must not slide through green.
+    scenario = next(s for s in BUILDABLE if s.name == "llm_tool_llm")
+    unreadable = _planted(scenario, "not_a_registered_dialect", tmp_path)
+    assert not unreadable.supported
+    assert "no registered adapter" in unreadable.skip_reason
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        built(unreadable)
+    assert "not_a_registered_dialect" in str(skipped.value)
+
+
+# --------------------------------------------------------------------------
 # The central assertion
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("scenario", BUILDABLE, ids=ids(BUILDABLE))
-def test_the_scenario_produces_its_canonical_graph(scenario):
-    document = to_document(built(scenario))
-    assert canonical(document, scenario.erase) == scenario.expected_graph
-
-
-@pytest.mark.parametrize("scenario", BUILDABLE, ids=ids(BUILDABLE))
-def test_the_scenario_produces_exactly_its_expected_diagnostics(scenario):
-    document = to_document(built(scenario))
-    assert canonical(document, scenario.erase)["diagnostics"] == (
-        scenario.expected_diagnostics
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_rendering_produces_its_scenario_s_canonical_graph(rendering):
+    # THE claim. Every dialect of a scenario, against that scenario's one
+    # unmodified expectation. If this fails for a second dialect, the adapter
+    # is wrong or the model is -- it is never the expectation that moves.
+    document = to_document(built(rendering))
+    assert canonical(document, rendering.scenario.erase) == (
+        rendering.scenario.expected_graph
     )
 
 
-@pytest.mark.parametrize("scenario", FAILING, ids=ids(FAILING))
-def test_the_scenario_refuses_to_build(scenario):
-    expectation = scenario.expected_error
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_rendering_produces_exactly_its_expected_diagnostics(rendering):
+    document = to_document(built(rendering))
+    assert canonical(document, rendering.scenario.erase)["diagnostics"] == (
+        rendering.scenario.expected_diagnostics
+    )
+
+
+@pytest.mark.parametrize(
+    "rendering", FAILING_RENDERINGS, ids=labels(FAILING_RENDERINGS)
+)
+def test_the_rendering_refuses_to_build(rendering):
+    # §4.2's equivalence half: every dialect of a refusal scenario must refuse
+    # the SAME way. A dialect that builds a graph where another refuses is a
+    # finding about the model, not a fixture to relax.
+    expectation = rendering.scenario.expected_error
     with pytest.raises(SpanweaveError) as failure:
-        built(scenario)
+        built(rendering)
     # Type AND code, never message text (`FIXTURES.md` §4.2). A fixture that
     # pinned a phrase would start pressuring the message to stay as written.
     assert type(failure.value).__name__ == expectation["error"]
     assert failure.value.code == expectation["code"]
 
 
-@pytest.mark.parametrize("scenario", FAILING, ids=ids(FAILING))
-def test_a_refusal_still_says_something_useful_to_a_human(scenario):
+@pytest.mark.parametrize(
+    "rendering", FAILING_RENDERINGS, ids=labels(FAILING_RENDERINGS)
+)
+def test_a_refusal_still_says_something_useful_to_a_human(rendering):
     # The corpus does not pin the wording, so something else has to insist
     # there IS wording. Otherwise "matched by code" quietly licenses an empty
     # message.
     with pytest.raises(SpanweaveError) as failure:
-        built(scenario)
+        built(rendering)
     assert len(str(failure.value)) > 40
 
 
@@ -183,24 +330,32 @@ def test_every_expected_error_code_is_one_the_library_actually_raises():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("scenario", BUILDABLE, ids=ids(BUILDABLE))
-def test_every_scenario_builds_a_valid_graph(scenario):
-    assert validate(to_document(built(scenario))) == ()
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_every_rendering_builds_a_valid_graph(rendering):
+    assert validate(to_document(built(rendering))) == ()
 
 
-@pytest.mark.parametrize("scenario", BUILDABLE, ids=ids(BUILDABLE))
-def test_every_scenario_is_byte_identical_on_a_rebuild(scenario):
-    determinism.assert_repeatable(lambda: dumps(built(scenario)))
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_every_rendering_is_byte_identical_on_a_rebuild(rendering):
+    graph = built(rendering)
+    determinism.assert_repeatable(lambda: dumps(graph))
 
 
-@pytest.mark.parametrize("scenario", BUILDABLE, ids=ids(BUILDABLE))
-def test_every_scenario_accounts_for_every_record(scenario):
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_every_rendering_accounts_for_every_record(rendering):
+    graph = built(rendering)
     records = [
         json.loads(line)
-        for line in scenario.dialects[0].read_text(encoding="utf-8").splitlines()
+        for line in rendering.path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    determinism.assert_every_record_accounted_for(records, to_document(built(scenario)))
+    determinism.assert_every_record_accounted_for(records, to_document(graph))
 
 
 # --------------------------------------------------------------------------
