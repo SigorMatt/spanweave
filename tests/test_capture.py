@@ -7,6 +7,7 @@ actually go wrong. It is duck-typed precisely so this test can exist without
 opentelemetry installed.
 """
 
+import importlib.metadata
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -1562,9 +1563,59 @@ def test_the_provenance_template_names_the_exact_installed_versions():
     assert "dialect emitted: otel_genai" in steps
     assert "matched pair" in steps
     assert "execute_tool" in steps  # the tool span here is convention-defined
-    # Nothing is installed in the agent's environment, so the template says so
-    # rather than printing a plausible number.
-    assert "NOT INSTALLED" in steps
+
+
+# The next three tests replace a single assertion that read `assert "NOT
+# INSTALLED" in steps`. It was green in CI and red on the machine that had just
+# installed the GenAI packages in order to run the capture -- which is to say it
+# passed in every environment where it could not catch anything, and failed in
+# the only one where the property it names is actually load-bearing. An
+# environment-sensitive assertion about *one* branch is not a test of the
+# property; assert both branches, and drive them from the test rather than from
+# whatever happens to be on the machine.
+
+
+def test_an_installed_package_reports_its_real_version():
+    # `pytest` is installed by construction -- this test is running under it.
+    # The point is that the number comes from the environment, so nothing here
+    # asserts a literal version string.
+    assert run.installed("pytest") == importlib.metadata.version("pytest")
+    assert "NOT INSTALLED" not in run.installed("pytest")
+
+
+def test_an_absent_package_says_so_rather_than_guessing():
+    assert "NOT INSTALLED" in run.installed("spanweave-no-such-package-24601")
+
+
+def test_the_provenance_template_prints_whatever_installed_reports(monkeypatch):
+    # Both branches through the template itself: the versions in the provenance
+    # file are read from the environment at capture time, never transcribed.
+    # Patching `installed` proves the template calls it -- a hard-coded or
+    # remembered version string would survive the patch.
+    real = run.installed
+
+    def steps():
+        return run._next_steps(
+            captured="x.jsonl",
+            name="x",
+            backend=GENAI,
+            model="openai/gpt-oss-120b",
+            endpoint="",
+            today="2026-01-01",
+            count=4,
+        )
+
+    monkeypatch.setattr(run, "installed", lambda package: "9.9.9-from-the-env")
+    present = steps()
+    assert "opentelemetry-instrumentation-genai-openai 9.9.9-from-the-env" in present
+    assert "NOT INSTALLED" not in present
+
+    # The absent branch goes through the real `installed()`, just asked about a
+    # package that cannot be installed -- so the placeholder wording is the
+    # shipped one and not a copy of it made here.
+    monkeypatch.setattr(run, "installed", lambda package: real(package + "-24601"))
+    absent = steps()
+    assert "NOT INSTALLED" in absent
 
 
 def test_the_openinference_half_carries_the_matched_pair_statement_too():

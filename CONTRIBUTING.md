@@ -50,6 +50,11 @@ A mergeable PR:
       issue, don't edit the expectation (`FIXTURES.md` §4).
 - [ ] Updates `SPEC.md` if behavior changed, in the same PR.
 - [ ] Is small. One concern per PR.
+- [ ] Has no test whose result depends on what happens to be installed on the
+      machine running it. A test that asserts the *absent* branch of an
+      optional dependency is green in CI and red on the developer's machine —
+      it passes in every environment where it cannot catch anything. Assert
+      both branches, and drive them from the test.
 
 ## Adding an adapter — the short version
 
