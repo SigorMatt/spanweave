@@ -1703,7 +1703,7 @@ below:
   > about what `openai/gpt-oss-120b` will actually emit. **2.6 is still a
   > HALT.**
 
-- [ ] **2.6 The GenAI capture run.** `[2a]` **NEVER CUT** (`ROADMAP.md`: a
+- [x] **2.6 The GenAI capture run.** `[2a]` **NEVER CUT** (`ROADMAP.md`: a
   hand-authored fixture proves the adapter matches our *understanding* of a
   dialect; only a captured one proves it matches the instrumentor).
   **HALT — human-run, exactly as 1.9 was.** The agent must not synthesize a

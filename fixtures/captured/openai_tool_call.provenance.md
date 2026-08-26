@@ -32,6 +32,17 @@ transport.
 An unrecorded redaction is indistinguishable from none, so this section exists
 even though nothing was removed.
 
+## Matched pair
+
+This file and `genai_tool_call.jsonl` are a **matched pair**: same model
+(openai/gpt-oss-120b), same prompt, same tool inventory, differing **only in
+the instrumentor** — OpenInference here, OTel GenAI there. Neither can be read
+as evidence about a dialect without the other.
+
+Note one asymmetry: GenAI defines an `execute_tool` span convention and
+OpenInference defines none, so the tool span is convention-defined in that
+half and ours in this one. That is a property of the dialects, not a choice.
+
 ## What this fixture may be used to claim
 
 **It demonstrates `openinference-instrumentation-openai`** — whatever service
