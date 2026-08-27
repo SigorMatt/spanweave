@@ -3683,148 +3683,132 @@ Starting Phase 3 is still a separate decision.
   - [ ] **The capture itself — human-run.** HALT.
 
 - [x] **2.16 Render the three declared scenarios — from the capture.** `[2a]`
-  **HALT: `invoke_workflow` → `chain` is a semantic decision about a closed
-  vocabulary. NOT taken. The evidence is below and the reversal is a one-line
-  diff plus two files, both written and verified.**
+  **Decision: `invoke_workflow` is NOT mapped to `chain`. ENDORSED by the human
+  (2026-08-28). The reversal below is kept intact and is NOT applied.**
 
   2.15's capture landed (`fixtures/captured/genai_workflow.jsonl`, ff11065).
   This task read it and derived the renderings from it, in that order.
 
-  > ## What the capture actually shows
+  > ## The load-bearing argument: provenance
   >
-  > Nine spans, one trace, `otel_genai`. The `chain` candidate is line 1, and
-  > this is the whole of it:
+  > **No instrumentor can ever emit an `invoke_workflow` span.** An
+  > instrumentor wraps **SDK calls**, and a workflow is not one — there is
+  > nothing for it to hook. Only an application can emit such a span, which is
+  > exactly what `capture/backends.py` did to produce the one in the capture.
   >
-  > ```json
-  > {"trace_id":"576957f1…","span_id":"32d899e81a805815","parent_id":null,
-  >  "name":"invoke_workflow paris.brief","start_time":1787864372.8942885,
-  >  "end_time":1787864374.7456913,"status":"UNSET",
-  >  "attributes":{"gen_ai.operation.name":"invoke_workflow",
-  >                "gen_ai.workflow.name":"paris.brief"}}
-  > ```
+  > So the mapping would rest permanently on renderings derived from spans **we
+  > emit ourselves** — not while a capture is pending, but **for the whole
+  > class, and for good.** At that point `capture/README.md`'s founding rule
+  > binds: *evidence about the outside world that you generated from your own
+  > idea of the outside world is not evidence.*
   >
-  > No payload attributes, no model, no `gen_ai.agent.name`. Two attributes.
-  > The link is on line 6, the second `invoke_agent` span, as a record-level
-  > `links` array naming line 2 — same field shape both dialects use.
+  > That is the whole argument, and it generalizes past this value. The general
+  > form is now in `ADAPTERS.md` §3 under `kind`, where someone filling that
+  > field will meet it: **a convention value no instrumentor can emit is not a
+  > mapping candidate, however well it fits the vocabulary — map from what
+  > instrumentors produce, not from what the registry defines.** A mapping
+  > whose evidence can never arrive is not deferred, it is unfounded, and the
+  > difference matters because the first looks temporary and the second is not.
   >
-  > ## The decision: `invoke_workflow` is **not** mapped to `chain`
+  > **Checked against the convention's own library, not assumed.**
+  > `opentelemetry-util-genai` 1.1b0 *does* ship a `WorkflowInvocation`
+  > (`_workflow_invocation.py`): operation `invoke_workflow`, span name
+  > `invoke_workflow {name}`, attributes `gen_ai.operation.name` +
+  > `gen_ai.workflow.name`. Two things follow, and they point the same way.
+  > First, it **confirms the capture's transcription** — the harness's span
+  > matches that shape attribute for attribute, which is what a faithful
+  > emission looks like. Second, it is reached through `handler.workflow(name)`,
+  > a surface an **application** calls, exactly as our harness does. The
+  > convention defines the shape; nothing auto-discovers a workflow, because a
+  > workflow is a fact about an application that no wrapper can observe. The
+  > argument survives its strongest check.
   >
-  > 2.10's reason was conjunctive: *a judgement rather than a name match*, **and**
-  > *no captured GenAI trace contains one*. The capture retires the second
-  > conjunct and leaves the first exactly where it was. So the question is
-  > whether anything else changed — and three things did, of which **two are
-  > measured** and all three point the same way.
+  > ## The definitional argument is real, and lost anyway
   >
-  > **1. The span is harness-emitted, and structurally must be.** The
-  > provenance file says so, and it is not an accident of this harness: an
-  > instrumentor wraps **SDK calls**, and a workflow is not one. *No
-  > instrumentor can ever emit an `invoke_workflow` span.* So the evidence class
-  > 2.10 was implicitly waiting for cannot arrive — but the corollary is not
-  > "decide anyway", it is that `capture/README.md`'s own sentence binds:
-  > *evidence about the outside world that you generated from your own idea of
-  > the outside world is not evidence.* The capture proves the value round-trips
-  > and that the adapter degrades honestly on it. It cannot say what a third
-  > party means by it, and it is the only `invoke_workflow` span in existence
-  > here.
+  > A later reader should be able to see that this was close, so it is recorded
+  > at full strength rather than as a straw man.
   >
-  > **2. Mapping it BREAKS `unknown_kind[otel_genai]` — measured, not
-  > predicted.** `invoke_workflow` is the adapter's **only** unmapped convention
-  > value, and it is that scenario's `otel_genai` specimen *precisely because*
-  > it is read from the registry rather than invented. Under the mapping:
+  > `SPEC.md` §3.2 defines `chain` as *"a composite step with no more specific
+  > kind"*. A workflow **is** a composite step. `NodeKind` has nothing more
+  > specific, and the captured span is exactly that: a composite parent, no
+  > payloads, no model, two attributes. On the definition alone, `chain` fits —
+  > better than any other value in the enum, and better than `unknown` does.
+  >
+  > **It loses to provenance, not to definition.** The question is not whether
+  > the shoe fits; it is whether we are entitled to say so on evidence we
+  > generated. We are not, and never will be for this class.
+  >
+  > ## The cost measurement — confirming, not carrying
+  >
+  > Secondary to the above, and recorded in that order deliberately: it is
+  > weaker, and it does not generalize. It does confirm.
+  >
+  > | Scenario | Under the mapping | |
+  > |---|---|---|
+  > | `cyclic_parents` | reproduces `expected/graph.json` **exactly** | retired |
+  > | `span_links` | reproduces `expected/graph.json` **exactly** | retired |
+  > | `retriever_and_embedding` | still fails, on `s1.inputs` alone (2.17) | **not** retired |
+  > | `unknown_kind` | **breaks** | broken |
+  >
+  > Two retired, one broken. And what breaks is the adapter's **only** unmapped
+  > convention value — `unknown_kind`'s `otel_genai` half uses `invoke_workflow`
+  > precisely because it is read from the registry rather than invented.
+  > Re-authoring it would mean picking a `gen_ai.operation.name` outside the
+  > convention's nine, i.e. **inventing one**, which `FIXTURES.md` §5.1 forbids
+  > and which that scenario's own table says it deliberately avoided.
+  >
+  > Measured, not predicted:
   >
   > ```
   > unknown_kind[otel_genai]:  node s1.kind: got 'chain'  want 'unknown'
   >                            diagnostics: got []  want [unknown_span_kind ×1]
   > ```
   >
-  > Recovering it would mean a `gen_ai.operation.name` value outside the
-  > convention's nine, which is the move that scenario's own table says it
-  > deliberately avoided and which no observed output supports. So the trade is
-  > not "three declarations for free" — it is **two retired, one broken, one
-  > untouched**.
-  >
-  > **3. `SPEC.md` §3.2 designates `unknown` for exactly this class.** It names
-  > `guardrail`, `reranker`, `router`, `handoff` — all composite-ish kinds a
-  > dialect invents — and says the answer is `unknown` + `reported_kind`, calling
-  > that *"what makes the closed enum survivable in practice"*. If `chain` were
-  > the residual bucket for composites, that passage describes a path nothing
-  > takes. And `chain` is reachable from OpenInference by a literal name match
-  > (`CHAIN`), which is what every other `OPERATIONS` entry is. `invoke_workflow`
-  > would be the table's only inference — and "a GenAI workflow is a chain" is a
-  > domain interpretation, which is `CLAUDE.md` invariant 1.
-  >
-  > **Nothing here is decisive against mapping.** The definitional argument is
-  > real: `chain` *is* "a composite step with no more specific kind", `NodeKind`
-  > has nothing more specific, and the captured span is a composite parent with
-  > absent payloads. That is why this is carried rather than closed. What is
-  > claimed is only this: **the capture did not change the balance, and two new
-  > measured facts tilt it the other way.**
+  > `SPEC.md` §3.2 says the same thing in prose: `unknown` + `reported_kind` is
+  > the first-class outcome for exactly this class, naming `guardrail`,
+  > `reranker`, `router`, `handoff`, and calling it *"what makes the closed enum
+  > survivable in practice"*.
   >
   > ## What the three scenarios rest on instead
   >
-  > Each `coverage.json` was rewritten, because each carried a clause that is
-  > now **false**. The §4.3 lifecycle is a reason that survives being checked,
-  > and one of these did not.
+  > All three `coverage.json` files were rewritten, because each carried a
+  > clause the capture made **false** — *"no captured GenAI trace contains
+  > one"*. A §4.3 reason is an invitation to check it against observed output;
+  > one that has stopped being true is how a declaration becomes an exemption.
   >
-  > | Scenario | Under the mapping | Blocked by |
-  > |---|---|---|
-  > | `cyclic_parents` | **reproduces `expected/graph.json` exactly** | the decision, and nothing else |
-  > | `span_links` | **reproduces `expected/graph.json` exactly** | the decision, and nothing else |
-  > | `retriever_and_embedding` | still fails | an **independent** blocker that outlives the decision |
+  > - `cyclic_parents`, `span_links`: **one decision away and nothing else.**
+  > - `retriever_and_embedding`: blocked independently — see 2.17.
   >
-  > The first two agree with `name` **compared** — no `comparison.json`, no
-  > `erase: ["name"]`, and therefore **no edit to any `expected/graph.json`**.
-  > That was not assumed; it was the reason for running the probe with and
-  > without the erasure. It matters because the precedent (2.8) for rendering a
-  > second dialect was `erase: ["name"]` plus deleting `name` from the frozen
-  > graph — a step that was carried to a human. These two need none of it.
+  > ## `EdgeKind.link` across dialects — unchanged, and not softened
   >
-  > **`retriever_and_embedding` is the finding.** Measured under the mapping,
-  > with the convention's own attributes:
+  > **The cross-dialect claim does not cover `EdgeKind.link`.**
   >
-  > ```
-  > node s2.outputs: got  {"state":"absent",  "mime":null,               "value":null}
-  > node s2.outputs: want {"state":"present", "mime":"application/json", "value":[{"id":"doc-1"},{"id":"doc-2"}]}
-  > ```
+  > `fixtures/captured/genai_workflow.jsonl` produces a real `link` edge in
+  > `otel_genai`, `basis` `span.link`, target resolving in-trace. That proves
+  > the adapter reads links. It is **fidelity evidence in one dialect, and
+  > fidelity in one dialect is not equivalence** — `fixtures/captured/` is not
+  > the equivalence corpus.
   >
-  > The convention **does** define `gen_ai.retrieval.documents` and
-  > `gen_ai.retrieval.query.text` (0.65b0). This adapter consumes neither, so
-  > they land in `unmapped` and the payload stays `absent`. `FIXTURES.md` §4.4
-  > forbids declaring a payload's `state` away — `absent` ≠ `present` is the
-  > model's central honesty claim — so **no declaration can absorb this**.
-  > Rendering it needs adapter work written from the convention registry with no
-  > captured `retrieval` or `embeddings` span in the repo: §5.1's forbidden move,
-  > and the defect that cost Phase 1 four fixtures.
+  > **What would cover it:** `span_links` rendered in `otel_genai`. Nothing
+  > else in the corpus carries the kind, and nothing else carries the only
+  > adapter-supplied `basis` string in the library. **The chain decision blocks
+  > exactly that**, and the rendering is written and verified below, so the
+  > coverage is one decision away rather than one piece of work away.
   >
-  > That is the **second** time this scenario's stated blocker has been wrong.
-  > 2.11 predicted the retriever and then recorded the chain parent. The
-  > retriever *is* a blocker — one level down, at the payload rather than the
-  > kind. It must not be retired with the other two.
+  > ## The reversal — WRITTEN AND VERIFIED, **NOT APPLIED**
   >
-  > ## `EdgeKind.link` across dialects — the plain answer
+  > Kept whole so the next person does not re-derive it. Nothing here is in the
+  > tree; the corpus builds green without it.
   >
-  > **No. The cross-dialect claim still does not cover `EdgeKind.link`.**
+  > **Its cost, stated with it:** applying this retires `cyclic_parents` and
+  > `span_links` and **breaks `unknown_kind[otel_genai]`**, which then needs an
+  > invented `gen_ai.operation.name` — there is no observed value to fall back
+  > on. `retriever_and_embedding` stays declared either way (2.17).
   >
-  > `fixtures/captured/genai_workflow.jsonl` does produce a real `link` edge in
-  > `otel_genai`, `basis` `span.link`, target resolving in-trace. That proves the
-  > adapter reads links, and it is worth having. But `fixtures/captured/` is not
-  > part of the equivalence corpus — it is **fidelity evidence in one dialect,
-  > not cross-dialect coverage.**
-  >
-  > `span_links` is still the only corpus scenario carrying the kind, it is
-  > still declared unrenderable in `otel_genai`, and so `link` **and the only
-  > adapter-supplied `basis` string in the library** remain exercised in exactly
-  > one dialect. Yes — `span_links` is the thing that would carry it, and it
-  > would carry it the moment the decision is taken. That is measured.
-  >
-  > ## The reversal, ready to apply
-  >
-  > If the decision goes the other way, this is the whole of it. One line in
-  > `spanweave/adapters/otel_genai.py`:
+  > One line in `spanweave/adapters/otel_genai.py`:
   >
   > ```diff
-  > -    "create_agent": NodeKind.AGENT,
-  > +    "create_agent": NodeKind.AGENT,
+  >      "create_agent": NodeKind.AGENT,
   > +    "invoke_workflow": NodeKind.CHAIN,
   >  }
   > -UNMAPPED_BY_DECISION = ("invoke_workflow",)
@@ -3845,39 +3829,153 @@ Starting Phase 3 is still a separate decision.
   > {"attributes":{"gen_ai.operation.name":"invoke_workflow"},"end_time":1001.0,"links":[{"span_id":"s9","trace_id":"t2"}],"name":"chain.step","parent_id":"s0","span_id":"s1","start_time":1000.2,"status":"OK","trace_id":"t1"}
   > ```
   >
-  > Both verified byte-exact against the **unmodified** expected graphs. Then
-  > delete those two `coverage.json` files (the §4.3 lifecycle, as
-  > `declared_data_edge`'s did), tick their `scenario.md` dialect boxes — and
-  > **re-author `unknown_kind`'s `otel_genai` rendering**, which is the part that
-  > is not free and has no observed value to fall back on.
+  > Both verified byte-exact against the **unmodified** expected graphs, with
+  > `name` **compared** — no `comparison.json`, no `erase: ["name"]`, and so no
+  > edit to any frozen graph. That is worth noting against the 2.8 precedent,
+  > where rendering a second dialect *did* need `erase: ["name"]` plus deleting
+  > `name` from the expected graph, and was carried to a human for it.
   >
-  > Each rendering's attribute shape is transcribed from the capture: the
-  > workflow span carries `gen_ai.operation.name` alone, exactly as every other
-  > `otel_genai` rendering carries only the keys its scenario exercises, and
-  > `gen_ai.workflow.name` is omitted for the same reason `server.address` and
-  > `gen_ai.response.*` are omitted everywhere else — omission is fine,
-  > misstatement is not (§5.1). Span names match the OpenInference half so no
-  > erasure is needed; that is a fixture-authoring convention (§4.1's shape), not
-  > a claim about the dialect.
+  > Then delete those two `coverage.json` files (the §4.3 lifecycle, as
+  > `declared_data_edge`'s did), tick their `scenario.md` dialect boxes, and
+  > re-author `unknown_kind`'s `otel_genai` half — the part that is not free.
   >
-  > ## Done, and not done
+  > Attribute shapes are transcribed from the capture: the workflow span
+  > carries `gen_ai.operation.name` alone, as every other `otel_genai` rendering
+  > carries only the keys its scenario exercises, and `gen_ai.workflow.name` is
+  > omitted for the same reason `server.address` and `gen_ai.response.*` are
+  > omitted everywhere else — omission is fine, misstatement is not (§5.1).
+  >
+  > **When this reopens:** a dialect whose *instrumentor* emits a genuine
+  > composite step. Then the evidence exists and the question is fresh. Until
+  > then it is settled, and this record is the reason.
+  >
+  > ## Done
   >
   > - [x] Renderings derived by **reading the committed fixture**, then probed
-  >       against the unmodified expected graphs. Nothing was written to make a
-  >       rendering pass; `canonical()` untouched; no `expected/graph.json`
-  >       edited.
-  > - [x] All three `coverage.json` reasons rewritten — each had a clause that
-  >       the capture made false, and a stale reason is how a declaration
-  >       becomes an exemption.
-  > - [x] `retriever_and_embedding`'s **independent** blocker found and recorded.
-  > - [x] `unknown_kind`'s cost recorded in its own `scenario.md`, and the stale
-  >       "one of the two this adapter does not map" corrected to *the only one*.
-  > - [x] `EdgeKind.link` answered plainly: not covered; `span_links` is the
-  >       carrier; one decision away.
-  > - [x] `make check` and `make conformance` green. `PREDICTIONS.md` untouched.
-  > - [ ] **The mapping decision — human.** HALT.
-  > - [ ] Not started, and dependent on it: the two renderings, the two
-  >       `coverage.json` retirements, `unknown_kind`'s re-authoring.
+  >       against the unmodified expected graphs. `canonical()` untouched, no
+  >       `expected/graph.json` edited, nothing written to make a test pass.
+  > - [x] Decision taken, endorsed, and recorded with the provenance argument
+  >       load-bearing and the definitional argument stated at full strength.
+  > - [x] General rule in `ADAPTERS.md` §3 (`kind`) and its §6 checklist.
+  > - [x] All three `coverage.json` reasons rewritten; `unknown_kind`'s cost
+  >       recorded in its own `scenario.md`, and its stale *"one of the two this
+  >       adapter does not map"* corrected to **the only one**.
+  > - [x] `EdgeKind.link` answered plainly and not softened anywhere.
+
+- [x] **2.17 `retriever_and_embedding`: the adapter gap, and what remains.**
+  `[2a]` **HALT: still not renderable. Two blockers, both evidenced below.**
+
+  2.16 found this scenario blocked on a payload as well as on `chain`. The
+  payload half was an **adapter gap, not a vocabulary one**, and is now closed.
+  The scenario is still declared, and the reason is a better one.
+
+  > ## Fixed: the retriever's output
+  >
+  > The adapter now reads a retrieval span's two content attributes:
+  >
+  > | Attribute | mime | parsed |
+  > |---|---|---|
+  > | `gen_ai.retrieval.documents` | `application/json` | yes |
+  > | `gen_ai.retrieval.query.text` | `text/plain` | **no** |
+  >
+  > The asymmetry is the dialect's, not a choice: `RetrievalInvocation.documents`
+  > goes through the same `gen_ai_json_dumps` the message lists use, and
+  > `query_text` is typed `str | None` and written verbatim. So this is
+  > `ADAPTERS.md` §3's *"a mime the dialect defines but does not emit"* rule
+  > applied in **both** directions — reading a JSON-shaped query as JSON would
+  > invent a structure the convention does not claim, which is the same error as
+  > refusing `application/json` on the attributes it does.
+  >
+  > `s2.outputs` now agrees with `expected/graph.json` exactly.
+  >
+  > ## What it was mapped from — said plainly, because it is weaker
+  >
+  > **Neither attribute appears in any captured trace in this repo.** The
+  > evidence, since it was asked for:
+  >
+  > ```
+  > fixtures/captured/openai_tool_call.jsonl   4 spans   AGENT, LLM, TOOL
+  > fixtures/captured/genai_tool_call.jsonl    4 spans   invoke_agent, chat, execute_tool
+  > fixtures/captured/genai_workflow.jsonl     9 spans   invoke_workflow, invoke_agent, chat, execute_tool
+  >
+  > lines carrying gen_ai.retrieval.documents / .query.text / embeddings content:  NONE
+  > ```
+  >
+  > Three traces, 17 spans, and not a `retrieval` or `embeddings` span among
+  > them. The mapping comes from `opentelemetry-util-genai` 1.1b0's
+  > `_retrieval_invocation.py` — the support library the captured traces' **own
+  > instrumentor** delegates to for `gen_ai.input.messages`, so the same source
+  > read at the same version, and it states the types rather than only the
+  > names.
+  >
+  > The registry alone would **not** have been enough, and this is worth
+  > knowing: in `opentelemetry-semantic-conventions` 0.65b0 every `gen_ai.*`
+  > docstring has been replaced by the notice that the conventions moved house.
+  > It supplies names and nothing else — no type, no brief, no requirement
+  > level. `capture/README.md` already warns not to trust that package past its
+  > date; this is the first place the warning bit.
+  >
+  > This provenance is weaker than a capture and is recorded as such in the
+  > adapter, in the tests, and in the scenario — not left for a reader to work
+  > out from the fact that the tests pass.
+  >
+  > ## Still blocked, and the blocker moved again
+  >
+  > | Node | Field | `otel_genai` | |
+  > |---|---|---|---|
+  > | `s2` | `outputs` | agrees exactly | **fixed** |
+  > | `s1` | `inputs` | `absent` vs `present` | **blocker 1** |
+  > | `s0` | `kind` | `unknown` vs `chain` | blocker 2 |
+  >
+  > **Blocker 1: the dialect has no content attribute for an embedding span at
+  > all.** `EmbeddingInvocation` emits `gen_ai.embeddings.dimension.count`,
+  > `gen_ai.request.encoding_formats`, `gen_ai.response.model` and token counts
+  > — nothing carrying the embedded text. There is no attribute to render, and
+  > putting the text under `gen_ai.input.messages` would be inventing one.
+  >
+  > That is `absent` against `present`, a payload **state** disagreement, and
+  > `FIXTURES.md` §4.4 forbids declaring one away *ever*: `absent` ≠ `empty` ≠
+  > `redacted` is the model's central honesty claim and there must be no
+  > mechanism that can absorb a disagreement about it. So this is not a
+  > declaration away from renderable — it is unrenderable, and **no capture can
+  > retire it**, because it is a property of the convention rather than a gap in
+  > an adapter.
+  >
+  > **Blocker 1 outlives blocker 2, measured:** with `invoke_workflow`
+  > hypothetically mapped to `chain`, the scenario still fails on `s1.inputs`
+  > alone. If 2.16 is ever reversed, this scenario must **not** be retired with
+  > the other two.
+  >
+  > ## The stated blocker has now been wrong three times
+  >
+  > Worth recording as a pattern rather than three separate corrections. 2.11:
+  > *the dialect may not name a retriever* — refuted, it does. 2.11 then: *the
+  > chain parent* — true but not the whole of it. 2.16: *the chain parent and
+  > the retriever's payloads* — the payloads were an adapter gap, now closed,
+  > and the real one was one node over.
+  >
+  > Each reason was checked and each was wrong in the same direction: it named
+  > the first blocker found and stopped. `FIXTURES.md` §4.3's *"an invitation to
+  > check the reason against observed output"* is doing real work on this
+  > scenario, and the corrected version of `ADAPTERS.md` §5 now carries the
+  > general lesson — coverage is lost to **what a dialect cannot say**, which is
+  > usually a kind and sometimes an attribute that does not exist.
+  >
+  > ## Done
+  >
+  > - [x] Adapter reads both retrieval attributes, with the mime each one's type
+  >       warrants and neither invented.
+  > - [x] Eight unit tests, including the state-honesty cases, the
+  >       looks-like-JSON query, the no-fallback rule, and the embedding span
+  >       that has no content attribute — which is blocker 1, pinned.
+  > - [x] What it was mapped from stated in the adapter, the tests, the
+  >       scenario and the `coverage.json`.
+  > - [x] `coverage.json` rewritten again: one blocker removed, one restated,
+  >       one added. **Not retired** — the scenario still cannot be rendered.
+  > - [x] `make check`, `make conformance`, gates green. `PREDICTIONS.md`
+  >       untouched.
+  > - [ ] **Renderable only if the convention grows an embedding content
+  >       attribute (blocker 1) *and* 2.16 is reversed (blocker 2).** HALT.
 
 ## Phase 3 — Confirm, package, launch  *(provisional)*
 

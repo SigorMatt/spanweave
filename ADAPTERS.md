@@ -77,6 +77,38 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   carrying the original string. Never force a near-miss into a neighbouring kind;
   a wrong kind is worse than an honest `unknown`, because `unknown` is visible
   and a wrong kind isn't.
+- **A value no instrumentor can emit is not a mapping candidate, however well
+  it fits the vocabulary.** Map from what instrumentors **produce**, not from
+  what the registry **defines**. The two are not the same set, and where they
+  differ the registry is the larger one.
+
+  The test is mechanical: ask what would have to run for a span carrying this
+  value to exist. An instrumentor wraps **SDK calls**. If the thing the value
+  names is not an SDK call — a workflow, a pipeline stage, a business step —
+  then only an *application* can emit it, and every rendering you write for it
+  will be derived from a span you wrote yourself. Not just today, while a
+  capture is pending: **permanently, for the whole class.** At that point
+  `capture/README.md`'s rule binds — *evidence about the outside world that you
+  generated from your own idea of the outside world is not evidence* — and
+  `unknown` + `reported_kind` is the honest answer. It is a first-class
+  outcome, and a consumer that wants the value can read it off the node
+  (`SPEC.md` §3.2).
+
+  This is not a rule about difficulty or about waiting. A mapping whose
+  evidence can never arrive is not deferred, it is unfounded, and the
+  difference matters because the first looks temporary and the second is not.
+
+  **The worked case is `otel_genai`'s `invoke_workflow`** (`TASKS.md` 2.16),
+  and it is worth reading because the definitional argument for mapping it was
+  *real*: `SPEC.md` §3.2 defines `chain` as "a composite step with no more
+  specific kind", a workflow is a composite step, and `NodeKind` has nothing
+  more specific. It lost to provenance, not to definition. Three conformance
+  scenarios pay for that and are declared rather than rendered, and the record
+  says so with the cost measured.
+
+  **When it reopens:** a dialect whose *instrumentor* emits a genuine composite
+  step. Then the evidence exists, and the question is a fresh one rather than a
+  re-derivation.
 - `name` — as reported. Do not prettify or rewrite.
 - `operation` — the tool/model/retriever name when the dialect distinguishes it
   from `name`.
@@ -224,6 +256,19 @@ attribute shape. Payload spellings differ everywhere and are handled by
 declaration; a kind your dialect cannot name takes whole scenarios with it, and
 often not the ones the scenario was written for.
 
+**With one correction, from `TASKS.md` 2.17.** Payload spellings are handled by
+declaration only while the dialects disagree about a payload's *value* or
+*mime*. A dialect that emits **no attribute at all** where another emits one
+produces `absent` against `present`, and `FIXTURES.md` §4.4 forbids declaring a
+payload's `state` away — so that is coverage lost to attribute shape after all.
+`retriever_and_embedding` is the case: OTel GenAI has no content attribute for
+an embedding span, and no capture can retire that, because it is a property of
+the convention rather than a gap in an adapter.
+
+So the sharper version: coverage is lost to **what a dialect cannot say** —
+usually a kind, sometimes an attribute that does not exist. Both are declared;
+neither is a payload spelling.
+
 ## 6. Checklist
 
 - [ ] Single file under `spanweave/adapters/`; nothing else in the package touched.
@@ -234,6 +279,9 @@ often not the ones the scenario was written for.
 - [ ] `unmapped` keys recorded; `raw` preserved verbatim.
 - [ ] Renderings derived from **observed instrumentor output**, not from a
       reading of the dialect's spec.
+- [ ] No `NodeKind` mapped from a convention value **no instrumentor can
+      emit** — map from what instrumentors produce, not from what the registry
+      defines (§3, `kind`).
 - [ ] Requester ids taken only from what a span itself produced — history
       echoes do not pair.
 - [ ] All conformance scenarios rendered and passing against the **unmodified**

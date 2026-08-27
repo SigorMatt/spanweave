@@ -543,3 +543,117 @@ def test_the_adapter_accounts_for_every_operation_the_convention_defines():
         f"the convention defines {unaccounted}, which this adapter neither "
         f"maps nor names as a decision"
     )
+
+
+# --------------------------------------------------------------------------
+# A retrieval span's two content attributes (TASKS.md 2.17)
+# --------------------------------------------------------------------------
+#
+# Neither attribute appears in any captured trace in this repo -- three traces
+# and not a `retrieval` or `embeddings` span among them. What they were mapped
+# from is `opentelemetry-util-genai` 1.1b0's `_retrieval_invocation.py`, the
+# support library the captured traces' own instrumentor delegates to for
+# `gen_ai.input.messages`. That is the same source at the same version, and it
+# is stated here rather than left to be inferred from the fact that these tests
+# pass.
+
+
+def a_retrieval(**attributes):
+    return span_of({"gen_ai.operation.name": "retrieval", **attributes})
+
+
+def test_a_retrieval_span_states_its_query_as_text_and_its_documents_as_json():
+    # The dialect distinguishes the two, and so must the adapter:
+    # `query_text` is typed `str` and written verbatim; `documents` goes
+    # through the same `gen_ai_json_dumps` the message lists use.
+    span = a_retrieval(
+        **{
+            "gen_ai.retrieval.query.text": "order status",
+            "gen_ai.retrieval.documents": '[{"id":"doc-1"},{"id":"doc-2"}]',
+        }
+    )
+    assert span.kind is NodeKind.RETRIEVER
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.mime == "text/plain"
+    assert span.inputs.value == "order status"
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.mime == "application/json"
+    assert span.outputs.value == [{"id": "doc-1"}, {"id": "doc-2"}]
+    assert codes_of(span) == []
+
+
+def test_a_query_that_looks_like_json_is_still_text():
+    # The mime comes from what the convention says the attribute IS, not from
+    # what one value happens to look like. Parsing this would invent a
+    # structure the dialect does not claim -- the same error as refusing
+    # `application/json` on the attributes it does.
+    span = a_retrieval(**{"gen_ai.retrieval.query.text": '{"not":"json to us"}'})
+    assert span.inputs.mime == "text/plain"
+    assert span.inputs.value == '{"not":"json to us"}'
+    assert codes_of(span) == []
+
+
+def test_a_retrieval_span_with_no_content_has_absent_payloads():
+    # Both attributes are Opt-In in the convention, so absent is the ordinary
+    # case and must not be confused with empty (SPEC.md §3.3).
+    span = a_retrieval()
+    assert span.inputs.state is PayloadState.ABSENT
+    assert span.outputs.state is PayloadState.ABSENT
+    assert span.inputs.mime is None and span.outputs.mime is None
+
+
+def test_an_empty_document_list_is_empty_not_absent():
+    span = a_retrieval(**{"gen_ai.retrieval.documents": "[]"})
+    assert span.outputs.state is PayloadState.EMPTY
+    assert span.outputs.value == []
+
+
+def test_documents_that_do_not_parse_stay_present_and_say_so():
+    span = a_retrieval(**{"gen_ai.retrieval.documents": "[{"})
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.value is None
+    assert span.outputs.raw == "[{"
+    assert codes_of(span) == ["payload_parse_failed"]
+
+
+def test_a_retrieval_span_does_not_fall_back_to_the_message_pair():
+    # The retrieval pair is not a fallback, and the asymmetry is the
+    # convention's: `RetrievalInvocation` emits no message list at all. A
+    # retrieval span carrying one is reporting something this adapter does not
+    # read, and reporting it is the honest outcome -- not preferring it away.
+    span = a_retrieval(**{"gen_ai.input.messages": messages(user("hi"))})
+    assert span.inputs.state is PayloadState.ABSENT
+    assert "gen_ai.input.messages" in span.unmapped
+    assert codes_of(span) == ["unmapped_attributes"]
+
+
+def test_the_retrieval_attributes_are_not_read_on_other_kinds():
+    # They belong to one invocation in the convention. On a `chat` span they
+    # are attributes this adapter does not normalize, which is `unmapped` plus
+    # a diagnostic -- never a payload smuggled in from another operation.
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.retrieval.documents": '[{"id":"doc-1"}]',
+        }
+    )
+    assert span.kind is NodeKind.LLM
+    assert span.outputs.state is PayloadState.ABSENT
+    assert "gen_ai.retrieval.documents" in span.unmapped
+
+
+def test_an_embedding_span_has_no_content_attribute_in_this_dialect():
+    # The reason `retriever_and_embedding` is STILL declared unrenderable
+    # after this task. `opentelemetry-util-genai`'s `EmbeddingInvocation`
+    # emits `dimension_count`, `encoding_formats`, `response_model` and token
+    # counts -- and no content of any kind. So an embedding span's payloads
+    # are `absent` here, where OpenInference records the embedded text as
+    # `present`. `absent` != `present` is a payload-STATE disagreement, and
+    # FIXTURES.md §4.4 forbids declaring one away, ever.
+    span = span_of(
+        {"gen_ai.operation.name": "embeddings", "gen_ai.request.model": "demo-embed"}
+    )
+    assert span.kind is NodeKind.EMBEDDING
+    assert span.inputs.state is PayloadState.ABSENT
+    assert span.outputs.state is PayloadState.ABSENT
+    assert span.operation == "demo-embed"

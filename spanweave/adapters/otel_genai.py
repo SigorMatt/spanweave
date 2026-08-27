@@ -37,12 +37,18 @@ interesting part:
 where the rule lives -- this is its worked example, not its only statement).
 This dialect carries no content-type attribute anywhere. But the convention
 *defines* ``gen_ai.input.messages``, ``gen_ai.output.messages``,
-``gen_ai.tool.call.arguments`` and ``gen_ai.tool.call.result`` as structured
-values, which the OTLP exporter serializes to JSON strings because span
-attributes cannot hold nested data. So this adapter reports
-``application/json`` for those four keys and parses them, and a parse failure
-stays honest -- ``present``, ``value=None``, ``raw`` kept, and a
-``payload_parse_failed`` diagnostic.
+``gen_ai.tool.call.arguments``, ``gen_ai.tool.call.result`` and
+``gen_ai.retrieval.documents`` as structured values, which the OTLP exporter
+serializes to JSON strings because span attributes cannot hold nested data. So
+this adapter reports ``application/json`` for those five keys and parses them,
+and a parse failure stays honest -- ``present``, ``value=None``, ``raw`` kept,
+and a ``payload_parse_failed`` diagnostic.
+
+The rule cuts both ways, and ``gen_ai.retrieval.query.text`` is where it cuts
+the other one: the convention states that attribute is a **plain string**, so
+this adapter reports ``text/plain`` and does **not** parse it. Reading a
+JSON-shaped query as JSON would invent a structure the dialect does not claim,
+which is the same error as refusing the mime on the five above.
 
 The third condition of that rule is that a reader of the **fixture** can find
 this out without reading the adapter, so it is also stated in the affected
@@ -151,10 +157,36 @@ TOOL_CALL_ID = "gen_ai.tool.call.id"
 REQUEST_MODEL = "gen_ai.request.model"
 USAGE_PREFIX = "gen_ai.usage."
 
-#: The content type the convention fixes for the four structured attributes.
-#: See the module docstring: this is a statement about the dialect, not about
-#: a span.
+#: A retrieval span's two content attributes. Read on `NodeKind.RETRIEVER`
+#: spans and nowhere else, because that is the only invocation the convention
+#: puts them on (`TASKS.md` 2.17).
+#:
+#: **Neither appears in any captured trace in this repo**, and that is stated
+#: rather than glossed: `fixtures/captured/` holds three traces and none
+#: contains a `retrieval` or an `embeddings` span at all. What they were mapped
+#: from is `opentelemetry-util-genai` 1.1b0's own
+#: `_retrieval_invocation.py` -- the support library the captured traces' own
+#: instrumentor delegates to for `gen_ai.input.messages`, so it is the same
+#: source of truth, read at the same version. The registry alone would not have
+#: been enough: in `opentelemetry-semantic-conventions` 0.65b0 every `gen_ai.*`
+#: docstring has been replaced by the notice that the conventions moved house,
+#: so it supplies names and nothing else.
+RETRIEVAL_QUERY = "gen_ai.retrieval.query.text"
+RETRIEVAL_DOCUMENTS = "gen_ai.retrieval.documents"
+
+#: The content type the convention fixes for the four structured attributes,
+#: and for `gen_ai.retrieval.documents`. See the module docstring: this is a
+#: statement about the dialect, not about a span.
 STRUCTURED_MIME = "application/json"
+
+#: And the content type for the one content attribute this dialect states is
+#: **not** structured. `RetrievalInvocation.query_text` is typed `str | None`
+#: and written to the span verbatim, where `documents` goes through the same
+#: `gen_ai_json_dumps` the message lists use. So the dialect distinguishes the
+#: two, and reporting one as JSON would be inventing a structure the
+#: convention does not claim -- the same rule as `STRUCTURED_MIME`, applied in
+#: the other direction (`ADAPTERS.md` §3).
+TEXT_MIME = "text/plain"
 
 #: Inside a message list. `type` is what separates a call the model *made*
 #: from a result it was *given* -- see the module docstring.
@@ -365,23 +397,38 @@ def _payloads(
 ) -> tuple[Payload, Payload]:
     """The two attribute pairs this dialect uses, chosen by span kind.
 
-    A tool span states its call's arguments and result; everything else states
-    a message list. Only the pair actually read is marked consumed, so a span
-    carrying both would report the other pair in `unmapped` rather than have it
-    silently preferred away.
+    A tool span states its call's arguments and result; a **retrieval** span
+    states its query text and its documents; everything else states a message
+    list. Only the pair actually read is marked consumed, so a span carrying
+    another pair reports it in `unmapped` rather than having it silently
+    preferred away.
+
+    The retrieval pair is not a fallback for the message pair, and the
+    asymmetry is the convention's rather than a choice here:
+    `opentelemetry-util-genai`'s `RetrievalInvocation` emits no message list at
+    all, and its `EmbeddingInvocation` emits **no content attribute of any
+    kind** -- which is why an embedding span's payloads are `absent` in this
+    dialect and why `retriever_and_embedding` is still declared unrenderable
+    (`TASKS.md` 2.17).
     """
     if kind is NodeKind.TOOL:
-        keys = (TOOL_ARGUMENTS, TOOL_RESULT)
+        pairs = ((TOOL_ARGUMENTS, STRUCTURED_MIME), (TOOL_RESULT, STRUCTURED_MIME))
+    elif kind is NodeKind.RETRIEVER:
+        pairs = (
+            (RETRIEVAL_QUERY, TEXT_MIME),
+            (RETRIEVAL_DOCUMENTS, STRUCTURED_MIME),
+        )
     else:
-        keys = (INPUT_MESSAGES, OUTPUT_MESSAGES)
+        pairs = ((INPUT_MESSAGES, STRUCTURED_MIME), (OUTPUT_MESSAGES, STRUCTURED_MIME))
     return tuple(  # type: ignore[return-value]
-        _payload(attributes, key, consumed, diagnostics) for key in keys
+        _payload(attributes, key, mime, consumed, diagnostics) for key, mime in pairs
     )
 
 
 def _payload(
     attributes: Mapping[str, JsonValue],
     key: str,
+    mime: str,
     consumed: set[str],
     diagnostics: list[Diagnostic],
 ) -> Payload:
@@ -392,12 +439,20 @@ def _payload(
         return Payload.absent()
 
     reported = attributes[key]
+    if mime == TEXT_MIME:
+        # The one content attribute the convention states is unstructured.
+        # Not parsed, and no `payload_parse_failed` is reachable here: there
+        # is nothing to fail. A value that happens to look like JSON is still
+        # text, because the dialect says the attribute is text.
+        text = reported if isinstance(reported, str) else json.dumps(reported)
+        return Payload(state=_state_of(reported), mime=mime, value=text, raw=text)
+
     if not isinstance(reported, str):
         # Already structured -- an exporter that can carry nested attributes.
         text = json.dumps(reported)
         return Payload(
             state=_state_of(reported),
-            mime=STRUCTURED_MIME,
+            mime=mime,
             value=reported,
             raw=text,
         )
@@ -417,12 +472,8 @@ def _payload(
         )
         # State stays `present`: something was reported, we just could not read
         # it. `raw` is where it survives.
-        return Payload(
-            state=PayloadState.PRESENT, mime=STRUCTURED_MIME, value=None, raw=reported
-        )
-    return Payload(
-        state=_state_of(value), mime=STRUCTURED_MIME, value=value, raw=reported
-    )
+        return Payload(state=PayloadState.PRESENT, mime=mime, value=None, raw=reported)
+    return Payload(state=_state_of(value), mime=mime, value=value, raw=reported)
 
 
 def _state_of(value: JsonValue) -> PayloadState:
