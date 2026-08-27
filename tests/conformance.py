@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,13 +48,31 @@ ERASED_PAYLOAD_FIELDS = ("raw",)
 #: relation.
 ERASED_EDGE_FIELDS = ("adapter",)
 
+#: The only `Payload` fields a scenario may declare dialect-varying
+#: (`FIXTURES.md` §4.4). Fixed **here**, never read from a fixture, so that no
+#: declaration can reach `state`: `absent` != `empty` != `redacted` is the
+#: model's central honesty claim (`SPEC.md` §3.3), and two dialects disagreeing
+#: about a payload's *state* must stay a finding rather than something a
+#: comparison file can absorb.
+DECLARABLE_PAYLOAD_FIELDS = frozenset({"value", "mime"})
 
-def canonical(document: dict[str, Any], erase: tuple[str, ...] = ()) -> dict[str, Any]:
+
+def canonical(
+    document: dict[str, Any],
+    erase: tuple[str, ...] = (),
+    drop_payloads: Mapping[str, frozenset[str]] | None = None,
+) -> dict[str, Any]:
     """The dialect-independent form of a graph document.
 
     ``erase`` names extra node fields a scenario has declared dialect-varying
     in its ``scenario.md`` -- ``name`` is the only one so far, and only where
     the scenario says so explicitly.
+
+    ``drop_payloads`` maps a ``"<node id>.<inputs|outputs>"`` selector to the
+    payload fields that scenario has declared dialect-varying (§4.4). **It is
+    passed only by the cross-dialect comparison.** The within-dialect check
+    passes nothing, so every declared field is still pinned there -- which is
+    the whole reason a declaration costs the corpus no regression detection.
     """
     return {
         "meta": {
@@ -64,16 +82,27 @@ def canonical(document: dict[str, Any], erase: tuple[str, ...] = ()) -> dict[str
             "edge_count": len(document["edges"]),
             "diagnostic_count": len(document["diagnostics"]),
         },
-        "nodes": [_node(node, erase) for node in document["nodes"]],
+        "nodes": [
+            _node(node, erase, drop_payloads or {}) for node in document["nodes"]
+        ],
         "edges": [_without(edge, ERASED_EDGE_FIELDS) for edge in document["edges"]],
         "diagnostics": _by_code(document["diagnostics"]),
     }
 
 
-def _node(node: dict[str, Any], erase: tuple[str, ...]) -> dict[str, Any]:
+def _node(
+    node: dict[str, Any],
+    erase: tuple[str, ...],
+    drop_payloads: Mapping[str, frozenset[str]],
+) -> dict[str, Any]:
     kept = _without(node, (*ERASED_NODE_FIELDS, *erase))
     for side in ("inputs", "outputs"):
-        kept[side] = _without(kept[side], ERASED_PAYLOAD_FIELDS)
+        declared = drop_payloads.get(f"{node['id']}.{side}", frozenset())
+        # Guarded rather than trusted: a declaration naming `state` would be
+        # the one erasure this corpus must never make, and the guard belongs
+        # where the erasure happens, not only where the fixture is read.
+        declared = frozenset(declared) & DECLARABLE_PAYLOAD_FIELDS
+        kept[side] = _without(kept[side], (*ERASED_PAYLOAD_FIELDS, *sorted(declared)))
     return kept
 
 
@@ -149,6 +178,58 @@ class Scenario:
             for dialect, entry in declared.items()
             if not dialect.startswith("_")
         }
+
+    @property
+    def declaration(self) -> dict[str, Any]:
+        """The §4.4 declaration: payloads dialects record differently, and why."""
+        path = self.path / "expected/comparison.json"
+        if not path.exists():
+            return {}
+        declared = json.loads(path.read_text(encoding="utf-8"))
+        entry = declared.get("dialect_varying_payloads")
+        return entry if isinstance(entry, dict) else {}
+
+    @property
+    def drop_payloads(self) -> dict[str, frozenset[str]]:
+        """Selector -> declared fields, for the CROSS-DIALECT comparison only."""
+        payloads = self.declaration.get("payloads", {})
+        return {
+            str(selector): frozenset(str(field) for field in fields)
+            for selector, fields in payloads.items()
+        }
+
+    def overrides(self, dialect: str) -> dict[str, dict[str, Any]]:
+        """This dialect's own values for the payloads declared above (§4.4).
+
+        Absent means "agrees with `graph.json`". A dialect that differs and
+        omits the file fails the within-dialect check loudly, which is why the
+        declaration costs no regression detection.
+        """
+        path = self.path / f"expected/payloads/{dialect}.json"
+        if not path.exists():
+            return {}
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            str(selector): fields
+            for selector, fields in loaded.items()
+            if not str(selector).startswith("_")
+        }
+
+    def expected_graph_for(self, dialect: str) -> dict[str, Any] | None:
+        """`graph.json` as this dialect expects it -- claim 1's target (§4)."""
+        graph = self.expected_graph
+        overrides = self.overrides(dialect)
+        if graph is None or not overrides:
+            return graph
+        nodes = []
+        for node in graph["nodes"]:
+            node = dict(node)
+            for side in ("inputs", "outputs"):
+                fields = overrides.get(f"{node['id']}.{side}")
+                if fields:
+                    node[side] = {**node[side], **fields}
+            nodes.append(node)
+        return {**graph, "nodes": nodes}
 
     def rendering(self, dialect: str) -> pathlib.Path | None:
         for path in self.dialects:

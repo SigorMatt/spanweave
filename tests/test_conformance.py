@@ -25,6 +25,7 @@ from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
 from tests.conformance import (
     CORPUS,
+    DECLARABLE_PAYLOAD_FIELDS,
     DIALECTS,
     DIALECTS_PENDING_CORPUS_COVERAGE,
     Rendering,
@@ -166,6 +167,228 @@ def test_a_scenario_expects_exactly_one_outcome(scenario):
 
 
 # --------------------------------------------------------------------------
+# Declared dialect-varying payloads (FIXTURES.md 4.4)
+# --------------------------------------------------------------------------
+
+DECLARING = [s for s in SCENARIOS if s.declaration]
+
+
+def test_only_dialect_files_live_under_dialects():
+    # `scenarios()` treats every file in `dialects/` as a rendering, keyed by
+    # its stem. A stray note or backup there would become a phantom dialect
+    # that skips forever -- so provenance notes live beside `scenario.md`.
+    for scenario in SCENARIOS:
+        for path in scenario.dialects:
+            assert path.suffix in (".jsonl", ".json"), (
+                f"{scenario.name}: {path.name} is not a rendering; keep notes "
+                f"outside dialects/"
+            )
+
+
+@pytest.mark.parametrize("scenario", DECLARING, ids=ids(DECLARING))
+def test_a_declaration_says_which_payloads_and_why(scenario):
+    declaration = scenario.declaration
+    # A declaration without a reason is a missing comparison with extra steps
+    # -- the same rule §4.3 applies to an unrenderable dialect, for the same
+    # reason: the reason is what a reviewer checks.
+    assert len(str(declaration.get("reason", ""))) > 40
+    assert scenario.drop_payloads, f"{scenario.name} declares no payloads"
+
+
+@pytest.mark.parametrize("scenario", DECLARING, ids=ids(DECLARING))
+def test_a_declaration_never_reaches_payload_state(scenario):
+    # `absent` != `empty` != `redacted` is the model's central honesty claim
+    # (`SPEC.md` §3.3). Two dialects disagreeing about a payload's STATE must
+    # stay a finding; no comparison file may absorb it. Guarded here AND in
+    # `canonical()`, because a fixture is a likelier place to get this wrong
+    # than the comparison code.
+    for selector, fields in scenario.drop_payloads.items():
+        undeclarable = sorted(fields - DECLARABLE_PAYLOAD_FIELDS)
+        assert undeclarable == [], (
+            f"{scenario.name}: {selector} declares {undeclarable}, which is "
+            f"not declarable; only {sorted(DECLARABLE_PAYLOAD_FIELDS)} are"
+        )
+
+
+@pytest.mark.parametrize("scenario", DECLARING, ids=ids(DECLARING))
+def test_a_declaration_names_payloads_that_exist(scenario):
+    graph = scenario.expected_graph
+    real = {
+        f"{node['id']}.{side}"
+        for node in graph["nodes"]
+        for side in ("inputs", "outputs")
+    }
+    unknown = sorted(set(scenario.drop_payloads) - real)
+    assert unknown == [], (
+        f"{scenario.name}: declares payloads that do not exist: {unknown}"
+    )
+
+
+@pytest.mark.parametrize("scenario", DECLARING, ids=ids(DECLARING))
+def test_a_declaration_never_covers_an_absent_payload(scenario):
+    # An `absent` payload has no value and no mime, so declaring one sets
+    # nothing aside and only makes the declaration look larger than it is.
+    graph = scenario.expected_graph
+    states = {
+        f"{node['id']}.{side}": node[side]["state"]
+        for node in graph["nodes"]
+        for side in ("inputs", "outputs")
+    }
+    pointless = sorted(
+        selector for selector in scenario.drop_payloads if states[selector] == "absent"
+    )
+    assert pointless == [], f"{scenario.name}: declares absent payloads: {pointless}"
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=ids(SCENARIOS))
+def test_an_override_only_touches_what_the_scenario_declared(scenario):
+    # An override that reached an undeclared payload would be a silent second
+    # erasure -- a dialect quietly given its own expectation with nothing on
+    # the record saying the dialects disagree.
+    for dialect in sorted({p.stem for p in scenario.dialects}):
+        for selector, fields in scenario.overrides(dialect).items():
+            declared = scenario.drop_payloads.get(selector)
+            assert declared is not None, (
+                f"{scenario.name}/{dialect}: overrides {selector}, which "
+                f"expected/comparison.json does not declare dialect-varying"
+            )
+            extra = sorted(set(fields) - declared)
+            assert extra == [], (
+                f"{scenario.name}/{dialect}: overrides {extra} on {selector}, "
+                f"which the declaration does not cover"
+            )
+
+
+def test_no_declaration_outlives_the_disagreement_that_earned_it():
+    # A declaration on which every buildable dialect already agrees is stale,
+    # and stale is how an exemption becomes permanent. Vacuous with one
+    # adapter; it starts biting when the second lands, which is when a
+    # declaration could first be shown unnecessary.
+    for scenario in CROSS_DIALECT:
+        graphs = [
+            canonical(to_document(spanweave.build(path)), scenario.erase)
+            for path in scenario.dialects
+            if path.stem in adapter_backed()
+        ]
+        for selector, fields in scenario.drop_payloads.items():
+            node_id, side = selector.split(".")
+            seen = [
+                {f: _payload_of(g, node_id, side).get(f) for f in sorted(fields)}
+                for g in graphs
+            ]
+            assert any(entry != seen[0] for entry in seen[1:]), (
+                f"{scenario.name}: {selector} is declared dialect-varying but "
+                f"every dialect agrees on {sorted(fields)}; delete the "
+                f"declaration rather than carrying it (FIXTURES.md §4.4)"
+            )
+
+
+def _payload_of(graph, node_id, side):
+    for node in graph["nodes"]:
+        if node["id"] == node_id:
+            return node[side]
+    raise AssertionError(f"no node {node_id}")
+
+
+# --- and the mechanism itself, exercised rather than described --------------
+#
+# The three otel_genai renderings that declare payloads are skipped until 2.9
+# registers an adapter, so nothing in the corpus exercises §4.4 yet. These
+# plant the situation instead, so the mechanism is not merely documented.
+
+
+def _llm_tool_llm():
+    return next(s for s in BUILDABLE if s.name == "llm_tool_llm")
+
+
+def _one_payload_changed(tmp_path, node_id="s2"):
+    """The corpus rendering with one TOOL payload value altered."""
+    scenario = _llm_tool_llm()
+    source = scenario.rendering("openinference")
+    path = tmp_path / "openinference.jsonl"
+    path.write_text(
+        source.read_text(encoding="utf-8").replace("shipped", "delayed"),
+        encoding="utf-8",
+    )
+    del node_id
+    return scenario, Rendering(scenario=scenario, dialect="openinference", path=path)
+
+
+def test_claim_one_still_fails_on_a_changed_payload_that_is_declared(tmp_path):
+    # The point of the narrow form. `s2.outputs` IS declared dialect-varying
+    # (for `mime`), and its value must still be pinned: a declaration sets a
+    # field aside for the CROSS-DIALECT claim only.
+    scenario, changed = _one_payload_changed(tmp_path)
+    assert "s2.outputs" in scenario.drop_payloads
+    document = to_document(built(changed))
+    assert canonical(document, scenario.erase) != scenario.expected_graph_for(
+        "openinference"
+    )
+
+
+def test_the_cross_dialect_form_sets_aside_exactly_what_was_declared(tmp_path):
+    scenario, changed = _one_payload_changed(tmp_path)
+    plain = canonical(to_document(built(changed)), scenario.erase)
+    dropped = canonical(
+        to_document(built(changed)), scenario.erase, scenario.drop_payloads
+    )
+    # `mime` is declared on s2.outputs and is gone; `value` is not declared
+    # there and survives -- which is what keeps the byte-for-byte tool-payload
+    # agreement a tested claim rather than an erased one.
+    assert "mime" in _payload_of(plain, "s2", "outputs")
+    assert "mime" not in _payload_of(dropped, "s2", "outputs")
+    assert "value" in _payload_of(dropped, "s2", "outputs")
+    # On s1 both are declared, and both are gone.
+    assert _payload_of(dropped, "s1", "inputs") == {"state": "present"}
+
+
+def test_an_override_restores_a_dialect_s_own_expectation(tmp_path):
+    # What a dialect that records a different fact supplies, so claim 1 keeps
+    # its teeth for that dialect too.
+    scenario = _llm_tool_llm()
+    graph = scenario.expected_graph
+    with_override = scenario.expected_graph_for("openinference")
+    assert with_override == graph  # no override file: agrees with graph.json
+
+    payloads = scenario.path / "expected/payloads"
+    payloads.mkdir(exist_ok=True)
+    marker = payloads / "planted_dialect.json"
+    marker.write_text(
+        json.dumps({"s1.inputs": {"mime": None, "value": ["something else"]}}),
+        encoding="utf-8",
+    )
+    try:
+        overridden = scenario.expected_graph_for("planted_dialect")
+        assert _payload_of(overridden, "s1", "inputs")["value"] == ["something else"]
+        assert _payload_of(overridden, "s1", "inputs")["mime"] is None
+        # Everything not overridden is untouched, including `state`.
+        assert _payload_of(overridden, "s1", "inputs")["state"] == "present"
+        assert _payload_of(overridden, "s2", "inputs") == _payload_of(
+            graph, "s2", "inputs"
+        )
+    finally:
+        marker.unlink()
+        if not any(payloads.iterdir()):
+            payloads.rmdir()
+
+
+def test_a_declaration_that_names_state_cannot_erase_it():
+    # Belt and braces: `test_a_declaration_never_reaches_payload_state` fails
+    # the fixture, and this proves canonical() would refuse to honour it even
+    # if that test were deleted. `state` is the one field no mechanism here may
+    # reach.
+    scenario = _llm_tool_llm()
+    document = to_document(spanweave.build(scenario.rendering("openinference")))
+    smuggled = canonical(
+        document, scenario.erase, {"s1.inputs": frozenset({"state", "value"})}
+    )
+    assert _payload_of(smuggled, "s1", "inputs") == {
+        "state": "present",
+        "mime": "application/json",
+    }
+
+
+# --------------------------------------------------------------------------
 # The transitional gap: renderings no adapter can read (TASKS.md 2.7)
 # --------------------------------------------------------------------------
 
@@ -273,13 +496,68 @@ def test_a_rendering_for_an_adapterless_dialect_is_skipped_not_passed(tmp_path):
     "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
 )
 def test_the_rendering_produces_its_scenario_s_canonical_graph(rendering):
-    # THE claim. Every dialect of a scenario, against that scenario's one
-    # unmodified expectation. If this fails for a second dialect, the adapter
-    # is wrong or the model is -- it is never the expectation that moves.
+    # CLAIM 1 -- fidelity within a dialect (`FIXTURES.md` §4). NOTHING declared
+    # is set aside here: a payload a scenario declares dialect-varying is still
+    # pinned, by `graph.json` or by that dialect's own override. This is the
+    # claim with teeth, and it is why a §4.4 declaration costs the corpus no
+    # regression detection at all.
     document = to_document(built(rendering))
     assert canonical(document, rendering.scenario.erase) == (
-        rendering.scenario.expected_graph
+        rendering.scenario.expected_graph_for(rendering.dialect)
     )
+
+
+def _cross_dialect_form(rendering):
+    """A rendering's canonical graph with its scenario's §4.4 declarations set
+    aside -- the form claim 2 compares."""
+    return canonical(
+        to_document(built(rendering)),
+        rendering.scenario.erase,
+        rendering.scenario.drop_payloads,
+    )
+
+
+CROSS_DIALECT = [
+    scenario
+    for scenario in BUILDABLE
+    if len([d for d in scenario.dialects if d.stem in adapter_backed()]) > 1
+]
+
+
+@pytest.mark.parametrize("scenario", CROSS_DIALECT, ids=ids(CROSS_DIALECT))
+def test_every_dialect_of_a_scenario_produces_the_same_canonical_graph(scenario):
+    # CLAIM 2 -- the library's central claim, and the reason the corpus exists.
+    # Same run, described by any supported instrumentor, one graph.
+    #
+    # Vacuous while only one dialect has an adapter, and deliberately written
+    # so that it stops being vacuous the moment a second one is registered
+    # rather than needing to be remembered then.
+    forms = {
+        path.stem: _cross_dialect_form(
+            Rendering(scenario=scenario, dialect=path.stem, path=path)
+        )
+        for path in scenario.dialects
+        if path.stem in adapter_backed()
+    }
+    first, *rest = sorted(forms)
+    for other in rest:
+        assert forms[first] == forms[other], (
+            f"{scenario.name}: {first} and {other} disagree on a field neither "
+            f"expected/comparison.json declares dialect-varying. That is a "
+            f"finding about the adapter or about the model -- never a reason "
+            f"to widen the erasure (FIXTURES.md §4)."
+        )
+
+
+def test_the_cross_dialect_claim_is_reported_as_vacuous_while_it_is():
+    # Otherwise "0 scenarios compared across dialects" and "every scenario
+    # agrees" render identically in a green run.
+    multi = [s.name for s in CROSS_DIALECT]
+    if not multi:
+        assert len(adapter_backed()) < 2, (
+            "two adapters are registered but no scenario renders both; the "
+            "central claim is being asserted over nothing"
+        )
 
 
 @pytest.mark.parametrize(

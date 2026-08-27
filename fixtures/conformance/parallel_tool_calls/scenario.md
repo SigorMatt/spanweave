@@ -66,4 +66,7 @@ requested at once.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — rendered at 2.8; unread until 2.9. The weakest
+      provenance of the three: the capture has one tool call and this scenario
+      needs two, so the *shape* of each part is transcribed and only the count
+      is not. See `otel_genai.notes.md`.

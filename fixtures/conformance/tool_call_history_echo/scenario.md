@@ -80,4 +80,7 @@ fulfilled once, and the echo is neither.
 ## Dialects
 
 - [x] `openinference` — Phase 1, rendered from an observed capture
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — rendered at 2.8 from the captured trace; unread until
+      2.9. Provenance: `otel_genai.notes.md`, which also records that the
+      echoed request id reaches `unmapped` in OpenInference and does **not**
+      here, because this dialect carries it inside a consumed payload.

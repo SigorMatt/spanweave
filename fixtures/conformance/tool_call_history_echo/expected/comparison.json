@@ -2,19 +2,12 @@
   "_note": "Node fields this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4).",
   "dialect_varying_payloads": {
     "payloads": {
-      "s0.inputs": [
-        "value",
-        "mime"
-      ],
       "s1.inputs": [
         "value",
         "mime"
       ],
       "s1.outputs": [
         "value",
-        "mime"
-      ],
-      "s2.inputs": [
         "mime"
       ],
       "s2.outputs": [
@@ -31,7 +24,5 @@
     },
     "reason": "OpenInference records an LLM span's whole request envelope in input.value (messages plus model, tool definitions and invocation parameters) and the whole provider response in output.value; OTel GenAI records the normalized conversation in gen_ai.input.messages / gen_ai.output.messages. One strictly contains the other plus more, so neither is a re-encoding of the other and SPEC.md 3.3 constrains neither (FIXTURES.md 4.4). The agent span differs the same way: a bare string against the same text inside the message array. `mime` is declared wherever a payload is, and on the tool span it is declared ALONE: OTel GenAI states no content type anywhere in the dialect, while the tool payload VALUES agree byte-for-byte between the two captured traces -- so the value stays compared, because that agreement is the strongest cross-dialect evidence the corpus has."
   },
-  "erase": [
-    "name"
-  ]
+  "erase": []
 }

@@ -118,5 +118,7 @@ old rendering had quietly asserted about the dialect.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2 (this is the rendering that first tests whether the
-      model was general or merely OpenInference-shaped)
+- [x] `otel_genai` — rendered at 2.8 from the captured trace; **unread until
+      2.9 registers the adapter**, so the equivalence claim is not yet made.
+      Provenance per attribute: `otel_genai.notes.md`. Payload divergences are
+      declared in `expected/comparison.json` (`FIXTURES.md` §4.4).

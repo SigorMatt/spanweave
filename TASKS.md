@@ -1903,7 +1903,7 @@ below:
   > It is a determinism claim rather than an equivalence one, so it is outside
   > this task, but it will not extend to a second dialect on its own.
 
-- [ ] **2.8 Dialect-two renderings — the pairing set.** `[2a]` **NEVER CUT.**
+- [x] **2.8 Dialect-two renderings — the pairing set.** `[2a]` **NEVER CUT.**
   Transcribe from the 2.6 capture, in this order: `llm_tool_llm`,
   `tool_call_history_echo`, `parallel_tool_calls`. These three are the
   `call_result` relation — the structural relation dialects disagree about most
@@ -1923,9 +1923,13 @@ below:
   record it came from, the suite reports them as skipped-pending-adapter per
   2.7, and `make check` is green.*
 
-  > **HALTED BEFORE TRANSCRIBING (2026-08-27). The two captured traces disagree
-  > about `Payload.value` on every `llm` and `agent` span, and `FIXTURES.md` §4
-  > compares payload values. Picking a way out is a spec conversation.**
+  > **HALT RESOLVED (2026-08-27) — C, in its narrow form, after §4 was
+  > corrected. The record of the halt is kept below in full; the resolution and
+  > what it cost are at the end of it.**
+  >
+  > **The halt as raised.** The two captured traces disagree about
+  > `Payload.value` on every `llm` and `agent` span, and `FIXTURES.md` §4
+  > compares payload values. Picking a way out is a spec conversation.
   >
   > ### What was checked
   >
@@ -2130,6 +2134,118 @@ below:
   > §5's own bar is the two-consumer test in §5(c), and this is not that — it
   > is a two-*dialect* test, which §5 does not currently name. Whether that
   > counts is §5's to decide, and 2.14 is where it should be argued, not here.
+
+  > ### The resolution, and what 2.8 then did (2026-08-27)
+  >
+  > **Decided by the human: correct §4 first as its own statement of what
+  > equivalence claims, then C on top. A is out** (0/8 detection is the corpus
+  > losing the ability to notice payload regressions, and it disarms 2.7's own
+  > teeth test — §4's prohibition happening wholesale). **B is out for now**
+  > (it decides `OPEN_QUESTIONS.md` §2 and §5 by implementation; argue it on
+  > merits at 2.14 or later, never because it made a test pass).
+  >
+  > **The question that changed C's cost, asked before implementing.** Does a
+  > declaration suppress value comparison only in the cross-dialect claim, or
+  > also in the single-dialect expected-graph check? **It was the broader
+  > form.** `expected/graph.json` is itself in canonical form — `name`, which
+  > `llm_tool_llm` declares dialect-varying, is simply *absent from the file* —
+  > so any erasure removes the field from both sides and no dialect's value
+  > stays pinned anywhere. C at 5/8 was C priced at the broader form.
+  >
+  > **Built as the narrow form, so the price is 0.** The two claims are now
+  > separate tests (`FIXTURES.md` §4):
+  > - *Claim 1, fidelity within a dialect* —
+  >   `test_the_rendering_produces_its_scenario_s_canonical_graph`, comparing
+  >   against `expected_graph_for(dialect)` with **nothing** set aside. A
+  >   dialect whose declared payload differs supplies its own values in
+  >   `expected/payloads/<dialect>.json`; one that agrees supplies no file; one
+  >   that differs and **forgets** the file fails loudly. So every payload of
+  >   every rendering is still pinned, and detection stays **8/8**.
+  > - *Claim 2, equivalence across dialects* —
+  >   `test_every_dialect_of_a_scenario_produces_the_same_canonical_graph`,
+  >   the only place a declaration applies. Vacuous with one adapter, and
+  >   written so it stops being vacuous the moment a second registers rather
+  >   than needing to be remembered then;
+  >   `test_the_cross_dialect_claim_is_reported_as_vacuous_while_it_is` keeps
+  >   "0 scenarios compared" from rendering identically to "every scenario
+  >   agrees".
+  >
+  > **`mime` rides along, per the decision, but per-selector rather than as a
+  > fixed field set.** A declaration names the fields for each payload, and on
+  > the **tool** spans it names `mime` **alone** — so the byte-for-byte value
+  > agreement between the two captures stays a *tested* claim instead of being
+  > erased alongside the disagreement. A fixed `(value, mime)` set would have
+  > thrown away the corpus's strongest cross-dialect evidence to fix a problem
+  > that evidence does not have.
+  >
+  > **`state` is not declarable, and cannot be made so.** Guarded twice:
+  > `test_a_declaration_never_reaches_payload_state` fails the fixture, and
+  > `canonical()` intersects with `DECLARABLE_PAYLOAD_FIELDS` so it would
+  > refuse to honour such a declaration even if that test were deleted
+  > (`test_a_declaration_that_names_state_cannot_erase_it`). `absent` ≠
+  > `empty` ≠ `redacted` is the model's central honesty claim; two dialects
+  > disagreeing about a payload's *state* must stay a finding.
+  >
+  > Five more hygiene tests: a declaration must carry a reason of substance
+  > (§4.3's rule, same grounds), must name payloads that exist, must not cover
+  > an `absent` payload, an override may only touch what was declared, and —
+  > **`test_no_declaration_outlives_the_disagreement_that_earned_it`** — a
+  > declaration on which every buildable dialect already agrees fails the
+  > corpus. Stale is how an exemption becomes permanent.
+  >
+  > ### The three renderings
+  >
+  > Written after the mechanism, transcribed from
+  > `fixtures/captured/genai_tool_call.jsonl`, with per-attribute provenance in
+  > `<scenario>/otel_genai.notes.md` — beside `scenario.md`, **not** in
+  > `dialects/`, because `scenarios()` treats every file there as a rendering
+  > and a notes file would have become a phantom dialect skipping forever.
+  > `test_only_dialect_files_live_under_dialects` now fails that.
+  >
+  > Each notes file lists the observed keys **deliberately omitted** and why.
+  > The choice that most deserves review is named in them rather than left
+  > implicit: `unmapped_attributes` is emitted **once per span**, the expected
+  > graphs pin the count at 2 / 2 / 1, and so which spans carry an unmapped key
+  > is a fixture-authoring choice made with that count in view. It is
+  > precedented — the OpenInference specimens already omit `llm.system`,
+  > `llm.tools.*.tool.json_schema`, `llm.invocation_parameters` and
+  > `llm.token_count.prompt_details.cache_read`, all of which the OpenInference
+  > capture carries — but precedent is not proof, and a reviewer should check
+  > it.
+  >
+  > `parallel_tool_calls` has the weakest provenance of the three and says so
+  > in its notes: the capture has **one** tool call and the scenario needs two,
+  > so the *shape* of each `tool_call` part is transcribed and only the count
+  > is not. The 2b fleet established parallel calls are routine, so a capture
+  > that retires this note is obtainable.
+  >
+  > ### Two things carried to 2.9 rather than worked around here
+  >
+  > 1. **`Node.name`.** The GenAI convention names spans `{operation} {target}`
+  >    — `chat demo-model`, `execute_tool lookup` — against the expected
+  >    graphs' `llm.plan` / `tool.lookup`. `llm_tool_llm` already declares
+  >    `name` dialect-varying ("dialects disagree about operation naming
+  >    conventions and that disagreement is not interesting"), so it does not
+  >    bite there. **`tool_call_history_echo` and `parallel_tool_calls` do
+  >    not**, and it bites in both. This is **bookkeeping the corpus already
+  >    decided**, not a model finding — but the fix is deleting `name` from two
+  >    `expected/graph.json` files, which 2.8 forbids. 2.9 owns it.
+  > 2. **A sentence in `tool_call_history_echo/scenario.md` is now true of one
+  >    dialect only.** It says the echoed request id "surfaces in `unmapped`
+  >    and is reported". In OpenInference it does — it is a flat attribute the
+  >    adapter declines. In GenAI it sits **inside** `gen_ai.input.messages`,
+  >    which *is* consumed, so nothing is left over to report. Codes and counts
+  >    still match, which is all §4 compares. Flagged, not rewritten.
+  >
+  > ### One earlier concern, withdrawn
+  >
+  > 2.8's first record said `Edge.basis` would need to become cross-dialect
+  > vocabulary. **Mostly not:** `CALL_BASIS`, `DATA_BASIS`, `PARENT_BASIS` and
+  > the temporal bases are all set in `spanweave/build.py`, so every dialect
+  > gets the same string for free. Only `link.basis` and `DeclaredDataEdge.basis`
+  > come from an adapter, and neither is used by these three scenarios. It
+  > remains a real gap for `span_links` (2.11) and for any dialect that names
+  > both ends of a relation on one span — carried to 2.9 at that reduced size.
 
 - [ ] **2.9 The OTel GenAI adapter — and the first equivalence run.** `[2a]`
   Single file under `spanweave/adapters/`, registered; nothing else in the
