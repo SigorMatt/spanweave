@@ -1534,26 +1534,6 @@ below:
 
 ### `[2a]` — the second dialect  *(begins only after 2.4's HALT clears)*
 
-> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7 is done and committed. **2.8
-> is HALTED before any rendering was written**, and its box is unchecked: the
-> two captured traces disagree about `Payload.value` and `Payload.mime` on
-> every `llm` and `agent` span, `FIXTURES.md` §4 compares both, and no faithful
-> adapter reconciles them. Three resolutions are written out at 2.8 with
-> measured costs; **none is picked, and picking one is a human's call.** Do not
-> start 2.8 without that decision — the renderings themselves are
-> resolution-independent, but writing them first would put the decision under
-> pressure from work already committed. 2.9's own HALT is unchanged and still
-> ahead; what 2.8 found about the §4.2.1 `data` edge (it is **not** at risk —
-> GenAI declares the relation) is recorded there too.
-
-> **This workstream inverts Phase 1's order on purpose: capture first, then
-> render from what the capture shows, then write the adapter.** Phase 1
-> rendered from a *reading* of OpenInference and produced four fixtures that
-> were confidently wrong about the dialect in three separate ways — invisible
-> to 593 tests, six gates and two review scripts, because the fixtures and the
-> adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
-> disagreed. Do not repeat it.
-
 > **Three things 2b handed to this workstream.** Assigned here so a cold
 > session finds them without reading the 2b record.
 >
@@ -1595,6 +1575,23 @@ below:
 >    rendered at 2.10, consider a scenario whose tool span carries **no**
 >    status — but only if the instrumentor actually emits one that way. §5.1
 >    binds here too: do not hand-author the absence into existence.
+
+> **This workstream inverts Phase 1's order on purpose: capture first, then
+> render from what the capture shows, then write the adapter.** Phase 1
+> rendered from a *reading* of OpenInference and produced four fixtures that
+> were confidently wrong about the dialect in three separate ways — invisible
+> to 593 tests, six gates and two review scripts, because the fixtures and the
+> adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
+> disagreed. Do not repeat it.
+
+> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7 done. 2.8 halted on the
+> payload-value collision, **decision received**: `FIXTURES.md` §4 is corrected
+> first as its own statement of what equivalence claims, then resolution **C**
+> (per-scenario dialect-varying payload declarations) on top, in its **narrow**
+> form — see 2.8. A and B are ruled out, with reasons, at 2.8. Read the three
+> handoff items at the top of this section before the first unchecked box;
+> **this intro is now four blocks and roughly 70 lines, which is already past
+> what an outline-first read survives — split it before adding a fifth.**
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
