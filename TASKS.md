@@ -1578,48 +1578,37 @@ below:
 > `tests/test_codes.py` derives the required type names from the §3.10 table
 > itself, so a type added to the spec and not exported fails the build.
 
-> **WHERE THIS SESSION STOPPED (2026-08-27, second session).** 2.7, 2.8 and
-> 2.9 are done and 2.9's HALT is discharged: `llm_tool_llm`,
-> `parallel_tool_calls` and `tool_call_history_echo` are **byte-identical**
-> across `openinference` and `otel_genai`. **2.10 is worked but NOT done, and
-> its box is deliberately unchecked** — 10 of 11 scenarios covered, two of them
-> as `coverage.json` declarations, plus one new scenario
-> (`unset_and_error_status`) that closes finding F6. `make check` and
-> `make conformance` are green as it stands.
+> **WHERE THIS SESSION STOPPED (2026-08-27).** **Phase 2a is complete: 2.10
+> through 2.14 are all done, and the Phase 2 exit HALT is live.** Do not start
+> Phase 3.
 >
-> **Two halts are open at 2.10 and both need a human before 2.11 starts.**
+> `make check` green (1155 tests), `make conformance` green, `make gates`
+> green, `review_corpus.py` exit 0. The phase's central claim, over 17 of 21
+> scenarios rendered in both dialects: **16 byte-identical canonical graphs,
+> 1 identical refusal, 0 differ.**
 >
-> - **Halt A — DISCHARGED.** Accepted and implemented: `Diagnostic.source` on
->   the two unpaired codes is now `{call_id, operation}` and is **byte-identical
->   across both dialects**; `SPEC.md` §3.7 states `source`'s shape per code.
->   `examples/fleet_aggregate`'s `by_tool` reconciles for the first time.
->   Classified **shape** and recorded at 2.14. One thing still owed to a human:
->   **O1's amendment in `PREDICTIONS.md`**, whose exact wording was handed
->   over — the walk *raises*, in both directions and including the defensive
->   `.get()` idiom, so the confident zero is the consumer's own `try/except`.
->   The agent may not edit that file.
-> - **Halt B — OPEN, and its prerequisite is done.** `FIXTURES.md` §4 now names
->   `attributes` in the Compared list, corrected on its own terms in its own
->   commit with nothing riding on it, and the list is checked in both
->   directions so a fourth instance goes red. `unknown_kind` is therefore now a
->   clean question against an honest contract: two canonical graphs differing
->   by exactly one line (`attributes.reported_kind`), a disagreement that is
->   *correct* and unavoidable. Three options are costed at the task; **not
->   decided**, the rendering is not committed, and 2.10's box stays unchecked.
+> **Read 2.14.** It is the phase-exit artifact and the input to the Phase 4
+> freeze decision. Its headline: `spanweave/model.py` was **not touched** in
+> all of Phase 2 — no kind, state, warrant or diagnostic code moved. One shape
+> change (`Diagnostic.source` on two codes) and one additive public-API change
+> (the §3.10 error types).
 >
-> Also found at 2.10 and **not acted on**: the convention defines nine
-> `gen_ai.operation.name` values and the adapter maps seven. `retrieval` is one
-> of the two, which settles 2.11's open question — `retriever_and_embedding`
-> does **not** need a `coverage.json`. `invoke_workflow` is the other, and it
-> is why `cyclic_parents` is declared unrenderable.
+> Three things a next session should not have to re-derive:
 >
-> Still carried to 2.14: applying a declared `erase` to both sides of the
-> comparison, and `Edge.basis` as cross-dialect vocabulary (live at 2.11).
+> - **The pattern named at 2.14** — `mime`, `attributes` and
+>   `Diagnostic.source` were each relied on with nothing stating it and nothing
+>   asserting it, all three because the *permissive* default won, and all three
+>   found only by a second dialect. Before the freeze: audit every serialized
+>   field typed permissively. `Edge.basis` is the next one.
+> - **The highest-value action outstanding is a capture, not a decision.** One
+>   GenAI trace containing an `invoke_workflow` span retires three coverage
+>   declarations at once and restores `EdgeKind.link` to the cross-dialect
+>   claim. A capture is a human act (`AGENT.md` halt point).
+> - **Both-sides `erase` is still not adopted**, deliberately, twice. It must
+>   arrive in its own change with nothing riding on it.
 >
-> **The intro above was split at the start of this session**, and the rule that
-> replaced it now lives in `AGENT.md` ("Keeping a handoff note readable")
-> rather than only here — it is a documentation discipline that applies to
-> every such block, not a note about this one.
+> The handoff-note rule that produced this section's layout lives in
+> `AGENT.md` ("Keeping a handoff note readable"), not here.
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
@@ -3241,7 +3230,7 @@ below:
   > your dialect cannot name takes whole scenarios with it, and often not the
   > ones the scenario was written for.
 
-- [ ] **2.14 Phase 2 exit: the model-change record.** `[2a]`
+- [x] **2.14 Phase 2 exit: the model-change record.** `[2a]`
   Record **every** model change either pressure forced, with its cause — the
   2b findings from 2.4, anything 2.9–2.11 forced, and every deferral. That
   record is the evidence for or against the model's generality and it is the
@@ -3296,6 +3285,231 @@ below:
   *Artifact for the decision:* the model-change record, `make conformance`
   output over both dialects, and the "same run, two instrumentors, one graph"
   comparison for `llm_tool_llm`.
+
+  > # Phase 2 exit record
+  >
+  > `make check` green (1155 tests, 2 skipped), `make conformance` green,
+  > `make gates` green, `review_corpus.py` exit 0.
+  >
+  > ## The headline: `spanweave/model.py` was not touched
+  >
+  > `git diff` over the whole of Phase 2 shows **zero** lines changed in
+  > `spanweave/model.py` and **zero** in `schema/findings…` — no `NodeKind`, no
+  > `EdgeKind`, no `Payload` state, no warrant, no `Diagnostic` code, no query
+  > primitive. Phase 2's job was to break the model with a second dialect and an
+  > adversarial consumer, and the model held. Six files under `spanweave/`
+  > changed at all: the new adapter, its registration, the public `__init__`,
+  > `build.py`, `seam.py`, and the OpenInference adapter.
+  >
+  > That is the input the Phase 4 freeze decision needs, and it is worth being
+  > precise about what it does and does not say. It says the **types** were
+  > general enough. It does not say the corpus proved them so: four scenarios
+  > are declared unrenderable in dialect two, and what they would have tested is
+  > listed below rather than counted as passing.
+  >
+  > ## The evidence
+  >
+  > 17 of 21 scenarios are rendered in both dialects. Compared by
+  > `canonical_bytes`, not `==`:
+  >
+  > ```
+  > 16 byte-identical canonical graphs
+  >  1 identical refusal (duplicate_span_ids: DuplicateNodeIdError / duplicate_node_id in both)
+  >  0 differ
+  > ```
+  >
+  > The same run, described by two instrumentors that share **no attribute
+  > name, no naming convention, no message shape and no mechanism for telling a
+  > request from an echo**, produces one graph. `llm_tool_llm` is the reference
+  > case and was the first evidence, at 2.9.
+  >
+  > ## Model changes, with cause and classification
+  >
+  > Two, and only one touches a public contract.
+  >
+  > ### 1. `Diagnostic.source` on `unpaired_call` / `unpaired_result` — SHAPE
+  >
+  > From `"call_a"` to `{"call_id": "call_a", "operation": "lookup"}`, plus
+  > `NormalizedSpan.call_names` at the seam and a `source`-per-code table in
+  > `SPEC.md` §3.7.
+  >
+  > **Cause:** finding F5 (2b) → `PREDICTIONS.md` O1 → settled at 2.10 against
+  > two dialects. A requested call that nothing fulfils has no node, so
+  > `operation` — where a tool's name lives — had nowhere to be, and a fleet
+  > could say *which model* left a call unfulfilled but not *what it asked for*.
+  >
+  > **Classification: SHAPE**, by the binding test and not a widened version of
+  > it. `NormalizedSpan` gained a field and a serialized value changed type.
+  > It was **not** an `AGENT.md` halt point — nothing in the model's closed
+  > enums moved — and "not a halt point" is not "not a shape change". Phase 3's
+  > gate is zero shape changes; this one is spent in Phase 2, which is where it
+  > belongs.
+  >
+  > **What O1's own classification got wrong, and it is the more useful
+  > finding.** O1 was filed as a *spec gap* — "the model could express this
+  > today, nothing populates it, no document asks for one" — and that was right
+  > about the remedy's **shape** and wrong about its **cost**.
+  > `Diagnostic.source` is typed `JsonValue`, which made the change look free;
+  > it was not, because `source` is **serialized**. **A spec gap can carry a
+  > shape cost when the permissive field is a serialized one.** That is a hole
+  > in the category as written at 2.4, and it is now recorded in
+  > `PREDICTIONS.md` by the human who wrote the category.
+  >
+  > ### 2. Public API: the `SPEC.md` §3.10 error types — additive
+  >
+  > `SpanweaveError` and its three subclasses are now exported (F4). Purely
+  > additive: it made a written spec rule followable that was previously
+  > impossible to obey through the public API. Not a shape change.
+  >
+  > ### And one adapter change worth recording as a defect, not a decision
+  >
+  > `retrieval` was missing from the OTel GenAI operation table while
+  > `embeddings`, `text_completion`, `generate_content` and `create_agent` were
+  > present on identical evidence — so a real `retrieval` span became `unknown`
+  > and a real `embeddings` span did not. Found at 2.11 by checking a prediction
+  > against the convention's registry rather than from memory. Fixed. No model
+  > change.
+  >
+  > ## The pattern behind three of this phase's findings
+  >
+  > The human asked for this to be named once rather than filed three times, and
+  > it is the most transferable thing Phase 2 produced.
+  >
+  > | Found | What was relied on | What said so |
+  > |---|---|---|
+  > | 2.8 | `canonical()` compares `Payload.mime` | nothing — absent from `FIXTURES.md` §4's Compared list for two phases |
+  > | 2.10 | `canonical()` compares `Node.attributes` | nothing — absent for three |
+  > | 2.10 | `Diagnostic.source` carries a specific shape per code | nothing — no test asserted it for either unpaired code, so changing its type broke **zero** tests |
+  >
+  > All three are the same species: **a property the project depends on, that no
+  > document states and no test asserts.** Not one was a drafting slip. Each has
+  > the same mechanism — the *permissive* default won. `canonical()` keeps a
+  > field unless told otherwise, so a field added to the model is silently
+  > compared. `JsonValue` permits any shape, so a diagnostic's payload is
+  > silently unconstrained. In every case the code was right and the contract
+  > was absent, which is why nothing was red.
+  >
+  > And they share a discovery mechanism: **the second dialect**. Each surfaced
+  > only when two independent implementations had to agree on it. That is
+  > exactly the value 2a was bought for, and it is the argument for a *third*
+  > dialect being worth more than its coverage — a defect of this species is
+  > invisible to any number of tests written by one author against one dialect.
+  >
+  > Both `FIXTURES.md` lists are now checked in both directions
+  > (`test_the_compared_list_names_every_field_that_is_compared`,
+  > `..._nothing_that_is_erased`), and §3.7's table is checked against what the
+  > library emits. A fourth instance goes red rather than waiting for a dialect.
+  >
+  > **For the freeze decision:** before freezing `schema_version`, audit every
+  > serialized field typed permissively (`JsonValue`, free `str`) for a stated
+  > contract and an asserting test. `Diagnostic.source` was one.
+  > `Edge.basis` — a free `str`, compared, adapter-supplied — is the next one,
+  > and it is unresolved (below).
+  >
+  > ## Carried forward, not done
+  >
+  > ### Apply a declared `erase` to both sides of the comparison
+  >
+  > Proposal 2 at 2.9's halt; **still not adopted**, deliberately, twice. Today
+  > an `erase` entry is honoured by stripping the built graph, and
+  > `expected/graph.json` simply does not carry the field — so an erasure
+  > applies to **both** claims, and a declared field is pinned nowhere. A §4.4
+  > payload declaration is narrower: it applies to claim 2 only, and claim 1
+  > still pins the value through `expected/payloads/<dialect>.json`.
+  >
+  > The asymmetry is real and it grew this phase: `erase` now carries `name` on
+  > eleven scenarios and one `attributes` key. The thing to check first, from
+  > 2.9: `expected/graph.json` is **itself already canonical**, which is exactly
+  > what makes the change look free — and is the same property that made
+  > resolution C look like it cost 5/8 detection when the narrow form cost 0.
+  >
+  > It has not been taken because both times it arrived as a side effect of
+  > something else (a naming mismatch, then an `attributes` key). It should be
+  > argued on its own, in its own change, with nothing riding on it — the way
+  > §4's Compared list was corrected at Halt B.
+  >
+  > ### `Edge.basis` as cross-dialect vocabulary — measured, and worse than open
+  >
+  > Carried from 2.9, answered at 2.11, and the answer is sharper than the
+  > question. `basis` is a free `str`, is **compared** by `canonical()`, and is
+  > adapter-supplied in exactly two places. Across all 38 renderings:
+  >
+  > - Every `basis` the corpus actually compares is the **builder's** — one
+  >   string per rule, unreachable from any dialect. Agreement is structural,
+  >   not lucky.
+  > - **Both** adapter-supplied bases are invisible to the cross-dialect claim.
+  >   `SpanLink.basis` because its only scenario (`span_links`) is declared
+  >   unrenderable; `DeclaredDataEdge.basis` because `otel_genai` produces none
+  >   — it reaches the same edge through `received_call_ids`, whose basis the
+  >   builder supplies.
+  >
+  > So the risk is real, entirely confined to two cases, and **currently
+  > unmeasurable by construction**. Both adapters happen to write `span.link`,
+  > which is right in both because it names an OTel record-level field rather
+  > than a dialect attribute — and nothing checks that, and no document states
+  > the vocabulary. This is the same species as the three findings above, caught
+  > before it bit. It belongs to Phase 4 alongside the freeze audit.
+  >
+  > ## Declared coverage, and what it costs
+  >
+  > Four scenarios are declared unrenderable in `otel_genai`. Nothing was
+  > **cut** — 2.11 and 2.12 both survived the phase intact.
+  >
+  > | Scenario | Reason | What is untested in dialect two |
+  > |---|---|---|
+  > | `redacted_payload` | the dialect defines no redaction marker; turning content capture off yields `absent`, a different state | `PayloadState.redacted` |
+  > | `cyclic_parents` | pins `kind: chain` | `ordering_cycle` |
+  > | `retriever_and_embedding` | pins `kind: chain` on the parent | `NodeKind.chain` |
+  > | `span_links` | pins `kind: chain` | **`EdgeKind.link`**, and the only adapter-supplied `basis` |
+  >
+  > **Three of the four are one missing kind.** Nothing in
+  > `gen_ai.operation.name` maps to `chain`, because the one candidate,
+  > `invoke_workflow`, is described by the convention only as "Invoke GenAI
+  > workflow" — mapping it to "a composite step with no more specific kind"
+  > would be a judgement rather than the name match every other entry is, and
+  > `AGENT.md` says reaching for an inference is the signal to stop. It is
+  > recorded in the adapter as `UNMAPPED_BY_DECISION`, not left as an absence.
+  >
+  > **The single highest-value action outstanding is a capture, not a
+  > decision:** one GenAI trace containing an `invoke_workflow` span retires
+  > three declarations at once and restores `EdgeKind.link` to the cross-dialect
+  > claim. A capture is a human act (`AGENT.md` halt point).
+  >
+  > **The generalizable lesson, now in `ADAPTERS.md` §5:** coverage is lost to
+  > **kind vocabulary**, not to attribute shape. Payload spellings differ
+  > everywhere and are absorbed by declaration; a kind a dialect cannot name
+  > takes whole scenarios with it — and often not the ones the scenario was
+  > written for. `retriever_and_embedding` was predicted to fail on the
+  > *retriever*; it fails on its `chain` parent.
+  >
+  > ## Recorded, deliberately not acted on
+  >
+  > - **Three attributes both dialects model and this library does not**
+  >   (2.6): finish reason (`gen_ai.response.finish_reasons` /
+  >   `llm.finish_reason`), the tool inventory (`gen_ai.tool.definitions` /
+  >   `llm.tools.*`), and the provider (`gen_ai.provider.name` / `llm.system`).
+  >   *What two independent dialects both bothered to model* is a principled
+  >   test for what belongs in normalization, and three candidates now meet it.
+  >   `OPEN_QUESTIONS.md` §5 and §9 — evidence for, not resolution of.
+  > - **§4.2.1 `data` edges generalize** (2.9): confirmed on real telemetry in a
+  >   second dialect, and by a *different mechanism* — OpenInference separates
+  >   said-from-shown by attribute prefix, GenAI by a part `type` inside the
+  >   payload. A rule that holds across two mechanisms is general; across two
+  >   spellings of one mechanism it is lucky. Evidence for `OPEN_QUESTIONS.md`
+  >   §7 and `PREDICTIONS.md` P3, resolving neither.
+  > - **F7** (nothing states which diagnostic codes are node-scoped) is flagged
+  >   for re-reading under the spec-gap category, which did not exist when it
+  >   was classified operational.
+  >
+  > ## Definition of done
+  >
+  > - [x] Both dialects produce identical canonical graphs for every scenario in
+  >       scope — 16 byte-identical, 1 identical refusal, 0 differ.
+  > - [x] P5 resolved in `PREDICTIONS.md` (REFUTED, scoped) by the human at 2.4;
+  >       O1 amended by the human at 2.10. Neither file touched by the agent.
+  > - [x] Every model change recorded above with its cause and classification.
+  > - [x] Every declaration recorded with what it costs. Nothing cut.
+  > - [x] `make check` and `make conformance` green.
 
 ## Phase 3 — Confirm, package, launch  *(provisional)*
 
