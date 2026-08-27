@@ -114,15 +114,32 @@ OPERATIONS: Mapping[str, NodeKind] = {
 #: **judgement** about what a workflow is, not a match, and this library's rule
 #: is that reaching for an inference is the signal to stop (`AGENT.md`).
 #:
-#: It is not free. Three conformance scenarios pin `kind: chain` and are
-#: therefore declared unrenderable in this dialect -- `cyclic_parents`,
+#: It is not free, and `TASKS.md` 2.16 measured the price rather than
+#: estimating it. Three conformance scenarios pin `kind: chain` and are
+#: declared unrenderable in this dialect -- `cyclic_parents`,
 #: `retriever_and_embedding` and `span_links` -- and `span_links` is the only
-#: scenario carrying `EdgeKind.link`. One captured GenAI trace containing an
-#: `invoke_workflow` span retires all three declarations at once, which makes
-#: it the highest-value capture outstanding (`TASKS.md` 2.14). The harness can
-#: now produce a trace of that shape -- `make capture ARGS="--backend genai
-#: --shape workflow"`, `TASKS.md` 2.15 -- but running it is a human act, and
-#: nothing here changes until a captured file exists to change it against.
+#: scenario carrying `EdgeKind.link`, which is therefore still untested across
+#: dialects.
+#:
+#: The capture that was supposed to settle this now exists
+#: (`fixtures/captured/genai_workflow.jsonl`, 2.15), and it did **not** settle
+#: it. It retires the "no captured trace contains one" half of the old reason
+#: and leaves the judgement untouched -- the `invoke_workflow` span in it is
+#: harness-emitted, and structurally must be, since an instrumentor wraps SDK
+#: calls and a workflow is not one. What 2.16 measured:
+#:
+#: * `cyclic_parents` and `span_links` would reproduce their expected graphs
+#:   **exactly** under the mapping. One decision away, nothing else.
+#: * `retriever_and_embedding` would **not**: its retriever output stays
+#:   `absent` because this adapter reads neither `gen_ai.retrieval.documents`
+#:   nor `gen_ai.retrieval.query.text`, and a payload's `state` may never be
+#:   declared away (`FIXTURES.md` §4.4).
+#: * `unknown_kind`'s `otel_genai` rendering would **break**: this is the only
+#:   unmapped convention value, and that scenario's specimen is exactly it.
+#:
+#: So the decision trades two scenarios for one, and it is a semantic decision
+#: about a closed vocabulary rather than a coverage gap. It stays here until a
+#: human takes it.
 UNMAPPED_BY_DECISION = ("invoke_workflow",)
 
 INPUT_MESSAGES = "gen_ai.input.messages"

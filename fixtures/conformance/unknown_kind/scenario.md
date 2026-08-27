@@ -63,12 +63,28 @@ on `reported_kind`, the staleness test deletes it.
 | | attribute | value | why this one |
 |---|---|---|---|
 | `openinference` | `openinference.span.kind` | `GUARDRAIL` | Phase 1; a kind the dialect's own vocabulary has and `NodeKind` does not |
-| `otel_genai` | `gen_ai.operation.name` | `invoke_workflow` | one of the **nine** values `opentelemetry-semantic-conventions` 0.65b0 defines, and one of the two this adapter does not map |
+| `otel_genai` | `gen_ai.operation.name` | `invoke_workflow` | one of the **nine** values `opentelemetry-semantic-conventions` 0.65b0 defines, and **the only one** this adapter does not map |
 
 `invoke_workflow` is not invented to make a point: it is read from the
 convention's own registry, at the version 2.6's capture ran under, and it is
 genuinely unmapped. `SPEC.md` §3.2 defines `chain` as "a composite step with no
 more specific kind", which makes it a real candidate — deliberately not taken,
-because no captured trace contains one and mapping it on a reading is what
-`FIXTURES.md` §5.1 forbids. That candidacy is recorded at `TASKS.md` 2.10 and
-is also why `cyclic_parents` is declared unrenderable.
+because mapping it is a judgement rather than the name match every other
+`OPERATIONS` entry is. That candidacy is recorded at `TASKS.md` 2.10 and is why
+`cyclic_parents` and `span_links` are declared unrenderable.
+
+### This rendering is what the `chain` candidacy costs
+
+`invoke_workflow` is the adapter's **only** unmapped convention value, so this
+scenario's `otel_genai` half depends on it staying unmapped. `TASKS.md` 2.16
+measured the consequence rather than predicting it: with `invoke_workflow`
+mapped to `chain`, this rendering builds `s1` as a `chain` with no diagnostic
+and **fails** its expected graph.
+
+Recovering it would mean picking a `gen_ai.operation.name` value that is *not*
+in the convention's registry — which is precisely what the table above says this
+rendering deliberately avoided, and which no observed output supports
+(`FIXTURES.md` §5.1). So the `chain` decision is not "retire three declarations
+for free": it retires two, leaves `retriever_and_embedding` blocked for an
+unrelated reason, and takes this rendering's principled specimen with it. That
+trade belongs in the decision, and it is why the decision is a human's.

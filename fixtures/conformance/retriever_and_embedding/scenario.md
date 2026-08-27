@@ -45,10 +45,27 @@ None.
 - [x] `openinference` — Phase 1
 - [ ] `otel_genai` — **declared unrenderable** (`expected/coverage.json`)
 
-**Not for the reason anyone expected.** `TASKS.md` 2.11 flagged this as the
-most likely coverage candidate on the grounds that GenAI's vocabulary might not
-name a retriever. It does: the convention defines `retrieval`, the adapter now
-maps it to `NodeKind.retriever`, and `embeddings` was already mapped. Both of
-this scenario's interesting spans render.
+**Not for the reason anyone expected — twice now.** `TASKS.md` 2.11 flagged
+this as the most likely coverage candidate on the grounds that GenAI's
+vocabulary might not name a retriever. It does: the convention defines
+`retrieval`, the adapter maps it to `NodeKind.retriever`, and `embeddings` was
+already mapped. So 2.11 recorded that the blocker was `s0`, the **chain**
+parent, which no mapped operation produces.
 
-The blocker is `s0`, the **chain** parent, which no mapped operation produces.
+**That was also incomplete.** `TASKS.md` 2.16 measured it: this scenario has
+**two independent blockers**, and the chain parent is not the binding one.
+
+`s2.outputs` is `absent` in `otel_genai` under every candidate attribute,
+because the adapter reads neither `gen_ai.retrieval.documents` nor
+`gen_ai.retrieval.query.text` — both of which the convention **does** define
+(`opentelemetry-semantic-conventions` 0.65b0) and neither of which this adapter
+consumes. `FIXTURES.md` §4.4 forbids setting a payload's `state` aside, ever:
+`absent` ≠ `present` is a real disagreement and must stay visible. Rendering it
+would need the adapter to learn two attributes written from the convention
+registry, with no captured `retrieval` or `embeddings` span anywhere in the
+repo — the reading-not-observation `FIXTURES.md` §5.1 forbids.
+
+So the retriever *is* a blocker after all, one level down: at the payload rather
+than at the kind. **This blocker outlives the `chain` decision** — mapping
+`invoke_workflow` would not make this scenario renderable, and it must not be
+retired alongside `cyclic_parents` and `span_links`.

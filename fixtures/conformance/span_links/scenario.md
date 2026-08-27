@@ -58,3 +58,20 @@ That makes this the most expensive of the three `chain` declarations: it is the
 only scenario in the corpus carrying an `EdgeKind.link`, so `link` edges — and
 the adapter-supplied `basis` string that comes with them — are **untested
 across dialects**. Recorded at `TASKS.md` 2.11 rather than left implicit.
+
+### What the workflow capture did and did not change (`TASKS.md` 2.16)
+
+`fixtures/captured/genai_workflow.jsonl` carries a real OTel span link and the
+`otel_genai` adapter reads it, producing an `EdgeKind.link` edge with `basis`
+`span.link`. So the adapter is proven against a real link, in this dialect.
+
+**That is fidelity evidence in one dialect, not cross-dialect coverage.**
+`fixtures/captured/` is not part of the equivalence corpus, and this scenario is
+still the only member of that corpus carrying the kind. So the plain answer is:
+after the capture, the cross-dialect claim **still does not cover
+`EdgeKind.link`**, and this scenario is still the thing that would carry it.
+
+It would carry it the moment `chain` becomes reachable — measured at 2.16, the
+`otel_genai` rendering recorded there reproduces `expected/graph.json` exactly,
+`name` compared and nothing declared. The declaration is now pending a semantic
+decision, not a capture.
