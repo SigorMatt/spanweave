@@ -1534,10 +1534,11 @@ below:
 
 ### `[2a]` — the second dialect  *(begins only after 2.4's HALT clears)*
 
-> **Three things 2b handed to this workstream.** Assigned here so a cold
-> session finds them without reading the 2b record.
+> **LIVE HANDOFF — read these two before the first unchecked box.** Both come
+> from 2b, both are settled at **2.10**, and both are settled by *evidence*,
+> not by patch.
 >
-> 1. **O1 / finding F5 is settled at 2.10, by evidence, not by patch.** Do
+> 1. **O1 / finding F5 — a requested-but-unfulfilled call names no tool.** Do
 >    **not** fix it first. Render `unpaired_tool_call` in `otel_genai` and
 >    check whether *any single* payload path yields the requested tool's name
 >    in **both** dialects. The risk that makes this worth settling with
@@ -1545,32 +1546,9 @@ below:
 >    against dialect two — it reports a **confident zero**, indistinguishable
 >    from "there were none." The remedy (a spec change plus an adapter change)
 >    is decided **after** that rendering says what is actually there.
-> 2. **Finding F4 is fixed in this workstream, not deferred.** `SPEC.md`
->    §3.10 instructs callers to match on the error `code` and never the
->    message, but `spanweave/__init__.py` exports neither `SpanweaveError` nor
->    any subclass — so through the public API that rule is currently
->    **impossible to obey**. Export the type and the five subclasses in the
->    §3.10 table, with a test. Small, and it makes a written spec rule
->    followable. Fold it into whichever 2a task touches the public surface.
->
->    **DONE (2026-08-22), in its own commit rather than folded into 2.5** —
->    2.5 touches `capture/`, not the public surface, and this belongs in the
->    diff a reader of `spanweave/__init__.py` will look at. Two corrections to
->    the finding as written: the §3.10 table names **three** subclasses, not
->    five (seven *codes* across three types plus the base), and the fix is not
->    only an export. `examples/fleet_aggregate` — the consumer that reported
->    this — now distinguishes `refused` (the library read the trace and said
->    no, and `code` says why) from every other reason a build can fail, which
->    is the distinction F4 says was unavailable; its rollup carries a
->    `refused` boolean per failure. The catch stays broad, because a fleet
->    must survive an unreadable file as well as an unreadable trace.
->    `tests/test_codes.py` derives the required type names **from the §3.10
->    table itself**, so a type added to the spec and not exported fails the
->    build rather than reintroducing the same gap.
-> 3. **Finding F6 is a corpus gap, and 2a owns the next fixtures.** Every
->    tool node in `fixtures/conformance/` is `status: "ok"` (18 of 18); not
->    one real tool span in the 14-trace fleet is (19 `unset`, 1 `error`). A
->    consumer written against the corpus alone computes a success rate that
+> 2. **F6 — the corpus is 18-of-18 `status: "ok"` and reality is not.** Not
+>    one real tool span in the 14-trace fleet is `ok` (19 `unset`, 1 `error`).
+>    A consumer written against the corpus alone computes a success rate that
 >    silently reads zero against real telemetry. When the degenerate set is
 >    rendered at 2.10, consider a scenario whose tool span carries **no**
 >    status — but only if the instrumentor actually emits one that way. §5.1
@@ -1584,6 +1562,16 @@ below:
 > adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
 > disagreed. Do not repeat it.
 
+> **Retired from the handoff list** (kept as a pointer, not as a task).
+> **F4 — the §3.10 error types were unexportable — is DONE** (2026-08-22,
+> commit `89f629a`, its own commit rather than folded into 2.5). Two
+> corrections to the finding as written: the §3.10 table names **three**
+> subclasses, not five, and the fix was not only an export —
+> `examples/fleet_aggregate` now distinguishes `refused` from every other
+> reason a build can fail, which is the distinction F4 said was unavailable.
+> `tests/test_codes.py` derives the required type names from the §3.10 table
+> itself, so a type added to the spec and not exported fails the build.
+
 > **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7, 2.8 and 2.9 done; **2.9's
 > HALT is discharged**. `make check` and `make conformance` are green, and the
 > phase's central claim is evidenced: `llm_tool_llm`, `parallel_tool_calls` and
@@ -1593,10 +1581,14 @@ below:
 > handoff item 1 above (O1 / finding F5) is settled there, by evidence, not by
 > patch. Two things are carried forward to 2.14 rather than done: applying a
 > declared `erase` to both sides of the comparison, and `Edge.basis` as
-> cross-dialect vocabulary (live at 2.11). Read the three handoff items at the
-> top of this section before the first unchecked box; **this intro is four
-> blocks and past what an outline-first read survives — split it before adding
-> a fifth.**
+> cross-dialect vocabulary (live at 2.11).
+>
+> **The intro above was split here.** It had reached four blocks and 55 lines
+> between the header and the first task, which defeats the outline-first read
+> (grep for the first unchecked box) that a cold session actually performs.
+> The rule that replaced it: the **live** items go first and nothing else may
+> precede them; a settled item is retired to a pointer the same day it is
+> settled; this marker stays last. Retire before adding, not after.
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
