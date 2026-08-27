@@ -1,7 +1,9 @@
 # fixtures/captured/
 
-Traces produced by **real instrumentation on real runs**. Currently empty —
-the first one lands at `TASKS.md` 1.9, and it is a human-run step.
+Traces produced by **real instrumentation on real runs**. Three are present:
+`openai_tool_call.jsonl` and `genai_tool_call.jsonl` — the matched pair of the
+same tool-using conversation in both dialects — and `genai_workflow.jsonl`, a
+two-leg workflow with a span link, in `otel_genai` only.
 
 ## Rules
 
