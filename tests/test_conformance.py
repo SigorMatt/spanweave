@@ -25,6 +25,7 @@ from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
 from tests.conformance import (
     CORPUS,
+    DECLARABLE_NODE_MAPPINGS,
     DECLARABLE_PAYLOAD_FIELDS,
     DIALECTS,
     DIALECTS_PENDING_CORPUS_COVERAGE,
@@ -33,6 +34,7 @@ from tests.conformance import (
     canonical,
     renderings,
     scenarios,
+    split_erasures,
     unsupported,
 )
 
@@ -361,17 +363,110 @@ def test_an_override_only_touches_what_the_scenario_declared(scenario):
             )
 
 
+# --- dotted-path erasures (FIXTURES.md 4.5) ---------------------------------
+
+ERASING = [s for s in SCENARIOS if s.erase]
+
+
+@pytest.mark.parametrize("scenario", ERASING, ids=ids(ERASING))
+def test_a_dotted_erasure_names_a_mapping_the_corpus_allows(scenario):
+    # `inputs` and `outputs` are mappings too. A dotted erasure that reached
+    # one would route straight around §4.4's guarantee that `state` is never
+    # set aside -- the narrow mechanism must not be reachable through the
+    # broad one. Guarded in `canonical()` AND here, because a fixture is a
+    # likelier place to get this wrong than the comparison code.
+    for entry in scenario.erase:
+        field, dot, key = entry.partition(".")
+        if not dot:
+            continue
+        assert field in DECLARABLE_NODE_MAPPINGS, (
+            f"{scenario.name}: erases {entry!r}; only "
+            f"{sorted(DECLARABLE_NODE_MAPPINGS)} may have a key erased"
+        )
+        assert key, f"{scenario.name}: {entry!r} names no key"
+
+
+def test_a_dotted_erasure_into_a_payload_is_refused_even_if_a_fixture_asks():
+    # Belt and braces: the test above fails the fixture, and this proves
+    # `canonical()` would decline to honour it anyway. `state` is the one
+    # field no mechanism here may reach, by any route.
+    scenario = _llm_tool_llm()
+    document = to_document(spanweave.build(scenario.rendering("openinference")))
+    smuggled = canonical(document, ("inputs.state", "outputs.value"))
+    assert _payload_of(smuggled, "s1", "inputs")["state"] == "present"
+    assert "value" in _payload_of(smuggled, "s1", "outputs")
+    fields, keys = split_erasures(("inputs.state", "attributes.reported_kind"))
+    assert fields == ()
+    assert keys == {"attributes": frozenset({"reported_kind"})}
+
+
+def test_a_dotted_erasure_takes_the_named_key_and_leaves_the_rest():
+    # The reason this is narrower than `erase: ["attributes"]`: everything the
+    # scenario did NOT declare stays compared.
+    scenario = _llm_tool_llm()
+    document = to_document(spanweave.build(scenario.rendering("openinference")))
+    node = next(
+        n
+        for n in canonical(document, ("attributes.reported_kind",))["nodes"]
+        if n["id"] == "s1"
+    )
+    assert node["attributes"] == {"model": "demo-model"}
+
+
+@pytest.mark.parametrize("scenario", ERASING, ids=ids(ERASING))
+def test_a_dotted_erasure_names_a_key_that_exists(scenario):
+    # A declaration for a key nothing produces sets nothing aside and makes
+    # the declaration look larger than it is -- the same rule §4.4 applies to
+    # an absent payload.
+    _, keys = split_erasures(scenario.erase)
+    if not keys:
+        return
+    graph = scenario.expected_graph
+    if graph is None:
+        return
+    for path in scenario.dialects:
+        if path.stem not in adapter_backed():
+            continue
+        built = canonical(to_document(spanweave.build(path)))
+        for field, erased in keys.items():
+            present = {key for node in built["nodes"] for key in node.get(field, {})}
+            missing = sorted(erased - present)
+            assert missing == [], (
+                f"{scenario.name}/{path.stem}: erases {field}.{missing}, which "
+                f"no node carries"
+            )
+
+
 def test_no_declaration_outlives_the_disagreement_that_earned_it():
     # A declaration on which every buildable dialect already agrees is stale,
     # and stale is how an exemption becomes permanent. Vacuous with one
     # adapter; it starts biting when the second lands, which is when a
     # declaration could first be shown unnecessary.
     for scenario in CROSS_DIALECT:
+        buildable = [p for p in scenario.dialects if p.stem in adapter_backed()]
         graphs = [
             canonical(to_document(spanweave.build(path)), scenario.erase)
-            for path in scenario.dialects
-            if path.stem in adapter_backed()
+            for path in buildable
         ]
+        # `erase` expires by the same rule as a §4.4 payload declaration, and
+        # per ENTRY -- a whole field or a single dotted key. An erasure is a
+        # recorded disagreement, so one nothing disagrees about is stale, and
+        # stale is how a declaration becomes permanent. Compared on the
+        # UNERASED graphs, since the erased ones cannot show it by definition.
+        unerased = [canonical(to_document(spanweave.build(p))) for p in buildable]
+        for entry in scenario.erase:
+            field, dot, key = entry.partition(".")
+            seen = [
+                [node.get(field, {}).get(key) for node in graph["nodes"]]
+                if dot
+                else [node.get(field) for node in graph["nodes"]]
+                for graph in unerased
+            ]
+            assert any(entry_seen != seen[0] for entry_seen in seen[1:]), (
+                f"{scenario.name}: erases {entry!r} but every dialect agrees "
+                f"on it; delete the declaration rather than carrying it "
+                f"(FIXTURES.md §4, §4.5)"
+            )
         for selector, fields in scenario.drop_payloads.items():
             node_id, side = selector.split(".")
             # Per FIELD, not per selector. A declaration that names `mime`

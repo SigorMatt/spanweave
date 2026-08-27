@@ -56,6 +56,14 @@ ERASED_EDGE_FIELDS = ("adapter",)
 #: comparison file can absorb.
 DECLARABLE_PAYLOAD_FIELDS = frozenset({"value", "mime"})
 
+#: The only node fields a scenario may erase **one key of**, by dotted path
+#: (`FIXTURES.md` §4.5). Fixed here, never read from a fixture, and it is a
+#: whitelist rather than a blacklist for one reason: `inputs` and `outputs`
+#: are mappings too, so a dotted erasure that reached them would route
+#: straight around §4.4's guarantee that `state` can never be set aside. The
+#: narrow mechanism must not be reachable through the broad one.
+DECLARABLE_NODE_MAPPINGS = frozenset({"attributes"})
+
 
 def canonical(
     document: dict[str, Any],
@@ -64,9 +72,11 @@ def canonical(
 ) -> dict[str, Any]:
     """The dialect-independent form of a graph document.
 
-    ``erase`` names extra node fields a scenario has declared dialect-varying
-    in its ``scenario.md`` -- ``name`` is the only one so far, and only where
-    the scenario says so explicitly.
+    ``erase`` names what a scenario has declared dialect-varying in its
+    ``scenario.md``: a node field (``name``), or **one key of one node
+    mapping** by dotted path (``attributes.reported_kind``), and only where
+    the scenario says so explicitly. A dotted path is honoured only into
+    ``DECLARABLE_NODE_MAPPINGS``.
 
     ``drop_payloads`` maps a ``"<node id>.<inputs|outputs>"`` selector to the
     payload fields that scenario has declared dialect-varying (§4.4). **It is
@@ -95,7 +105,11 @@ def _node(
     erase: tuple[str, ...],
     drop_payloads: Mapping[str, frozenset[str]],
 ) -> dict[str, Any]:
-    kept = _without(node, (*ERASED_NODE_FIELDS, *erase))
+    fields, keys = split_erasures(erase)
+    kept = _without(node, (*ERASED_NODE_FIELDS, *fields))
+    for mapping, erased in keys.items():
+        if mapping in kept:
+            kept[mapping] = _without(kept[mapping], tuple(sorted(erased)))
     for side in ("inputs", "outputs"):
         declared = drop_payloads.get(f"{node['id']}.{side}", frozenset())
         # Guarded rather than trusted: a declaration naming `state` would be
@@ -104,6 +118,25 @@ def _node(
         declared = frozenset(declared) & DECLARABLE_PAYLOAD_FIELDS
         kept[side] = _without(kept[side], (*ERASED_PAYLOAD_FIELDS, *sorted(declared)))
     return kept
+
+
+def split_erasures(
+    erase: tuple[str, ...],
+) -> tuple[tuple[str, ...], dict[str, frozenset[str]]]:
+    """A scenario's `erase` list, split into whole fields and dotted keys.
+
+    Public because the corpus tests assert on the split itself: an entry that
+    names a mapping this corpus does not allow keys to be erased from is
+    dropped **here**, so the guard sits where the erasure happens and not only
+    where the fixture is read.
+    """
+    fields = tuple(entry for entry in erase if "." not in entry)
+    keys: dict[str, set[str]] = {}
+    for entry in erase:
+        mapping, dot, key = entry.partition(".")
+        if dot and mapping in DECLARABLE_NODE_MAPPINGS and key:
+            keys.setdefault(mapping, set()).add(key)
+    return fields, {mapping: frozenset(k) for mapping, k in keys.items()}
 
 
 def _without(mapping: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:

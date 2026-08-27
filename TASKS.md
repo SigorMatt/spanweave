@@ -2521,7 +2521,7 @@ below:
   > said 2.9 must. 2.13 deletes it along with the rest of the transitional
   > mechanism.
 
-- [ ] **2.10 Dialect-two renderings — the degenerate set.** `[2a]` **NEVER
+- [x] **2.10 Dialect-two renderings — the degenerate set.** `[2a]` **NEVER
   CUT** (`ROADMAP.md`: this is where dialect conventions actually diverge and
   where `PREDICTIONS.md` P2 gets tested; cutting these keeps the pleasant half
   of the corpus and discards the informative half).
@@ -2544,12 +2544,11 @@ below:
   has been checked against observed output rather than assumed
   (`FIXTURES.md` §4.3 — a `renderable: false` is an invitation to check the
   reason, not a settled fact).*
-  > **STATE: 10 of 11 rendered, 1 new scenario added, TWO HALTS OPEN. The box
-  > stays unchecked** — 2.10's done-when requires every listed scenario to
-  > carry an `otel_genai` rendering *or* a `coverage.json` entry, and
-  > `unknown_kind` has neither. It is blocked on a decision that is not the
-  > agent's (Halt B below). Everything else in the task is done and green:
-  > `make check` 858 → 862 tests, `make conformance` green, `make gates` green.
+  > **STATE: DONE. All 11 covered, 1 new scenario added, both halts
+  > discharged.** Worked over two sittings; the intermediate state is kept
+  > below because the halts are the record. 9 rendered, 2 declared
+  > unrenderable, and `unknown_kind` rendered after Halt B was decided.
+  > `make check` and `make conformance` green.
   >
   > ### What landed
   >
@@ -2565,7 +2564,7 @@ below:
   > | `shuffled_order` | rendered | `name`; the five `llm_tool_llm` payloads |
   > | `redacted_payload` | **`coverage.json`** | — |
   > | `cyclic_parents` | **`coverage.json`** | — |
-  > | `unknown_kind` | **BLOCKED — Halt B** | — |
+  > | `unknown_kind` | rendered *(after Halt B)* | `name`; `attributes.reported_kind` |
   > | `unset_and_error_status` | **new scenario**, both dialects | `name` |
   >
   > `name` is declared everywhere for the reason settled at 2.9: the OTel GenAI
@@ -2938,8 +2937,45 @@ below:
   > as compared, on a scenario where only one **key** of it disagrees. Option 3
   > stays rejected for the same reason.
   >
-  > `unknown_kind` is still unrendered and 2.10's box is still unchecked. The
-  > two-line specimen is above; recreating it costs nothing.
+  > ### HALT B DISCHARGED (2026-08-27) — option 1, dotted-path erase
+  >
+  > Taken on the stated grounds: whole-field erase sets aside a field §4 now
+  > explicitly lists as compared, over **one key** disagreeing, and the corpus
+  > has consistently preferred narrow-and-declared over broad-and-silent —
+  > `coverage.json`, §4.4's per-field payload declaration, and resolution C at
+  > 2.8 all took that shape. This is the same instrument one level finer.
+  >
+  > `FIXTURES.md` **§4.5** is the mechanism's home. `unknown_kind` declares
+  > `erase: ["attributes.reported_kind", "name"]` and is now rendered; its
+  > `otel_genai` span carries `gen_ai.operation.name: "invoke_workflow"`, read
+  > from the convention's own registry at the version 2.6's capture ran under,
+  > and genuinely unmapped.
+  >
+  > **Condition: per-key, and it expires.** The staleness test that deleted
+  > 2.8's tool-span selectors now covers `erase` too, per entry — a whole
+  > field or a single dotted key — and compares the **unerased** graphs, since
+  > an erased one cannot show a disagreement by definition. Watched failing by
+  > adding `operation` to the list, on which both dialects agree. A second
+  > guard fails a declaration naming a key no node carries (watched failing on
+  > `attributes.nonexistent`).
+  >
+  > **Condition: the scenario states why agreement is impossible.**
+  > `unknown_kind/scenario.md` now says it in those terms — `reported_kind` is
+  > by definition the dialect's verbatim token, so two vocabularies
+  > necessarily produce two strings and an adapter making them agree would be
+  > lying about what it read. §4.5 makes that a *requirement* of the
+  > mechanism, not a courtesy: a reader must be able to tell "this field means
+  > different things by construction" from "nobody has reconciled these yet",
+  > because only the second is a bug.
+  >
+  > **The whitelist is the load-bearing part of the implementation.** Only
+  > `attributes` may have a key erased, fixed in code and never read from a
+  > fixture. `inputs` and `outputs` are mappings too, and a dotted erasure
+  > reaching one would route straight around §4.4's guarantee that a payload's
+  > `state` can never be set aside. The narrow mechanism must not be reachable
+  > through the broad one; guarded where the fixture is read **and** where the
+  > erasure happens, because the second is what holds if the first is deleted.
+  > Watched refusing `inputs.state`.
   >
   > The rendering is **not** committed. Writing it would leave the corpus with
   > a file no test can compare, which is the silent rot `DIALECTS_PENDING…` and

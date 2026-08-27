@@ -32,7 +32,6 @@
         "value": null
       },
       "kind": "agent",
-      "name": "agent.run",
       "operation": null,
       "outputs": {
         "mime": null,
@@ -46,7 +45,6 @@
     },
     {
       "attributes": {
-        "reported_kind": "GUARDRAIL"
       },
       "ended_at": 1001.0,
       "id": "s1",
@@ -56,7 +54,6 @@
         "value": null
       },
       "kind": "unknown",
-      "name": "guardrail.check",
       "operation": null,
       "outputs": {
         "mime": null,

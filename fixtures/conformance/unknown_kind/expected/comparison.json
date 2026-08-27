@@ -1,0 +1,7 @@
+{
+  "_note": "Node fields, and single node-mapping keys, this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4, 4.5).",
+  "erase": [
+    "attributes.reported_kind",
+    "name"
+  ]
+}

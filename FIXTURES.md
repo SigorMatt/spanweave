@@ -162,10 +162,14 @@ which one it meant (§4.2, §4.3).
   a payload is dialect-specific even when its parsed value is not),
   `Edge.adapter`, `meta.adapters`, `meta.source_digest`,
   `meta.spanweave_version`.
-- **Erased where declared:** node `name`, and named `Payload` fields on named
-  payloads (§4.4) — **only where** `expected/comparison.json` says so, so the
-  erasure is a reviewable fact in the corpus. Declared erasures apply to
-  **claim 2 only**; claim 1 still pins every one of them.
+- **Erased where declared:** a node field (`name`), **one key of one node
+  mapping** by dotted path (`attributes.reported_kind`, §4.5), and named
+  `Payload` fields on named payloads (§4.4) — **only where**
+  `expected/comparison.json` says so, so every erasure is a reviewable fact in
+  the corpus. A §4.4 payload declaration applies to **claim 2 only**; claim 1
+  still pins every one of those. An `erase` entry applies to both, because
+  `expected/graph.json` is itself in canonical form and simply does not carry
+  the field — see `TASKS.md` 2.14, where narrowing that is a live proposal.
 - **Compared:** everything else — and this list is **exact, not
   illustrative**. `canonical()` keeps, on each node, `id`, `kind`, `name`,
   `operation`, `attributes`, `started_at`, `ended_at`, `status`,
@@ -364,6 +368,61 @@ decision needs to be able to read; a widened erasure would have said nothing at
 all. It follows that a declaration nothing disagrees about is stale — once two
 or more dialects can be built, a declared payload on which every dialect
 already agrees fails the corpus.
+
+### 4.5 Node attributes two dialects necessarily spell differently
+
+**The finding this exists for.** `Node.attributes` holds what an adapter
+normalized out of a dialect. Most of it agrees across dialects — `model` does,
+everywhere it appears. One key cannot, and cannot *in principle*:
+`reported_kind` is **by definition** the dialect's own verbatim token for a
+kind the library could not map. That is the whole content of the field. Two
+dialects drawing on two vocabularies necessarily put two different strings
+there, and an adapter that made them agree would be lying about what it read —
+either normalizing a token whose only job is to be unnormalized, or reporting a
+string the instrumentor never wrote.
+
+So this is not "these two dialects happen to disagree", which a better adapter
+or a later capture might resolve. It is a property of what the field means.
+
+**The mechanism.** A scenario adds a dotted path to `erase`:
+
+```json
+{
+  "erase": ["attributes.reported_kind", "name"]
+}
+```
+
+**Only `attributes` may have a key erased this way**, and the whitelist is
+fixed in code rather than read from the fixture (`tests/conformance.py`
+`DECLARABLE_NODE_MAPPINGS`). `inputs` and `outputs` are mappings too, and a
+dotted erasure that reached one would route straight around §4.4's guarantee
+that a payload's `state` can never be set aside. **The narrow mechanism must
+not be reachable through the broad one.** Guarded twice — once where the
+fixture is read, once where the erasure happens — because the second is what
+holds if the first is ever deleted.
+
+**Why a key and not the field.** `erase: ["attributes"]` works today and would
+have cost one line of fixture and no code. It sets aside a field §4 explicitly
+lists as compared, over a scenario where exactly **one key** of it disagrees,
+and it applies to both claims — so `reported_kind` would stop being pinned
+anywhere in the corpus. The corpus has consistently preferred
+narrow-and-declared over broad-and-silent: `coverage.json`, §4.4's per-field
+payload declaration, and the per-dialect overrides that keep claim 1's teeth
+all took that shape. This is the same instrument at one more level of
+granularity.
+
+**It expires like every other declaration.** A dotted erasure on which every
+buildable dialect already agrees fails the corpus, per entry, by the same
+staleness test that deletes a stale §4.4 selector. A declaration is a recorded
+disagreement; one nothing disagrees about is not a declaration, it is an
+exemption that outlived its reason.
+
+**And the scenario must say why.** `expected/comparison.json` records *that*
+two dialects disagree. `scenario.md` must record *why they cannot agree* — a
+reader has to be able to tell "this field means different things by
+construction" from "nobody has got round to reconciling these yet", because
+only the second is a bug. See `unknown_kind/scenario.md`, the corpus's only
+user of this mechanism.
 
 ## 5. Hand-authored fixtures
 
