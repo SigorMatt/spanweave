@@ -816,3 +816,42 @@ def test_a_redacted_payload_keeps_the_marker_the_source_wrote():
         spanweave.build(CORPUS / "redacted_payload/dialects/openinference.jsonl")
     )
     assert document["nodes"][0]["inputs"]["raw"] == "__REDACTED__"
+
+
+# --------------------------------------------------------------------------
+# The unpaired diagnostics, across dialects (SPEC.md 3.7; PREDICTIONS.md O1)
+# --------------------------------------------------------------------------
+
+
+def test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect():
+    """O1's gap, closed and kept closed.
+
+    `canonical()` compares diagnostics by code and count, which is right --
+    wording is not a contract -- but it means the corpus cannot see `source`
+    at all. This is the one assertion that does, and it is the one that
+    matters: before this, the requested tool's name appeared ZERO times in
+    either dialect's diagnostics, and the two payload paths that did carry it
+    shared no prefix (`unpaired_tool_call/otel_genai.notes.md`).
+    """
+    scenario = next(s for s in BUILDABLE if s.name == "unpaired_tool_call")
+    per_dialect = {}
+    for path in scenario.dialects:
+        if path.stem not in adapter_backed():
+            continue
+        document = to_document(spanweave.build(path))
+        per_dialect[path.stem] = {
+            (d["code"], d["node_id"]): d["source"]
+            for d in document["diagnostics"]
+            if d["code"] in ("unpaired_call", "unpaired_result")
+        }
+
+    assert len(per_dialect) > 1, "vacuous: only one dialect could be built"
+    first, *rest = sorted(per_dialect)
+    for other in rest:
+        assert per_dialect[first] == per_dialect[other], (
+            f"{first} and {other} disagree on an unpaired diagnostic's source"
+        )
+    assert per_dialect[first] == {
+        ("unpaired_call", "s1"): {"call_id": "call_a", "operation": "lookup"},
+        ("unpaired_result", "s2"): {"call_id": "call_b", "operation": "other"},
+    }

@@ -117,6 +117,7 @@ PART_TYPE = "type"
 TOOL_CALL_PART = "tool_call"
 TOOL_RESPONSE_PART = "tool_call_response"
 PART_ID = "id"
+PART_NAME = "name"
 PARTS = "parts"
 
 # The token counts the model has fields for; anything else counted goes to
@@ -212,7 +213,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     operation, model = _operation(kind, attributes, consumed)
     if model is not None:
         normalized["model"] = model
-    call_ids, call_role = _call(attributes, outputs, consumed)
+    call_ids, call_role, call_names = _call(attributes, outputs, consumed, operation)
     status, status_note = _status(record)
 
     unmapped = sorted(
@@ -253,6 +254,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         usage=usage,
         call_ids=call_ids,
         call_role=call_role,
+        call_names=call_names,
         links=_links(record),
         data_edges=_data_edges(record),
         received_call_ids=_received_results(inputs),
@@ -425,7 +427,8 @@ def _call(
     attributes: Mapping[str, JsonValue],
     outputs: Payload,
     consumed: set[str],
-) -> tuple[tuple[str, ...], CallRole | None]:
+    operation: str | None,
+) -> tuple[tuple[str, ...], CallRole | None, dict[str, str]]:
     """Recover the call ids the dialect carries. Never guess one.
 
     A span that *answers* a call carries ``gen_ai.tool.call.id``. A span that
@@ -444,17 +447,31 @@ def _call(
     consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
-        return (fulfilling,), CallRole.FULFILLER
+        # A fulfiller's own `operation` already names the tool; carrying it
+        # here too is what lets both unpaired codes share one `source` shape.
+        named = {fulfilling: operation} if operation is not None else {}
+        return (fulfilling,), CallRole.FULFILLER, named
 
     requested = _requested(outputs)
     if not requested:
-        return (), None
-    return requested, CallRole.REQUESTER
+        return (), None, {}
+    return requested, CallRole.REQUESTER, _requested_names(outputs)
 
 
 def _requested(outputs: Payload) -> tuple[str, ...]:
     """Ids of calls this span's own output messages asked for."""
     return _ids_of_type(outputs.value, TOOL_CALL_PART)
+
+
+def _requested_names(outputs: Payload) -> dict[str, str]:
+    """The `name` beside each requested `tool_call` part's `id`.
+
+    Same part, same walk as `_requested` -- the convention puts the two in one
+    object, so the name is located by construction rather than searched for.
+    Read only so a call nothing fulfils can still be attributed to the tool it
+    named (`SPEC.md` §3.7); a call that IS fulfilled has a node that says it.
+    """
+    return _names_of_type(outputs.value, TOOL_CALL_PART)
 
 
 def _received_results(inputs: Payload) -> tuple[str, ...]:
@@ -468,6 +485,21 @@ def _received_results(inputs: Payload) -> tuple[str, ...]:
     return _ids_of_type(inputs.value, TOOL_RESPONSE_PART)
 
 
+def _names_of_type(messages: JsonValue, part_type: str) -> dict[str, str]:
+    """Part `id` -> part `name`, for one part `type`, first mention winning.
+
+    As tolerant as `_ids_of_type` and for the same reason: a message list the
+    convention would not recognize yields nothing rather than raising.
+    """
+    found: dict[str, str] = {}
+    for part in _parts_of_type(messages, part_type):
+        identifier = _as_str(part.get(PART_ID))
+        named = _as_str(part.get(PART_NAME))
+        if identifier is not None and named is not None:
+            found.setdefault(identifier, named)
+    return found
+
+
 def _ids_of_type(messages: JsonValue, part_type: str) -> tuple[str, ...]:
     """Every part `id` of one `type`, in message order, deduplicated.
 
@@ -476,9 +508,25 @@ def _ids_of_type(messages: JsonValue, part_type: str) -> tuple[str, ...]:
     still `present` and still in `raw`, so the content is not lost -- only the
     relation this adapter declines to claim.
     """
-    if not isinstance(messages, list):
-        return ()
     found: list[str] = []
+    for part in _parts_of_type(messages, part_type):
+        identifier = _as_str(part.get(PART_ID))
+        if identifier is not None and identifier not in found:
+            found.append(identifier)
+    return tuple(found)
+
+
+def _parts_of_type(
+    messages: JsonValue, part_type: str
+) -> Iterator[Mapping[str, JsonValue]]:
+    """Every part of one `type`, in message order. One walk, two readers.
+
+    Shared so that the id and the name can never come from different parts:
+    they are two fields of one object, and reading them apart is how a call
+    would end up labelled with another call's tool.
+    """
+    if not isinstance(messages, list):
+        return
     for message in messages:
         if not isinstance(message, dict):
             continue
@@ -486,14 +534,8 @@ def _ids_of_type(messages: JsonValue, part_type: str) -> tuple[str, ...]:
         if not isinstance(parts, list):
             continue
         for part in parts:
-            if not isinstance(part, dict):
-                continue
-            if part.get(PART_TYPE) != part_type:
-                continue
-            identifier = _as_str(part.get(PART_ID))
-            if identifier is not None and identifier not in found:
-                found.append(identifier)
-    return tuple(found)
+            if isinstance(part, dict) and part.get(PART_TYPE) == part_type:
+                yield part
 
 
 def _status(record: Mapping[str, JsonValue]) -> tuple[Status, str | None]:

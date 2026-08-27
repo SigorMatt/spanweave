@@ -431,3 +431,92 @@ def test_the_graph_is_immutable(field):
     graph = build([a_span("s0")])
     with pytest.raises(dataclasses.FrozenInstanceError):
         setattr(graph, field, ())
+
+
+# --------------------------------------------------------------------------
+# `source` on the two unpaired codes (SPEC.md 3.7, `source` per code)
+# --------------------------------------------------------------------------
+#
+# A requested call that nothing fulfils has NO NODE, so `operation` -- where a
+# tool's name lives -- has nowhere to be, and the tool a consumer asked about
+# was unattributable from the graph (`PREDICTIONS.md` O1). The name rides on
+# the diagnostic instead. These pin the shape, because until this change
+# nothing in the suite asserted `source` for either code at all.
+
+
+def _source_of(graph, code):
+    return [d.source for d in graph.diagnostics if d.code == code]
+
+
+def _asking(span_id, call_id, name=None):
+    return a_span(
+        span_id,
+        kind=NodeKind.LLM,
+        call_ids=(call_id,),
+        call_role=CallRole.REQUESTER,
+        call_names={call_id: name} if name else {},
+    )
+
+
+def _answering(span_id, call_id, name=None):
+    return a_span(
+        span_id,
+        kind=NodeKind.TOOL,
+        operation=name,
+        call_ids=(call_id,),
+        call_role=CallRole.FULFILLER,
+        call_names={call_id: name} if name else {},
+    )
+
+
+def test_an_unpaired_call_names_the_tool_it_asked_for():
+    graph = build([_asking("s0", "call_a", "lookup")])
+    assert _source_of(graph, codes.UNPAIRED_CALL) == [
+        {"call_id": "call_a", "operation": "lookup"}
+    ]
+
+
+def test_an_unpaired_result_carries_the_same_shape():
+    # Redundant there -- the fulfiller HAS a node whose `operation` says it --
+    # and carried anyway, so a consumer reading both codes never has to branch
+    # on which one it is holding to know what `source` is.
+    graph = build([_answering("s0", "call_b", "other")])
+    assert _source_of(graph, codes.UNPAIRED_RESULT) == [
+        {"call_id": "call_b", "operation": "other"}
+    ]
+
+
+def test_a_dialect_that_names_no_tool_says_so_rather_than_guessing():
+    graph = build([_asking("s0", "call_a")])
+    assert _source_of(graph, codes.UNPAIRED_CALL) == [
+        {"call_id": "call_a", "operation": None}
+    ]
+
+
+def test_a_paired_call_produces_no_diagnostic_to_carry_a_name():
+    graph = build([_asking("s0", "call_a", "lookup"), _answering("s1", "call_a", "x")])
+    assert _source_of(graph, codes.UNPAIRED_CALL) == []
+    assert edges_of(graph, EdgeKind.CALL_RESULT) == [("s0", "s1")]
+
+
+def test_two_spans_naming_one_call_differently_name_it_at_all():
+    # Disagreement is not resolved by picking. Picking would also make the
+    # answer depend on input order, which CLAUDE.md 4 forbids outright.
+    spans = [_asking("s0", "call_a", "lookup"), _asking("s1", "call_a", "other")]
+    assert _source_of(build(spans), codes.UNPAIRED_CALL) == [
+        {"call_id": "call_a", "operation": None},
+        {"call_id": "call_a", "operation": None},
+    ]
+    # ...and reversing them says the same thing, which is the point.
+    assert _source_of(build(spans), codes.UNPAIRED_CALL) == _source_of(
+        build(list(reversed(spans))), codes.UNPAIRED_CALL
+    )
+
+
+def test_call_names_are_copied_out_of_the_caller_s_dict():
+    # `NormalizedSpan` is frozen; a mapping passed in must not stay reachable.
+    mutable = {"call_a": "lookup"}
+    span = _asking("s0", "call_a")
+    span = dataclasses.replace(span, call_names=mutable)
+    mutable["call_a"] = "something else"
+    assert span.call_names == {"call_a": "lookup"}

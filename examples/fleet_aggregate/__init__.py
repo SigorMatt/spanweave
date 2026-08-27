@@ -26,13 +26,30 @@ from spanweave import Diagnostic, Graph, NodeKind, SpanweaveError, Status, build
 #: Why a rollup line is missing, in the output, machine-readable. The library
 #: degrades honestly (`CLAUDE.md` 2); a consumer that swallowed the gap would
 #: undo that one layer up.
-UNATTRIBUTED_CALLS = (
-    "unfulfilled_calls.by_tool is empty: `unpaired_call` names the requesting "
-    "node and the call id, and a call that was requested but never ran has no "
-    "node, so the tool it asked for is not on the graph. Recovering it means "
-    "parsing the requesting node's outputs payload -- one dialect's shape, in "
-    "a consumer that must not know one."
+#:
+#: **This finding is closed** (F5 / `PREDICTIONS.md` O1). It read:
+#:
+#: > `unfulfilled_calls.by_tool` is empty: `unpaired_call` names the requesting
+#: > node and the call id, and a call that was requested but never ran has no
+#: > node, so the tool it asked for is not on the graph. Recovering it means
+#: > parsing the requesting node's outputs payload -- one dialect's shape, in a
+#: > consumer that must not know one.
+#:
+#: `SPEC.md` §3.7 now states the tool name on the diagnostic itself, so the
+#: rollup below is populated from `source["operation"]` and no payload is
+#: walked. Kept only for the case the library still cannot answer: a dialect
+#: that names no tool at all, where the honest output is a labelled bucket
+#: rather than a silently smaller total.
+UNNAMED_CALLS = (
+    "some unfulfilled calls are counted under `(dialect named no tool)`: the "
+    "diagnostic carried `operation: null`, meaning the instrumentor stated an "
+    "id and no name. That is a gap in the trace, not in the rollup, and it is "
+    "bucketed rather than dropped so the by_tool total still reconciles."
 )
+
+#: The bucket above. Named rather than spelled inline, because a consumer
+#: filtering it out needs something stable to filter on.
+UNNAMED_TOOL = "(dialect named no tool)"
 
 
 class TraceFailure:
@@ -90,6 +107,7 @@ class Fleet:
         self.unfulfilled_calls_by_model: collections.Counter[str] = (
             collections.Counter()
         )
+        self.unfulfilled_calls_by_tool: collections.Counter[str] = collections.Counter()
         self.unfulfilled_results = 0
         self.failures: list[TraceFailure] = []
 
@@ -118,6 +136,7 @@ class Fleet:
             if diagnostic.code == "unpaired_call":
                 self.unfulfilled_calls += 1
                 self.unfulfilled_calls_by_model[_asker(graph, diagnostic)] += 1
+                self.unfulfilled_calls_by_tool[_asked_for(diagnostic)] += 1
             elif diagnostic.code == "unpaired_result":
                 self.unfulfilled_results += 1
 
@@ -129,8 +148,8 @@ class Fleet:
     def as_dict(self) -> dict[str, Any]:
         """The rollup, in a form that sorts the same way every time."""
         limits: list[str] = []
-        if self.unfulfilled_calls:
-            limits.append(UNATTRIBUTED_CALLS)
+        if self.unfulfilled_calls_by_tool[UNNAMED_TOOL]:
+            limits.append(UNNAMED_CALLS)
 
         return {
             "traces": {
@@ -160,10 +179,12 @@ class Fleet:
                 # Answerable: the diagnostic names the node that asked, and
                 # `Node.operation` on an `llm` is the model (`SPEC.md` §3.1).
                 "by_model": _sorted(self.unfulfilled_calls_by_model),
-                # Not answerable. See UNATTRIBUTED_CALLS -- and note that the
-                # two live side by side on purpose, because the boundary is
-                # the finding: the graph knows who asked, not what for.
-                "by_tool": {},
+                # Answerable since `SPEC.md` §3.7 put the tool name on the
+                # diagnostic. This line was empty for a whole phase and the
+                # emptiness was the finding (F5): the graph knew who asked and
+                # not what for. Read off `source`; no payload is walked, so it
+                # is the same one line of code in every dialect.
+                "by_tool": _sorted(self.unfulfilled_calls_by_tool),
             },
             "unfulfilled_results": self.unfulfilled_results,
             "unbuildable": [
@@ -172,6 +193,21 @@ class Fleet:
             ],
             "limits": limits,
         }
+
+
+def _asked_for(diagnostic: Diagnostic) -> str:
+    """Which tool this unfulfilled call asked for (`SPEC.md` §3.7).
+
+    Defensive about the shape rather than trusting it: `Diagnostic.source` is
+    typed `JsonValue`, so a library older than the §3.7 table -- or a future
+    code reusing this counter -- would put a bare string here. An unreadable
+    source becomes a labelled bucket, never a dropped count.
+    """
+    source = diagnostic.source
+    if not isinstance(source, dict):
+        return UNNAMED_TOOL
+    named = source.get("operation")
+    return named if isinstance(named, str) else UNNAMED_TOOL
 
 
 def _asker(graph: Graph, diagnostic: Diagnostic) -> str:

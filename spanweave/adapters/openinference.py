@@ -80,6 +80,11 @@ TOOL_CALL_ID = "tool_call.id"
 # echo as a second request (see `tool_call_history_echo`).
 OUTPUT_MESSAGES = "llm.output_messages."
 CALL_ID_SUFFIX = ".tool_call.id"
+#: Beside the id, on the same requested call. Read only so that a call
+#: nothing fulfils can still be attributed to the tool it named
+#: (`SPEC.md` §3.7): the requested call has no node, so this is the only
+#: place the name can be carried.
+CALL_NAME_SUFFIX = ".tool_call.function.name"
 
 # A tool RESULT the span was given, as opposed to a call it requested. The
 # dialect renders an OpenAI tool-result message -- {"role": "tool",
@@ -193,7 +198,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     operation, model = _operation(attributes, consumed)
     if model is not None:
         normalized["model"] = model
-    call_ids, call_role = _call(attributes, consumed)
+    call_ids, call_role, call_names = _call(attributes, consumed, operation)
     status, status_note = _status(record)
 
     unmapped = sorted(
@@ -234,6 +239,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         usage=usage,
         call_ids=call_ids,
         call_role=call_role,
+        call_names=call_names,
         links=_links(record),
         data_edges=_data_edges(record),
         received_call_ids=_received_results(attributes, consumed),
@@ -379,8 +385,8 @@ def _operation(
 
 
 def _call(
-    attributes: Mapping[str, JsonValue], consumed: set[str]
-) -> tuple[tuple[str, ...], CallRole | None]:
+    attributes: Mapping[str, JsonValue], consumed: set[str], operation: str | None
+) -> tuple[tuple[str, ...], CallRole | None, dict[str, str]]:
     """Recover the call ids the dialect carries. Never guess one.
 
     A span that *answers* a call carries ``tool_call.id``. A span that
@@ -402,19 +408,33 @@ def _call(
     consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
-        return (fulfilling,), CallRole.FULFILLER
+        # A fulfiller's own `operation` already names the tool; carrying it
+        # here too is what lets both unpaired codes share one `source` shape.
+        named = {fulfilling: operation} if operation is not None else {}
+        return (fulfilling,), CallRole.FULFILLER, named
 
     requested: list[str] = []
+    names: dict[str, str] = {}
     for key in sorted(str(k) for k in attributes):
-        if key.startswith(OUTPUT_MESSAGES) and key.endswith(CALL_ID_SUFFIX):
-            consumed.add(key)
-            found = _as_str(attributes[key])
-            if found is not None and found not in requested:
-                requested.append(found)
+        if not key.startswith(OUTPUT_MESSAGES) or not key.endswith(CALL_ID_SUFFIX):
+            continue
+        consumed.add(key)
+        found = _as_str(attributes[key])
+        if found is None or found in requested:
+            continue
+        requested.append(found)
+        # The name sits beside the id under the same `...tool_calls.M.` stem,
+        # so it is located by construction rather than by scanning.
+        stem = key[: -len(CALL_ID_SUFFIX)]
+        name_key = stem + CALL_NAME_SUFFIX
+        stated = _as_str(attributes.get(name_key))
+        if stated is not None:
+            consumed.add(name_key)
+            names[found] = stated
 
     if not requested:
-        return (), None
-    return tuple(requested), CallRole.REQUESTER
+        return (), None, {}
+    return tuple(requested), CallRole.REQUESTER, names
 
 
 def _status(record: Mapping[str, JsonValue]) -> tuple[Status, str | None]:

@@ -106,6 +106,15 @@ class NormalizedSpan:
     #: this span's `call_role`.
     call_ids: tuple[str, ...] = ()
     call_role: CallRole | None = None
+    #: Call id -> the name the dialect gave that call's tool, for the ids in
+    #: `call_ids`. Empty where the dialect names none; never inferred.
+    #:
+    #: Only reason it exists: a requested call that no span fulfils has **no
+    #: node**, so `operation` -- where a tool's name lives (`SPEC.md` §3.2) --
+    #: has nowhere to be, and the tool a fleet asked for and never ran was
+    #: unattributable from the graph (`SPEC.md` §3.7, `source` per code). It is
+    #: read by `unpaired_call` / `unpaired_result` and nothing else.
+    call_names: Mapping[str, str] = field(default_factory=dict)
     links: tuple[SpanLink, ...] = ()
     data_edges: tuple[DeclaredDataEdge, ...] = ()
     #: Call ids whose **results this span was given** -- the dialect declaring
@@ -130,3 +139,4 @@ class NormalizedSpan:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "attributes", dict(self.attributes))
+        object.__setattr__(self, "call_names", dict(self.call_names))

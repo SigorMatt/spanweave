@@ -227,6 +227,54 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 are already preserved verbatim in `RawRecord`, and duplicating payload content
 into diagnostics is an unnecessary exposure surface.
 
+#### `source`, per code
+
+`source` is typed `JsonValue`, so its shape is per code and must be stated
+rather than inferred. Two codes carry an object; the rest carry the offending
+fragment as the type it arrived as.
+
+| Code | `source` |
+|---|---|
+| `unpaired_call` | `{"call_id": str, "operation": str \| null}` |
+| `unpaired_result` | `{"call_id": str, "operation": str \| null}` |
+| `unmapped_attributes` | `list[str]` — attribute keys, never values |
+| `malformed_record` | `str` — the line's text |
+| everything else | the offending fragment, verbatim |
+
+`operation` is the name the dialect gave the tool, and is `null` when the
+dialect named none. It is not a guess: a dialect that states a requested call's
+name states it on the requesting span, next to the id.
+
+On `unpaired_result` the name is **redundant** — that call *has* a fulfilling
+span, so `node_id` already leads to a node whose `operation` says the same
+thing. It is carried anyway, because the two codes are read together and a
+consumer that had to branch on which one it was holding to know whether
+`source` was a string or an object would be a worse contract than one
+redundant field.
+
+**Why this is not a breach of the keys-only rule above.** That rule exists
+because values are already in `RawRecord` and copying payload *content* into a
+diagnostic is exposure without benefit. A tool's **name** is not content in
+that sense — it is the identity of an operation, the same category as
+`Node.operation` (§3.2), which the model already normalizes and puts on every
+node. The library is not deciding to expose something new; it is putting a
+value it already publishes on a fulfilled call in the one place a call that
+never ran can be seen at all.
+
+**Why it is needed.** Without it, a call that was requested and never fulfilled
+can be attributed to the model that asked — via `node_id` — but not to the tool
+it named, because a call with no fulfilling span has no node and therefore no
+`operation`. Per-tool requested-versus-fulfilled is a question any fleet
+consumer asks, and it was unanswerable from the graph. Recovering the name
+meant walking the requesting node's output payload, in a dialect-specific shape
+(`FIXTURES.md` §4.4), inside a consumer that must not know a dialect.
+
+That was measured, not assumed, once a second dialect existed
+(`TASKS.md` 2.10): the tool name appeared **zero** times in either dialect's
+diagnostics, and the two payload paths share no prefix — `outputs.value` is a
+JSON object in one dialect and an array in the other — so no single expression
+reaches both.
+
 ### 3.8 Edge
 
 ```

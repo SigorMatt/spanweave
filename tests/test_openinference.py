@@ -536,3 +536,76 @@ def test_parsing_is_lazy():
     assert pulled == []
     next(spans)
     assert len(pulled) == 1
+
+
+# --------------------------------------------------------------------------
+# The name beside the id (SPEC.md 3.7, `source` per code)
+# --------------------------------------------------------------------------
+
+
+def test_a_requested_call_carries_the_name_stated_beside_its_id():
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": (
+                "lookup"
+            ),
+        }
+    )
+    assert span.call_names == {"call_a": "lookup"}
+    # Read, therefore consumed: reporting as unmapped something we mapped
+    # would be a false statement about coverage in both directions.
+    assert not any("function.name" in key for key in span.unmapped)
+
+
+def test_each_requested_call_gets_its_own_name_not_the_first_one():
+    stem = "llm.output_messages.0.message.tool_calls"
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.0.tool_call.id": "call_a",
+            f"{stem}.0.tool_call.function.name": "alpha",
+            f"{stem}.1.tool_call.id": "call_b",
+            f"{stem}.1.tool_call.function.name": "beta",
+        }
+    )
+    assert span.call_names == {"call_a": "alpha", "call_b": "beta"}
+
+
+def test_an_id_with_no_name_beside_it_is_left_unnamed():
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.call_names == {}
+
+
+def test_a_fulfilling_span_names_its_call_from_its_own_tool_name():
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "lookup",
+            "tool_call.id": "call_a",
+        }
+    )
+    assert span.call_names == {"call_a": "lookup"}
+
+
+def test_an_echoed_call_name_in_input_context_is_not_read():
+    # The echo defect, one level down. `input_messages` carries the previous
+    # turn's call verbatim, and reading its name here would attach a tool to a
+    # span that requested nothing (`tool_call_history_echo`).
+    stem = "llm.input_messages.1.message.tool_calls.0.tool_call"
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.id": "call_a",
+            f"{stem}.function.name": "lookup",
+        }
+    )
+    assert span.call_ids == ()
+    assert span.call_names == {}

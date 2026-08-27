@@ -255,10 +255,12 @@ def _explicit_edges(
     adapter: AdapterInfo,
 ) -> tuple[Edge, ...]:
     """Every relation the telemetry stated. Nothing it merely implied."""
-    requesters, fulfillers = _call_sides(spans, ids)
+    requesters, fulfillers, call_names = _call_sides(spans, ids)
     found: list[Edge] = []
     found.extend(_parent_edges(spans, ids, by_span_id, collected, adapter))
-    found.extend(_call_result_edges(requesters, fulfillers, collected, adapter))
+    found.extend(
+        _call_result_edges(requesters, fulfillers, call_names, collected, adapter)
+    )
     found.extend(_link_edges(spans, ids, by_span_id, adapter))
     found.extend(_data_edges(spans, ids, by_span_id, fulfillers, adapter))
     return _deduplicated(found)
@@ -266,21 +268,35 @@ def _explicit_edges(
 
 def _call_sides(
     spans: Sequence[NormalizedSpan], ids: Sequence[NodeId]
-) -> tuple[dict[str, list[NodeId]], dict[str, list[NodeId]]]:
-    """Who asked for each call, and who answered it.
+) -> tuple[dict[str, list[NodeId]], dict[str, list[NodeId]], dict[str, str | None]]:
+    """Who asked for each call, who answered it, and what it was called.
 
     Built once: `call_result` joins the two sides, and a `data` edge joins the
     answering side to whoever was later given the answer (`SPEC.md` §4.2).
+
+    The third value is the tool name per call id, for the two unpaired
+    diagnostics (`SPEC.md` §3.7). It is `None` where no span named the call
+    **and** where two spans named it differently -- disagreement is not
+    something to resolve by picking, and picking would also make the result
+    depend on input order, which `CLAUDE.md` 4 forbids outright.
     """
     requesters: dict[str, list[NodeId]] = {}
     fulfillers: dict[str, list[NodeId]] = {}
+    claimed: dict[str, set[str]] = {}
     for span, node_id in zip(spans, ids, strict=True):
         if not span.call_ids or span.call_role is None:
             continue
         side = requesters if span.call_role is CallRole.REQUESTER else fulfillers
         for call_id in span.call_ids:
             side.setdefault(call_id, []).append(node_id)
-    return requesters, fulfillers
+            named = span.call_names.get(call_id)
+            if named is not None:
+                claimed.setdefault(call_id, set()).add(named)
+    names: dict[str, str | None] = {
+        call_id: next(iter(found)) if len(found) == 1 else None
+        for call_id, found in claimed.items()
+    }
+    return requesters, fulfillers, names
 
 
 def _parent_edges(
@@ -320,9 +336,24 @@ def _parent_edges(
     return edges
 
 
+def _unpaired_source(
+    call_id: str, call_names: dict[str, str | None]
+) -> dict[str, str | None]:
+    """`source` for the two unpaired codes (`SPEC.md` §3.7, `source` per code).
+
+    An object rather than the bare id, because a requested call that nothing
+    fulfils has **no node** -- so `operation`, where a tool's name lives, has
+    nowhere to be, and the tool a consumer asked about was unattributable from
+    the graph. `operation` is the dialect's own word for the call, `None`
+    where the dialect said none; nothing here infers one.
+    """
+    return {"call_id": call_id, "operation": call_names.get(call_id)}
+
+
 def _call_result_edges(
     requesters: dict[str, list[NodeId]],
     fulfillers: dict[str, list[NodeId]],
+    call_names: dict[str, str | None],
     collected: DiagnosticCollector,
     adapter: AdapterInfo,
 ) -> list[Edge]:
@@ -343,7 +374,7 @@ def _call_result_edges(
                     f"call {call_id!r} was requested and no span in this input "
                     f"fulfils it; no edge is invented",
                     node_id=node_id,
-                    source=call_id,
+                    source=_unpaired_source(call_id, call_names),
                     adapter=adapter.id,
                 )
             continue
@@ -354,7 +385,7 @@ def _call_result_edges(
                     f"call {call_id!r} was fulfilled but no span in this input "
                     f"requests it; no edge is invented",
                     node_id=node_id,
-                    source=call_id,
+                    source=_unpaired_source(call_id, call_names),
                     adapter=adapter.id,
                 )
             continue

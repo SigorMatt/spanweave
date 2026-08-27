@@ -142,3 +142,52 @@ def test_something_that_is_not_the_librarys_error_is_not_caught_by_it():
     from spanweave import SpanweaveError
 
     assert not isinstance(FileNotFoundError("no such file"), SpanweaveError)
+
+
+# --------------------------------------------------------------------------
+# `source`'s shape, which is per code and therefore has to be stated
+# --------------------------------------------------------------------------
+
+
+def source_shapes() -> dict[str, str]:
+    """`SPEC.md` §3.7's `source` table: code -> the shape column, verbatim."""
+    start = SPEC.index("#### `source`, per code")
+    block = SPEC[start : SPEC.index("### 3.8", start)]
+    return {
+        code: shape.strip()
+        for code, shape in re.findall(r"^\|\s*`([a-z_]+)`\s*\|([^|]*)\|", block, re.M)
+    }
+
+
+def test_every_code_with_a_declared_source_shape_is_a_real_code():
+    # A shape documented for a code that does not exist is a contract nobody
+    # can meet, and reads as coverage.
+    assert set(source_shapes()) <= set(diagnostics.CODES)
+
+
+def test_the_unpaired_codes_emit_the_object_the_spec_declares():
+    """`source` is `JsonValue`, so only this keeps the document honest.
+
+    The type permits anything, which means the contract lives entirely in
+    §3.7's table -- and a table nothing checks is how `FIXTURES.md` §4's
+    Compared list went wrong three times.
+    """
+    import spanweave
+    from spanweave.serialize import to_document
+
+    corpus = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
+    shapes = source_shapes()
+    seen = set()
+    for dialect in ("openinference", "otel_genai"):
+        path = corpus / f"unpaired_tool_call/dialects/{dialect}.jsonl"
+        for entry in to_document(spanweave.build(path))["diagnostics"]:
+            code = entry["code"]
+            if code not in (diagnostics.UNPAIRED_CALL, diagnostics.UNPAIRED_RESULT):
+                continue
+            seen.add(code)
+            assert "call_id" in shapes[code] and "operation" in shapes[code], (
+                f"SPEC.md §3.7 does not declare an object source for {code}"
+            )
+            assert sorted(entry["source"]) == ["call_id", "operation"]
+            assert isinstance(entry["source"]["call_id"], str)
+    assert seen == {diagnostics.UNPAIRED_CALL, diagnostics.UNPAIRED_RESULT}

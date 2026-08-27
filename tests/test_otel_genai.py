@@ -377,3 +377,111 @@ def test_every_captured_span_keeps_its_record_verbatim():
     records = [json.loads(line) for line in CAPTURED.read_text().splitlines()]
     spans = list(ADAPTER.parse(records))
     assert [span.raw.source for span in spans] == records
+
+
+# --------------------------------------------------------------------------
+# The name inside the part (SPEC.md 3.7, `source` per code)
+# --------------------------------------------------------------------------
+
+
+def test_a_requested_call_carries_the_name_inside_its_part():
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.output.messages": messages(
+                {
+                    "role": "assistant",
+                    "parts": [
+                        {
+                            "arguments": {"order": "A-1"},
+                            "name": "lookup",
+                            "id": "call_a",
+                            "type": "tool_call",
+                        }
+                    ],
+                }
+            ),
+        }
+    )
+    assert span.call_names == {"call_a": "lookup"}
+
+
+def test_each_requested_call_gets_its_own_name_not_the_first_one():
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.output.messages": messages(
+                {
+                    "role": "assistant",
+                    "parts": [
+                        {"name": "alpha", "id": "call_a", "type": "tool_call"},
+                        {"name": "beta", "id": "call_b", "type": "tool_call"},
+                    ],
+                }
+            ),
+        }
+    )
+    assert span.call_names == {"call_a": "alpha", "call_b": "beta"}
+
+
+def test_a_part_with_no_name_leaves_its_call_unnamed():
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.output.messages": messages(
+                {"role": "assistant", "parts": [{"id": "call_a", "type": "tool_call"}]}
+            ),
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.call_names == {}
+
+
+def test_a_fulfilling_span_names_its_call_from_its_own_tool_name():
+    span = span_of(
+        {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup",
+            "gen_ai.tool.call.id": "call_a",
+        }
+    )
+    assert span.call_names == {"call_a": "lookup"}
+
+
+def test_an_echoed_call_name_in_the_input_list_is_not_read():
+    # The echo defect, one level down: the same `tool_call` part reappears in
+    # the NEXT turn's input list, name and all (`tool_call_history_echo`).
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.input.messages": messages(
+                {
+                    "role": "assistant",
+                    "parts": [{"name": "lookup", "id": "call_a", "type": "tool_call"}],
+                }
+            ),
+        }
+    )
+    assert span.call_ids == ()
+    assert span.call_names == {}
+
+
+def test_a_response_part_is_not_a_request_even_when_it_names_a_tool():
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.output.messages": messages(
+                {
+                    "role": "tool",
+                    "parts": [
+                        {
+                            "name": "lookup",
+                            "id": "call_a",
+                            "type": "tool_call_response",
+                        }
+                    ],
+                }
+            ),
+        }
+    )
+    assert span.call_names == {}

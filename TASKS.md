@@ -1589,18 +1589,23 @@ below:
 >
 > **Two halts are open at 2.10 and both need a human before 2.11 starts.**
 >
-> - **Halt A — O1 / finding F5, settled by evidence.** Answered in three parts,
->   with a remedy proposed and deliberately not implemented. The headline is a
->   partial *refutation*: the cross-dialect payload walk **raises** rather than
->   returning a confident zero, in both directions and including the defensive
->   `.get()` idiom. The zero is the consumer's own `try/except`, not a silent
->   shape mismatch. `PREDICTIONS.md` is the human's to edit.
-> - **Halt B — `unknown_kind` blocks the task.** Two canonical graphs that
->   differ by exactly one line (`attributes.reported_kind`), a disagreement
->   that is *correct* and unavoidable, and no mechanism in the corpus that can
->   declare it. `Node.attributes` is also missing from `FIXTURES.md` §4's
->   Compared list — the same defect `mime` had, found the same way. Three
->   options are costed at the task; the rendering is not committed.
+> - **Halt A — DISCHARGED.** Accepted and implemented: `Diagnostic.source` on
+>   the two unpaired codes is now `{call_id, operation}` and is **byte-identical
+>   across both dialects**; `SPEC.md` §3.7 states `source`'s shape per code.
+>   `examples/fleet_aggregate`'s `by_tool` reconciles for the first time.
+>   Classified **shape** and recorded at 2.14. One thing still owed to a human:
+>   **O1's amendment in `PREDICTIONS.md`**, whose exact wording was handed
+>   over — the walk *raises*, in both directions and including the defensive
+>   `.get()` idiom, so the confident zero is the consumer's own `try/except`.
+>   The agent may not edit that file.
+> - **Halt B — OPEN, and its prerequisite is done.** `FIXTURES.md` §4 now names
+>   `attributes` in the Compared list, corrected on its own terms in its own
+>   commit with nothing riding on it, and the list is checked in both
+>   directions so a fourth instance goes red. `unknown_kind` is therefore now a
+>   clean question against an honest contract: two canonical graphs differing
+>   by exactly one line (`attributes.reported_kind`), a disagreement that is
+>   *correct* and unavoidable. Three options are costed at the task; **not
+>   decided**, the rendering is not committed, and 2.10's box stays unchecked.
 >
 > Also found at 2.10 and **not acted on**: the convention defines nine
 > `gen_ai.operation.name` values and the adapter maps seven. `retrieval` is one
@@ -1611,8 +1616,8 @@ below:
 > Still carried to 2.14: applying a declared `erase` to both sides of the
 > comparison, and `Edge.basis` as cross-dialect vocabulary (live at 2.11).
 >
-> **The intro above was split at the start of this session**, and the rule
-> that replaced it now lives in `AGENT.md` ("Keeping a handoff note readable")
+> **The intro above was split at the start of this session**, and the rule that
+> replaced it now lives in `AGENT.md` ("Keeping a handoff note readable")
 > rather than only here — it is a documentation discipline that applies to
 > every such block, not a note about this one.
 
@@ -2779,6 +2784,66 @@ below:
   > evidence above is offered for a human to resolve it with; nothing here
   > resolves it.
   >
+  > ### HALT A DISCHARGED (2026-08-27) — accepted, implemented, two conditions met
+  >
+  > **Proposal 1 taken.** `Diagnostic.source` on `unpaired_call` and
+  > `unpaired_result` is now `{"call_id", "operation"}`; `SPEC.md` §3.7 states
+  > `source`'s shape per code where it previously stated none. The result, and
+  > it is the point of the whole exercise — **byte-identical in both
+  > dialects**:
+  >
+  > ```json
+  > {"code": "unpaired_call",   "node_id": "s1", "source": {"call_id": "call_a", "operation": "lookup"}}
+  > {"code": "unpaired_result", "node_id": "s2", "source": {"call_id": "call_b", "operation": "other"}}
+  > ```
+  >
+  > No payload is walked, so the consumer is one line and the same line in
+  > every dialect. `examples/fleet_aggregate`'s `unfulfilled_calls.by_tool`
+  > was empty for a whole phase and now reconciles against the same total as
+  > `by_model`. Its `UNATTRIBUTED_CALLS` limit is retired to a quotation; what
+  > replaced it is narrower and still honest — a dialect that states an id and
+  > no name buckets under `(dialect named no tool)` rather than shrinking the
+  > total, because a rollup that silently drops what it cannot label is F5 one
+  > layer up.
+  >
+  > **The 2b tripwire fired, which is worth more than the fix.**
+  > `test_the_boundary_the_task_exists_to_find_is_in_the_output` asserted
+  > `by_tool == {}` and said in as many words that "a change that made
+  > `by_tool` answerable should fail this test and be read at 2.4, not pass
+  > silently." It failed exactly that way. Renamed to
+  > `..._the_task_found_is_now_closed` and rewritten to assert the new state,
+  > with the old text quoted in its docstring — a tripwire edited into
+  > agreement leaves no evidence it ever meant anything.
+  >
+  > **Condition: the §3.7 exception, written as reasoning not a carve-out.**
+  > Keys-not-content exists because values are already in `RawRecord` and
+  > duplicating payload content is unnecessary exposure. A tool **name** is not
+  > content in that sense — it is the identity of an operation, the same
+  > category as `Node.operation`, which the model already normalizes and puts
+  > on every node. The library is not exposing something new; it is putting a
+  > value it already publishes on a *fulfilled* call in the one place a call
+  > that never ran can be seen at all. That argument is in §3.7, not a
+  > footnote.
+  >
+  > **Condition: the refutation recorded first.** Done above, and the exact
+  > wording for `PREDICTIONS.md` O1 was handed to the human — the agent may not
+  > edit that file.
+  >
+  > **What the suite did not have, and now does.** Nothing anywhere asserted
+  > `source` for either code; the change broke **zero** tests, which is its own
+  > finding. Added: five builder tests (including that two spans naming one
+  > call differently yield `operation: null` rather than a pick, in both input
+  > orders), five per adapter — each with the echo case, because reading a
+  > name off an echoed `tool_call` part is the `tool_call_history_echo` defect
+  > one level down — a cross-dialect equality assertion in the corpus, and
+  > `test_the_unpaired_codes_emit_the_object_the_spec_declares`, which reads
+  > §3.7's table and fails if the library and the document disagree. That last
+  > one exists because `source` is typed `JsonValue`: the type permits
+  > anything, so the contract lives entirely in a table, and an unchecked table
+  > is how `FIXTURES.md` §4's Compared list went wrong three times.
+  >
+  > The contract change is recorded at **2.14** and classified **shape**.
+  >
   > ---
   >
   > ## HALT B — `unknown_kind`, and a compared field with no declaration mechanism
@@ -2842,10 +2907,39 @@ below:
   >    indistinguishable, which is the ambiguity §4.2/§4.3 were split apart to
   >    remove.
   >
-  > Recommendation: **1**, with `attributes` added to §4's Compared list in the
-  > same change regardless of which option wins — the list being wrong is a
-  > separate defect from this scenario, and it should be fixed on its own terms,
-  > exactly as §4 was corrected before C was applied at 2.8.
+  > Recommendation: **1**.
+  >
+  > ### §4 CORRECTED FIRST (2026-08-27), on its own terms
+  >
+  > Done, in its own commit, with **no rendering riding on it**:
+  > `Node.attributes` is now named in `FIXTURES.md` §4's Compared list, because
+  > it *is* compared. That was the third time a comparison rule asserted
+  > something the contract never stated — `mime` for two phases, `attributes`
+  > for three, and §3.3-vs-§4 on payload contents was the same shape, the one
+  > that forced §4.4 into existence.
+  >
+  > It is not a drafting slip and it was not fixed as one. A field is added to
+  > the model, `canonical()` keeps it because keeping is the **default**, and
+  > prose is not where anyone looks — so the gap surfaces only when a second
+  > dialect happens to disagree on that field, which is phases of latency for a
+  > contract error. So the list is now exact rather than illustrative, written
+  > in the model's own field names, and checked in both directions:
+  > `test_the_compared_list_names_every_field_that_is_compared` (watched
+  > failing on `attributes`) and
+  > `test_the_compared_list_names_nothing_that_is_erased` (watched failing on
+  > `provenance`, which is the easy mistake to make while fixing the first).
+  >
+  > **The three options above are unchanged by the correction, and that is the
+  > useful outcome.** Option 1 is now an extension of a contract that already
+  > admits `attributes` is compared, rather than the thing that reveals it; it
+  > can be argued on whether a dotted path is the right granularity, which is
+  > the actual question. Option 2's cost is now visible in the document too:
+  > erasing `attributes` wholesale would set aside a field §4 explicitly lists
+  > as compared, on a scenario where only one **key** of it disagrees. Option 3
+  > stays rejected for the same reason.
+  >
+  > `unknown_kind` is still unrendered and 2.10's box is still unchecked. The
+  > two-line specimen is above; recreating it costs nothing.
   >
   > The rendering is **not** committed. Writing it would leave the corpus with
   > a file no test can compare, which is the silent rot `DIALECTS_PENDING…` and
@@ -2921,6 +3015,33 @@ below:
   look like it cost 5/8 when the narrow form costs 0.
   Also carried: **`Edge.basis` as cross-dialect vocabulary** (2.9), which goes
   live at 2.11.
+
+  > **Public-contract change already made, for this record (2.10).**
+  > `Diagnostic.source` changed from a bare id string to
+  > `{"call_id", "operation"}` on **two** codes, `unpaired_call` and
+  > `unpaired_result`, and `SPEC.md` §3.7 now states `source`'s shape per code
+  > where it stated none.
+  >
+  > **Classify it as SHAPE**, by `PREDICTIONS.md`'s binding test and not a
+  > widened version of it: `NormalizedSpan` gained a field (`call_names`), and
+  > a serialized value changed type. No `NodeKind`, `EdgeKind`, warrant,
+  > `Payload` state or `Diagnostic` code was added, so it was not an
+  > `AGENT.md` halt point — but "not a halt point" is not "not a shape change",
+  > and Phase 3's gate is zero shape changes, which is precisely why it is
+  > written here rather than left to be inferred from a diff.
+  >
+  > **Cause:** finding F5 / `PREDICTIONS.md` O1, settled at 2.10 against two
+  > dialects rather than argued from one. This is the phase working as
+  > intended: pre-`0.9.x` the change is cheap, and the freeze is the thing that
+  > stops it being cheap later.
+  >
+  > **Also for the record, the `unpaired_result` half is redundant** — that
+  > call has a fulfilling span whose node already carries the name. It was
+  > changed anyway so both codes share one `source` shape; a consumer that had
+  > to branch on which code it was holding to know whether `source` was a
+  > string or an object would be a worse contract than one redundant field.
+  > Recorded so the freeze decision reads a deliberate choice rather than an
+  > overreach.
 
   *Done when both dialects produce identical canonical graphs for every
   scenario still in scope, P5 is resolved in `PREDICTIONS.md`, every model

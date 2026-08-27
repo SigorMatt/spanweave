@@ -12,10 +12,14 @@ aggregator is wrong.
 from __future__ import annotations
 
 import collections
+import dataclasses
 import json
 import pathlib
 import subprocess
 import sys
+
+import spanweave
+from examples import fleet_aggregate
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 CORPUS = REPO / "fixtures" / "conformance"
@@ -141,21 +145,55 @@ def test_trace_id_does_not_identify_a_trace_in_this_corpus() -> None:
     assert got["traces"]["built"] > 1
 
 
-def test_the_boundary_the_task_exists_to_find_is_in_the_output() -> None:
-    """`TASKS.md` 2.3: the friction is the deliverable, so it ships visibly.
+def test_the_boundary_the_task_found_is_now_closed() -> None:
+    """The tripwire above fired, and this is what replaced it.
 
-    An unfulfilled call can be attributed to the model that asked for it --
-    the diagnostic names that node, and `Node.operation` names the model. It
-    cannot be attributed to the tool it asked for, because a call that never
-    ran has no node. Both halves are asserted: a change that made `by_tool`
-    answerable should fail this test and be read at 2.4, not pass silently.
+    It used to read: an unfulfilled call can be attributed to the model that
+    asked -- the diagnostic names that node -- but not to the tool it asked
+    for, because a call that never ran has no node. It asserted
+    ``by_tool == {}`` and said in as many words that "a change that made
+    `by_tool` answerable should fail this test and be read at 2.4, not pass
+    silently."
+
+    It failed exactly that way. `SPEC.md` §3.7 now states the tool name on the
+    diagnostic (finding F5 / `PREDICTIONS.md` O1, settled at `TASKS.md` 2.10
+    against **two** dialects), so `by_tool` is populated from
+    ``source["operation"]`` with no payload walked. Recorded here rather than
+    rewritten quietly, because a tripwire that fires and is edited into
+    agreement leaves no evidence it ever meant anything.
     """
     got = _rollup()
     unfulfilled = got["unfulfilled_calls"]
     assert unfulfilled["total"] == got["diagnostics"]["unpaired_call"] > 0
+    # Both attributions now reconcile against the same total, which is the
+    # whole of what F5 said was unavailable.
     assert sum(unfulfilled["by_model"].values()) == unfulfilled["total"]
-    assert unfulfilled["by_tool"] == {}
-    assert any("by_tool" in limit for limit in got["limits"])
+    assert sum(unfulfilled["by_tool"].values()) == unfulfilled["total"]
+    assert unfulfilled["by_tool"]
+    # Nothing landed in the honest-gap bucket for this fleet, so the limit it
+    # explains must not be claimed either.
+    assert fleet_aggregate.UNNAMED_TOOL not in unfulfilled["by_tool"]
+    assert not any("by_tool" in limit for limit in got["limits"])
+
+
+def test_a_call_whose_dialect_named_no_tool_is_bucketed_not_dropped() -> None:
+    # The one case the library still cannot answer. It must not shrink the
+    # total: a rollup that silently drops what it cannot label is the exact
+    # failure mode F5 was about, one layer up.
+    rollup = fleet_aggregate.Fleet()
+    graph = spanweave.build(CORPUS / "unpaired_tool_call/dialects/openinference.jsonl")
+    unnamed = [
+        dataclasses.replace(d, source={"call_id": "call_a", "operation": None})
+        if d.code == "unpaired_call"
+        else d
+        for d in graph.diagnostics
+    ]
+    rollup.given = 1
+    rollup.add("planted", dataclasses.replace(graph, diagnostics=tuple(unnamed)))
+    got = rollup.as_dict()["unfulfilled_calls"]
+    assert got["by_tool"] == {fleet_aggregate.UNNAMED_TOOL: 1}
+    assert sum(got["by_tool"].values()) == got["total"]
+    assert any("named no tool" in limit for limit in rollup.as_dict()["limits"])
 
 
 def test_rerun_is_byte_identical() -> None:
