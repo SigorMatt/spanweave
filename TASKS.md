@@ -3088,7 +3088,7 @@ below:
   > nothing states the vocabulary. Carried to 2.14 with this shape, not as an
   > open worry.
 
-- [ ] **2.12 `detect()` for both adapters.** `[2a]` **CUT 1 IF THE PHASE
+- [x] **2.12 `detect()` for both adapters.** `[2a]` **CUT 1 IF THE PHASE
   SLIPS** — the first thing to go, and the only item in this phase that can be
   removed without losing information (`ROADMAP.md`: it is ergonomics and yields
   **zero** evidence about whether the model is general).
@@ -3104,6 +3104,54 @@ below:
   **If cut:** make `--adapter` required, update `SPEC.md` §6.1 and `--help` to
   say so, move detection to Phase 4, and record the deferral here. `SPEC.md`
   §6.1's hard-error behavior is what makes that deferral safe.
+
+  > **DONE — not cut.** `tests/test_detection.py`. Over **all 42** trace files
+  > the project holds (40 corpus renderings + both captured traces), selection
+  > is correct with **zero** mismatches, and the two registries built in
+  > opposite orders agree on every one.
+  >
+  > The registry mechanics were already proved with stubs in
+  > `tests/test_adapters.py`, and that is the right level — the mechanism
+  > should be testable without a dialect. What stubs cannot say is whether
+  > `openinference.*` and `gen_ai.*` are genuinely distinctive, which is a
+  > claim about the real world and needs the real corpus.
+  >
+  > **The assertion is stronger than "the right one wins": the other adapter
+  > scores exactly `0.0` on every input.** A margin would be enough for
+  > selection and not enough for confidence — two adapters both above the floor
+  > means the markers overlap, and the third dialect turns that overlap into a
+  > tie. The file list is derived from the tree, so a rendering added tomorrow
+  > is checked tomorrow rather than whenever someone remembers this file.
+  >
+  > ### The hardening this task actually found
+  >
+  > Both adapters wrapped `detect()` in `try: ... except Exception: return
+  > 0.0`, marked `pragma: no cover`. It reads as defensive and is **the exact
+  > inverse of what this module is for**: it converts a broken adapter into a
+  > *confident* `0.0` and hands the input to whichever adapter is still
+  > standing — a plausible graph from possibly the wrong dialect, which is the
+  > silent failure `spanweave/adapters/__init__.py`'s own docstring says it
+  > exists to prevent. Meanwhile the registry already turns an escaping
+  > exception into `adapter_detect_failed` **naming the adapter**, which is the
+  > loud outcome. The catch was suppressing the good path.
+  >
+  > Both removed. `detect()` is now total by construction — every branch is an
+  > `isinstance` guard — and that is asserted rather than asserted-about:
+  > fourteen cases per adapter of input no instrumentor would produce
+  > (`None`, a bare string, `attributes: null`, an integer attribute key, no
+  > `attributes` key at all) all return `0.0` without raising.
+  >
+  > Also pinned: detection is idempotent and does not mutate the sample
+  > (purity is easy to lose to a `pop` or a cached flag and impossible to
+  > notice downstream); a record carrying **both** dialects' markers raises
+  > `adapter_ambiguous` naming both and pointing at `--adapter`; an input in
+  > neither raises `adapter_unconfident`.
+  >
+  > One structural note. `duplicate_span_ids` is skipped in the *build* check
+  > and deliberately **not** in the detection checks: detection succeeds there
+  > and the refusal happens afterwards, in the builder. Conflating them would
+  > let a detection regression hide behind an expected error. The refusal set
+  > is read from the corpus (`expected/error.json`), not named.
 
 - [ ] **2.13 Close the corpus: flip `DIALECTS`.** `[2a]` **NEVER CUT** — this
   is the task that makes coverage un-rottable.

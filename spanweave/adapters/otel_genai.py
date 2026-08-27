@@ -183,19 +183,23 @@ class OtelGenAiAdapter:
     version = ADAPTER_VERSION
 
     def detect(self, sample: Sequence[JsonValue]) -> float:
-        try:
-            for record in sample:
-                if not isinstance(record, dict):
-                    continue
-                attributes = record.get("attributes")
-                if not isinstance(attributes, dict):
-                    continue
-                if any(str(key).startswith(MARKER_PREFIX) for key in attributes):
-                    # 0.9, not 1.0: certainty is not ours to declare
-                    # (ADAPTERS.md §2).
-                    return 0.9
-        except Exception:  # pragma: no cover - detect() must never raise
-            return 0.0
+        """Total by construction; no blanket ``except``.
+
+        Same reasoning as ``OpenInferenceAdapter.detect`` -- a catch here would
+        convert a broken adapter into a confident ``0.0`` and hand the input to
+        whichever adapter is still standing. Letting it escape reaches
+        ``adapter_detect_failed``, which names the culprit (`TASKS.md` 2.12).
+        """
+        for record in sample:
+            if not isinstance(record, dict):
+                continue
+            attributes = record.get("attributes")
+            if not isinstance(attributes, dict):
+                continue
+            if any(str(key).startswith(MARKER_PREFIX) for key in attributes):
+                # 0.9, not 1.0: certainty is not ours to declare
+                # (ADAPTERS.md §2).
+                return 0.9
         return 0.0
 
     def parse(self, records: Iterable[JsonValue]) -> Iterator[NormalizedSpan]:

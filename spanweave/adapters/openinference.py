@@ -139,19 +139,25 @@ class OpenInferenceAdapter:
     version = ADAPTER_VERSION
 
     def detect(self, sample: Sequence[JsonValue]) -> float:
-        try:
-            for record in sample:
-                if not isinstance(record, dict):
-                    continue
-                attributes = record.get("attributes")
-                if not isinstance(attributes, dict):
-                    continue
-                if any(str(key).startswith(MARKER_PREFIX) for key in attributes):
-                    # A distinctive marker, and 0.9 rather than 1.0: certainty
-                    # is not ours to declare (ADAPTERS.md §2).
-                    return 0.9
-        except Exception:  # pragma: no cover - detect() must never raise
-            return 0.0
+        """Total by construction: every branch is an ``isinstance`` guard.
+
+        There is deliberately **no** blanket ``except`` here. One would turn a
+        broken adapter into a confident ``0.0`` and let a different adapter win
+        unopposed -- the silent-wrong-graph outcome the registry exists to
+        prevent -- whereas an escaping exception is caught by
+        ``AdapterRegistry.confidences`` and reported as ``adapter_detect_failed``
+        naming this adapter (`TASKS.md` 2.12).
+        """
+        for record in sample:
+            if not isinstance(record, dict):
+                continue
+            attributes = record.get("attributes")
+            if not isinstance(attributes, dict):
+                continue
+            if any(str(key).startswith(MARKER_PREFIX) for key in attributes):
+                # A distinctive marker, and 0.9 rather than 1.0: certainty is
+                # not ours to declare (ADAPTERS.md §2).
+                return 0.9
         return 0.0
 
     def parse(self, records: Iterable[JsonValue]) -> Iterator[NormalizedSpan]:
