@@ -52,6 +52,13 @@ happened:
   operational only because this category did not yet exist. Re-read it
   against this definition once 2a has exercised the category.
 
+  **Amended at 2.10:** a spec gap can still carry a **shape cost** when the
+  permissive field is a *serialized* one. O1's remedy needed no new kind,
+  state, warrant or code — but `Diagnostic.source` is serialized, so a value
+  changed type on a public contract. "The model can express it" is not the
+  same as "the change is free". Check whether the permissive field crosses the
+  schema boundary before classifying.
+
 The test for which one you're looking at: *could an existing graph.json express
 the consumer's need, if it had been built with different options?* If yes,
 operational. If the consumer needs a field that cannot exist, shape.
@@ -241,8 +248,9 @@ not answerable from `graph.json`.
 A consumer must instead walk
 `outputs.value["choices"][0]["message"]["tool_calls"][…]["function"]["name"]`,
 re-implementing the adapter's pairing logic against one dialect's payload
-shape. Against a second dialect this does not raise — it reports a confident
-zero, indistinguishable from "there were none."
+shape. Against a second dialect the paths do not merely differ, they disagree on
+container type at the first step: `outputs.value` is a JSON object in
+OpenInference and an array in OTel GenAI.
 
 **Classification: spec gap, not shape.** `Diagnostic.source` is `JsonValue`, so
 an adapter could carry `{call_id, operation}` today with no new field, kind, or
@@ -250,5 +258,74 @@ halt point. The model permits it; nothing populates it; no document asks for
 one. That is a third category the shape/operational test above does not cover,
 and it should be used where it fits rather than forcing a binary.
 
-Deferred to 2a: render `unpaired_tool_call` in `otel_genai` and check whether
-any single path yields the tool name in both dialects.
+**Status: RESOLVED — scoped, and partly self-refuting.** Settled at 2.10,
+Phase 2a, against two dialects. `unpaired_tool_call` was rendered in
+`otel_genai`, both graphs were built, and the output was inspected.
+
+1. **From the graph alone the requested tool cannot be named — in neither
+   dialect, and they agree exactly.** Both emit the same diagnostic, identical
+   but for the adapter id. The call **id** appears three times — `source`,
+   inside `message`, and as the `node_id` of the asking span — and the tool
+   **name** appears zero times. A call that never ran has no node, so
+   `operation`, where a tool's name lives (`SPEC.md` §3.2), has nowhere to be.
+   One asymmetry, and it is the kind that makes a consumer look portable when
+   it is not: OpenInference *mentions* the name in a second diagnostic, because
+   `unmapped_attributes` lists the key
+   `llm.output_messages.0.message.tool_calls.0.tool_call.function.name` — as a
+   **key**, never a value. GenAI carries it inside the payload and names it in
+   no diagnostic at all. A consumer scraping names out of diagnostic key lists
+   works against dialect one and finds nothing in dialect two.
+
+2. **The payload paths are not the same path.** OpenInference reaches the name
+   at `outputs.value["choices"][i]["message"]["tool_calls"][j]["function"]["name"]`
+   and the id at the same path's `[j]["id"]`; OTel GenAI reaches the name at
+   `outputs.value[i]["parts"][j]["name"]` where `parts[j]["type"] ==
+   "tool_call"`, and the id at that path's `[j]["id"]`. `outputs.value` is a
+   **dict** in one and a **list** in the other. No prefix in common, so no
+   single expression reaches both.
+
+3. **Loud failure, not a confident zero — and this partly refutes O1 as
+   written.** Measured in both directions on the two graphs this scenario
+   builds: the OpenInference path against `otel_genai` raises `TypeError: list
+   indices must be integers or slices, not str`, and the usual defensive
+   `.get()` chain raises `AttributeError: 'list' object has no attribute
+   'get'`, because `.get` on a list is an `AttributeError` rather than a miss;
+   the OTel GenAI path against `openinference` raises `TypeError: string
+   indices must be integers, not 'str'`. O1 said the walk "does not raise — it
+   reports a confident zero." **It raises.** The confident zero is still real,
+   but its **mechanism is the consumer's own error handling, not a silent
+   shape mismatch**: any `try/except` around the walk — and there will be one,
+   since trace payloads are untrusted input (`SECURITY.md`), and
+   `examples/fleet_aggregate` already wraps at trace granularity for exactly
+   that reason — converts the loud failure into an empty result. So the gap is
+   **weaker than O1 claimed and still a gap**: a portable consumer *can*
+   detect this today, if it chooses not to swallow it.
+
+**Remedy taken.** `Diagnostic.source` on `unpaired_call` and `unpaired_result`
+changed from a bare id to `{"call_id", "operation"}`, and `SPEC.md` §3.7 now
+states `source`'s shape per code where it stated none. The result, which is
+the point of the exercise, is byte-identical in both dialects:
+
+```json
+{"code": "unpaired_call",   "node_id": "s1", "source": {"call_id": "call_a", "operation": "lookup"}}
+{"code": "unpaired_result", "node_id": "s2", "source": {"call_id": "call_b", "operation": "other"}}
+```
+
+No payload is walked, so the consumer is one line and the same line in every
+dialect. `examples/fleet_aggregate`'s `unfulfilled_calls.by_tool` was empty
+for a whole phase and now reconciles against the same total as `by_model`; a
+dialect that states an id and no name buckets under `(dialect named no tool)`
+rather than shrinking the total, because a rollup that silently drops what it
+cannot label is F5 one layer up.
+
+**What the spec-gap classification got right, and what it missed.** Right: the
+remedy needed no new `NodeKind`, no new `EdgeKind`, no new warrant, no new
+`Payload` state and no new `Diagnostic` code, so it was not an `AGENT.md`
+model-change halt point; the model permitted the fact, nothing populated it,
+no document asked for one, and the fix was a spec change plus an adapter
+change — exactly the category as defined. Missed: the cost. `NormalizedSpan`
+gained a field (`call_names`) and a **serialized** value changed type on a
+public contract, which is why the change is recorded at TASKS.md 2.14 and
+classified **shape** — "not a halt point" is not "not a shape change", and
+Phase 3's gate is zero shape changes. The category held; the assumption that
+it came for free did not.
