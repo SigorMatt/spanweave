@@ -94,6 +94,30 @@ invariants in the way `DESIGN.md` §8 and `ENVIRONMENT.md` describe —
 6. Check the box in `TASKS.md` in the same change, recording anything that
    diverged from the plan. Commit. Move to the next task.
 
+## Keeping a handoff note readable (retire before adding)
+
+Step 6 above accumulates. `TASKS.md` carries per-workstream intro blocks whose
+whole purpose is that a **cold** session finds them without reading backwards —
+and a cold session reads this file outline-first: grep for the first unchecked
+box and start there. An intro that has grown past a screen is jumped over
+entirely, so it stops doing the one job it exists for. This is not a style
+preference; it is the note failing silently, which is the same failure mode as
+a gate that scans nothing.
+
+`[2a]`'s intro reached four blocks and 55 lines before anyone noticed. The rule
+that replaced it, and that applies to every such block:
+
+- **Live items first**, and nothing may precede them. A reader who stops after
+  three lines must have read the thing that would have changed what they do.
+- **A settled item becomes a pointer the same day it is settled** — one or two
+  lines naming the outcome and the commit, not the reasoning, which lives in
+  the task record and in the code. Retire *before* adding the next item, not
+  after; a list only ever grows if retirement is deferred.
+- **The session marker stays last**, because it is the block most likely to be
+  stale and the least likely to change what a reader does first.
+- If it grows past three blocks again, **split it** rather than tightening the
+  prose.
+
 ## Self-verification (don't self-certify by prose)
 
 "Done" means the executable check passes, not that the output looks right. If a

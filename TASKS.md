@@ -1611,13 +1611,10 @@ below:
 > Still carried to 2.14: applying a declared `erase` to both sides of the
 > comparison, and `Edge.basis` as cross-dialect vocabulary (live at 2.11).
 >
-> **The intro above was split at the start of this session.** It had reached
-> four blocks and 55 lines between the header and the first task, which defeats
-> the outline-first read (grep for the first unchecked box) that a cold session
-> actually performs. The rule that replaced it: the **live** items go first and
-> nothing else may precede them; a settled item is retired to a pointer the
-> same day it is settled; this marker stays last. Retire before adding, not
-> after.
+> **The intro above was split at the start of this session**, and the rule
+> that replaced it now lives in `AGENT.md` ("Keeping a handoff note readable")
+> rather than only here — it is a documentation discipline that applies to
+> every such block, not a note about this one.
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
