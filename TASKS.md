@@ -3153,7 +3153,7 @@ below:
   > let a detection regression hide behind an expected error. The refusal set
   > is read from the corpus (`expected/error.json`), not named.
 
-- [ ] **2.13 Close the corpus: flip `DIALECTS`.** `[2a]` **NEVER CUT** — this
+- [x] **2.13 Close the corpus: flip `DIALECTS`.** `[2a]` **NEVER CUT** — this
   is the task that makes coverage un-rottable.
   Add `otel_genai` to `tests/conformance.py:DIALECTS`. That single line turns
   on `FIXTURES.md` §4.3's "silence is a failure" rule for the whole corpus:
@@ -3170,6 +3170,76 @@ below:
   *Done when `make conformance` is green with both dialects in `DIALECTS`, no
   scenario is silent for either dialect, the transitional skip is gone, and
   `review_corpus.py` reports no false findings against the corpus as it stands.*
+
+  > **DONE.** `DIALECTS = ("openinference", "otel_genai")`. `make conformance`
+  > green at 419 tests, and the header now reads:
+  >
+  > ```
+  > conformance dialects: declared=['openinference', 'otel_genai'] adapter-backed=['openinference', 'otel_genai']
+  > conformance coverage: 21 scenarios, renderings: openinference 21, otel_genai 17; 17 compared across dialects; 4 declared unrenderable
+  > conformance skipping nothing: every rendering has an adapter
+  > ```
+  >
+  > 17 of 21 scenarios are now compared **across** dialects rather than
+  > round-tripped through one. The four declared are `redacted_payload` (no
+  > redaction marker in the dialect) and the three `chain` scenarios
+  > (`cyclic_parents`, `retriever_and_embedding`, `span_links`).
+  >
+  > ### The exemption is deleted, not emptied
+  >
+  > `DIALECTS_PENDING_CORPUS_COVERAGE` held exactly one dialect between 2.7 and
+  > here. It is **removed from the source**, and the tripwire that read
+  > `adapter_backed() == set(DIALECTS) | set(PENDING)` is now a plain equality.
+  > Emptying it would have left an invitation: an exemption list that exists is
+  > an exemption list somebody uses. The circumstance that justified it — four
+  > consecutive tasks each requiring green while a tripwire was necessarily red
+  > — was a **plan defect**, acknowledged as such at 2.7, and is not a
+  > circumstance that recurs. A third adapter lands with its renderings or it
+  > does not land, and `ADAPTERS.md` §5 now says so.
+  >
+  > ### `tests/conftest.py` kept, and re-scoped rather than deleted
+  >
+  > The task said to retire 2.7's mechanism. Its *state* and its *tripwire* are
+  > gone. The pytest **header** is not, and the reasoning is worth recording
+  > because it cuts against the instruction: what it reports stopped being a
+  > transition and became standing coverage. It now prints scenario and
+  > rendering counts, how many are compared across dialects, and how many
+  > declarations stand — so "the cross-dialect claim" cannot quietly decay into
+  > a claim about one dialect without the number moving. The skip branch
+  > survives with its wording inverted: it now says a skip is **a defect, not a
+  > transition**, because a skip that reads like a known condition is a skip
+  > nobody investigates.
+  >
+  > ### `review_corpus.py` — it was reporting a false finding, and worse
+  >
+  > It called `duplicate_span_ids` "no expected/graph.json" and exited 1. That
+  > scenario's expectation *is* the refusal, and a review aid that flags a
+  > correct fixture trains a reviewer to ignore it — which is the only failure
+  > mode a review aid really has. It now reads `error.json` and prints the
+  > refusal as the expectation, and refuses the two states `FIXTURES.md` §1
+  > forbids (both files, or neither).
+  >
+  > Added beyond the task, because closing the corpus made it necessary: the
+  > tool now prints **what each scenario has SET ASIDE** — `coverage.json`
+  > reasons, every `erase` entry, every declared payload selector with its
+  > reason, and any per-dialect override file — under the heading *the
+  > expectation is only as strong as what it still compares*. Before this, a
+  > reviewer signing a scenario off saw the graph and not the erasures that
+  > make it green, which is precisely backwards now that there are eleven
+  > declarations across the corpus. It also prints which dialects each scenario
+  > is rendered in, and fails loudly if its own `DEGENERATE` list names a
+  > scenario that no longer exists (it did: `malformed_record`, a phantom, and
+  > it was missing `tool_call_history_echo`).
+  >
+  > `fixtures/conformance/README.md` and `ADAPTERS.md` updated. The README's
+  > stale claim that `declared_data_edge` has no rendering is not merely
+  > deleted — it is kept as a **warning**, since being wrong about one's own
+  > dialect for a whole phase is the thing §4.3 exists to catch. `ADAPTERS.md`
+  > §5 gains what the second dialect actually cost, as a worked expectation for
+  > the third: **coverage is lost to kind vocabulary, not to attribute shape.**
+  > Payload spellings differ everywhere and are handled by declaration; a kind
+  > your dialect cannot name takes whole scenarios with it, and often not the
+  > ones the scenario was written for.
 
 - [ ] **2.14 Phase 2 exit: the model-change record.** `[2a]`
   Record **every** model change either pressure forced, with its cause — the

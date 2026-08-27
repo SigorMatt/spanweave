@@ -17,13 +17,12 @@ the fixtures testing the code, the code would be editing the fixtures. If a
 dialect fails equivalence, either the adapter is wrong or the model is, and
 finding out which is the entire value on offer.
 
-A rendering is only *buildable* if its dialect has a registered adapter. That
-gap is transitional -- `TASKS.md` 2.8 lands renderings before 2.9 lands the
-adapter that reads them -- and it is the one place this suite could go quiet
-without going red. So the gap is named (`Rendering.supported`), reported
-(`tests/conftest.py` puts it in the pytest header, and each such rendering is
-an explicitly skipped test rather than an absent one), and fenced by the
-tripwire in `test_conformance.py`.
+A rendering is only *buildable* if its dialect has a registered adapter.
+Between `TASKS.md` 2.8 and 2.13 that gap was real -- renderings landed before
+the adapter that reads them -- and it was the one place this suite could go
+quiet without going red. It is closed: every dialect the corpus names has an
+adapter, and `Rendering.supported` survives as the guard that says so rather
+than as a state anything is expected to be in.
 """
 
 from __future__ import annotations
@@ -153,19 +152,15 @@ def _by_code(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 #: Every dialect the corpus is expected to cover. A scenario must either
 #: render each of these or declare in `expected/coverage.json` that it cannot
-#: (`FIXTURES.md` §4.3). Phase 2 adds the second entry here, and that addition
-#: is what makes every scenario account for it.
-DIALECTS = ("openinference",)
-
-#: Dialects a registered adapter can read but `DIALECTS` does not yet name --
-#: so the corpus is NOT yet requiring any scenario to cover them.
+#: (`FIXTURES.md` §4.3). `otel_genai` was added at `TASKS.md` 2.13, and that
+#: one line is what makes every scenario account for it.
 #:
-#: Transitional and declared, in the shape `FIXTURES.md` §4.3 already uses for
-#: a scenario a dialect cannot render, and for the same reason: a declared gap
-#: is reviewable, a silent one rots. **Empty is the only correct long-term
-#: value.** `TASKS.md` 2.13 flips `DIALECTS` and deletes this. Never add an
-#: entry to make a test green.
-DIALECTS_PENDING_CORPUS_COVERAGE: tuple[str, ...] = ("otel_genai",)
+#: There is no longer a "pending" list beside this. There was one between 2.7
+#: and 2.13, holding a dialect an adapter could read while the corpus did not
+#: yet require coverage of it, and it is deleted rather than emptied: a
+#: transitional mechanism left in place outlives its transition, and an empty
+#: exemption list is an invitation to put something in it.
+DIALECTS = ("openinference", "otel_genai")
 
 
 @dataclass(frozen=True)
@@ -326,10 +321,14 @@ class Rendering:
 
     @property
     def skip_reason(self) -> str:
+        # Reachable only if a rendering is added for a dialect nothing can
+        # read. That was a planned state until 2.13 and is a mistake now, so
+        # the wording says so -- a skip that reads like a known condition is
+        # a skip nobody investigates.
         return (
             f"no registered adapter for dialect {self.dialect!r}: "
-            f"{self.scenario.name} renders it, but nothing can read it yet "
-            f"(TASKS.md 2.8 renders, 2.9 adapts, 2.13 closes)"
+            f"{self.scenario.name} renders it and nothing can read it. Since "
+            f"TASKS.md 2.13 this is a defect, not a transition"
         )
 
     @property

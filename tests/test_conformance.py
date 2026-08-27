@@ -28,7 +28,6 @@ from tests.conformance import (
     DECLARABLE_NODE_MAPPINGS,
     DECLARABLE_PAYLOAD_FIELDS,
     DIALECTS,
-    DIALECTS_PENDING_CORPUS_COVERAGE,
     Rendering,
     adapter_backed,
     canonical,
@@ -605,29 +604,24 @@ def test_every_declared_dialect_has_an_adapter_that_can_read_it():
 
 
 def test_no_adapter_reads_a_dialect_the_corpus_does_not_account_for():
-    """The tripwire 2.13 finally clears.
+    """Closed at 2.13, and now an equality with no exemption term.
 
     An adapter whose dialect is absent from `DIALECTS` is an adapter the corpus
     does not require any scenario to cover: its renderings can be added, or
     quietly not added, and nothing goes red. That is the rot this whole
-    mechanism exists to prevent.
+    mechanism exists to prevent, and it is the way a THIRD dialect would
+    arrive.
 
-    `DIALECTS_PENDING_CORPUS_COVERAGE` is the only way to hold that state, and
-    it is a *declaration*, not an exemption -- the same shape §4.3 already uses
-    for a scenario a dialect cannot render, and for the same reason: a declared
-    gap is reviewable, a silent one is not. Empty is the only correct
-    long-term value. **Do not add an entry to get a test green** -- add one
-    only when a task explicitly says the corpus is not yet covering a new
-    dialect, and delete it in the task that covers it.
+    Between 2.7 and 2.13 this read
+    `adapter_backed() == set(DIALECTS) | set(DIALECTS_PENDING_CORPUS_COVERAGE)`,
+    where the second term held one declared, temporary, guarded exemption. The
+    exemption is not emptied, it is **deleted** -- an empty exemption list is
+    an invitation to put something in it, and the reason it existed (four
+    consecutive tasks each requiring green while a tripwire was necessarily
+    red) is not a reason that recurs. A third adapter must land with its
+    renderings, or not land.
     """
-    assert adapter_backed() == set(DIALECTS) | set(DIALECTS_PENDING_CORPUS_COVERAGE)
-
-
-def test_the_pending_list_holds_nothing_stale():
-    # A dialect listed as pending that no adapter provides is a leftover, and
-    # a leftover here silently widens the exemption above.
-    assert set(DIALECTS_PENDING_CORPUS_COVERAGE) <= adapter_backed()
-    assert not (set(DIALECTS_PENDING_CORPUS_COVERAGE) & set(DIALECTS))
+    assert adapter_backed() == set(DIALECTS)
 
 
 def test_the_suite_reports_every_rendering_it_skipped_and_why():

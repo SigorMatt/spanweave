@@ -195,6 +195,34 @@ An adapter without fixtures is not mergeable.
    understanding of the dialect; only a captured one proves you matched the
    instrumentor.
 4. Add adapter-specific unit tests for quirks the shared corpus doesn't cover.
+5. **Every scenario must be either rendered or declared.** Since `TASKS.md`
+   2.13 the corpus names both shipped dialects in
+   `tests/conformance.py:DIALECTS`, which turns on `FIXTURES.md` §4.3's
+   *silence is a failure* rule: a scenario your dialect cannot express needs an
+   `expected/coverage.json` entry with a reason, and a missing rendering that
+   nobody declared fails the build. There is **no third state and no exemption
+   list** — one existed between 2.7 and 2.13, held exactly one dialect, was
+   guarded and temporary, and was deleted rather than emptied. A new adapter
+   lands with its renderings, or it does not land.
+6. **Declaring is not free, and it expires.** A `coverage.json` reason is an
+   *invitation to check it against observed output*, not a settled fact — the
+   seed corpus's only user of the mechanism turned out to be wrong about its
+   own dialect (`FIXTURES.md` §4.3). Likewise a `comparison.json` declaration
+   that no dialect actually disagrees about fails the corpus, per field and per
+   entry. Both are recorded findings, not exemptions.
+
+### What the second dialect cost, as a worked expectation
+
+`otel_genai` renders 17 of 21 scenarios. Four are declared, and the pattern is
+worth knowing before you start: **three of the four are one missing kind.**
+Nothing in the GenAI operation vocabulary maps to `NodeKind.chain`, so every
+scenario pinning a `chain` node is out — including the only one carrying an
+`EdgeKind.link`, which was not the coverage anybody expected to lose.
+
+The lesson for a third adapter: coverage is lost to **kind vocabulary**, not to
+attribute shape. Payload spellings differ everywhere and are handled by
+declaration; a kind your dialect cannot name takes whole scenarios with it, and
+often not the ones the scenario was written for.
 
 ## 6. Checklist
 
@@ -209,6 +237,9 @@ An adapter without fixtures is not mergeable.
 - [ ] Requester ids taken only from what a span itself produced — history
       echoes do not pair.
 - [ ] All conformance scenarios rendered and passing against the **unmodified**
-      expected graphs.
+      expected graphs, or declared in `coverage.json` with a reason checked
+      against observed output.
+- [ ] Your dialect added to `tests/conformance.py:DIALECTS` in the same change
+      as its renderings — that line is what makes coverage un-rottable.
 - [ ] One captured fixture with provenance.
 - [ ] `make check` green — including the neutrality and layering gates.
