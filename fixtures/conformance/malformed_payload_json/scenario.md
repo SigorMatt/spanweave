@@ -40,4 +40,13 @@ the other 9,999 (`SECURITY.md`).
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+`name` is declared dialect-varying (`expected/comparison.json`). The payload is
+**not** — and that is worth reading twice, because the two dialects arrive at
+`present` / `application/json` / `value: null` from opposite directions.
+OpenInference is *told* the mime by `output.mime_type` and fails to parse it.
+OTel GenAI is told nothing: the adapter reports `application/json` because the
+convention *defines* `gen_ai.tool.call.result` as a structured value
+(`ADAPTERS.md` §3), and then fails to parse it. Same three fields, same
+diagnostic, two different reasons for believing the content type.

@@ -1,0 +1,3 @@
+{"trace_id": "t1", "span_id": "s0", "parent_id": null, "name": "agent.run", "start_time": 1000.0, "end_time": 1003.0, "status": "UNSET", "attributes": {"openinference.span.kind": "AGENT"}}
+{"trace_id": "t1", "span_id": "s1", "parent_id": "s0", "name": "tool.lookup_flight", "start_time": 1000.2, "end_time": 1001.0, "status": "ERROR", "status_message": "ToolFailure: no such flight", "attributes": {"openinference.span.kind": "TOOL", "tool.name": "lookup_flight", "input.value": "{\"flight\": \"BA117\"}", "input.mime_type": "application/json"}}
+{"trace_id": "t1", "span_id": "s2", "parent_id": "s0", "name": "tool.other", "start_time": 1001.2, "end_time": 1002.0, "status": "UNSET", "attributes": {"openinference.span.kind": "TOOL", "tool.name": "other"}}

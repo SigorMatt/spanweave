@@ -1,0 +1,7 @@
+{
+  "_note": "Dialects that CANNOT render this scenario, each with a reason (FIXTURES.md 4.3). A renderable:false is an INVITATION TO CHECK THE REASON against observed output, not a settled fact.",
+  "otel_genai": {
+    "renderable": false,
+    "reason": "This scenario's canonical graph pins kind: chain on both nodes, and the otel_genai adapter maps no gen_ai.operation.name value to NodeKind.chain. Checked against the convention's own registry rather than from memory: opentelemetry-semantic-conventions 0.65b0 -- the version 2.6's capture ran under -- defines nine values for gen_ai.operation.name (chat, create_agent, embeddings, execute_tool, generate_content, invoke_agent, invoke_workflow, retrieval, text_completion). Seven are mapped. `invoke_workflow` is a real candidate for chain, which SPEC.md 3.2 defines as 'a composite step with no more specific kind', but no captured GenAI trace contains one, and mapping it here would be exactly the reading-not-observation FIXTURES.md 5.1 forbids. The cycle itself is expressible; the node kind is not. Recorded at TASKS.md 2.10 alongside `retrieval`, which is the same shape and lands at 2.11 with retriever_and_embedding. A capture containing either retires this file."
+  }
+}

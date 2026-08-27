@@ -19,7 +19,6 @@
         "value": ""
       },
       "kind": "tool",
-      "name": "tool.lookup",
       "operation": "lookup",
       "outputs": {
         "mime": "application/json",

@@ -46,4 +46,9 @@ reporting something wrong.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+`name` is declared dialect-varying (`expected/comparison.json`). Nothing else
+is declared. Timestamps are envelope, not dialect: both instrumentors export
+`start_time` / `end_time` as Unix seconds, so an inverted pair and a missing
+`start_time` degrade identically and produce the same two diagnostics.

@@ -24,7 +24,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.lookup",
       "operation": "lookup",
       "outputs": {
         "mime": null,

@@ -35,4 +35,9 @@ so nothing follows from that, but the choice is visible in `clock_skew`.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+`name` is declared dialect-varying (`expected/comparison.json`), for the reason
+given in `missing_payloads`. Nothing else is declared: a dangling `parent_id`
+is an envelope fact, identical in both dialects, so the diagnostic is reached
+by the same route in both.

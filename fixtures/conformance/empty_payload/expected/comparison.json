@@ -1,0 +1,15 @@
+{
+  "_note": "Node fields this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4).",
+  "dialect_varying_payloads": {
+    "payloads": {
+      "s0.inputs": [
+        "mime",
+        "value"
+      ]
+    },
+    "reason": "Both dialects agree this payload is EMPTY -- the state, which no declaration may ever set aside, is the scenario's whole subject and is compared. They cannot agree on how emptiness is spelled. OpenInference's input.value is a free string with its own input.mime_type, so it can carry a bare \"\" at text/plain. OTel GenAI's gen_ai.tool.call.arguments is defined by the convention as a structured value, so the dialect's only way to say empty is an empty JSON container: a bare \"\" there is not valid JSON and would parse-fail, which is a different fact again. Outputs are declared NOWHERE -- both dialects say {} at application/json, and that agreement stays a fully tested claim."
+  },
+  "erase": [
+    "name"
+  ]
+}

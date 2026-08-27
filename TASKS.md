@@ -1534,25 +1534,25 @@ below:
 
 ### `[2a]` — the second dialect  *(begins only after 2.4's HALT clears)*
 
-> **LIVE HANDOFF — read these two before the first unchecked box.** Both come
-> from 2b, both are settled at **2.10**, and both are settled by *evidence*,
-> not by patch.
+> **LIVE HANDOFF — read this before the first unchecked box.** One item, and
+> it is **answered but not closed**: the evidence is in, the remedy is a
+> human's to choose.
 >
-> 1. **O1 / finding F5 — a requested-but-unfulfilled call names no tool.** Do
->    **not** fix it first. Render `unpaired_tool_call` in `otel_genai` and
->    check whether *any single* payload path yields the requested tool's name
->    in **both** dialects. The risk that makes this worth settling with
->    evidence is that a consumer reaching into payloads does not fail loudly
->    against dialect two — it reports a **confident zero**, indistinguishable
->    from "there were none." The remedy (a spec change plus an adapter change)
->    is decided **after** that rendering says what is actually there.
-> 2. **F6 — the corpus is 18-of-18 `status: "ok"` and reality is not.** Not
->    one real tool span in the 14-trace fleet is `ok` (19 `unset`, 1 `error`).
->    A consumer written against the corpus alone computes a success rate that
->    silently reads zero against real telemetry. When the degenerate set is
->    rendered at 2.10, consider a scenario whose tool span carries **no**
->    status — but only if the instrumentor actually emits one that way. §5.1
->    binds here too: do not hand-author the absence into existence.
+> **O1 / finding F5 — a requested-but-unfulfilled call names no tool.**
+> `unpaired_tool_call` is now rendered in `otel_genai` and the three questions
+> are answered at **2.10, Halt A**, with a remedy proposed and deliberately not
+> implemented. Two things a reader should take from it before touching this:
+>
+> - **Neither dialect can name the tool from the graph, and they agree
+>   exactly.** The diagnostic carries the call id three times and the name
+>   zero times, in both.
+> - **O1's stated risk is partly refuted.** The cross-dialect payload walk
+>   **raises** — in both directions, including the defensive `.get()` idiom —
+>   rather than reporting a confident zero. The zero comes from the consumer's
+>   own `try/except`, which is a weaker gap than O1 claimed and still a gap.
+>
+> Do **not** implement a remedy without the decision. Three are costed at the
+> task; `PREDICTIONS.md` is the human's to edit.
 
 > **This workstream inverts Phase 1's order on purpose: capture first, then
 > render from what the capture shows, then write the adapter.** Phase 1
@@ -1562,7 +1562,13 @@ below:
 > adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
 > disagreed. Do not repeat it.
 
-> **Retired from the handoff list** (kept as a pointer, not as a task).
+> **Retired from the handoff list** (kept as pointers, not as tasks).
+> **F6 — the corpus was 18-of-18 `status: "ok"` while no real tool span was —
+> is CLOSED at 2.10.** A new scenario, `unset_and_error_status`, renders
+> `unset` and `error` in both dialects from observed spans, and
+> `test_the_corpus_is_not_uniformly_ok` makes the gap un-reintroducable rather
+> than merely fixed.
+>
 > **F4 — the §3.10 error types were unexportable — is DONE** (2026-08-22,
 > commit `89f629a`, its own commit rather than folded into 2.5). Two
 > corrections to the finding as written: the §3.10 table names **three**
@@ -1572,23 +1578,46 @@ below:
 > `tests/test_codes.py` derives the required type names from the §3.10 table
 > itself, so a type added to the spec and not exported fails the build.
 
-> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7, 2.8 and 2.9 done; **2.9's
-> HALT is discharged**. `make check` and `make conformance` are green, and the
-> phase's central claim is evidenced: `llm_tool_llm`, `parallel_tool_calls` and
-> `tool_call_history_echo` are **byte-identical** across `openinference` and
-> `otel_genai`, and the captured GenAI trace builds cleanly with the §4.2.1
-> `data` edge from real telemetry. **2.10 is the next unchecked task** — and
-> handoff item 1 above (O1 / finding F5) is settled there, by evidence, not by
-> patch. Two things are carried forward to 2.14 rather than done: applying a
-> declared `erase` to both sides of the comparison, and `Edge.basis` as
-> cross-dialect vocabulary (live at 2.11).
+> **WHERE THIS SESSION STOPPED (2026-08-27, second session).** 2.7, 2.8 and
+> 2.9 are done and 2.9's HALT is discharged: `llm_tool_llm`,
+> `parallel_tool_calls` and `tool_call_history_echo` are **byte-identical**
+> across `openinference` and `otel_genai`. **2.10 is worked but NOT done, and
+> its box is deliberately unchecked** — 10 of 11 scenarios covered, two of them
+> as `coverage.json` declarations, plus one new scenario
+> (`unset_and_error_status`) that closes finding F6. `make check` and
+> `make conformance` are green as it stands.
 >
-> **The intro above was split here.** It had reached four blocks and 55 lines
-> between the header and the first task, which defeats the outline-first read
-> (grep for the first unchecked box) that a cold session actually performs.
-> The rule that replaced it: the **live** items go first and nothing else may
-> precede them; a settled item is retired to a pointer the same day it is
-> settled; this marker stays last. Retire before adding, not after.
+> **Two halts are open at 2.10 and both need a human before 2.11 starts.**
+>
+> - **Halt A — O1 / finding F5, settled by evidence.** Answered in three parts,
+>   with a remedy proposed and deliberately not implemented. The headline is a
+>   partial *refutation*: the cross-dialect payload walk **raises** rather than
+>   returning a confident zero, in both directions and including the defensive
+>   `.get()` idiom. The zero is the consumer's own `try/except`, not a silent
+>   shape mismatch. `PREDICTIONS.md` is the human's to edit.
+> - **Halt B — `unknown_kind` blocks the task.** Two canonical graphs that
+>   differ by exactly one line (`attributes.reported_kind`), a disagreement
+>   that is *correct* and unavoidable, and no mechanism in the corpus that can
+>   declare it. `Node.attributes` is also missing from `FIXTURES.md` §4's
+>   Compared list — the same defect `mime` had, found the same way. Three
+>   options are costed at the task; the rendering is not committed.
+>
+> Also found at 2.10 and **not acted on**: the convention defines nine
+> `gen_ai.operation.name` values and the adapter maps seven. `retrieval` is one
+> of the two, which settles 2.11's open question — `retriever_and_embedding`
+> does **not** need a `coverage.json`. `invoke_workflow` is the other, and it
+> is why `cyclic_parents` is declared unrenderable.
+>
+> Still carried to 2.14: applying a declared `erase` to both sides of the
+> comparison, and `Edge.basis` as cross-dialect vocabulary (live at 2.11).
+>
+> **The intro above was split at the start of this session.** It had reached
+> four blocks and 55 lines between the header and the first task, which defeats
+> the outline-first read (grep for the first unchecked box) that a cold session
+> actually performs. The rule that replaced it: the **live** items go first and
+> nothing else may precede them; a settled item is retired to a pointer the
+> same day it is settled; this marker stays last. Retire before adding, not
+> after.
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
   backend to `capture/` emitting **OTel GenAI** semantic conventions.
@@ -2513,6 +2542,318 @@ below:
   has been checked against observed output rather than assumed
   (`FIXTURES.md` §4.3 — a `renderable: false` is an invitation to check the
   reason, not a settled fact).*
+  > **STATE: 10 of 11 rendered, 1 new scenario added, TWO HALTS OPEN. The box
+  > stays unchecked** — 2.10's done-when requires every listed scenario to
+  > carry an `otel_genai` rendering *or* a `coverage.json` entry, and
+  > `unknown_kind` has neither. It is blocked on a decision that is not the
+  > agent's (Halt B below). Everything else in the task is done and green:
+  > `make check` 858 → 862 tests, `make conformance` green, `make gates` green.
+  >
+  > ### What landed
+  >
+  > | Scenario | `otel_genai` | Declared |
+  > |---|---|---|
+  > | `missing_payloads` | rendered | `name` |
+  > | `empty_payload` | rendered | `name`; `s0.inputs` `mime`+`value` |
+  > | `unpaired_tool_call` | rendered | `name`; `s1.inputs`/`s1.outputs` `value` |
+  > | `orphan_parent` | rendered | `name` |
+  > | `clock_skew` | rendered | `name` |
+  > | `malformed_payload_json` | rendered | `name` |
+  > | `duplicate_span_ids` | rendered | — (no graph; §4.2 refusal, same type + code) |
+  > | `shuffled_order` | rendered | `name`; the five `llm_tool_llm` payloads |
+  > | `redacted_payload` | **`coverage.json`** | — |
+  > | `cyclic_parents` | **`coverage.json`** | — |
+  > | `unknown_kind` | **BLOCKED — Halt B** | — |
+  > | `unset_and_error_status` | **new scenario**, both dialects | `name` |
+  >
+  > `name` is declared everywhere for the reason settled at 2.9: the OTel GenAI
+  > convention *prescribes* the span name as `<operation> <target>`, so a
+  > faithful rendering cannot reuse OpenInference's. That is the mechanism
+  > working, not a new decision.
+  >
+  > Only **three** payload disagreements exist across the whole degenerate set,
+  > and two of them are the envelope-vs-conversation finding §4.4 already
+  > records. The third (`empty_payload`) is new and is a better statement of
+  > the same thing: both dialects reach `state: empty` — the field the scenario
+  > exists to assert, and the one no declaration may ever set aside — but they
+  > cannot agree on how emptiness is *spelled*. OpenInference's `input.value`
+  > is a free string with its own mime, so it can say `""` at `text/plain`;
+  > `gen_ai.tool.call.arguments` is a structured value, and `""` there is not
+  > valid JSON, so the dialect's only spelling of empty is an empty container.
+  > Every other degenerate payload agrees in both `value` and `mime`.
+  >
+  > Two renderings are worth reading for what they prove rather than what they
+  > cover. `malformed_payload_json` is the test that `ADAPTERS.md` §3's
+  > "a mime the dialect defines but does not emit" rule **degrades honestly**:
+  > both dialects reach `present` / `application/json` / `value: null` by
+  > opposite routes — one is told the mime, the other asserts it from the
+  > convention — and the adapter-asserted mime does not suppress
+  > `payload_parse_failed`. And `shuffled_order`'s rendering is
+  > `llm_tool_llm`'s, byte for byte, reordered; the determinism pair is now
+  > parametrized over every dialect that renders both halves, with a guard that
+  > fails if one side gains a dialect the other lacks.
+  >
+  > ### Two `coverage.json` declarations, both with the check that produced them
+  >
+  > `FIXTURES.md` §4.3 makes a `renderable: false` *an invitation to check the
+  > reason*, so both reasons name what was checked rather than what was
+  > believed.
+  >
+  > - **`redacted_payload`.** The scenario asserts `Payload.redacted` and the
+  >   state is its whole subject. Checked three ways: the convention defines no
+  >   redaction sentinel; the captured GenAI trace contains no marker of any
+  >   kind; and the mechanism the dialect *does* have — opt-in content capture
+  >   — omits the attribute entirely, which is `absent`, a different state and
+  >   a different fact. The dialect can say "nothing was recorded"; it cannot
+  >   say "something was recorded and withheld."
+  > - **`cyclic_parents`.** Not the cycle — that is envelope and expressible —
+  >   but `kind: chain`, which no mapped operation produces.
+  >
+  > ### A finding that lands on 2.11, recorded here because it was found here
+  >
+  > `gen_ai.operation.name` was read from the convention's own registry rather
+  > than from memory: `opentelemetry-semantic-conventions` **0.65b0**, the
+  > version 2.6's capture ran under, defines **nine** values. The adapter maps
+  > **seven**. The two it does not:
+  >
+  > - **`retrieval`** — maps to `NodeKind.retriever` on its face. 2.11's note
+  >   says `retriever_and_embedding` is "the most likely `coverage.json`
+  >   candidate, since GenAI's operation vocabulary may not name a retriever —
+  >   check that against observed output before declaring it." **It does name
+  >   one.** That check is now done and the answer is no coverage entry.
+  > - **`invoke_workflow`** — a real candidate for `chain` (`SPEC.md` §3.2: "a
+  >   composite step with no more specific kind"), and the reason
+  >   `cyclic_parents` is declared unrenderable rather than rendered. Not
+  >   mapped, deliberately: `OPERATIONS`' own docstring says the unconfirmed
+  >   entries are "claims awaiting a capture", and no capture contains one.
+  >
+  > Neither is acted on here. Both are adapter changes that belong to 2.11, and
+  > mapping either on a reading is what `FIXTURES.md` §5.1 forbids.
+  >
+  > ### Finding F6 closed: `unset_and_error_status`
+  >
+  > Handoff item 2. The corpus was **18 of 18** tool spans `ok`; of 20 real
+  > tool spans, **none** was (19 `unset`, 1 `error`). A consumer computing a
+  > success rate against the corpus alone reads a confident zero against real
+  > telemetry, and nothing inside the corpus could see it — only a consumer
+  > pointed at real traces could, which is what 2b was for.
+  >
+  > New scenario, rendered in both dialects, every fact transcribed from an
+  > observed span: `UNSET` on an agent span and on a tool span from both
+  > captures; `ERROR` + `status_message` + an **absent** output from the 2b
+  > fleet's `05_failing_flight`, the only observed error span either dialect
+  > has produced. It is also the corpus's first `status_note` anywhere.
+  >
+  > **The first draft was wrong and the check caught it.** It gave one span no
+  > `status` key at all, to separate "stated unset" from "not stated". Checked
+  > before committing: across all **68** captured records, every one carries a
+  > `status` key. Omitting it would have been a claim that an exporter drops
+  > the field — §5.1's "omitting a key whose absence changes what the expected
+  > graph asserts is a misstatement, not a simplification". The span now states
+  > `UNSET`, and the absent-key branch stays where it was already tested, in
+  > both adapters' unit tests. Recorded because the draft was plausible and
+  > only the capture said no.
+  >
+  > The gap is now un-reintroducable rather than merely fixed:
+  > `test_the_corpus_is_not_uniformly_ok` fails if every tool span in the
+  > corpus is `ok` again. Watched failing (`{'error','unset'} <= {'ok'}`) with
+  > the scenario removed.
+  >
+  > Two other tests were added for gaps this task exposed:
+  > `test_a_declared_unrenderable_dialect_really_has_no_rendering` (until 2.13
+  > flips `DIALECTS`, nothing would notice a scenario that both renders a
+  > dialect and declares it unrenderable — a contradiction worse than either
+  > half), and the twinning guard on the shuffle pair.
+  >
+  > ---
+  >
+  > ## HALT A — O1 / finding F5, settled by evidence
+  >
+  > Handoff item 1. Rendered `unpaired_tool_call` in `otel_genai`, built both,
+  > and inspected the output. Full working in
+  > `fixtures/conformance/unpaired_tool_call/otel_genai.notes.md`.
+  >
+  > **(a) From the graph alone, can the requested tool be named? No — in
+  > neither dialect, and they agree exactly.** Both emit the same diagnostic,
+  > identical but for the adapter id:
+  >
+  > ```json
+  > {"code": "unpaired_call", "level": "warning", "node_id": "s1",
+  >  "source": "call_a",
+  >  "message": "call 'call_a' was requested and no span in this input fulfils it; no edge is invented"}
+  > ```
+  >
+  > The call **id** appears three times — `source`, inside `message`, and as
+  > the `node_id` of the asking span. The tool **name** appears zero times. A
+  > call that never ran has no node, so `operation` — where a tool's name lives
+  > (`SPEC.md` §3.2) — has nowhere to be.
+  >
+  > One asymmetry, and it is the kind that makes a consumer look portable when
+  > it is not: OpenInference *mentions* the name in a second diagnostic, because
+  > `unmapped_attributes` lists the key
+  > `llm.output_messages.0.message.tool_calls.0.tool_call.function.name` — as a
+  > **key**, never a value. GenAI carries it inside the payload and names it in
+  > no diagnostic at all. A consumer scraping names out of diagnostic key lists
+  > works against dialect one and finds nothing in dialect two.
+  >
+  > **(b) The payload paths, and they are not the same path.** They disagree on
+  > the container type at the first step:
+  >
+  > | | to the name | to the id |
+  > |---|---|---|
+  > | OpenInference | `outputs.value["choices"][i]["message"]["tool_calls"][j]["function"]["name"]` | same, `[j]["id"]` |
+  > | OTel GenAI | `outputs.value[i]["parts"][j]["name"]`, where `parts[j]["type"] == "tool_call"` | same, `[j]["id"]` |
+  >
+  > `outputs.value` is a **dict** in one and a **list** in the other. No prefix
+  > in common, so no single expression reaches both.
+  >
+  > **(c) Confident zero, or loud failure? Loud — and this partly refutes O1 as
+  > written.** Measured in both directions on the two graphs this scenario
+  > builds:
+  >
+  > | consumer | vs `openinference` | vs `otel_genai` |
+  > |---|---|---|
+  > | OpenInference path, direct indexing | `['lookup']` | `TypeError: list indices must be integers or slices, not str` |
+  > | OpenInference path, defensive `.get()` chain | `['lookup']` | `AttributeError: 'list' object has no attribute 'get'` |
+  > | OTel GenAI path, direct indexing | `TypeError: string indices must be integers, not 'str'` | `['lookup']` |
+  >
+  > O1 says the walk "does not raise — it reports a confident zero,
+  > indistinguishable from 'there were none.'" **It raises**, and so does the
+  > usual defensive idiom, because `.get` on a list is an `AttributeError`
+  > rather than a miss.
+  >
+  > The confident zero is still real, but its **mechanism is the consumer's own
+  > error handling, not a silent shape mismatch**. Any `try/except` around the
+  > walk — and there will be one, since trace payloads are untrusted input
+  > (`SECURITY.md`) — converts the loud failure into an empty result;
+  > `examples/fleet_aggregate` already wraps at trace granularity for exactly
+  > that reason. So the gap is **weaker than O1 claimed and still a gap**: a
+  > portable consumer *can* detect this today, if it chooses not to swallow it.
+  > That is a materially different fact from "cannot detect it at all", and it
+  > is the agent's job to say so rather than confirm the prediction it was
+  > handed.
+  >
+  > ### The remedy, proposed and NOT implemented
+  >
+  > **Proposal 1 — enrich `Diagnostic.source` on `unpaired_call` (and
+  > `unpaired_result`) from a bare id to `{call_id, operation}`.** Recommended.
+  >
+  > Exact surface, and it is smaller than it looks:
+  >
+  > | Where | Today | Proposed |
+  > |---|---|---|
+  > | `Diagnostic.source` (`spanweave/model.py`) | `JsonValue`; carries `"call_a"` | unchanged type; carries `{"call_id": "call_a", "operation": "lookup"}` |
+  > | `NormalizedSpan` (`spanweave/seam.py`) | `call_ids: tuple[str, ...]` | + `call_names: Mapping[str, str]` — id → the name the dialect gave it, absent when it gave none |
+  > | `spanweave/build.py` ~L338 | `source=call_id` | `source={"call_id": …, "operation": …}` |
+  > | both adapters | — | OpenInference reads `llm.output_messages.N.message.tool_calls.M.tool_call.function.name`, already observed and today only reported as unmapped; GenAI reads the `tool_call` part's `name`, already parsed by `_ids_of_type` |
+  > | `SPEC.md` §3.7 | says nothing about `source`'s shape | states it per code |
+  >
+  > What it is **not**: no new `NodeKind`, no new `EdgeKind`, no new `Payload`
+  > state, no new warrant, no new diagnostic code — so no `AGENT.md` model-change
+  > halt point. `Diagnostic.sort_key` is `(code, node_id, message)` and does not
+  > touch `source`, so ordering and determinism are unaffected. Neutrality is
+  > unaffected: `operation` is the dialect's own word for the tool, the same
+  > word a fulfilled call already puts on its node.
+  >
+  > What it **costs**, stated rather than buried: `source` changes from a
+  > string to an object for two codes. `schema_version` is unfrozen and this is
+  > exactly the kind of change Phase 2 exists to find, but it is a
+  > public-contract change and belongs in 2.14's model-change record either way.
+  > It also puts a *name from a payload* into a diagnostic, and `SPEC.md` §3.7's
+  > standing rule is that a diagnostic carries keys, not payload content — the
+  > argument for the exception is that a tool's name is the dialect's own
+  > identifier for the call, not the call's content, and it is already carried
+  > verbatim on every *fulfilled* call's node. That distinction is a human's to
+  > accept or reject.
+  >
+  > **Proposal 2 — do nothing to the model; document the two paths.** Ship a
+  > table like (b) above in `ADAPTERS.md`, so a consumer that must walk knows
+  > it is walking one dialect. Cheapest, changes no contract, and leaves the
+  > gap exactly where it is: every consumer re-implements the pairing logic the
+  > library already did, per dialect.
+  >
+  > **Proposal 3 — a node for the call that never ran.** Named only to be
+  > visibly rejected: it invents a span the telemetry never recorded, and
+  > `unknown` nodes exist for records we *saw*. It would put the tool name in
+  > `operation` at the cost of the losslessness invariant meaning something
+  > different.
+  >
+  > O1 is an observation in `PREDICTIONS.md`, which the agent may not edit. The
+  > evidence above is offered for a human to resolve it with; nothing here
+  > resolves it.
+  >
+  > ---
+  >
+  > ## HALT B — `unknown_kind`, and a compared field with no declaration mechanism
+  >
+  > Not anticipated by the task, and the reason 2.10's box is unchecked.
+  >
+  > `unknown_kind` renders cleanly in `otel_genai`. Built against the honest
+  > rendering — `gen_ai.operation.name: "invoke_workflow"`, a value the
+  > convention really defines (0.65b0) and the adapter really does not map —
+  > the two canonical graphs differ by **exactly one line**:
+  >
+  > ```diff
+  >    "attributes": {
+  > -    "reported_kind": "GUARDRAIL"
+  > +    "reported_kind": "invoke_workflow"
+  >    },
+  > ```
+  >
+  > Everything else agrees: `kind: unknown`, the `unknown_span_kind` diagnostic,
+  > the parent edge, both payloads, the node order.
+  >
+  > **The disagreement is not a defect. It is unavoidable and it is correct.**
+  > `reported_kind` is by definition the *dialect's own verbatim token* for a
+  > kind we could not map. Two dialects necessarily spell it differently —
+  > that is the same fact `name` records, one level down — and an adapter that
+  > made them agree would be lying about what it read.
+  >
+  > **The corpus cannot say so.** `canonical()` compares `Node.attributes`;
+  > `erase` declares whole node fields; §4.4 declares `value`/`mime` on named
+  > payloads. Nothing declares one key of one node's `attributes`. Worse,
+  > `attributes` is **not in `FIXTURES.md` §4's Compared list at all** — it is
+  > compared by implementation and unmentioned by the contract, which is
+  > precisely the position `mime` was in for two phases before the §4.4 rewrite
+  > caught it. So this is a second instance of a known defect class, found the
+  > same way: by a second dialect arriving.
+  >
+  > **Not decided here, on the standing instruction.** Adopting a
+  > comparison-semantics change because it unblocked a rendering is the shape
+  > refused twice already (resolution B at 2.8, proposal 2 at 2.9). Three
+  > options, with what each moves:
+  >
+  > 1. **Extend `erase` to dotted paths** — `erase: ["attributes.reported_kind"]`.
+  >    Narrowest, and the exact analogue of §4.4's per-field payload
+  >    declaration. Moves: `canonical()`'s `_without` gains one level of path
+  >    walking; `FIXTURES.md` §4 gains `attributes` in the Compared list and a
+  >    sentence in "erased where declared"; one `comparison.json`. Nothing else
+  >    in the corpus changes, because `attributes` holds only `model` elsewhere
+  >    and every dialect agrees on that.
+  > 2. **`erase: ["attributes"]` on this scenario alone** — uses the mechanism
+  >    exactly as built, changes no code, one line of fixture. Costs the
+  >    pinning of `reported_kind` in *both* claims for this scenario (`erase`
+  >    applies to both, unlike a §4.4 declaration). Mitigated but not covered:
+  >    both adapters already assert it in unit tests
+  >    (`test_openinference.py:240`, `test_otel_genai.py:107`). This is the
+  >    coarse form of exactly the thing §4.4 was carefully made fine-grained
+  >    about, which is the argument against it.
+  > 3. **Declare `unknown_kind` unrenderable in `otel_genai`.** Rejected as
+  >    dishonest and named so it is visibly rejected: the dialect renders the
+  >    scenario perfectly. §4.3 means "the dialect cannot say this"; using it
+  >    for "the corpus cannot compare this" would make the two
+  >    indistinguishable, which is the ambiguity §4.2/§4.3 were split apart to
+  >    remove.
+  >
+  > Recommendation: **1**, with `attributes` added to §4's Compared list in the
+  > same change regardless of which option wins — the list being wrong is a
+  > separate defect from this scenario, and it should be fixed on its own terms,
+  > exactly as §4 was corrected before C was applied at 2.8.
+  >
+  > The rendering is **not** committed. Writing it would leave the corpus with
+  > a file no test can compare, which is the silent rot `DIALECTS_PENDING…` and
+  > the skip machinery exist to prevent. The two-line specimen is reproduced
+  > above in full; recreating it costs nothing.
 
 - [ ] **2.11 Dialect-two renderings — the structural set.** `[2a]`
   **CUT 2 IF THE PHASE SLIPS** (`ROADMAP.md`). Render in this order — the

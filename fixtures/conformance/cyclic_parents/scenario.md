@@ -40,4 +40,10 @@ denial of service when this runs inside CI or a pipeline (`SECURITY.md`).
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [ ] `otel_genai` — **declared unrenderable** (`expected/coverage.json`)
+
+Not because of the cycle — that is envelope, and expressible — but because this
+scenario's canonical graph pins `kind: chain`, and no `gen_ai.operation.name`
+value the adapter maps produces one. The convention's `invoke_workflow` is a
+real candidate and is deliberately *not* mapped on a reading; see
+`coverage.json` for what was checked.

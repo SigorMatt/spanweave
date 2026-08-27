@@ -28,4 +28,11 @@ something — the model has a state that says exactly what happened.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+`name` is declared dialect-varying (`expected/comparison.json`): the OTel GenAI
+convention prescribes the span name as `<operation> <target>`, so a faithful
+rendering cannot reuse OpenInference's. Nothing else is declared — with no
+payload attributes on either span there is nothing left for two dialects to
+disagree about, which is what makes this the cheapest cross-dialect check in
+the corpus and a good first one to read.

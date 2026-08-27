@@ -2,20 +2,10 @@
   "_note": "Node fields this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4).",
   "dialect_varying_payloads": {
     "payloads": {
-      "s0.inputs": [
-        "mime",
-        "value"
-      ],
       "s1.inputs": [
         "value"
       ],
       "s1.outputs": [
-        "value"
-      ],
-      "s3.inputs": [
-        "value"
-      ],
-      "s3.outputs": [
         "value"
       ]
     },

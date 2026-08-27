@@ -1,0 +1,7 @@
+{
+  "_note": "Dialects that CANNOT render this scenario, each with a reason (FIXTURES.md 4.3). A renderable:false is an INVITATION TO CHECK THE REASON against observed output, not a settled fact -- see the seed corpus's declared_data_edge, which was declared unrenderable in OpenInference and turned out to be renderable in every multi-turn trace.",
+  "otel_genai": {
+    "renderable": false,
+    "reason": "This scenario asserts Payload.redacted, and the state is the whole subject -- no declaration may set a state aside (FIXTURES.md 4.4), so a rendering that produced any other state would not be this scenario. Checked three ways rather than assumed. (1) The convention: gen_ai.* defines no redaction sentinel and no redaction attribute; OpenInference's __REDACTED__ marker has no counterpart. (2) The captured trace, fixtures/captured/genai_tool_call.jsonl: no attribute value anywhere is a marker of any kind. (3) The mechanism the dialect DOES have is opt-in content capture, and switching it off omits gen_ai.input.messages entirely -- which is `absent`, a different state and a different fact. So the dialect can say 'nothing was recorded' but cannot say 'something was recorded and withheld'. Recheck when a GenAI instrumentor is observed emitting a redaction marker; that is what retires this file."
+  }
+}

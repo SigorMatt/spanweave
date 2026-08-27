@@ -107,9 +107,19 @@ implementation gets wrong.
 | `cyclic_parents` | a parent cycle | graph still built, diagnostic, no hang |
 | `shuffled_order` | the same trace, lines reordered | byte-identical to its ordered twin |
 | `tool_call_history_echo` | a call id resent as input context by a later turn | **no** `call_result` edge from the echoing span |
+| `unset_and_error_status` | span statuses that are not `ok`, and a `status_message` | `unset` for both spellings, `error` with its note, an `absent` output |
 
 Every new adapter must render **all** of these, including the degenerate ones.
 An adapter that only handles happy paths is not done.
+
+> `unset_and_error_status` is the one row here that was **not** seeded in
+> Phase 1. It was added at `TASKS.md` 2.10 because the 2b consumer measured the
+> corpus against real telemetry and found every tool span in it `ok` (18 of 18)
+> and no real tool span `ok` at all (19 `unset`, 1 `error`). A corpus can be
+> internally consistent and still be unrepresentative in a way that makes a
+> consumer written against it read a confident zero in production, and nothing
+> inside the corpus can notice that. Only a consumer pointed at real traces
+> can, which is what workstream 2b was for.
 
 ## 4. The equivalence rule
 

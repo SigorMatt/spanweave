@@ -58,4 +58,11 @@ None. A redaction the source performed is not a mapping failure.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [ ] `otel_genai` — **declared unrenderable** (`expected/coverage.json`)
+
+The dialect defines no redaction marker, and the thing it *can* do — omit the
+content attribute when capture is off — is `absent`, a different state and a
+different fact. `state` is the one field no declaration may set aside, so
+rendering it any other way would not be this scenario. The reason in
+`coverage.json` names the three checks behind it, and §4.3 makes it an
+invitation to recheck rather than a settled fact.

@@ -72,6 +72,9 @@ DEGENERATE = (
     "cyclic_parents",
     "shuffled_order",
     "tool_call_history_echo",
+    # Added at 2.10, not seeded: the corpus was 18-of-18 `status: "ok"` while
+    # 20 real tool spans were 19 `unset` and 1 `error` (finding F6).
+    "unset_and_error_status",
 )
 
 
@@ -139,6 +142,49 @@ def test_every_dialect_is_either_rendered_or_declared_unrenderable(scenario, dia
         # A declaration without a reason is just a missing file with extra
         # steps. The reason is what a reviewer checks.
         assert len(reason) > 20
+
+
+def test_a_declared_unrenderable_dialect_really_has_no_rendering():
+    # §4.3's other half. "Silence is a failure" is enforced only over
+    # `DIALECTS`, which does not yet name `otel_genai` -- so until 2.13 flips
+    # it, nothing would notice a scenario that BOTH renders a dialect and
+    # declares it unrenderable. That contradiction is worse than either half
+    # alone: the corpus would be testing the rendering while telling a reader
+    # it does not exist.
+    for scenario in SCENARIOS:
+        for dialect in scenario.coverage:
+            if scenario.declared_unrenderable(dialect) is None:
+                continue
+            assert scenario.rendering(dialect) is None, (
+                f"{scenario.name} declares {dialect} unrenderable and renders it anyway"
+            )
+
+
+def test_the_corpus_is_not_uniformly_ok():
+    # Finding F6 (`TASKS.md` 2.4), as a tripwire rather than a note. The 2b
+    # consumer measured this corpus against real telemetry: every tool span
+    # here was `ok` (18 of 18), and of 20 real tool spans none was (19 `unset`,
+    # 1 `error`). A consumer that computes a success rate against the corpus
+    # alone therefore reads a confident zero in production, and no test inside
+    # the corpus could see it.
+    #
+    # This does not make the corpus representative -- nothing here can. It
+    # makes the gap un-reintroducable: delete `unset_and_error_status` and this
+    # goes red rather than quiet.
+    statuses = set()
+    notes = 0
+    for rendering in BUILDABLE_RENDERINGS:
+        if not rendering.supported:
+            continue
+        for node in to_document(spanweave.build(rendering.path))["nodes"]:
+            if node["kind"] == "tool":
+                statuses.add(node["status"])
+            notes += node["status_note"] is not None
+    assert {"unset", "error"} <= statuses, (
+        f"every tool span in the corpus is {sorted(statuses)}; real telemetry "
+        f"is not (finding F6)"
+    )
+    assert notes, "no node in the corpus carries a status_note"
 
 
 def test_no_scenario_is_currently_unrenderable():
@@ -647,38 +693,53 @@ def test_every_rendering_accounts_for_every_record(rendering):
 # --------------------------------------------------------------------------
 
 
-def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin():
+#: Dialects in which `shuffled_order` and `llm_tool_llm` are BOTH rendered.
+#: Derived, not listed: the pair below is only a determinism check in a dialect
+#: where both halves exist, and a dialect added to one and not the other must
+#: drop out rather than compare a scenario against a missing file.
+TWINNED = sorted(
+    {p.stem for p in (CORPUS / "shuffled_order/dialects").iterdir()}
+    & {p.stem for p in (CORPUS / "llm_tool_llm/dialects").iterdir()}
+    & adapter_backed()
+)
+
+
+def test_the_shuffle_pair_is_twinned_in_every_dialect_that_renders_either():
+    # A dialect that renders one half and not the other would silently narrow
+    # the check above to the dialects that happen to be complete.
+    for name in ("shuffled_order", "llm_tool_llm"):
+        rendered = {p.stem for p in (CORPUS / name / "dialects").iterdir()}
+        assert rendered & adapter_backed() == set(TWINNED), (
+            f"{name} renders {sorted(rendered)}; the shuffle pair must be "
+            f"rendered in the same dialects on both sides"
+        )
+
+
+@pytest.mark.parametrize("dialect", TWINNED)
+def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(dialect):
     # Not merely equal: identical bytes. This is the single most valuable
-    # determinism check in the corpus (SPEC.md §5.2).
-    shuffled = CORPUS / "shuffled_order"
-    twin = CORPUS / "llm_tool_llm"
+    # determinism check in the corpus (SPEC.md §5.2) -- and it is run per
+    # dialect, because "input line order does not matter" is a claim about the
+    # library, not about one adapter's tolerance.
     erase = ("name",)
-    one = canonical_bytes(
-        canonical(
-            to_document(spanweave.build(shuffled / "dialects/openinference.jsonl")),
-            erase,
-        )
-    )
-    other = canonical_bytes(
-        canonical(
-            to_document(spanweave.build(twin / "dialects/openinference.jsonl")), erase
-        )
-    )
-    assert one == other
+
+    def graph(name):
+        path = CORPUS / name / f"dialects/{dialect}.jsonl"
+        return canonical_bytes(canonical(to_document(spanweave.build(path)), erase))
+
+    assert graph("shuffled_order") == graph("llm_tool_llm")
 
 
-def test_a_shuffled_trace_really_is_a_reordering_of_its_twin():
+@pytest.mark.parametrize("dialect", TWINNED)
+def test_a_shuffled_trace_really_is_a_reordering_of_its_twin(dialect):
     # Otherwise the test above proves nothing.
-    def lines(name):
-        path = CORPUS / name / "dialects/openinference.jsonl"
-        return sorted(path.read_text(encoding="utf-8").splitlines())
+    def text(name):
+        return (CORPUS / name / f"dialects/{dialect}.jsonl").read_text(encoding="utf-8")
 
-    assert lines("shuffled_order") == lines("llm_tool_llm")
-    assert (CORPUS / "shuffled_order/dialects/openinference.jsonl").read_text(
-        encoding="utf-8"
-    ) != (CORPUS / "llm_tool_llm/dialects/openinference.jsonl").read_text(
-        encoding="utf-8"
+    assert sorted(text("shuffled_order").splitlines()) == sorted(
+        text("llm_tool_llm").splitlines()
     )
+    assert text("shuffled_order") != text("llm_tool_llm")
 
 
 def test_an_unparseable_payload_keeps_its_text_verbatim():

@@ -35,4 +35,11 @@ Same as `llm_tool_llm`: node ids are the span id strings `s0`–`s3`, and
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+The `otel_genai` rendering is `llm_tool_llm`'s, line-for-line, in the same
+shuffled order this scenario's OpenInference rendering uses (s2, s0, s3, s1) —
+which is exactly what the scenario is for: the two expected graphs are
+byte-identical, so any difference here would be an ordering defect and nothing
+else. It carries the same declarations `llm_tool_llm` does, for the same
+reasons.

@@ -47,4 +47,20 @@ s1 states its requested id in `llm.output_messages.0.message.tool_calls.0.tool_c
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+`name`, and `s1`'s two payload `value`s, are declared dialect-varying
+(`expected/comparison.json`): OpenInference records the request envelope and
+the whole provider response, OTel GenAI records the normalized conversation,
+and neither is a re-encoding of the other. `mime` is **not** declared here —
+both dialects report `application/json` on both payloads — and neither is
+anything on `s0` or `s2`, which report no payloads in either dialect.
+
+The two dialects state the unpairing by different mechanisms and reach the same
+graph. OpenInference puts the requested id in an attribute key
+(`llm.output_messages.0.message.tool_calls.0.tool_call.id`); OTel GenAI puts it
+in a `tool_call` part **inside** `gen_ai.output.messages`. Both fulfilments
+name a different id, and neither dialect produces a `call_result` edge.
+
+See `otel_genai.notes.md` for what this scenario says about naming the tool
+that was requested and never ran (`PREDICTIONS.md` O1).

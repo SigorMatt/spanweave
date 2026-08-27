@@ -43,7 +43,6 @@
         "value": null
       },
       "kind": "agent",
-      "name": "agent.run",
       "operation": null,
       "outputs": {
         "mime": null,
@@ -65,7 +64,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.alpha",
       "operation": "alpha",
       "outputs": {
         "mime": null,
@@ -87,7 +85,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.beta",
       "operation": "beta",
       "outputs": {
         "mime": null,

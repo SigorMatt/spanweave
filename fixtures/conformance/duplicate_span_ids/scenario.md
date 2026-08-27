@@ -33,4 +33,9 @@ paths keep every record; neither guesses.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.10)
+
+No `expected/comparison.json`: this scenario has no graph to compare. §4.2's
+equivalence half is the assertion instead — **both** dialects must raise
+`DuplicateNodeIdError` with code `duplicate_node_id`. A dialect that built a
+graph where the other refused would be a finding about the model.

@@ -27,7 +27,6 @@
         "value": null
       },
       "kind": "agent",
-      "name": "agent.run",
       "operation": null,
       "outputs": {
         "mime": null,
@@ -49,7 +48,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.lookup",
       "operation": "lookup",
       "outputs": {
         "mime": null,
