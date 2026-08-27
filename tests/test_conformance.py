@@ -144,6 +144,62 @@ def test_every_dialect_is_either_rendered_or_declared_unrenderable(scenario, dia
         assert len(reason) > 20
 
 
+FIXTURES_MD = CORPUS.parent.parent / "FIXTURES.md"
+
+
+def _compared_bullet():
+    """The `**Compared:**` bullet of `FIXTURES.md` §4, as text."""
+    text = FIXTURES_MD.read_text(encoding="utf-8")
+    start = text.index("- **Compared:**")
+    return text[start : text.index("\n\n", start)]
+
+
+def test_the_compared_list_names_every_field_that_is_compared():
+    """`FIXTURES.md` §4's Compared list must be exact, not illustrative.
+
+    It has been wrong twice in the same direction: `mime` was compared and
+    unlisted for two phases, `attributes` for three. Neither was a drafting
+    slip. A field is added to the model, `canonical()` keeps it because
+    keeping is the DEFAULT, and prose is not where anyone looks -- so the gap
+    is only found when a second dialect disagrees on it, which is years of
+    latency for a contract error.
+
+    This closes the loop the other way round: the code is the source of truth
+    for what is compared, and the document must keep up with it.
+    """
+    scenario = next(s for s in BUILDABLE if s.name == "llm_tool_llm")
+    # No `erase`: a scenario's declaration is orthogonal to what the contract
+    # says is compared, and passing one here would hide `name`.
+    graph = canonical(to_document(spanweave.build(scenario.rendering("openinference"))))
+    bullet = _compared_bullet()
+
+    kept = set()
+    for node in graph["nodes"]:
+        kept |= set(node)
+        for side in ("inputs", "outputs"):
+            kept |= set(node[side])
+    for edge in graph["edges"]:
+        kept |= set(edge)
+
+    unlisted = sorted(field for field in kept if f"`{field}`" not in bullet)
+    assert unlisted == [], (
+        f"canonical() compares {unlisted}, which FIXTURES.md §4's Compared "
+        f"list does not name. The list is exact, not illustrative -- add the "
+        f"field to the document, or stop comparing it."
+    )
+
+
+def test_the_compared_list_names_nothing_that_is_erased():
+    # The other direction, and the cheaper mistake to make while fixing the
+    # first: a list that names an erased field would read as an assertion the
+    # corpus makes and does not.
+    bullet = _compared_bullet()
+    for field in ("provenance", "adapter", "source_digest", "spanweave_version"):
+        assert f"`{field}`" not in bullet, (
+            f"the Compared list names {field!r}, which canonical() erases"
+        )
+
+
 def test_a_declared_unrenderable_dialect_really_has_no_rendering():
     # §4.3's other half. "Silence is a failure" is enforced only over
     # `DIALECTS`, which does not yet name `otel_genai` -- so until 2.13 flips

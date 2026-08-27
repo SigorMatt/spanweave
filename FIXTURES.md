@@ -166,15 +166,31 @@ which one it meant (§4.2, §4.3).
   payloads (§4.4) — **only where** `expected/comparison.json` says so, so the
   erasure is a reviewable fact in the corpus. Declared erasures apply to
   **claim 2 only**; claim 1 still pins every one of them.
-- **Compared:** node ids, kinds, operations, timestamps, statuses, payload
-  **states, values and mime types**, usage, all edges (`src`, `dst`, `kind`,
-  `warrant`, `basis`), node order, and diagnostics by code and count.
+- **Compared:** everything else — and this list is **exact, not
+  illustrative**. `canonical()` keeps, on each node, `id`, `kind`, `name`,
+  `operation`, `attributes`, `started_at`, `ended_at`, `status`,
+  `status_note`, `inputs` and `outputs` (each by `state`, `value` and `mime`),
+  and `usage`; on each edge, `src`, `dst`, `kind`, `warrant` and `basis`; plus
+  the node order and the diagnostics by code and count.
 
-> `mime` was missing from the **Compared** list for two phases while
-> `canonical()` compared it anyway — it erases only `Payload.raw`. Corrected
-> here rather than in the code, because comparing it is right: a dialect that
-> declares a content type is saying something a consumer acts on. It is now one
-> of the fields §4.4 exists to handle.
+> **This list has been wrong twice, in the same direction both times, and the
+> second correction is why it is now exact and tested.**
+>
+> `mime` was missing from it for two phases while `canonical()` compared it
+> anyway — it erases only `Payload.raw`. `attributes` was missing for three,
+> for the same reason. Both were corrected here rather than in the code,
+> because comparing them is right: a dialect that declares a content type, or
+> a normalized attribute, is saying something a consumer acts on.
+>
+> A comparison rule asserting something the contract never stated is the
+> failure mode this section keeps producing — §3.3-vs-§4 on payload *contents*
+> was a third instance, and the one that forced §4.4 into existence. It is not
+> a drafting slip: a field is added to the model, `canonical()` keeps it
+> because keeping is the default, and the prose is not where anyone looks. So
+> the list is now checked. `tests/test_conformance.py`
+> ::`test_the_compared_list_names_every_field_that_is_compared` reads this file
+> and fails if `canonical()` keeps a field the list does not name. A fourth
+> instance now goes red instead of waiting for a dialect to find it.
 
 If two dialects genuinely cannot agree on a compared field, that is a **finding
 about the model**, not a reason to widen the erasure. Bring it to
