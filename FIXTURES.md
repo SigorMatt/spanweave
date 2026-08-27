@@ -26,9 +26,16 @@ fixtures/
                                   #   neither.
         error.json                # this scenario must NOT build (§4.2).
         diagnostics.json          # expected diagnostics (codes + counts)
-        comparison.json           # optional: node fields this scenario has
-                                  #   declared dialect-varying (§4), erased
-                                  #   by canonical(). Absent = erase nothing.
+        comparison.json           # optional: node fields, and payloads, this
+                                  #   scenario has declared dialect-varying
+                                  #   (§4, §4.4), set aside for the
+                                  #   CROSS-DIALECT claim only. Absent =
+                                  #   nothing declared.
+        payloads/
+          otel_genai.json         # optional: this dialect's own values for
+                                  #   the payloads declared above, so the
+                                  #   within-dialect claim still pins them
+                                  #   (§4.4). Absent = agrees with graph.json.
         coverage.json             # optional: dialects that CANNOT render this
                                   #   scenario, each with a reason (§4.3).
                                   #   A dialect is either rendered or declared
@@ -39,7 +46,10 @@ fixtures/
 ```
 
 One canonical graph per scenario. Not one per dialect. That asymmetry is the
-whole point.
+whole point — and `payloads/` does not undo it. A dialect override does not
+give a dialect its own graph; it names the handful of payload fields on which
+the corpus has **recorded** that two dialects state different facts, so that
+the one canonical graph can go on asserting everything else.
 
 ## 2. Writing `scenario.md`
 
@@ -103,11 +113,32 @@ An adapter that only handles happy paths is not done.
 
 ## 4. The equivalence rule
 
-For a scenario with dialects D₁…Dₙ:
+The corpus makes **two** claims, and they were conflated until Phase 2 forced
+them apart. Keeping them separate is what lets a dialect disagreement be
+recorded instead of erased.
+
+**Claim 1 — fidelity, within a dialect.** Every rendering reproduces its
+scenario's expectation *in full*:
 
 ```
-canonical(build(D₁)) == canonical(build(D₂)) == … == expected/graph.json
+canonical(build(Dᵢ)) == expected/graph.json, as Dᵢ expects it (§4.4)
 ```
+
+Nothing is erased for this claim beyond the declared node-field erasures below.
+It is what catches a regression in an adapter or the builder, and it is the
+claim with teeth: a payload that changes value fails here.
+
+**Claim 2 — equivalence, across dialects.** For a scenario with dialects
+D₁…Dₙ, the canonical graphs agree:
+
+```
+canonical(build(D₁)) ≡ canonical(build(D₂)) ≡ … ≡ expected/graph.json
+```
+
+where `≡` additionally sets aside the fields a scenario has **declared**
+dialect-varying (§4.4). It is the library's central claim, and the reason a
+declaration is a file in the corpus rather than a branch in the comparison
+code.
 
 Two scenarios in the seed corpus have no `expected/graph.json`, for two
 **different** reasons, and they get two different mechanisms because they are
@@ -116,20 +147,28 @@ which one it meant (§4.2, §4.3).
 
 `canonical()` erases what is legitimately dialect-specific and nothing else:
 
-- **Erased:** `provenance` (adapter id/version, dialect note), `Node.raw` (the
-  source record differs by construction), `Payload.raw` (the *encoding* of a
-  payload is dialect-specific even when its parsed value is not), `Edge.adapter`,
-  `meta.adapters`, `meta.source_digest`, `meta.spanweave_version`, and node
-  `name` **only where** `scenario.md` explicitly lists it as dialect-varying —
-  declared per scenario in `expected/comparison.json`, so the erasure is a
-  reviewable fact in the corpus rather than a branch in the comparison code.
+- **Erased always:** `provenance` (adapter id/version, dialect note), `Node.raw`
+  (the source record differs by construction), `Payload.raw` (the *encoding* of
+  a payload is dialect-specific even when its parsed value is not),
+  `Edge.adapter`, `meta.adapters`, `meta.source_digest`,
+  `meta.spanweave_version`.
+- **Erased where declared:** node `name`, and named `Payload` fields on named
+  payloads (§4.4) — **only where** `expected/comparison.json` says so, so the
+  erasure is a reviewable fact in the corpus. Declared erasures apply to
+  **claim 2 only**; claim 1 still pins every one of them.
 - **Compared:** node ids, kinds, operations, timestamps, statuses, payload
-  **states and values**, usage, all edges (`src`, `dst`, `kind`, `warrant`,
-  `basis`), node order, and diagnostics by code and count.
+  **states, values and mime types**, usage, all edges (`src`, `dst`, `kind`,
+  `warrant`, `basis`), node order, and diagnostics by code and count.
+
+> `mime` was missing from the **Compared** list for two phases while
+> `canonical()` compared it anyway — it erases only `Payload.raw`. Corrected
+> here rather than in the code, because comparing it is right: a dialect that
+> declares a content type is saying something a consumer acts on. It is now one
+> of the fields §4.4 exists to handle.
 
 If two dialects genuinely cannot agree on a compared field, that is a **finding
 about the model**, not a reason to widen the erasure. Bring it to
-`OPEN_QUESTIONS.md`.
+`OPEN_QUESTIONS.md`, and record it under §4.4 if it is a payload.
 
 > **Never weaken `canonical()` to make a test pass.** That inverts the corpus:
 > instead of the fixtures testing the code, the code would be editing the
@@ -220,6 +259,85 @@ must be either a rendering **or** an entry here with a reason. A missing
 rendering that nobody declared fails the corpus — otherwise "we could not
 express this" and "somebody forgot" look identical, and a dialect's coverage
 could quietly rot away one file at a time.
+
+### 4.4 Payloads two dialects record differently
+
+**The finding this exists for.** `SPEC.md` §3.3 defines `Payload.value` as
+*"parsed when `mime` is JSON, else `str`"* — a statement about the **parse of
+`raw`**, and nothing at all about what a payload should **contain**. So two
+faithful adapters, reading the source attributes their own dialects define, can
+legitimately produce different `value`s for the same span. Comparing `value`
+across dialects therefore asserts a property the model never promised.
+
+That is not hypothetical. The 2.6 matched pair — one run, two instrumentors —
+disagrees on every `llm` and `agent` span:
+
+| | OpenInference | OTel GenAI |
+|---|---|---|
+| in | `input.value` = the request envelope: messages **plus** model, tool definitions, invocation parameters | `gen_ai.input.messages` = the conversation, normalized |
+| out | `output.value` = the whole provider response, `system_fingerprint`, `usage`, `stop_reason` and all | `gen_ai.output.messages` = the assistant turn, normalized |
+| mime | `input.mime_type` / `output.mime_type` | **no mime attribute exists in the dialect** |
+
+`tool` span payloads, by contrast, agree **byte-for-byte**
+(`gen_ai.tool.call.arguments` == `input.value`).
+
+**This is not "the encoding is dialect-specific."** That argument is what
+justifies erasing `Payload.raw`, and reaching for it here would be wrong on the
+facts: one payload strictly *contains* the other plus more. No re-encoding
+reaches the request envelope from the conversation, because the information is
+not there. The disagreement is about **content**, and the model permits it
+because the model never spoke about content.
+
+**The mechanism.** A scenario declares, in `expected/comparison.json`, which
+payloads dialects record differently and why:
+
+```json
+{
+  "erase": ["name"],
+  "dialect_varying_payloads": {
+    "reason": "OpenInference records the request envelope on an LLM span; OTel GenAI records the normalized conversation. Neither is a re-encoding of the other.",
+    "payloads": ["s0.inputs", "s1.inputs", "s1.outputs"]
+  }
+}
+```
+
+- `payloads` — `<node id>.<inputs|outputs>` selectors. Nothing else in the
+  graph is declarable this way.
+- `reason` — mandatory, and checked for substance, for the same reason §4.3's
+  is: a declaration without a reason is a missing comparison with extra steps.
+
+**Only `value` and `mime` are ever set aside. `state` is not, and cannot be
+made so.** `absent` ≠ `empty` ≠ `redacted` is the model's central honesty
+claim (`SPEC.md` §3.3); two dialects disagreeing about a payload's *state*
+would be a real finding about the model, and there must be no mechanism that
+can quietly absorb it. The erasable set is fixed in code, not read from the
+fixture.
+
+**Claim 1 still pins every declared field.** A dialect whose value differs from
+`expected/graph.json` supplies its own in `expected/payloads/<dialect>.json`:
+
+```json
+{
+  "s1.inputs": {
+    "mime": null,
+    "value": [{"role": "user", "parts": [{"content": "…", "type": "text"}]}]
+  }
+}
+```
+
+A dialect that agrees with `graph.json` supplies no file. A dialect that
+differs and *forgets* the file fails claim 1 loudly — silence is not an
+outcome here either. So a declaration costs the corpus **nothing** in
+within-dialect regression detection: every payload of every rendering is still
+pinned somewhere. What it sets aside is only the cross-dialect assertion, on
+exactly the payloads named, with the reason on the record.
+
+**A declaration is a recorded finding, not an exemption.** It says *these two
+dialects record different facts here*. That is the thing a schema-freeze
+decision needs to be able to read; a widened erasure would have said nothing at
+all. It follows that a declaration nothing disagrees about is stale — once two
+or more dialects can be built, a declared payload on which every dialect
+already agrees fails the corpus.
 
 ## 5. Hand-authored fixtures
 
