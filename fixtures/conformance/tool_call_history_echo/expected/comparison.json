@@ -3,26 +3,19 @@
   "dialect_varying_payloads": {
     "payloads": {
       "s1.inputs": [
-        "value",
-        "mime"
+        "value"
       ],
       "s1.outputs": [
-        "value",
-        "mime"
-      ],
-      "s2.outputs": [
-        "mime"
+        "value"
       ],
       "s3.inputs": [
-        "value",
-        "mime"
+        "value"
       ],
       "s3.outputs": [
-        "value",
-        "mime"
+        "value"
       ]
     },
-    "reason": "OpenInference records an LLM span's whole request envelope in input.value (messages plus model, tool definitions and invocation parameters) and the whole provider response in output.value; OTel GenAI records the normalized conversation in gen_ai.input.messages / gen_ai.output.messages. One strictly contains the other plus more, so neither is a re-encoding of the other and SPEC.md 3.3 constrains neither (FIXTURES.md 4.4). The agent span differs the same way: a bare string against the same text inside the message array. `mime` is declared wherever a payload is, and on the tool span it is declared ALONE: OTel GenAI states no content type anywhere in the dialect, while the tool payload VALUES agree byte-for-byte between the two captured traces -- so the value stays compared, because that agreement is the strongest cross-dialect evidence the corpus has."
+    "reason": "OpenInference records an LLM span's whole request envelope in input.value (messages plus model, tool definitions and invocation parameters) and the whole provider response in output.value; OTel GenAI records the normalized conversation in gen_ai.input.messages / gen_ai.output.messages. One strictly contains the other plus more, so neither is a re-encoding of the other and SPEC.md 3.3 constrains neither (FIXTURES.md 4.4). Narrowed to what the first cross-dialect run actually showed disagreeing: `value` on every llm/agent payload, and `mime` on the AGENT span alone, where OpenInference reports text/plain for a bare string against this dialect's message array. The TOOL payloads are NOT declared -- mime and value both agree there, which is the byte-for-byte agreement the two captured traces show, and it stays a tested claim."
   },
   "erase": []
 }

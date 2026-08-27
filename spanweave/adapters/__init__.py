@@ -155,5 +155,7 @@ def detect(records: Sequence[JsonValue]) -> tuple[Adapter, float]:
 # also makes the shipped dialects available -- and so that an adapter file
 # never has to import the registry back (ADAPTERS.md §4).
 from spanweave.adapters.openinference import OpenInferenceAdapter  # noqa: E402
+from spanweave.adapters.otel_genai import OtelGenAiAdapter  # noqa: E402
 
 REGISTRY.register(OpenInferenceAdapter())
+REGISTRY.register(OtelGenAiAdapter())

@@ -1,0 +1,56 @@
+{
+  "_note": "This dialect's own values for the payloads expected/comparison.json declares dialect-varying (FIXTURES.md 4.4). Claim 1 -- fidelity within a dialect -- still pins every one of them; only the CROSS-dialect assertion sets them aside. Each value below is verified against the attribute in dialects/otel_genai.jsonl that produced it.",
+  "s0.inputs": {
+    "mime": "application/json",
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Check both suppliers.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "s1.inputs": {
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Check both suppliers.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "s1.outputs": {
+    "value": [
+      {
+        "finish_reason": "tool_calls",
+        "parts": [
+          {
+            "arguments": {
+              "supplier": "alpha"
+            },
+            "id": "call_a",
+            "name": "alpha",
+            "type": "tool_call"
+          },
+          {
+            "arguments": {
+              "supplier": "beta"
+            },
+            "id": "call_b",
+            "name": "beta",
+            "type": "tool_call"
+          }
+        ],
+        "role": "assistant"
+      }
+    ]
+  }
+}

@@ -272,15 +272,17 @@ def test_no_declaration_outlives_the_disagreement_that_earned_it():
         ]
         for selector, fields in scenario.drop_payloads.items():
             node_id, side = selector.split(".")
-            seen = [
-                {f: _payload_of(g, node_id, side).get(f) for f in sorted(fields)}
-                for g in graphs
-            ]
-            assert any(entry != seen[0] for entry in seen[1:]), (
-                f"{scenario.name}: {selector} is declared dialect-varying but "
-                f"every dialect agrees on {sorted(fields)}; delete the "
-                f"declaration rather than carrying it (FIXTURES.md §4.4)"
-            )
+            # Per FIELD, not per selector. A declaration that names `mime`
+            # alongside a genuinely varying `value` would otherwise ride along
+            # untested, and each field set aside should be one the corpus can
+            # point at a disagreement for.
+            for name in sorted(fields):
+                seen = [_payload_of(g, node_id, side).get(name) for g in graphs]
+                assert any(entry != seen[0] for entry in seen[1:]), (
+                    f"{scenario.name}: {selector} declares {name!r} "
+                    f"dialect-varying but every dialect agrees on it; narrow "
+                    f"the declaration rather than carrying it (FIXTURES.md §4.4)"
+                )
 
 
 def _payload_of(graph, node_id, side):
@@ -301,25 +303,25 @@ def _llm_tool_llm():
     return next(s for s in BUILDABLE if s.name == "llm_tool_llm")
 
 
-def _one_payload_changed(tmp_path, node_id="s2"):
-    """The corpus rendering with one TOOL payload value altered."""
+def _one_payload_changed(tmp_path, text="Look up the order status."):
+    """The corpus rendering with one DECLARED payload value altered."""
     scenario = _llm_tool_llm()
     source = scenario.rendering("openinference")
     path = tmp_path / "openinference.jsonl"
     path.write_text(
-        source.read_text(encoding="utf-8").replace("shipped", "delayed"),
+        source.read_text(encoding="utf-8").replace(text, "Look up something else."),
         encoding="utf-8",
     )
-    del node_id
     return scenario, Rendering(scenario=scenario, dialect="openinference", path=path)
 
 
 def test_claim_one_still_fails_on_a_changed_payload_that_is_declared(tmp_path):
-    # The point of the narrow form. `s2.outputs` IS declared dialect-varying
-    # (for `mime`), and its value must still be pinned: a declaration sets a
-    # field aside for the CROSS-DIALECT claim only.
+    # The whole point of the narrow form. `s1.inputs` IS declared
+    # dialect-varying, and its value must still be pinned: a declaration sets a
+    # field aside for the CROSS-DIALECT claim only. Under the broad form this
+    # assertion would be unwritable.
     scenario, changed = _one_payload_changed(tmp_path)
-    assert "s2.outputs" in scenario.drop_payloads
+    assert "value" in scenario.drop_payloads["s1.inputs"]
     document = to_document(built(changed))
     assert canonical(document, scenario.erase) != scenario.expected_graph_for(
         "openinference"
@@ -332,14 +334,18 @@ def test_the_cross_dialect_form_sets_aside_exactly_what_was_declared(tmp_path):
     dropped = canonical(
         to_document(built(changed)), scenario.erase, scenario.drop_payloads
     )
-    # `mime` is declared on s2.outputs and is gone; `value` is not declared
-    # there and survives -- which is what keeps the byte-for-byte tool-payload
-    # agreement a tested claim rather than an erased one.
-    assert "mime" in _payload_of(plain, "s2", "outputs")
-    assert "mime" not in _payload_of(dropped, "s2", "outputs")
-    assert "value" in _payload_of(dropped, "s2", "outputs")
-    # On s1 both are declared, and both are gone.
-    assert _payload_of(dropped, "s1", "inputs") == {"state": "present"}
+    # s0.inputs declares both, and both are gone.
+    assert _payload_of(dropped, "s0", "inputs") == {"state": "present"}
+    # s1.inputs declares `value` alone, so `mime` survives -- the declaration
+    # is exactly the disagreement and no wider.
+    assert "value" not in _payload_of(dropped, "s1", "inputs")
+    assert _payload_of(dropped, "s1", "inputs")["mime"] == "application/json"
+    # The TOOL payloads are declared nowhere, so nothing is set aside there.
+    # That is the byte-for-byte agreement between the two captured traces
+    # staying a tested claim rather than an erased one.
+    assert "s2.inputs" not in scenario.drop_payloads
+    assert _payload_of(dropped, "s2", "inputs") == _payload_of(plain, "s2", "inputs")
+    assert "value" in _payload_of(dropped, "s2", "inputs")
 
 
 def test_an_override_restores_a_dialect_s_own_expectation(tmp_path):

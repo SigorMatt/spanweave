@@ -132,7 +132,7 @@ DIALECTS = ("openinference",)
 #: is reviewable, a silent one rots. **Empty is the only correct long-term
 #: value.** `TASKS.md` 2.13 flips `DIALECTS` and deletes this. Never add an
 #: entry to make a test green.
-DIALECTS_PENDING_CORPUS_COVERAGE: tuple[str, ...] = ()
+DIALECTS_PENDING_CORPUS_COVERAGE: tuple[str, ...] = ("otel_genai",)
 
 
 @dataclass(frozen=True)

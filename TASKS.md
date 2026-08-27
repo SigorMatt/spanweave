@@ -1584,13 +1584,18 @@ below:
 > adapter shared the error (`FIXTURES.md` §5.1). Only real instrumentor output
 > disagreed. Do not repeat it.
 
-> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7 done. 2.8 halted on the
-> payload-value collision, **decision received**: `FIXTURES.md` §4 is corrected
-> first as its own statement of what equivalence claims, then resolution **C**
-> (per-scenario dialect-varying payload declarations) on top, in its **narrow**
-> form — see 2.8. A and B are ruled out, with reasons, at 2.8. Read the three
-> handoff items at the top of this section before the first unchecked box;
-> **this intro is now four blocks and roughly 70 lines, which is already past
+> **WHERE THIS SESSION STOPPED (2026-08-27).** 2.7 and 2.8 done. **2.9 is
+> HALTED with its box unchecked and `make conformance` red** — 4 failures, one
+> cause, written up at 2.9. The adapter is written and registered and the
+> central claim holds: `llm_tool_llm` is **byte-identical** across both
+> dialects, and the captured GenAI trace builds cleanly with the §4.2.1 `data`
+> edge from real telemetry. The four failures are `Node.name` on the two
+> scenarios that lack the `erase: ["name"]` declaration `llm_tool_llm` already
+> has; fixing it edits an `expected/graph.json`, which `AGENT.md` forbids
+> without a human. Two proposals are at 2.9, with a recommendation. **Do not
+> start 2.10 before that decision** — and do not "fix" the red suite by
+> relaxing the comparison. Read the three handoff items at the top of this
+> section before the first unchecked box; **this intro is four blocks and past
 > what an outline-first read survives — split it before adding a fifth.**
 
 - [x] **2.5 GenAI capture backend — written, not run.** `[2a]` Add a third
@@ -2274,6 +2279,181 @@ below:
   *Artifact for the decision:* `make conformance` output, and for any
   mismatch, the canonical-graph diff plus the captured lines that do or do not
   carry the contested attribute.
+
+  > **HALT (2026-08-27). The adapter is written and registered. The central
+  > claim holds on the reference scenario; one bookkeeping gap the corpus
+  > already decided elsewhere blocks the other two. Box left unchecked: 2.9's
+  > done-when requires `make conformance` green and it is not.**
+  >
+  > ### `make conformance`
+  >
+  > ```
+  > conformance dialects: declared=['openinference'] adapter-backed=['openinference', 'otel_genai']
+  > conformance skipping nothing: every rendering has an adapter
+  > ...
+  > FAILED test_the_rendering_produces_its_scenario_s_canonical_graph[parallel_tool_calls[otel_genai]]
+  > FAILED test_the_rendering_produces_its_scenario_s_canonical_graph[tool_call_history_echo[otel_genai]]
+  > FAILED test_every_dialect_of_a_scenario_produces_the_same_canonical_graph[parallel_tool_calls]
+  > FAILED test_every_dialect_of_a_scenario_produces_the_same_canonical_graph[tool_call_history_echo]
+  > 4 failed, 243 passed
+  > ```
+  >
+  > Everything else is green: `ruff`, `mypy --strict`, every gate, and all 503
+  > tests outside `test_conformance.py` (746 passed / 4 failed overall).
+  >
+  > ### The graphs match — this is the diff-that-isn't
+  >
+  > **`llm_tool_llm`, the reference scenario, is byte-identical across the two
+  > dialects.** Not "equal after allowances": the cross-dialect diff is empty.
+  >
+  > ```
+  > llm_tool_llm             CLAIM 1: IDENTICAL     CROSS-DIALECT: IDENTICAL
+  > parallel_tool_calls      CLAIM 1: 8 lines, all: name
+  > tool_call_history_echo   CLAIM 1: 6 lines, all: name
+  > ```
+  >
+  > And the **captured** GenAI trace from 2.6 builds cleanly, auto-detected,
+  > with the same seven edges the hand-authored reference scenario expects:
+  >
+  > ```
+  > adapter: otel_genai
+  > nodes:   agent(None), llm(openai/gpt-oss-120b), tool(get_weather), llm(openai/gpt-oss-120b)
+  > edges:   call_result/explicit/tool_call_id
+  >          data/explicit/'tool_call_id in tool-result message'
+  >          parent/explicit ×3, temporal/derived ×2
+  > ```
+  >
+  > Both captures detect to exactly one adapter each — no tie, no fallback.
+  >
+  > ### `SPEC.md` §4.2.1 is **not** at risk, and this is evidence about `EdgeKind.data`
+  >
+  > The outcome 2.9 was written to fear does not occur. OTel GenAI **does**
+  > carry a message-granularity producer→consumer declaration:
+  > `gen_ai.input.messages` on the follow-up turn holds
+  > `{"role":"tool","parts":[{"type":"tool_call_response","id":"chatcmpl-tool-ba26764988bf8aa9",…}]}`,
+  > and that `id` is the tool call id. So `llm_tool_llm`'s `s2 → s3` `data`
+  > edge is derivable **explicitly** in dialect two, and the edge above was
+  > produced from **real telemetry**, not from a fixture.
+  >
+  > Recorded as **evidence that `EdgeKind.data` generalizes past the dialect it
+  > was found in** — two independent conventions, written by different people,
+  > both declare this relation, and both resolve to the same span-level edge
+  > with the same warrant and the same basis. It bears on
+  > `OPEN_QUESTIONS.md` §7 and `PREDICTIONS.md` P3 and **resolves neither**;
+  > `PREDICTIONS.md` is not the agent's to edit in any phase.
+  >
+  > Two dialects also disagree about the *mechanism*, which is the more
+  > interesting half. OpenInference separates "what the model said" from "what
+  > it was shown" by **attribute prefix** (`llm.output_messages.` vs
+  > `llm.input_messages.`); GenAI's two lists have the same shape and the
+  > discriminator is a part `type` **inside the payload**
+  > (`tool_call` vs `tool_call_response`). `SPEC.md` §4.4's rule — a requester
+  > id comes only from what the span itself produced — survived unchanged, but
+  > it had to be re-implemented against a different mechanism to do so. That is
+  > the rule being general rather than lucky.
+  >
+  > ### The one mismatch: `Node.name`, and it is bookkeeping the corpus already settled
+  >
+  > All four failures have a single cause. The GenAI convention names spans
+  > `{operation} {target}`, so the renderings carry `chat demo-model`,
+  > `execute_tool lookup`, `invoke_agent`; the expected graphs carry
+  > `llm.plan`, `tool.lookup`, `agent.run` from the OpenInference specimens.
+  > **Nothing else differs** — not a kind, an id, an operation, a timestamp, a
+  > status, a payload state, a usage figure, an edge, or a diagnostic.
+  >
+  > `llm_tool_llm` does not fail because it **already declares `name`
+  > dialect-varying**, decided by a human in Phase 1 with the rationale written
+  > into its `scenario.md`: *"dialects disagree about operation naming
+  > conventions and that disagreement is not interesting."*
+  > `tool_call_history_echo` and `parallel_tool_calls` simply predate the
+  > existence of a second dialect, so nobody had a reason to declare it.
+  >
+  > **Not done here, and deliberately.** The fix is a `comparison.json` with
+  > `erase: ["name"]` for the two scenarios **plus deleting the `name` key from
+  > their `expected/graph.json`** — because an erasure is currently baked into
+  > the expectation file rather than applied to both sides. `AGENT.md` forbids
+  > editing an `expected/graph.json` or relaxing a comparison to make a
+  > second-dialect rendering pass, and it forbids it precisely so that a case
+  > this obvious still gets looked at. Two proposals:
+  >
+  > 1. **Do exactly what `llm_tool_llm` does.** Add `comparison.json` with
+  >    `erase: ["name"]` to both, delete `name` from both `expected/graph.json`,
+  >    and add the cross-dialect note to both `scenario.md`. Smallest, and
+  >    consistent with a decision already taken.
+  > 2. **Apply `erase` to both sides at comparison time**, so a declared
+  >    erasure never requires editing a fixture. `expected/graph.json` keeps
+  >    `name` and `canonical()` strips it from the expectation as well as from
+  >    the built graph. Strictly better as a mechanism — it is the same
+  >    "baked-in erasure" property that made the payload question look like it
+  >    cost 5/8 when the narrow form costs 0 — but it touches how **every**
+  >    scenario is compared, so it is a bigger change than the one that is
+  >    blocking, and it should be argued on its own merits rather than adopted
+  >    to clear a halt.
+  >
+  > **(1) is the recommendation**; (2) is worth doing afterwards, on purpose.
+  >
+  > ### The adapter's one interpretive act, flagged for review
+  >
+  > The dialect emits **no content-type attribute anywhere** — no counterpart
+  > to `input.mime_type`. The adapter nonetheless reports `application/json`
+  > for `gen_ai.input.messages`, `gen_ai.output.messages`,
+  > `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result`, and parses
+  > them, on the grounds that the convention **defines** those four as
+  > structured values which the OTLP exporter serializes to strings because
+  > span attributes cannot hold nested data. The argument is that this
+  > transcribes a fact the *dialect* states about itself — the same class of
+  > act as mapping `gen_ai.operation.name == "chat"` to `NodeKind.LLM` — rather
+  > than guessing about an individual span.
+  >
+  > It is written up in the module docstring so it can be argued with, and the
+  > alternative was measured rather than asserted: reporting `mime=None` and
+  > leaving `value` as the source string would make the two dialects' **tool**
+  > payloads disagree at model level, when the two captured traces show
+  > `gen_ai.tool.call.arguments` and `input.value` agreeing **byte for byte**.
+  > That would have recorded a serialization artifact as a finding. The
+  > decision is visible in the corpus rather than only in code: the tool
+  > payloads are declared dialect-varying **nowhere**, and
+  > `test_no_declaration_outlives_the_disagreement_that_earned_it` is what
+  > deleted the `mime` declarations 2.8 had put on them.
+  >
+  > ### What the first real run changed about 2.8's declarations
+  >
+  > 2.8 declared from the capture; 2.9 narrowed from the run. `mime` turned out
+  > to agree on every `llm` payload and to differ **only** on the `agent` span
+  > (`text/plain` for a bare string against a message array), and the `tool`
+  > payloads agree entirely. The staleness test was also tightened from
+  > per-selector to **per-field**, so a `mime` riding along beside a genuinely
+  > varying `value` no longer passes untested. Net: 12 declared selector-fields
+  > became 11 across three scenarios, and two selectors disappeared. The
+  > mechanism narrowing itself on contact with evidence is the mechanism
+  > working.
+  >
+  > ### `Edge.basis` — the earlier concern, at its real size
+  >
+  > 2.8 withdrew most of this and the run confirms it: `PARENT_BASIS`,
+  > `CALL_BASIS`, `DATA_BASIS` and the temporal bases all live in
+  > `spanweave/build.py`, so both dialects emit identical basis strings without
+  > coordinating. Only `SpanLink.basis` and `DeclaredDataEdge.basis` come from
+  > an adapter. Neither is exercised by these three scenarios, so **nothing is
+  > blocked** — but it stays a genuine spec gap of the O1 kind (the model
+  > permits an answer; no document commits to one), and it becomes live at
+  > **2.11** (`span_links`). Proposal, not adopted: `SPEC.md` should say that
+  > `basis` is cross-dialect vocabulary — two adapters describing the same
+  > relation must emit the same string — and name the strings the library
+  > itself uses, so a third dialect has something to conform to rather than a
+  > convention to guess at. Brought here as 2.9 was asked to; deciding it is a
+  > spec conversation.
+  >
+  > ### Also done here, per `ADAPTERS.md` §5.4
+  >
+  > `tests/test_otel_genai.py`, 33 tests for the quirks the shared corpus
+  > cannot cover — chiefly that a `tool_call` part in the **input** list must
+  > not pair, asserted directly and again against the captured trace (exactly
+  > one requester and one fulfiller across four real spans).
+  >
+  > `DIALECTS_PENDING_CORPUS_COVERAGE` now names `otel_genai`, as 2.7's record
+  > said 2.9 must. 2.13 deletes it along with the rest of the transitional
+  > mechanism.
 
 - [ ] **2.10 Dialect-two renderings — the degenerate set.** `[2a]` **NEVER
   CUT** (`ROADMAP.md`: this is where dialect conventions actually diverge and
