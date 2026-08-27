@@ -62,7 +62,6 @@
         }
       },
       "kind": "llm",
-      "name": "llm.plan",
       "operation": "demo-model",
       "outputs": {
         "mime": "application/json",
@@ -101,7 +100,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.lookup",
       "operation": "lookup",
       "outputs": {
         "mime": "application/json",
@@ -151,7 +149,6 @@
         }
       },
       "kind": "llm",
-      "name": "llm.answer",
       "operation": "demo-model",
       "outputs": {
         "mime": "application/json",

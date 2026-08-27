@@ -113,7 +113,17 @@ old rendering had quietly asserted about the dialect.
   `s0`–`s3` (`FIXTURES.md` §4.1).
 - `Node.name` is dialect-varying and erased by `canonical()`; dialects disagree
   about operation naming conventions and that disagreement is not interesting.
-- `Payload.raw` is erased: the parsed `value` must agree, the encoding need not.
+- `Payload.raw` is erased: the *encoding* of a payload is dialect-specific.
+- `Payload.value` on the `llm` and `agent` spans, and `mime` on the `agent`
+  span, are **also** dialect-varying, declared in `expected/comparison.json`
+  (`FIXTURES.md` §4.4). This line used to say the parsed `value` must agree
+  across dialects. It does not, and `SPEC.md` §3.3 never said it would:
+  OpenInference records an LLM span's request envelope, OTel GenAI records the
+  normalized conversation, and one strictly contains the other plus more.
+- The **tool** payloads are declared nowhere and stay fully compared. The two
+  captured traces carry identical bytes there
+  (`gen_ai.tool.call.arguments` == `input.value`), and that agreement is the
+  strongest cross-dialect evidence the corpus has.
 
 ## Dialects
 

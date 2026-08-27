@@ -90,3 +90,21 @@ HALT, not an edit).
    scenario already declares `name` dialect-varying, so it does not bite here —
    but `tool_call_history_echo` and `parallel_tool_calls` do not, and it bites
    there.
+
+## The mime this dialect never wrote
+
+`Payload.mime` is `application/json` on every payload here, and **the dialect
+emits no content-type attribute at all** — there is no counterpart to
+OpenInference's `input.mime_type`. The `otel_genai` adapter reports it because
+the convention *defines* `gen_ai.input.messages`, `gen_ai.output.messages`,
+`gen_ai.tool.call.arguments` and `gen_ai.tool.call.result` as structured
+values; the OTLP exporter serializes them to JSON strings only because span
+attributes cannot hold nested data. `ADAPTERS.md` §3 is the rule and its three
+conditions; this note is the third one being met.
+
+It is why `mime` is **not** declared dialect-varying on the `llm` payloads —
+both dialects say `application/json` there — and why the `tool` payloads are
+not declared at all. The alternative, `mime=None` with `value` left as the
+source string, would have made tool payloads that agree byte for byte in the
+two captured traces disagree at model level, and the corpus would have recorded
+a serialization artifact as a finding.

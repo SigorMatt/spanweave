@@ -74,7 +74,6 @@
         "value": "Check both suppliers."
       },
       "kind": "agent",
-      "name": "agent.run",
       "operation": null,
       "outputs": {
         "mime": null,
@@ -105,7 +104,6 @@
         }
       },
       "kind": "llm",
-      "name": "llm.plan",
       "operation": "demo-model",
       "outputs": {
         "mime": "application/json",
@@ -150,7 +148,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.alpha",
       "operation": "alpha",
       "outputs": {
         "mime": null,
@@ -172,7 +169,6 @@
         "value": null
       },
       "kind": "tool",
-      "name": "tool.beta",
       "operation": "beta",
       "outputs": {
         "mime": null,

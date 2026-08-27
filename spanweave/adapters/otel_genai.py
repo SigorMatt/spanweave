@@ -33,21 +33,21 @@ interesting part:
   exactly what ``received_call_ids`` is for. Nothing here compares an output
   string to an input string.
 
-**The one interpretive act, called out so it can be argued with.** The dialect
-emits no content-type attribute anywhere -- no counterpart to
-``input.mime_type``. But the convention *defines* ``gen_ai.input.messages``,
-``gen_ai.output.messages``, ``gen_ai.tool.call.arguments`` and
-``gen_ai.tool.call.result`` as structured values, which the OTLP exporter
-serializes to JSON strings because span attributes cannot hold nested data. So
-this adapter reports ``application/json`` for those four keys and parses them.
-That is transcribing a fact the *dialect* states about itself, in the same
-class as mapping ``gen_ai.operation.name == "chat"`` to ``NodeKind.LLM``, and
-not a guess about an individual span. If one fails to parse the outcome is the
-honest one -- ``present``, ``value=None``, ``raw`` kept, and a
-``payload_parse_failed`` diagnostic. The alternative, reporting ``mime=None``
-and leaving ``value`` as the source string, would make the two dialects'
-**tool** payloads disagree at model level when the captured traces show them
-agreeing byte for byte -- recording a serialization artifact as a finding.
+**A mime the dialect defines but does not emit** (``ADAPTERS.md`` §3, which is
+where the rule lives -- this is its worked example, not its only statement).
+This dialect carries no content-type attribute anywhere. But the convention
+*defines* ``gen_ai.input.messages``, ``gen_ai.output.messages``,
+``gen_ai.tool.call.arguments`` and ``gen_ai.tool.call.result`` as structured
+values, which the OTLP exporter serializes to JSON strings because span
+attributes cannot hold nested data. So this adapter reports
+``application/json`` for those four keys and parses them, and a parse failure
+stays honest -- ``present``, ``value=None``, ``raw`` kept, and a
+``payload_parse_failed`` diagnostic.
+
+The third condition of that rule is that a reader of the **fixture** can find
+this out without reading the adapter, so it is also stated in the affected
+scenarios' cross-dialect notes and in the ``reason`` of every
+``expected/comparison.json`` that declares a payload dialect-varying.
 """
 
 from __future__ import annotations

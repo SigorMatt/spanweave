@@ -77,6 +77,23 @@ message-list keys this library does not normalize, including the echoed ids.
 No `unpaired_call`, no `unpaired_result`: `call_a` was requested once and
 fulfilled once, and the echo is neither.
 
+## Cross-dialect notes
+
+- Node ids: all dialect renderings of this scenario use the same span id
+  strings (`FIXTURES.md` §4.1).
+- `Node.name` is dialect-varying and erased by `canonical()`, declared in
+  `expected/comparison.json`. The OTel GenAI convention names spans
+  `{operation} {target}` — `chat demo-model`, `execute_tool lookup` — and
+  OpenInference instrumentors name them after the framework call. Dialects
+  disagree about operation naming conventions and that disagreement is not
+  interesting; `llm_tool_llm` said so at seed time and this scenario simply
+  predates the mechanism.
+- Payloads on the `llm` and `agent` spans are declared dialect-varying for
+  `value` (`FIXTURES.md` §4.4): OpenInference records an LLM span's request
+  envelope and the whole provider response, OTel GenAI records the normalized
+  conversation, and neither is a re-encoding of the other. The **tool**
+  payloads are declared nowhere — they agree, which is the point.
+
 ## Dialects
 
 - [x] `openinference` — Phase 1, rendered from an observed capture

@@ -62,6 +62,18 @@ requested at once.
 - The tool spans have **distinct** start times on purpose. Tie-breaking is
   `parallel_tools`' subject, and entangling the two would make a failure in
   either one ambiguous.
+- `Node.name` is dialect-varying and erased by `canonical()`, declared in
+  `expected/comparison.json`. The OTel GenAI convention names spans
+  `{operation} {target}` — `chat demo-model`, `execute_tool lookup` — and
+  OpenInference instrumentors name them after the framework call. Dialects
+  disagree about operation naming conventions and that disagreement is not
+  interesting; `llm_tool_llm` said so at seed time and this scenario simply
+  predates the mechanism.
+- Payloads on the `llm` and `agent` spans are declared dialect-varying for
+  `value` (`FIXTURES.md` §4.4): OpenInference records an LLM span's request
+  envelope and the whole provider response, OTel GenAI records the normalized
+  conversation, and neither is a re-encoding of the other. The **tool**
+  payloads are declared nowhere — they agree, which is the point.
 
 ## Dialects
 

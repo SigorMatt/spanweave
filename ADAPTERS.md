@@ -91,6 +91,33 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 - Preserve `raw` always.
 - Mark `redacted` / `truncated` **only** when the source signals it. Never
   redact or truncate on your own.
+- **A mime the dialect defines but does not emit.** Some dialects carry no
+  content-type attribute at all, because their convention *defines* the
+  structure of each attribute instead of restating it per span. You **may**
+  report that mime and parse accordingly — it is transcribing a fact the
+  dialect states about itself, the same class of act as mapping a span-kind
+  enum onto a `NodeKind`, and not a guess about an individual span. Three
+  conditions, all required:
+  1. **The convention states the structure**, normatively, for that named
+     attribute. A convention that says "any" does not qualify, and neither
+     does "this instrumentor happens to emit JSON here."
+  2. **A parse failure stays honest** — `state` remains `present`, `value` is
+     `None`, `raw` is kept, and `payload_parse_failed` is emitted. If you are
+     tempted to suppress that diagnostic, condition 1 was not met.
+  3. **You say so where a reader of the *fixture* will find it**, not only in
+     your adapter's docstring: the scenario's cross-dialect notes and, if the
+     fixture declares payloads dialect-varying, the `reason` in its
+     `expected/comparison.json` (`FIXTURES.md` §4.4). Someone comparing two
+     renderings must be able to see why one of them has a mime its dialect
+     never wrote, without reading the adapter to find out.
+
+  The alternative — reporting `mime=None` and leaving `value` as the source
+  string — is not the conservative choice it looks like. It makes a payload
+  that agrees with another dialect **byte for byte** disagree at model level,
+  and the corpus then records a serialization artifact as a finding about the
+  model. That is the worse error, because it is the one that looks like
+  evidence. `spanweave/adapters/otel_genai.py` is the worked example, and the
+  measurement behind it is at `TASKS.md` 2.9.
 
 **Usage** — token counts only; no prices, ever (`SPEC.md` §9).
 
