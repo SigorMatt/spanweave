@@ -46,6 +46,10 @@ conformance:
 # Review and redact the output, write its provenance file, THEN commit it to
 # fixtures/captured/ (FIXTURES.md section 6).
 # ARGS passes flags through: make capture ARGS="--backend openai --name x"
+# ARGS="--backend genai --shape workflow" captures the second shape (TASKS.md
+# 2.15): a workflow of two agent legs, the second linked to the first, so a real
+# GenAI trace contains an invoke_workflow span and an EdgeKind.link. It is NOT
+# half of 2.6's matched pair and gets its own provenance file.
 # ARGS="--fleet 14" captures the scratch fleet for TASKS.md 2.2 instead: many
 # deliberately unalike runs into capture/_scratch/fleet/, for the Phase 2b
 # adversarial consumer. Scratch -- gitignored, no provenance, NEVER promoted

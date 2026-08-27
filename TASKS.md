@@ -3511,6 +3511,177 @@ below:
   > - [x] Every declaration recorded with what it costs. Nothing cut.
   > - [x] `make check` and `make conformance` green.
 
+## Phase 2 follow-up — post-exit  *(Phase 2 is tagged `phase-2-exit`)*
+
+Phase 2 is complete, tagged and merged. This section holds only work that
+2.14's exit record **named as outstanding**, and that is not Phase 3: it
+confirms nothing, packages nothing, and does not touch the Phase 3 shape gate.
+Starting Phase 3 is still a separate decision.
+
+- [x] **2.15 Capture harness — the workflow shape.** `[2a]`
+  **HALT: the capture itself is human-run and was not run here.**
+
+  2.14 named the highest-value outstanding action, and it is a **capture, not a
+  decision**. Three of the four scenarios declared unrenderable in `otel_genai`
+  are one missing kind: nothing in `gen_ai.operation.name` maps to `chain`,
+  because the one candidate, `invoke_workflow`, is described by the convention
+  only as "Invoke GenAI workflow" — mapping it to "a composite step with no
+  more specific kind" is a judgement, not a name match, and `AGENT.md` says
+  reaching for an inference is the signal to stop. One captured GenAI trace
+  containing an `invoke_workflow` span retires all three declarations, and one
+  of the three, `span_links`, carries the corpus's **only** `EdgeKind.link`.
+
+  **Done-when:** `make capture ARGS="--backend genai --shape workflow"` can
+  produce such a trace, is verified against stub spans, and refuses to
+  certify itself.
+
+  > **What was built.** A capture **shape** (`capture/backends.py`,
+  > `CaptureShape`), which is a new axis and deliberately not a new backend: a
+  > backend chooses the SDK and the instrumentor, a shape chooses what the run
+  > *does*. They are separate because the reference conversation must not move
+  > — 2.6's matched pair is matched on same model, same prompt, same tool
+  > inventory, differing only in the instrumentor, so anything that varies the
+  > conversation has to be a different capture rather than a change to that one.
+  > `reference` is the default and unchanged; `workflow` is scoped to the
+  > `genai` backend and refuses the others, because emitting a GenAI operation
+  > into an OpenInference trace would produce a mixed-dialect file no adapter
+  > reads honestly.
+  >
+  > ```
+  > invoke_workflow paris.brief          <- emitted by capture/backends.py
+  > ├── invoke_agent agent.run           <- emitted by capture/backends.py
+  > │   ├── chat <model>                 <- the instrumentor
+  > │   ├── execute_tool get_weather     <- emitted by capture/backends.py
+  > │   └── chat <model>                 <- the instrumentor
+  > └── invoke_agent agent.run           <- emitted here; LINKS to the first leg
+  >     ├── chat <model>
+  >     ├── execute_tool get_population
+  >     └── chat <model>
+  > ```
+  >
+  > **Where the `invoke_workflow` span comes from — the disclosure asked for,
+  > and the answer that was expected.** From `capture/backends.py`, not from
+  > the instrumentor. An instrumentor wraps **SDK calls** and a workflow is not
+  > one, so nothing would record it; only the `chat` spans are the
+  > instrumentor's, exactly as the existing two provenance files already say of
+  > `invoke_agent` and `execute_tool`. What the conventions supply is the
+  > **vocabulary**: `invoke_workflow` is one of the nine normative
+  > `gen_ai.operation.name` values and `gen_ai.workflow.name` is a defined
+  > attribute, so the span is **convention-named and harness-emitted** — the
+  > same standing `execute_tool` has, and one step further from `invoke_agent`,
+  > whose attributes are a judgement call. Emitting it is transcription.
+  > Nothing else is attached: the conventions describe no message content for a
+  > workflow, and inventing some would be the judgement this shape exists to
+  > avoid. The resulting node has `absent` payloads, which is the honest state.
+  >
+  > **Which span carries the link, and whose link it is.** The second leg's
+  > `invoke_agent` span, naming the first leg's. OTel span links are a
+  > record-level field of the **span data model** — identical in both dialects,
+  > read by both adapters, and convention-defined in that sense; it is why
+  > `span_links` says the blocker there was never the links. But **which** spans
+  > are linked, and what the link means, is defined by neither GenAI nor
+  > OpenInference. That part is **ours**, and it says so in this harness's own
+  > namespace (`spanweave.capture.link = previous_workflow_leg`) rather than
+  > under a `gen_ai.` name it has no right to — the same posture as
+  > `spanweave.capture.note` on the fleet's spans. The relation asserted is the
+  > weakest one true of the run: *this leg ran after that one, inside this
+  > workflow*. Not "this leg consumed that leg's output": the legs are
+  > independent conversations, and a link claiming otherwise would be a small
+  > fabrication in a file whose entire value is containing only what happened.
+  >
+  > **The link is in-trace only, and that is a stated limit rather than an
+  > oversight.** `span_links` also carries a link into *another* trace.
+  > Producing one here would mean naming a span in a trace this run did not
+  > produce, which is invention. Whoever renders that scenario from this capture
+  > must say which half the capture shows and which half remains hand-authored.
+  >
+  > **Provenance: its own, and not shared with the matched pair.** Asked
+  > explicitly rather than assumed, and the answer is its own. The pair
+  > statement in `genai_tool_call.provenance.md` and
+  > `openai_tool_call.provenance.md` claims *same model, same prompt, same tool
+  > inventory, differing only in the instrumentor*. This shape has different
+  > prompts, a different tool inventory and a different span topology, and no
+  > twin — there is no OpenInference capture it differs from only by
+  > instrumentor. Filing it under the pair's provenance would make that file's
+  > central claim false, which is the one thing a provenance file may never be.
+  > So: `genai_workflow.jsonl` + `genai_workflow.provenance.md`, and the harness
+  > **refuses to print the pair sentence** for any non-reference shape
+  > (`CaptureShape.matched_pair`) — printing it would be an instruction to write
+  > something untrue. It prints instead the sentence saying which capture this
+  > one is *not*.
+  >
+  > **Verification.** The self-checklist the harness already printed gained two
+  > lines, appended to the backend's three and answered **against the records it
+  > just wrote**, never against what the run intended — the same rule as the
+  > fleet's coverage table, for the same reason: a shape steers a run, it does
+  > not command one. Is there a span reporting
+  > `gen_ai.operation.name=invoke_workflow`? Is there a link joining two spans
+  > **of this trace**? A failure exits non-zero and the trace is still written,
+  > because it is the evidence for why. A link whose target is not in the file
+  > is reported as such rather than counted: it is a valid link — `link` is the
+  > one kind allowed to leave the trace — and it is not the thing this shape is
+  > for.
+  >
+  > All of it verified against stub spans as 2.5 was, with no credential and no
+  > `opentelemetry` import in the test path. `link_to` is looked up through the
+  > module at call time so the run can be driven with a stub link factory; the
+  > real one builds a genuine `opentelemetry.trace.Link`, because unlike an
+  > exported span that object is handed **to** the SDK and a plausible stand-in
+  > would fail in the one place it must not. 124 tests in `tests/test_capture.py`
+  > (was 108). `make check` and `make conformance` green.
+  >
+  > **The reference capture is unchanged, and that is tested, not asserted.**
+  > `converse` gained `links` and `on_agent_span`, both defaulting to nothing.
+  > `links=()` is what the OTel SDK itself defaults to, so passing it changes no
+  > exported byte, and the byte-for-byte OpenInference assertion still holds.
+  >
+  > **Deliberately NOT done.**
+  > - **The three scenarios were not pre-rendered.** They are rendered from what
+  >   the capture actually shows, after it exists — the inverted order 2a used
+  >   throughout, and the reason Phase 1 lost four fixtures (`FIXTURES.md` §5.1).
+  > - **`invoke_workflow` was not mapped.** It remains `UNMAPPED_BY_DECISION`.
+  >   Mapping it to `NodeKind.chain` is a model question and a halt point, and
+  >   the capture is the evidence that would inform it, not a substitute for it.
+  >   `tests/test_capture.py` pins what a human would see today: the workflow
+  >   span builds to `unknown` plus a diagnostic, beside a real `link` edge.
+  > - **No coverage declaration was touched**, no `expected/graph.json`, and
+  >   nothing under `spanweave/`. `PREDICTIONS.md` untouched, as in every phase.
+  > - **The capture was not run.** It needs a credential the agent does not have
+  >   and must not have (`ENVIRONMENT.md`), and `AGENT.md`'s fabrication halt
+  >   point applies in full: no file in `fixtures/captured/` was created, and
+  >   nothing here is described as captured.
+  >
+  > **What a human does next**, in order:
+  > 1. `make capture ARGS="--backend genai --shape workflow"`, with
+  >    `NEBIUS_API_KEY` and `NEBIUS_BASE_URL` set. Read the checklist it prints;
+  >    a non-zero exit means a shape is missing, and the fix is to re-run, never
+  >    to edit an exported span.
+  > 2. Read, redact, and promote per `FIXTURES.md` §6, writing
+  >    `genai_workflow.provenance.md` from the template the harness prints —
+  >    including both disclosures above, and **not** the matched-pair sentence.
+  > 3. *Then*, and only then, decide whether `invoke_workflow` maps to
+  >    `NodeKind.chain` (a halt point), and render the three scenarios from what
+  >    the file shows.
+  >
+  > **Noted, not acted on:** `fixtures/captured/README.md` still says the
+  > directory is "Currently empty — the first one lands at `TASKS.md` 1.9". Two
+  > fixtures have been there since 2.6. A stale claim in the one directory whose
+  > subject is provenance, left for the human whose directory it is.
+
+  ### Definition of done
+
+  - [x] The harness can emit a GenAI trace with an `invoke_workflow` span and a
+        span link, and says plainly which spans are the instrumentor's.
+  - [x] The link's carrier and ownership are stated in the harness, the README,
+        and the printed provenance template.
+  - [x] Verified against stub spans; self-checklist extended and exits non-zero
+        when either shape is missing.
+  - [x] Its own provenance file, argued rather than assumed; the pair sentence
+        suppressed for it.
+  - [x] Nothing pre-rendered, no model change, `make check` and
+        `make conformance` green.
+  - [ ] **The capture itself — human-run.** HALT.
+
 ## Phase 3 — Confirm, package, launch  *(provisional)*
 
 Bounded work only. Falsification happened in Phase 2; nothing open-ended sits

@@ -19,6 +19,7 @@ from capture.backends import ANTHROPIC, BACKENDS, GENAI, OPENAI
 from capture.exporter import JsonlSpanExporter, record_of
 from spanweave import diagnostics as codes
 from spanweave.adapters.openinference import OpenInferenceAdapter
+from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.build import build_graph
 from spanweave.model import AdapterInfo, NodeKind
 from spanweave.seam import CallRole
@@ -491,13 +492,18 @@ def test_without_the_harnesss_own_spans_there_would_be_no_pairing_at_all():
 class StubSpan:
     """Enough of an OTel span for the harness's own emitting code."""
 
-    def __init__(self, name, attributes):
+    def __init__(self, name, attributes, links=()):
         self.name = name
         self.attributes = dict(attributes)
+        self.links = tuple(links)
         self.exited_with = None
 
     def set_attribute(self, key, value):
         self.attributes[key] = value
+
+    def get_span_context(self):
+        """A span has to be able to name itself for another span to link to it."""
+        return SimpleNamespace(span_id=id(self), trace_id=0xB2)
 
 
 class StubTracer:
@@ -506,8 +512,8 @@ class StubTracer:
     def __init__(self):
         self.spans = []
 
-    def start_as_current_span(self, name, attributes=None):
-        span = StubSpan(name, attributes or {})
+    def start_as_current_span(self, name, attributes=None, links=()):
+        span = StubSpan(name, attributes or {}, links)
         self.spans.append(span)
 
         class _Scope:
@@ -1633,3 +1639,388 @@ def test_the_openinference_half_carries_the_matched_pair_statement_too():
     )
     assert "matched pair" in steps
     assert "dialect emitted: openinference" in steps
+
+
+# --------------------------------------------------------------------------
+# The workflow shape (TASKS.md 2.15)
+# --------------------------------------------------------------------------
+#
+# Same rule as everywhere else in this file: the model call is not tested and
+# should not be. What IS tested is everything that decides whether a
+# credentialed run is worth anything -- that the run emits an
+# `invoke_workflow` span and a span link at all, that they are read back off
+# the exported records rather than assumed, and that the provenance the
+# harness prints for this shape does not claim a matched pair it does not
+# have.
+
+
+def a_stub_link(span, note):
+    """`backends.link_to` without opentelemetry installed.
+
+    Matches what `exporter._links_of` reads -- `.context` and `.attributes` --
+    which is the same duck-typed surface the exporter is tested against. The
+    real `link_to` builds a genuine `opentelemetry.trace.Link`, because that
+    object is handed TO the SDK; this one only has to survive the exporter.
+    """
+    return (
+        SimpleNamespace(
+            context=span.get_span_context(),
+            attributes={backends.CAPTURE_LINK: note},
+        ),
+    )
+
+
+def a_genai_stub_backend(script):
+    """A stub backend that emits GenAI keys, as the workflow shape requires."""
+    backend, seen = a_stub_backend(script)
+    return replace(backend, dialect=backends.GENAI_DIALECT), seen
+
+
+def a_workflow_run(monkeypatch, script=None):
+    """Drive `converse_workflow` against stub spans and a stub backend."""
+    monkeypatch.setattr(backends, "link_to", a_stub_link)
+    call_one = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    call_two = backends.ToolCall("call_2", "get_population", {"city": "Paris"})
+    backend, seen = a_genai_stub_backend(
+        script
+        or [
+            ("assistant", [call_one]),
+            ("assistant", []),
+            ("assistant", [call_two]),
+            ("assistant", []),
+        ]
+    )
+    tracer = StubTracer()
+    called = backends.converse_workflow(backend, "stub-1", tracer)
+    return tracer, seen, called
+
+
+# -- what the run emits ----------------------------------------------------
+
+
+def test_the_workflow_run_wraps_two_agent_legs_in_one_workflow_span(monkeypatch):
+    tracer, seen, called = a_workflow_run(monkeypatch)
+    assert called is True
+    assert [span.name for span in tracer.spans] == [
+        "invoke_workflow paris.brief",
+        "invoke_agent agent.run",
+        "execute_tool get_weather",
+        "invoke_agent agent.run",
+        "execute_tool get_population",
+    ]
+    # Two legs, each a two-turn conversation, each with its own inventory.
+    assert [turn.messages[0]["content"] for turn in seen[::2]] == [
+        leg.prompt for leg in backends.WORKFLOW_LEGS
+    ]
+    assert [tuple(t.name for t in turn.tools) for turn in seen[::2]] == [
+        leg.tools for leg in backends.WORKFLOW_LEGS
+    ]
+
+
+def test_the_workflow_span_is_convention_named_and_carries_nothing_else(monkeypatch):
+    # The whole point of the shape: `invoke_workflow` is a real convention
+    # value, so emitting one is transcription. Both attributes are the
+    # conventions' own vocabulary, and nothing beyond them is attached --
+    # inventing message content for a workflow would be the judgement this
+    # shape exists to avoid making.
+    tracer, _, _ = a_workflow_run(monkeypatch)
+    workflow = tracer.spans[0]
+    assert workflow.attributes == {
+        "gen_ai.operation.name": "invoke_workflow",
+        "gen_ai.workflow.name": backends.WORKFLOW_NAME,
+    }
+    # And it is emitted HERE, not by an instrumentor: a stub backend that
+    # instruments nothing still produces it.
+    assert workflow.attributes == backends.genai_workflow_span_attributes(
+        backends.WORKFLOW_NAME
+    )
+
+
+def test_the_workflow_spans_speak_genai_and_not_openinference(monkeypatch):
+    # A mixed-dialect file is one no adapter reads honestly: detection would
+    # see both, one adapter would win, and whichever lost would take its
+    # spans' meaning with it.
+    tracer, _, _ = a_workflow_run(monkeypatch)
+    keys = {key for span in tracer.spans for key in span.attributes}
+    assert keys and all(
+        key.startswith("gen_ai.") or key.startswith("spanweave.capture.")
+        for key in keys
+    )
+    assert not any(key.startswith("openinference.") for key in keys)
+
+
+def test_the_second_leg_links_to_the_first_and_the_first_links_to_nothing(monkeypatch):
+    tracer, _, _ = a_workflow_run(monkeypatch)
+    workflow, first, _, second, _ = tracer.spans
+
+    assert first.links == ()
+    assert len(second.links) == 1
+    link = second.links[0]
+    assert link.context.span_id == first.get_span_context().span_id
+    # Not the workflow span, and not a tool span: the relation recorded is
+    # leg-to-previous-leg.
+    assert link.context.span_id != workflow.get_span_context().span_id
+    # And why it is there is written into the link, in this harness's own
+    # namespace -- neither dialect defines what a link between two of their
+    # spans means, so borrowing a `gen_ai.` name for it would be a claim the
+    # conventions do not support.
+    assert link.attributes == {"spanweave.capture.link": "previous_workflow_leg"}
+
+
+def test_the_workflow_shape_refuses_a_dialect_it_would_pollute():
+    # `invoke_workflow` is a GenAI operation. Emitting it into an
+    # OpenInference trace would produce a mixed-dialect file, so the refusal
+    # is structural rather than stylistic.
+    backend, _ = a_stub_backend([("assistant", [])])
+    with pytest.raises(backends.CaptureError) as failure:
+        backends.converse_workflow(backend, "stub-1", StubTracer())
+    assert "invoke_workflow" in str(failure.value)
+    assert "openinference" in str(failure.value)
+
+
+def test_the_reference_conversation_is_untouched_by_the_new_parameters():
+    # 2.6's matched pair is matched on the reference run not moving. `links`
+    # defaults to `()`, which is what the OTel SDK defaults to, so passing it
+    # changes no exported byte -- and `on_agent_span` defaults to None.
+    call = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    backend, seen = a_stub_backend([("assistant", [call]), ("assistant", [])])
+    tracer = StubTracer()
+    assert backends.converse(backend, "stub-1", tracer) is True
+    assert [span.name for span in tracer.spans] == ["agent.run", "tool.get_weather"]
+    assert all(span.links == () for span in tracer.spans)
+    assert seen[0].messages[0]["content"] == backends.QUESTION
+
+
+# -- the exported records, and the checklist read off them -----------------
+
+
+def a_workflow_capture():
+    """The records one `--shape workflow` run is meant to export.
+
+    Hand-assembled from the harness's own attribute functions, exactly as
+    `a_genai_capture` is: the point is to exercise the checklist and the
+    adapter against what the run would actually write, without a credential.
+    """
+    workflow, leg_one, leg_two = 0xA0, 0xA1, 0xA5
+    weather = backends.ToolCall("call_1", "get_weather", {"city": "Paris"})
+    people = backends.ToolCall("call_2", "get_population", {"city": "Paris"})
+    return records_of(
+        a_span(
+            span_id=workflow,
+            name=f"invoke_workflow {backends.WORKFLOW_NAME}",
+            start=1_000_000_000_000_000_000,
+            end=1_000_008_000_000_000_000,
+            attributes=backends.genai_workflow_span_attributes(backends.WORKFLOW_NAME),
+        ),
+        a_span(
+            span_id=leg_one,
+            parent=SimpleNamespace(span_id=workflow),
+            name="invoke_agent agent.run",
+            start=1_000_000_100_000_000_000,
+            end=1_000_003_000_000_000_000,
+            attributes=backends.genai_agent_span_attributes(
+                backends.WORKFLOW_LEGS[0].prompt
+            ),
+        ),
+        a_genai_llm_span(
+            span_id=0xA2,
+            inputs=[{"role": "user", "parts": [{"content": "q", "type": "text"}]}],
+            outputs=[TOOL_CALL_PART],
+        ),
+        a_span(
+            span_id=0xA3,
+            parent=SimpleNamespace(span_id=leg_one),
+            name="execute_tool get_weather",
+            start=1_000_001_200_000_000_000,
+            end=1_000_002_000_000_000_000,
+            attributes={
+                **backends.genai_tool_span_attributes(weather),
+                **backends.genai_tool_result_attributes({"celsius": 18}),
+            },
+        ),
+        a_genai_llm_span(
+            span_id=0xA4,
+            inputs=[TOOL_CALL_PART, TOOL_RESULT_PART],
+            outputs=[
+                {"role": "assistant", "parts": [{"content": "18C", "type": "text"}]}
+            ],
+        ),
+        a_span(
+            span_id=leg_two,
+            parent=SimpleNamespace(span_id=workflow),
+            name="invoke_agent agent.run",
+            start=1_000_004_000_000_000_000,
+            end=1_000_007_000_000_000_000,
+            attributes=backends.genai_agent_span_attributes(
+                backends.WORKFLOW_LEGS[1].prompt
+            ),
+            links=a_stub_link(
+                SimpleNamespace(
+                    get_span_context=lambda: SimpleNamespace(
+                        span_id=leg_one, trace_id=0xB2
+                    )
+                ),
+                backends.PREVIOUS_WORKFLOW_LEG,
+            ),
+        ),
+        a_span(
+            span_id=0xA6,
+            parent=SimpleNamespace(span_id=leg_two),
+            name="execute_tool get_population",
+            start=1_000_005_000_000_000_000,
+            end=1_000_006_000_000_000_000,
+            attributes={
+                **backends.genai_tool_span_attributes(people),
+                **backends.genai_tool_result_attributes({"people": 2_100_000}),
+            },
+        ),
+    )
+
+
+def test_the_workflow_checklist_answers_both_of_its_questions():
+    checks = backends.WORKFLOW.checklist(a_workflow_capture())
+    assert len(checks) == 2
+    assert all(check.ok for check in checks)
+    assert "invoke_workflow" in checks[0].question
+    assert backends.WORKFLOW_NAME in checks[0].detail
+    # The link is reported as src -> dst with its note, so a human confirming
+    # the claim against the file knows where to look.
+    assert "00000000000000a5 -> 00000000000000a1" in checks[1].detail
+    assert "previous_workflow_leg" in checks[1].detail
+
+
+def test_the_checklist_fails_when_no_workflow_span_was_written():
+    without = [
+        record
+        for record in a_workflow_capture()
+        if record["attributes"].get("gen_ai.operation.name") != "invoke_workflow"
+    ]
+    checks = backends.WORKFLOW.checklist(without)
+    assert not checks[0].ok and checks[1].ok
+    assert "no exported span carries" in checks[0].detail
+
+
+def test_the_checklist_fails_when_no_link_was_written():
+    without = [
+        {key: value for key, value in record.items() if key != "links"}
+        for record in a_workflow_capture()
+    ]
+    checks = backends.WORKFLOW.checklist(without)
+    assert checks[0].ok and not checks[1].ok
+    assert "no exported span carries a link" in checks[1].detail
+
+
+def test_a_link_that_leaves_this_trace_is_not_counted_as_an_in_trace_link():
+    # `EdgeKind.link` is the one kind allowed to point outside the trace, so a
+    # dangling link is not a defect -- but it also does not demonstrate the
+    # thing this shape is for, which is a link with a target in the file. The
+    # checklist says which it got rather than counting both the same.
+    records = a_workflow_capture()
+    linked = next(record for record in records if record.get("links"))
+    linked["links"][0]["span_id"] = "00000000000000f9"
+    checks = backends.WORKFLOW.checklist(records)
+    assert not checks[1].ok
+    assert "none naming a span in this file" in checks[1].detail
+
+
+def test_the_workflow_capture_builds_into_a_link_edge_and_an_unmapped_workflow():
+    # The strongest claim available without a key, and the one the shape
+    # exists to make checkable: what `--shape workflow` is designed to emit
+    # produces an `EdgeKind.link` in this dialect -- the kind no corpus
+    # scenario currently exercises in `otel_genai`.
+    #
+    # And the state of the workflow node TODAY: `unknown`, plus a diagnostic,
+    # because `invoke_workflow` is UNMAPPED_BY_DECISION. That is not a bug to
+    # fix here. It is exactly the observed output a human needs in order to
+    # decide whether `chain` is the right mapping -- a decision that is a
+    # model change and a halt point, taken after the capture exists and never
+    # by pre-rendering a scenario from a reading of the convention.
+    adapter = OtelGenAiAdapter()
+    graph = build_graph(
+        adapter.parse(a_workflow_capture()),
+        adapter=AdapterInfo(id=adapter.id, version=adapter.version),
+    )
+    links = graph.edges(kind="link")
+    assert len(links) == 1
+    assert links[0].warrant.value == "explicit"
+    assert links[0].basis == "span.link"
+    assert (links[0].src, links[0].dst) == ("00000000000000a5", "00000000000000a1")
+
+    workflow = graph.node("00000000000000a0")
+    assert workflow is not None
+    assert workflow.kind is NodeKind.UNKNOWN
+    assert codes.UNKNOWN_SPAN_KIND in {d.code for d in graph.diagnostics}
+
+
+# -- what the harness tells the human to write -----------------------------
+
+
+def test_the_workflow_capture_is_told_it_is_not_half_of_the_matched_pair():
+    # The pair sentence claims same model, same prompt, same tool inventory,
+    # differing only in the instrumentor. This shape has no twin, so printing
+    # it would be an instruction to write something false into the one kind of
+    # file whose entire purpose is being true.
+    steps = run._next_steps(
+        captured="x.jsonl",
+        name="genai_workflow",
+        backend=GENAI,
+        model="openai/gpt-oss-120b",
+        endpoint="",
+        today="2026-01-01",
+        count=8,
+        shape=backends.WORKFLOW,
+    )
+    assert "NOT half of 2.6's matched pair" in steps
+    assert "genai_workflow.provenance.md" in steps
+    assert "--shape workflow" in steps
+    # Both disclosures the shape has to carry, in the file the human writes.
+    assert "convention-NAMED and harness-EMITTED" in steps
+    assert "SECOND leg's `invoke_agent` span" in steps
+    assert "IN-TRACE" in steps
+
+
+def test_the_reference_capture_still_carries_the_pair_sentence():
+    steps = run._next_steps(
+        captured="x.jsonl",
+        name="genai_tool_call",
+        backend=GENAI,
+        model="openai/gpt-oss-120b",
+        endpoint="",
+        today="2026-01-01",
+        count=4,
+        shape=backends.REFERENCE,
+    )
+    assert "matched pair: same model" in steps
+    assert "NOT half of" not in steps
+    assert "--shape" not in steps
+
+
+# -- shape selection -------------------------------------------------------
+
+
+def test_the_default_shape_is_the_reference_conversation():
+    assert backends.SHAPES["reference"] is backends.REFERENCE
+    assert backends.REFERENCE.matched_pair is True
+    assert backends.REFERENCE.backends == ()
+    # Every other shape is on its own provenance, by construction.
+    assert not any(
+        shape.matched_pair
+        for shape in backends.SHAPES.values()
+        if shape.id != "reference"
+    )
+
+
+def test_a_shape_scoped_to_one_dialect_refuses_the_others(monkeypatch, capsys):
+    monkeypatch.setenv("NEBIUS_API_KEY", "x")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert run.main(["--backend", "openai", "--shape", "workflow"]) == 2
+    message = capsys.readouterr().err
+    assert "'workflow' shape runs only on: genai" in message
+    assert "openinference" in message
+
+
+def test_the_fleet_does_not_take_a_shape(monkeypatch, capsys):
+    monkeypatch.setenv("NEBIUS_API_KEY", "x")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert run.main(["--backend", "genai", "--shape", "workflow", "--fleet", "4"]) == 2
+    assert "does not take --shape workflow" in capsys.readouterr().err

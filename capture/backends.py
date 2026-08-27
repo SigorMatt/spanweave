@@ -86,6 +86,24 @@ GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result"
 INVOKE_AGENT = "invoke_agent"
 EXECUTE_TOOL = "execute_tool"
 
+#: The ninth `gen_ai.operation.name` value, and the reason this file grew a
+#: second capture *shape*. `spanweave/adapters/otel_genai.py` maps eight of the
+#: convention's nine operations and records this one as `UNMAPPED_BY_DECISION`:
+#: mapping `invoke_workflow` to `NodeKind.chain` would be a judgement about
+#: what a workflow is rather than the name match every other entry is. Three
+#: conformance scenarios pin `kind: chain` and are declared unrenderable in
+#: this dialect because of it, and one of the three carries the corpus's only
+#: `EdgeKind.link`. A captured trace containing an `invoke_workflow` span is
+#: what would let a human retire those declarations from **observed output**
+#: rather than from a reading of the convention (`TASKS.md` 2.15).
+INVOKE_WORKFLOW = "invoke_workflow"
+
+#: The one other attribute the conventions define for that operation. Both
+#: names are the conventions' own vocabulary, which is what makes emitting the
+#: span transcription rather than invention -- see
+#: `genai_workflow_span_attributes`.
+GEN_AI_WORKFLOW_NAME = "gen_ai.workflow.name"
+
 #: Where the fleet's model/spec stamp goes on a GenAI trace. **Not** a
 #: ``gen_ai.*`` key, and deliberately not: GenAI defines no free-form metadata
 #: attribute, and minting a plausible-looking ``gen_ai.`` name for one would
@@ -93,6 +111,20 @@ EXECUTE_TOOL = "execute_tool"
 #: though they did. An adapter will report it as unmapped, which is the honest
 #: outcome (`SPEC.md` §3.7).
 CAPTURE_NOTE = "spanweave.capture.note"
+
+#: Why one span links to another, written onto the link's own attributes.
+#: Same namespace as `CAPTURE_NOTE` and for the same reason. An OTel span link
+#: is a record-level field of the **span data model**, identical in every
+#: dialect and read by both adapters -- but *what a link between two GenAI
+#: spans means* is defined by neither GenAI nor OpenInference. So the relation
+#: is this harness's own, and it says so in this harness's namespace instead of
+#: minting a plausible-looking `gen_ai.` name for it.
+CAPTURE_LINK = "spanweave.capture.link"
+
+#: The only relation this harness currently links: leg N of a workflow to leg
+#: N-1. True of the run as it happened -- the legs are executed in this order,
+#: by this workflow, in this trace -- and asserted no more strongly than that.
+PREVIOUS_WORKFLOW_LEG = "previous_workflow_leg"
 
 #: The two attributes that decide whether a GenAI capture is worth anything.
 #: Without content capture there are no messages, so no tool-call ids, so no
@@ -371,6 +403,56 @@ def genai_tool_span_attributes(call: ToolCall) -> dict[str, Any]:
 def genai_tool_result_attributes(payload: Any) -> dict[str, Any]:
     """What a *successful* `execute_tool` span records on the way out."""
     return {GEN_AI_TOOL_CALL_RESULT: json.dumps(payload)}
+
+
+def genai_workflow_span_attributes(name: str) -> dict[str, Any]:
+    """The `invoke_workflow` span, in OTel GenAI. **Emitted here, not captured.**
+
+    This has to be said in exactly the terms the reference capture's provenance
+    already uses, because it is the same distinction and the wrong reading of
+    it is what makes a fixture claim more than it can: an instrumentor wraps
+    **SDK calls**, and a workflow is not an SDK call, so no instrumentor would
+    ever emit this span. It comes from `capture/backends.py`, like the
+    `invoke_agent` and `execute_tool` spans beside it, and only the `chat`
+    spans come from the instrumentor.
+
+    What the conventions supply is the **vocabulary**. `invoke_workflow` is one
+    of the nine normative `gen_ai.operation.name` values and
+    `gen_ai.workflow.name` is a defined attribute, so the span is
+    convention-NAMED and harness-EMITTED -- the same standing `execute_tool`
+    has in the reference capture, and one step further from the `invoke_agent`
+    span, whose attributes are a judgement call.
+
+    Nothing else is attached, and the omission is the point. `invoke_agent`
+    carries a prompt because a prompt is what starts an agent; the conventions
+    describe no message content for a workflow, and inventing some would be
+    precisely the judgement this shape exists to avoid making. A workflow node
+    built from this span therefore has `absent` payloads, which is the honest
+    state and not a gap.
+    """
+    return {
+        GEN_AI_OPERATION: INVOKE_WORKFLOW,
+        GEN_AI_WORKFLOW_NAME: name,
+    }
+
+
+def link_to(span: Any, note: str) -> tuple[Any, ...]:
+    """One OTel span link to `span`, carrying in its attributes why it is there.
+
+    Looked up through the module at call time rather than bound at a call site,
+    so :func:`converse_workflow` can be exercised against stub spans with no
+    ``opentelemetry`` installed. That is the same property that makes
+    `exporter.py` duck-typed, and it is what lets the testable half of this
+    harness be tested at all without a credential (`capture/README.md`).
+
+    The `Link` class itself is real and imported here rather than duck-typed,
+    because unlike an exported span this object is handed **to** the SDK, and a
+    plausible-looking stand-in would fail at the worst possible moment -- in a
+    credentialed run.
+    """
+    from opentelemetry.trace import Link
+
+    return (Link(span.get_span_context(), {CAPTURE_LINK: note}),)
 
 
 class Check(NamedTuple):
@@ -922,6 +1004,8 @@ def converse(
     parallel: bool = False,
     note: dict[str, Any] | None = None,
     base_url: str | None = None,
+    links: tuple[Any, ...] = (),
+    on_agent_span: Any = None,
 ) -> bool:
     """One two-turn tool-using conversation: agent -> [llm, tool, llm].
 
@@ -955,6 +1039,15 @@ def converse(
     It has to be said out loud in the provenance file, because "the trace
     came from real instrumentation" is then true of some spans and not
     others, and the difference is exactly what a captured fixture is for.
+
+    ``links`` and ``on_agent_span`` exist for :func:`converse_workflow` and
+    both default to nothing, so a plain ``make capture`` is the run it always
+    was. ``links=()`` is what the OTel SDK defaults to, so passing it changes
+    no exported byte -- which matters, because 2.6's matched pair is matched
+    on the reference conversation not moving. ``on_agent_span`` hands the
+    agent span back to the caller the moment it opens, which is how a later
+    leg can link to an earlier one without this function having to know that
+    workflows exist.
     """
     client = backend.client(base_url)
     tools = tuple(TOOLS[name] for name in tool_names)
@@ -965,7 +1058,11 @@ def converse(
     # the attribution survives without the model pretending to understand it.
     attributes = dialect.agent(prompt, note)
 
-    with tracer.start_as_current_span(dialect.agent_span_name, attributes=attributes):
+    with tracer.start_as_current_span(
+        dialect.agent_span_name, attributes=attributes, links=links
+    ) as agent_span:
+        if on_agent_span is not None:
+            on_agent_span(agent_span)
         messages: list[Any] = [{"role": "user", "content": prompt}]
 
         history, calls = backend.request(client, model, messages, tools, parallel)
@@ -1004,3 +1101,285 @@ def _run_tool(tracer: Any, call: ToolCall, dialect: SpanDialect = OPENINFERENCE)
             return payload
     except ToolFailure as failure:
         return {"error": str(failure)}
+
+
+# --------------------------------------------------------------------------
+# The second shape: a workflow (`TASKS.md` 2.15)
+# --------------------------------------------------------------------------
+#
+# Why a second shape at all. `spanweave/adapters/otel_genai.py` maps eight of
+# the convention's nine operations; the ninth, `invoke_workflow`, is
+# `UNMAPPED_BY_DECISION`, and three conformance scenarios that pin `kind:
+# chain` are declared unrenderable in `otel_genai` as a result. One of those
+# three, `span_links`, is the corpus's ONLY carrier of `EdgeKind.link`. So a
+# GenAI trace containing an `invoke_workflow` span AND a span link is what
+# would let a human retire three declarations and restore `link` to the
+# cross-dialect claim -- from observed output rather than from a reading of
+# the convention, which is the order 2a used throughout and the reason Phase 1
+# lost four fixtures.
+#
+# This shape produces such a trace. It does NOT decide anything: mapping
+# `invoke_workflow` to `NodeKind.chain` is still a model question, and
+# rendering the three scenarios is still work that happens AFTER a capture
+# exists, against what the capture actually shows.
+
+
+@dataclass(frozen=True)
+class WorkflowLeg:
+    """One agent invocation inside the workflow: a prompt and an inventory."""
+
+    id: str
+    prompt: str
+    tools: tuple[str, ...]
+
+
+#: The workflow's name, as `gen_ai.workflow.name`. Boring on purpose, like the
+#: stub tools: nothing here should need redacting or explaining.
+WORKFLOW_NAME = "paris.brief"
+
+#: Two legs, run in order. Two rather than one because a workflow of one leg
+#: is an agent with a wrapper, and because the link this shape has to exercise
+#: needs an earlier span to point at. Different tools per leg so the legs are
+#: distinguishable in the file by something other than their order.
+WORKFLOW_LEGS: tuple[WorkflowLeg, ...] = (
+    WorkflowLeg(
+        "weather",
+        "What is the weather in Paris? Use the tool.",
+        ("get_weather",),
+    ),
+    WorkflowLeg(
+        "population",
+        "How many people live in Paris? Use the tool.",
+        ("get_population",),
+    ),
+)
+
+
+def converse_workflow(
+    backend: Backend,
+    model: str,
+    tracer: Any,
+    legs: tuple[WorkflowLeg, ...] = WORKFLOW_LEGS,
+    workflow_name: str = WORKFLOW_NAME,
+    base_url: str | None = None,
+) -> bool:
+    """A workflow of agent legs, each linked to the one before it.
+
+        invoke_workflow paris.brief          <- emitted here
+        |-- invoke_agent agent.run           <- emitted here
+        |   |-- chat <model>                 <- the instrumentor
+        |   |-- execute_tool get_weather     <- emitted here
+        |   `-- chat <model>                 <- the instrumentor
+        `-- invoke_agent agent.run           <- emitted here; LINKS to leg 1
+            |-- chat <model>
+            |-- execute_tool get_population
+            `-- chat <model>
+
+    **Which span carries the link, and whose link it is.** The link is on the
+    *second* leg's `invoke_agent` span and names the *first* leg's. OTel span
+    links are a record-level field of the span data model -- identical in both
+    dialects, read by both adapters, and in that sense convention-defined. But
+    **which** spans are linked, and what the link means, is defined by neither
+    GenAI nor OpenInference: that part is this harness's, and it is written
+    into the link's own attributes under this harness's namespace
+    (`CAPTURE_LINK`) rather than under a `gen_ai.` name it has no right to.
+
+    The relation asserted is the weakest one that is actually true of the run:
+    *this leg ran after that one, inside this workflow*. It is deliberately
+    not "this leg consumed that leg's output" -- the legs are independent
+    conversations, and a link claiming otherwise would be a small fabrication
+    in a file whose entire value is that it contains only what happened.
+
+    **The link is in-trace only.** `span_links` also carries a link into
+    another trace, and this shape does not produce one: doing so would mean
+    naming a span in a trace this run did not produce, which is invention. A
+    human rendering that scenario from this capture has to say so.
+    """
+    if backend.dialect is not GENAI_DIALECT:
+        raise CaptureError(
+            f"the workflow shape emits {INVOKE_WORKFLOW!r}, a "
+            f"{GENAI_DIALECT.id} operation, and backend {backend.id!r} emits "
+            f"{backend.dialect.id}. Emitting it into another dialect's trace "
+            f"would produce a mixed-dialect file no adapter reads honestly."
+        )
+
+    called = []
+    opened: list[Any] = []
+    with tracer.start_as_current_span(
+        f"{INVOKE_WORKFLOW} {workflow_name}",
+        attributes=genai_workflow_span_attributes(workflow_name),
+    ):
+        for leg in legs:
+            # Computed BEFORE this leg opens, from the leg before it. The
+            # first leg links to nothing, because there is nothing yet.
+            links = link_to(opened[-1], PREVIOUS_WORKFLOW_LEG) if opened else ()
+            called.append(
+                converse(
+                    backend,
+                    model,
+                    tracer,
+                    leg.prompt,
+                    leg.tools,
+                    base_url=base_url,
+                    links=links,
+                    on_agent_span=opened.append,
+                )
+            )
+    return bool(called) and all(called)
+
+
+def _workflow_checks(records: list[dict[str, Any]]) -> tuple[Check, ...]:
+    """The two questions this shape exists to answer, read off what was written.
+
+    Answered against the exported records rather than against what the run
+    intended, for the same reason the fleet's coverage table is
+    (`capture/fleet.py`): a shape steers a run, it does not command one. The
+    first check can only fail if this harness stopped emitting the span; the
+    second can fail for a real reason, because a link whose target is not in
+    the file produces an edge that resolves to nothing.
+
+    A failure exits non-zero and the trace is still written -- it is the
+    evidence for why. What must never happen is a missing shape being added to
+    an exported span afterwards.
+    """
+    workflow = [
+        record
+        for record in records
+        if record["attributes"].get(GEN_AI_OPERATION) == INVOKE_WORKFLOW
+    ]
+    present = {record["span_id"] for record in records}
+    linked = [
+        (record["span_id"], link.get("span_id"), link.get("attributes") or {})
+        for record in records
+        for link in record.get("links") or ()
+    ]
+    in_trace = [entry for entry in linked if entry[1] in present]
+
+    if in_trace:
+        link_detail = "; ".join(
+            f"{src} -> {dst} [{attributes.get(CAPTURE_LINK, 'no note')}]"
+            for src, dst, attributes in in_trace
+        )
+    elif linked:
+        link_detail = (
+            f"{len(linked)} link(s) found, none naming a span in this file: "
+            f"{sorted(dst for _, dst, _ in linked)}"
+        )
+    else:
+        link_detail = "no exported span carries a link"
+
+    return (
+        Check(
+            f"a span reports {GEN_AI_OPERATION}={INVOKE_WORKFLOW!r} -- the kind "
+            f"nothing in this dialect currently maps (TASKS.md 2.15)",
+            bool(workflow),
+            "; ".join(
+                f"{record['name']!r} [{record['span_id']}] "
+                f"{GEN_AI_WORKFLOW_NAME}="
+                f"{record['attributes'].get(GEN_AI_WORKFLOW_NAME)!r}"
+                for record in workflow
+            )
+            or f"no exported span carries {GEN_AI_OPERATION}={INVOKE_WORKFLOW!r}",
+        ),
+        Check(
+            "a span link joins two spans of THIS trace, so EdgeKind.link has "
+            "a target here",
+            bool(in_trace),
+            link_detail,
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class CaptureShape:
+    """One conversation shape the harness can capture, and what it is for.
+
+    A shape is not a backend and not a dialect: it is *what the run does*.
+    The distinction earns its keep at exactly one place -- `matched_pair`
+    below -- and the rest is bookkeeping around it.
+    """
+
+    id: str
+    #: One line, printed by `--help`.
+    summary: str
+    #: Backend ids this shape may run under. Empty means any.
+    backends: tuple[str, ...]
+    #: Default output name. `None` means the historical `<backend>_tool_call`.
+    default_name: str | None
+    #: Whether this capture is half of `TASKS.md` 2.6's matched pair.
+    #:
+    #: **False for every shape but the reference one**, and the field exists so
+    #: the harness cannot print an instruction to write a sentence that is not
+    #: true. The pair statement claims *same model, same prompt, same tool
+    #: inventory, differing only in the instrumentor*; a different conversation
+    #: shape has no twin, so it needs its own provenance file and must not
+    #: carry that sentence.
+    matched_pair: bool
+    #: `(backend, model, tracer, base_url=None) -> bool`. Same shape as the
+    #: other callables held as data in this module.
+    run: Any = field(repr=False)
+    #: Optional `(records) -> tuple[Check, ...]`, appended to the backend's.
+    checklist: Any = field(default=None, repr=False)
+    #: Extra sentences for the provenance template, printed verbatim.
+    provenance_note: str = ""
+
+
+def _run_reference(backend, model, tracer, base_url=None):
+    return converse(backend, model, tracer, base_url=base_url)
+
+
+def _run_workflow(backend, model, tracer, base_url=None):
+    return converse_workflow(backend, model, tracer, base_url=base_url)
+
+
+REFERENCE = CaptureShape(
+    id="reference",
+    summary="the two-turn tool-using conversation: agent -> [llm, tool, llm]",
+    backends=(),
+    default_name=None,
+    matched_pair=True,
+    run=_run_reference,
+)
+
+WORKFLOW = CaptureShape(
+    id="workflow",
+    summary=(
+        "a workflow of two agent legs, the second linked to the first: "
+        "invoke_workflow -> [invoke_agent, invoke_agent]"
+    ),
+    backends=("genai",),
+    default_name="genai_workflow",
+    matched_pair=False,
+    run=_run_workflow,
+    checklist=_workflow_checks,
+    provenance_note=(
+        """
+   Two more, specific to the workflow shape:
+
+     * The `invoke_workflow` span comes from capture/backends.py, NOT from the
+       instrumentor -- an instrumentor wraps SDK calls and a workflow is not
+       one. What the conventions supply is the vocabulary: `invoke_workflow`
+       is one of the nine normative gen_ai.operation.name values and
+       gen_ai.workflow.name is a defined attribute. So the span is
+       convention-NAMED and harness-EMITTED, the same standing `execute_tool`
+       has in the reference capture. Say both halves; "captured from real
+       instrumentation" is true of the `chat` spans and of nothing else here.
+
+     * The span link is on the SECOND leg's `invoke_agent` span and names the
+       FIRST leg's. OTel span links are a record-level field of the span data
+       model, identical in both dialects -- that part is convention-defined.
+       WHICH spans are linked, and what the link means, is defined by neither
+       GenAI nor OpenInference: that part is this harness's, and it is stated
+       in the link's own attributes under spanweave.capture.link rather than
+       under a gen_ai. name. The relation asserted is only "this leg ran after
+       that one, inside this workflow" -- the legs are independent
+       conversations and the link claims nothing more. The link is IN-TRACE
+       only: `span_links` also carries a cross-trace link, and producing one
+       here would mean naming a span in a trace this run did not produce.
+"""
+    ),
+)
+
+#: Every shape the harness can capture. `reference` first, and it is the
+#: default: nothing about `make capture` changes unless a shape is named.
+SHAPES = {shape.id: shape for shape in (REFERENCE, WORKFLOW)}

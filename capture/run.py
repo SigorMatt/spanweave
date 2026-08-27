@@ -3,6 +3,7 @@
     make capture                      # picks the backend you have configured
     make capture ARGS="--backend openai"
     make capture ARGS="--backend genai"   # the OTel GenAI half of the pair
+    make capture ARGS="--backend genai --shape workflow"   # TASKS.md 2.15
     make capture ARGS="--fleet 8"     # the scratch fleet for TASKS.md 2.2
 
 This is the step an autonomous agent must not take (``AGENT.md``). Everything
@@ -29,6 +30,15 @@ human act, performed after reading the trace, redacting whatever needs
 redacting, and writing the provenance file. The harness prints exactly what
 remains.
 
+``--shape`` chooses *what the run does*. ``reference`` is the two-turn tool
+call every capture so far has been, and it is the default because 2.6's
+matched pair is matched on that conversation not moving. ``workflow`` is the
+second shape (``TASKS.md`` 2.15): a workflow of two agent legs, the second
+carrying an OTel span link to the first, whose point is to put an
+``invoke_workflow`` span and an ``EdgeKind.link`` into a real GenAI trace. It
+is **not** half of the matched pair, it needs **its own** provenance file, and
+the harness refuses to print the pair sentence for it.
+
 ``--fleet N`` is a different job with the same rule, only harder: it writes N
 deliberately unalike traces to ``capture/_scratch/fleet/`` for the adversarial
 consumer to aggregate (``capture/fleet.py``). Those are **scratch** — never
@@ -50,7 +60,7 @@ import textwrap
 from collections.abc import Mapping
 
 from capture import backends, fleet
-from capture.backends import BACKENDS, Backend, CaptureError
+from capture.backends import BACKENDS, SHAPES, Backend, CaptureError
 from capture.exporter import JsonlSpanExporter
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -127,6 +137,16 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(BACKENDS),
         help="which SDK to drive; default is whichever one you have configured",
     )
+    parser.add_argument(
+        "--shape",
+        choices=sorted(SHAPES),
+        default="reference",
+        help=(
+            "which conversation to run; default `reference`, which is the "
+            "run 2.6's matched pair is built on and must not drift. "
+            + "  ".join(f"{shape.id}: {shape.summary}." for shape in SHAPES.values())
+        ),
+    )
     parser.add_argument("--name", help="base name for the output file")
     parser.add_argument("--model", help="override the model this backend uses")
     parser.add_argument(
@@ -147,8 +167,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"capture: {failure}", file=sys.stderr)
         return 2
 
+    shape = SHAPES[args.shape]
+    if shape.backends and backend.id not in shape.backends:
+        # The same refusal posture as backend selection: a capture that ran as
+        # something other than what its provenance file will say is worse than
+        # no capture. Here the mismatch is structural -- `invoke_workflow` is a
+        # GenAI operation, and emitting it into an OpenInference trace would
+        # produce a mixed-dialect file no adapter reads honestly.
+        allowed = ", ".join(sorted(shape.backends))
+        print(
+            f"capture: the {shape.id!r} shape runs only on: {allowed}. "
+            f"Backend {backend.id!r} emits {backend.dialect.id}.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.fleet is not None and shape.id != "reference":
+        # The fleet varies the reference conversation's prompt and inventory
+        # (`fleet.py`); it is not a place to also vary the span topology, and
+        # a fleet of workflow traces is not what TASKS.md 2.2 asks for.
+        print(
+            f"capture: --fleet varies the reference conversation and does not "
+            f"take --shape {shape.id}. Run them separately.",
+            file=sys.stderr,
+        )
+        return 2
+
     model = backend.model(dict(environ), args.model)
-    name = args.name or f"{backend.id}_tool_call"
+    name = args.name or shape.default_name or f"{backend.id}_tool_call"
 
     if not environ.get(backend.api_key_env):
         print(
@@ -189,7 +234,12 @@ def main(argv: list[str] | None = None) -> int:
             provider.shutdown()
 
     try:
-        called = backends.converse(backend, model, tracer)
+        called = shape.run(backend, model, tracer)
+    except CaptureError as failure:
+        # A shape that cannot run under this backend refuses before writing
+        # anything, rather than producing a file that looks like a capture.
+        print(f"capture: {failure}", file=sys.stderr)
+        return 2
     finally:
         provider.shutdown()
 
@@ -224,7 +274,12 @@ def main(argv: list[str] | None = None) -> int:
 
     captured = write_trace(SCRATCH / f"{name}.local.jsonl", records)
 
+    # The backend's verifications, then the shape's. Composed rather than
+    # merged: the backend's three are `TASKS.md` 2.6's and belong to every
+    # GenAI capture; the shape's are about what THIS run was for.
     checks = backend.checklist(records) if backend.checklist is not None else ()
+    if shape.checklist is not None:
+        checks = checks + shape.checklist(records)
     hosts = endpoints_in(records)
     if checks:
         print(_checklist(checks))
@@ -239,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
             today=datetime.date.today().isoformat(),
             count=len(exporter.records),
             hosts=hosts,
+            shape=shape,
         )
     )
     # Non-zero when a verification failed, and the file stays: the same
@@ -280,9 +336,10 @@ def _checklist(checks):
     """
     lines = [
         "",
-        "Verification (TASKS.md 2.6) -- the harness's reading of what it just",
-        "wrote. Confirm each against the file; a harness that both produces a",
-        "trace and certifies it is not evidence.",
+        "Verification -- the harness's reading of what it just wrote. The",
+        "first block is TASKS.md 2.6's; a shape may add its own. Confirm each",
+        "against the file: a harness that both produces a trace and certifies",
+        "it is not evidence.",
         "",
     ]
     for check in checks:
@@ -442,7 +499,9 @@ def _slug(model: str) -> str:
     return "".join(c if c.isalnum() or c in "-." else "-" for c in model).strip("-")
 
 
-def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts=()):
+def _next_steps(
+    *, captured, name, backend, model, endpoint, today, count, hosts=(), shape=None
+):
     where = f"\n     - endpoint: {endpoint}" if endpoint else ""
     caution = (
         "\n   If the endpoint URL embeds a credential, redact it. It is the one\n"
@@ -460,6 +519,7 @@ def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts
             "\n   copy another fixture's sentence about the endpoint not appearing"
             "\n   in the file -- here it does.\n"
         )
+    shape = shape if shape is not None else backends.REFERENCE
     instrumentor = backend.packages[-1]
     sdk = backend.packages[0]
     dialect_note = textwrap.fill(
@@ -468,6 +528,7 @@ def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts
         initial_indent="",
         subsequent_indent="       ",
     )
+    shape_flag = "" if shape.matched_pair else f" --shape {shape.id}"
     versions = "\n".join(
         f"     - {label}: {package} {installed(package)}"
         for label, package in (
@@ -480,8 +541,23 @@ def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts
     # because the property it records -- same model, same prompt, same tools,
     # different instrumentor -- is what makes the cross-dialect comparison mean
     # anything, and it is invisible from either file on its own.
-    pair = (
-        f"""
+    if not shape.matched_pair:
+        # The pair statement claims same model, same prompt, same tool
+        # inventory, differing only in the instrumentor. A different
+        # conversation shape has no twin, so printing the sentence here would
+        # be an instruction to write something false into the one kind of file
+        # whose whole purpose is being true.
+        pair = f"""
+   This capture is NOT half of 2.6's matched pair, and must NOT carry the
+   matched-pair sentence. The `{shape.id}` shape is a different conversation
+   -- different prompts, a different tool inventory, a different span topology
+   -- so there is no twin differing from it only in the instrumentor. It gets
+   its OWN provenance file ({name}.provenance.md), which should say which
+   capture it is NOT: it does not supersede, extend, or share provenance with
+   {backend.id}_tool_call.
+"""
+    elif backend.dialect.id != "openinference" or backend.id == "openai":
+        pair = f"""
    AND, because this backend is half of a matched pair, the sentence that
    makes the pair legible from either side:
 
@@ -491,9 +567,8 @@ def _next_steps(*, captured, name, backend, model, endpoint, today, count, hosts
        file, naming this one. Neither file can be read as evidence about
        the dialect without it.
 """
-        if backend.dialect.id != "openinference" or backend.id == "openai"
-        else ""
-    )
+    else:
+        pair = ""
     return f"""
 Captured {count} spans -> {captured}
 
@@ -517,7 +592,8 @@ remain, and all three are yours (FIXTURES.md §6):
      - dialect emitted: {backend.dialect.id}
      - model: {model}{where}
      - captured: {today}
-     - command: make capture --backend {backend.id}
+     - command: make capture --backend {backend.id}{shape_flag}
+     - shape: {shape.id} -- {shape.summary}
      - redacted: <what, by whom> (or: nothing, and why that was safe)
      - this fixture may be used to claim: <what it actually demonstrates>
 
@@ -535,7 +611,7 @@ remain, and all three are yours (FIXTURES.md §6):
        {dialect_note}
      * The instrumentor patches the SDK client, not the endpoint. This
        demonstrates {instrumentor}, whatever service answered.
-
+{shape.provenance_note}
 Then check that it builds, and that what it says about itself is true:
 
      uv run spanweave inspect fixtures/captured/{name}.jsonl

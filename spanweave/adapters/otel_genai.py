@@ -119,7 +119,10 @@ OPERATIONS: Mapping[str, NodeKind] = {
 #: `retriever_and_embedding` and `span_links` -- and `span_links` is the only
 #: scenario carrying `EdgeKind.link`. One captured GenAI trace containing an
 #: `invoke_workflow` span retires all three declarations at once, which makes
-#: it the highest-value capture outstanding (`TASKS.md` 2.14).
+#: it the highest-value capture outstanding (`TASKS.md` 2.14). The harness can
+#: now produce a trace of that shape -- `make capture ARGS="--backend genai
+#: --shape workflow"`, `TASKS.md` 2.15 -- but running it is a human act, and
+#: nothing here changes until a captured file exists to change it against.
 UNMAPPED_BY_DECISION = ("invoke_workflow",)
 
 INPUT_MESSAGES = "gen_ai.input.messages"
