@@ -43,4 +43,12 @@ None.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [ ] `otel_genai` — **declared unrenderable** (`expected/coverage.json`)
+
+**Not for the reason anyone expected.** `TASKS.md` 2.11 flagged this as the
+most likely coverage candidate on the grounds that GenAI's vocabulary might not
+name a retriever. It does: the convention defines `retrieval`, the adapter now
+maps it to `NodeKind.retriever`, and `embeddings` was already mapped. Both of
+this scenario's interesting spans render.
+
+The blocker is `s0`, the **chain** parent, which no mapped operation produces.

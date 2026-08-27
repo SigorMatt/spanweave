@@ -70,5 +70,15 @@ does not normalize.
 
 ## Dialects
 
-- [x] `openinference` — Phase 1, rendered from an observed capture
-- [ ] `otel_genai` — Phase 2
+- [x] `openinference` — Phase 1
+- [x] `otel_genai` — Phase 2 (2.11)
+
+`name`, and `s2`'s two payload `value`s. `s1`'s output is declared **nowhere**:
+`gen_ai.tool.call.result` and `output.value` agree in value and mime.
+
+This is the second scenario to carry §4.2.1's `data` edge in both dialects, and
+the two dialects declare the relation by different mechanisms — OpenInference
+by a flat `llm.input_messages.N.message.tool_call_id`, OTel GenAI by a
+`tool_call_response` part **inside** `gen_ai.input.messages`. The edge, its
+warrant and its `basis` come out identical because the builder produces all
+three; the adapters only report which call ids a span was given the results of.

@@ -1,0 +1,6 @@
+{
+  "_note": "Node fields this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4).",
+  "erase": [
+    "name"
+  ]
+}

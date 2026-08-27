@@ -2982,7 +2982,7 @@ below:
   > the skip machinery exist to prevent. The two-line specimen is reproduced
   > above in full; recreating it costs nothing.
 
-- [ ] **2.11 Dialect-two renderings — the structural set.** `[2a]`
+- [x] **2.11 Dialect-two renderings — the structural set.** `[2a]`
   **CUT 2 IF THE PHASE SLIPS** (`ROADMAP.md`). Render in this order — the
   reverse of the cut order, so the tail is what gets dropped:
   `single_tool_call`, `parallel_tools`, `nested_agents`,
@@ -2996,6 +2996,97 @@ below:
   *Done when each rendered scenario produces its unmodified canonical graph,
   `make conformance` is green, and every scenario not rendered is recorded here
   as cut, with its reason, or declared in `coverage.json`.*
+
+  > **DONE. 4 of 6 rendered, 2 declared, nothing cut.** `single_tool_call`,
+  > `parallel_tools`, `nested_agents` and `declared_data_edge` produce their
+  > unmodified canonical graphs. `retriever_and_embedding` and `span_links`
+  > carry `coverage.json`. `make check` and `make conformance` green.
+  >
+  > | Scenario | `otel_genai` | Declared |
+  > |---|---|---|
+  > | `single_tool_call` | rendered | `name` only |
+  > | `parallel_tools` | rendered | `name`; `s0.inputs` `mime`+`value` |
+  > | `nested_agents` | rendered | `name` only |
+  > | `declared_data_edge` | rendered | `name`; `s2.inputs`/`s2.outputs` `value` |
+  > | `retriever_and_embedding` | **`coverage.json`** | — |
+  > | `span_links` | **`coverage.json`** | — |
+  >
+  > ### 2.11's own prediction, checked and refuted
+  >
+  > This task said `retriever_and_embedding` was "the most likely
+  > `coverage.json` candidate, since GenAI's operation vocabulary may not name
+  > a retriever — check that against observed output before declaring it."
+  >
+  > **It names one.** The convention defines `retrieval`, described as
+  > "Retrieval operation such as ... Search Vector Store", and the adapter now
+  > maps it to `NodeKind.retriever`. Its absence was an inconsistency rather
+  > than an abstention: `embeddings`, `text_completion`, `generate_content` and
+  > `create_agent` were all already mapped on exactly the same evidence, so a
+  > real `retrieval` span became `unknown` while a real `embeddings` span did
+  > not. That is a live defect for a user, fixed here with a unit test.
+  >
+  > **And the scenario is still unrenderable, for a reason nobody predicted:**
+  > its `s0` is a **chain**. The prediction checked the interesting spans and
+  > missed the parent.
+  >
+  > ### The finding this task actually produced: `chain` costs three scenarios
+  >
+  > `gen_ai.operation.name` has nine values; the adapter now maps eight. The
+  > ninth is `invoke_workflow`, and **not mapping it is a decision**, recorded
+  > in the adapter as `UNMAPPED_BY_DECISION` rather than left as an absence.
+  >
+  > Every other entry is a **name match** — the convention's word and the
+  > model's word denote the same thing, and the convention's own description
+  > confirms it. `invoke_workflow` is described only as "Invoke GenAI
+  > workflow". Mapping it to `chain` (`SPEC.md` §3.2: "a composite step with no
+  > more specific kind") would be a **judgement about what a workflow is**, and
+  > `AGENT.md` is explicit that reaching for an inference is the signal to
+  > stop.
+  >
+  > **The price, stated rather than buried.** Three scenarios pin `kind: chain`
+  > and are now all declared unrenderable in this dialect:
+  > `cyclic_parents` (2.10), `retriever_and_embedding`, `span_links`. The last
+  > is the expensive one: it is the **only** scenario in the corpus carrying an
+  > `EdgeKind.link`, so `link` edges are untested across dialects — and with
+  > them the one adapter-supplied `basis` string this dialect would produce.
+  >
+  > **One captured GenAI trace containing an `invoke_workflow` span retires all
+  > three declarations at once.** That makes it the highest-value capture
+  > outstanding, and it is carried to 2.14 as such. It is a capture, not a
+  > decision: §4.3 exists so a gap like this is reviewable rather than argued.
+  >
+  > ### `Edge.basis` as cross-dialect vocabulary — carried from 2.9, and the
+  > ### answer is that the corpus cannot currently test it
+  >
+  > The concern was that `basis` is a free string, is **compared** by
+  > `canonical()`, and is adapter-supplied in two places — so two adapters
+  > could describe the same relation with two different strings and fail
+  > equivalence on vocabulary rather than on substance. Measured across all
+  > sixteen renderings now in the corpus:
+  >
+  > | `basis` | Produced by | Cross-dialect |
+  > |---|---|---|
+  > | `span.parent_span_id` | builder | agrees, structurally |
+  > | `tool_call_id` | builder | agrees, structurally |
+  > | `tool_call_id in tool-result message` | builder | agrees, structurally |
+  > | `sibling start_time ordering` (+ the tie-break variant) | builder | agrees, structurally |
+  > | `span.link` | **adapter** (`SpanLink.basis`) | **never compared** — `span_links` is unrenderable |
+  > | *declared data edge* | **adapter** (`DeclaredDataEdge.basis`) | **never compared** — `otel_genai` produces none; it uses `received_call_ids`, whose basis the builder supplies |
+  >
+  > So every `basis` the corpus actually compares is the builder's, and
+  > agreement is structural rather than lucky — the builder has one string per
+  > rule and no dialect can reach it. **Both adapter-supplied bases are
+  > invisible to the cross-dialect claim**, one because its only scenario
+  > cannot be rendered and one because the second dialect takes a different
+  > route to the same edge.
+  >
+  > That is a sharper answer than "it might be a problem": the risk is real,
+  > entirely confined to the two adapter-supplied cases, and **currently
+  > unmeasurable by construction**. Both adapters happen to write `span.link`,
+  > which is right in both because it names an OTel record-level field rather
+  > than a dialect attribute — but nothing in the corpus checks that, and
+  > nothing states the vocabulary. Carried to 2.14 with this shape, not as an
+  > open worry.
 
 - [ ] **2.12 `detect()` for both adapters.** `[2a]` **CUT 1 IF THE PHASE
   SLIPS** — the first thing to go, and the only item in this phase that can be

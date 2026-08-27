@@ -51,4 +51,14 @@ None. Overlapping spans are ordinary, not a problem to report.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.11)
+
+`name`, and `s0.inputs` in `mime` and `value` — the agent span, where
+OpenInference reports a bare string at `text/plain` and this dialect reports a
+message array. The three tool spans are declared nowhere: they report no
+payloads in either dialect.
+
+What this scenario tests is unaffected by any of that. The tie-break —
+`s1` and `s2` share a `start_time`, and the order is settled by node id, not by
+line order — is the **builder's**, so both dialects produce
+`sibling start_time ordering (tied, broken by node_id)` on the same pair.

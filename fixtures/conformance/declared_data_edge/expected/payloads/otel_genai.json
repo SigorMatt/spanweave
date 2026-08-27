@@ -1,0 +1,53 @@
+{
+  "_note": "This dialect's own values for the payloads expected/comparison.json declares dialect-varying (FIXTURES.md 4.4). Claim 1 -- fidelity within a dialect -- still pins every one of them; only the CROSS-dialect assertion sets them aside. Each value below is parsed from the attribute in dialects/otel_genai.jsonl that produced it, not copied from adapter output.",
+  "s2.inputs": {
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Look up the order status.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "parts": [
+          {
+            "arguments": {
+              "order": "A-1"
+            },
+            "id": "call_a",
+            "name": "lookup",
+            "type": "tool_call"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "parts": [
+          {
+            "id": "call_a",
+            "response": "{\"status\":\"shipped\"}",
+            "type": "tool_call_response"
+          }
+        ],
+        "role": "tool"
+      }
+    ]
+  },
+  "s2.outputs": {
+    "value": [
+      {
+        "finish_reason": "stop",
+        "parts": [
+          {
+            "content": "Your order has shipped.",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      }
+    ]
+  }
+}

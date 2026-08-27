@@ -87,15 +87,40 @@ OPERATION = "gen_ai.operation.name"
 #: `invoke_agent`, `chat`, `execute_tool`; the rest are the convention's and
 #: are claims awaiting a capture. An operation not here becomes `unknown` plus
 #: a diagnostic, never a near-miss forced into a neighbouring kind.
+#:
+#: The convention defines **nine** values (`opentelemetry-semantic-conventions`
+#: 0.65b0, the version the captured trace was produced under). Eight are here.
+#: The ninth, `invoke_workflow`, is **deliberately absent** -- see below.
 OPERATIONS: Mapping[str, NodeKind] = {
     "chat": NodeKind.LLM,
     "text_completion": NodeKind.LLM,
     "generate_content": NodeKind.LLM,
     "embeddings": NodeKind.EMBEDDING,
+    "retrieval": NodeKind.RETRIEVER,
     "execute_tool": NodeKind.TOOL,
     "invoke_agent": NodeKind.AGENT,
     "create_agent": NodeKind.AGENT,
 }
+
+#: `invoke_workflow` is the one convention value this adapter does not map, and
+#: the omission is a decision rather than an oversight (`TASKS.md` 2.11).
+#:
+#: Every other entry above is a **name match**: the convention's word and the
+#: model's word denote the same thing, and the convention's own description
+#: confirms it -- `retrieval` is "Retrieval operation such as ... Search Vector
+#: Store", which is `NodeKind.retriever` and nothing else. `invoke_workflow` is
+#: described only as "Invoke GenAI workflow". Mapping it to `chain` --
+#: `SPEC.md` §3.2's "a composite step with no more specific kind" -- would be a
+#: **judgement** about what a workflow is, not a match, and this library's rule
+#: is that reaching for an inference is the signal to stop (`AGENT.md`).
+#:
+#: It is not free. Three conformance scenarios pin `kind: chain` and are
+#: therefore declared unrenderable in this dialect -- `cyclic_parents`,
+#: `retriever_and_embedding` and `span_links` -- and `span_links` is the only
+#: scenario carrying `EdgeKind.link`. One captured GenAI trace containing an
+#: `invoke_workflow` span retires all three declarations at once, which makes
+#: it the highest-value capture outstanding (`TASKS.md` 2.14).
+UNMAPPED_BY_DECISION = ("invoke_workflow",)
 
 INPUT_MESSAGES = "gen_ai.input.messages"
 OUTPUT_MESSAGES = "gen_ai.output.messages"

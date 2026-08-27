@@ -485,3 +485,61 @@ def test_a_response_part_is_not_a_request_even_when_it_names_a_tool():
         }
     )
     assert span.call_names == {}
+
+
+# --------------------------------------------------------------------------
+# The operation vocabulary against the convention's own registry
+# --------------------------------------------------------------------------
+
+
+def test_a_retrieval_operation_is_a_retriever():
+    # Added at `TASKS.md` 2.11, which asked whether "GenAI's operation
+    # vocabulary may not name a retriever". It does: the convention's own
+    # description is "Retrieval operation such as ... Search Vector Store".
+    # Its absence from OPERATIONS was an inconsistency, not an abstention --
+    # `embeddings`, `text_completion`, `generate_content` and `create_agent`
+    # are all mapped on exactly the same evidence.
+    span = span_of({"gen_ai.operation.name": "retrieval"})
+    assert span.kind is NodeKind.RETRIEVER
+    assert codes_of(span) == []
+
+
+def test_invoke_workflow_stays_unmapped_and_says_so():
+    # The one convention value deliberately not mapped: `chain` would be a
+    # judgement about what a workflow is, not a name match. An honest
+    # `unknown` plus a diagnostic is the library's answer to that
+    # (`SPEC.md` §3.2), and the reported token survives.
+    from spanweave.adapters.otel_genai import OPERATIONS, UNMAPPED_BY_DECISION
+
+    assert set(UNMAPPED_BY_DECISION).isdisjoint(OPERATIONS)
+    span = span_of({"gen_ai.operation.name": "invoke_workflow"})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes["reported_kind"] == "invoke_workflow"
+    assert codes_of(span) == ["unknown_span_kind"]
+
+
+def test_the_adapter_accounts_for_every_operation_the_convention_defines():
+    """Mapped, or named as a decision. Never silently absent.
+
+    The corpus cannot see this: no scenario exercises seven of the nine, so a
+    value dropped from `OPERATIONS` would fail nothing. The convention is the
+    only source of truth for what the dialect can say, and it moves.
+    """
+    from spanweave.adapters.otel_genai import OPERATIONS, UNMAPPED_BY_DECISION
+
+    defined = {
+        "chat",
+        "create_agent",
+        "embeddings",
+        "execute_tool",
+        "generate_content",
+        "invoke_agent",
+        "invoke_workflow",
+        "retrieval",
+        "text_completion",
+    }
+    unaccounted = sorted(defined - set(OPERATIONS) - set(UNMAPPED_BY_DECISION))
+    assert unaccounted == [], (
+        f"the convention defines {unaccounted}, which this adapter neither "
+        f"maps nor names as a decision"
+    )

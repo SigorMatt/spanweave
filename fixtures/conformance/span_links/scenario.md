@@ -48,4 +48,13 @@ None. A cross-trace link is not a defect.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [ ] `otel_genai` — **declared unrenderable** (`expected/coverage.json`)
+
+Not because of the links. OTel span links are a record-level `links` field,
+identical in both dialects and read by both adapters. The blocker is `s1`,
+which this scenario pins as a **chain**.
+
+That makes this the most expensive of the three `chain` declarations: it is the
+only scenario in the corpus carrying an `EdgeKind.link`, so `link` edges — and
+the adapter-supplied `basis` string that comes with them — are **untested
+across dialects**. Recorded at `TASKS.md` 2.11 rather than left implicit.

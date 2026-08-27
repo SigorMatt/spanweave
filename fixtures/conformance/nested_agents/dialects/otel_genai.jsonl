@@ -1,0 +1,3 @@
+{"trace_id": "t1", "span_id": "s0", "parent_id": null, "name": "invoke_agent", "start_time": 1000.0, "end_time": 1003.0, "status": "OK", "attributes": {"gen_ai.operation.name": "invoke_agent"}}
+{"trace_id": "t1", "span_id": "s1", "parent_id": "s0", "name": "invoke_agent", "start_time": 1000.2, "end_time": 1002.0, "status": "OK", "attributes": {"gen_ai.operation.name": "invoke_agent"}}
+{"trace_id": "t1", "span_id": "s2", "parent_id": "s1", "name": "execute_tool search", "start_time": 1000.4, "end_time": 1001.0, "status": "OK", "attributes": {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search"}}

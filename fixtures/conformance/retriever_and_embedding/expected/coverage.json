@@ -1,0 +1,7 @@
+{
+  "_note": "Dialects that CANNOT render this scenario, each with a reason (FIXTURES.md 4.3). A renderable:false is an INVITATION TO CHECK THE REASON against observed output, not a settled fact.",
+  "otel_genai": {
+    "reason": "This scenario's canonical graph pins kind: chain, and the otel_genai adapter maps no gen_ai.operation.name value to NodeKind.chain. Checked against the convention's own registry rather than from memory: opentelemetry-semantic-conventions 0.65b0 -- the version 2.6's capture ran under -- defines nine values, and the adapter now maps eight. The ninth, `invoke_workflow`, is described by the convention only as \"Invoke GenAI workflow\"; mapping it to chain (SPEC.md 3.2, \"a composite step with no more specific kind\") would be a judgement about what a workflow is rather than the name match every other entry is, and no captured GenAI trace contains one. NOTE that 2.11 predicted a DIFFERENT reason -- that the dialect might not name a retriever -- and that prediction is now refuted: `retrieval` exists in the convention, the adapter maps it to NodeKind.retriever, and the embedding half maps too. It is the CHAIN PARENT (s0) that this dialect cannot express, which is not what anyone expected to be the blocker. A single captured trace with an invoke_workflow span retires this file and two others at once; see TASKS.md 2.11 and 2.14.",
+    "renderable": false
+  }
+}

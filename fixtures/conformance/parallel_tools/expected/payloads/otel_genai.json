@@ -1,0 +1,17 @@
+{
+  "_note": "This dialect's own values for the payloads expected/comparison.json declares dialect-varying (FIXTURES.md 4.4). Claim 1 -- fidelity within a dialect -- still pins every one of them; only the CROSS-dialect assertion sets them aside. Each value below is parsed from the attribute in dialects/otel_genai.jsonl that produced it, not copied from adapter output.",
+  "s0.inputs": {
+    "mime": "application/json",
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Check both suppliers.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  }
+}

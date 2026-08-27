@@ -32,4 +32,10 @@ None.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.11)
+
+Only `name` is declared. Both payloads agree in **both** fields — a tool
+call's arguments and result are `application/json` in both dialects and carry
+the same values, which is the byte-for-byte agreement the 2.6 matched pair
+showed. The minimum viable trace is therefore also the minimum viable
+cross-dialect claim: two instrumentors, no declaration but a span name.

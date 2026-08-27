@@ -31,4 +31,12 @@ None.
 ## Dialects
 
 - [x] `openinference` — Phase 1
-- [ ] `otel_genai` — Phase 2
+- [x] `otel_genai` — Phase 2 (2.11)
+
+Only `name` is declared, and here that is worth a sentence rather than a
+pointer: **both** agent spans render as `invoke_agent`, so the GenAI names are
+not merely different from OpenInference's, they are identical to each other.
+`gen_ai.agent.name` would distinguish them and the adapter deliberately does
+not read it as `operation` (an agent's name is not a tool, model or retriever
+name — `SPEC.md` §3.2), so it surfaces in `unmapped` instead. Containment is
+carried entirely by `parent_id`, which is what this scenario asserts.

@@ -1,0 +1,1 @@
+{"trace_id": "t1", "span_id": "s0", "parent_id": null, "name": "execute_tool lookup", "start_time": 1000.0, "end_time": 1001.0, "status": "OK", "attributes": {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "lookup", "gen_ai.tool.call.arguments": "{\"order\":\"A-1\"}", "gen_ai.tool.call.result": "{\"status\":\"shipped\"}"}}
