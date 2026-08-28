@@ -108,10 +108,11 @@ rename or drop the field and nothing would notice) but it is a *different* gap
 from "nothing states or asserts this value anywhere", and the *Relies on* notes
 keep the two apart.
 
-Measured over the corpus and the captured fixtures at the commit that adds this
-file; 39 perturbations, one per field plus three that were split per payload
-side. The result is reproduced under *Measured* below, and the eleven green
-fields are cross-checked against this table by the test.
+Measured over the corpus and the captured fixtures; one perturbation per field,
+with the three payload fields run per side. Re-run in full after the `SPEC.md`
+§3.7 correction below, which moved three counts and left the eleven green
+fields unchanged. The result is reproduced under *Measured*, and the eleven
+green fields are cross-checked against this table by the test.
 
 ---
 
@@ -307,9 +308,14 @@ the library rely on that no document states and no test asserts?*
 - `diagnostics[].node_id` — that it is present exactly when the diagnostic is
   about one node. This is finding **F7** (2.4) — nothing states which codes are
   node-scoped — still unresolved, now visible as a field row.
-- `diagnostics[].source` — see **F-E**. §3.7's table is the worked example of
-  what "done" looks like *for two codes*. The catch-all row covering the other
-  ten is stated and unasserted, and three of those ten do not match its words.
+- `diagnostics[].source` — see **F-E**. §3.7's table was the worked example of
+  what "done" looks like *for two codes*, and its catch-all over the other ten
+  was false for three of them until this session corrected and asserted it.
+  What is still relied on: that a consumer can branch on `code` to know
+  `source`'s shape. True for the seven rows now stated; the catch-all still
+  covers three codes no fixture emits (`duplicate_source_id`,
+  `multi_trace_input`, `malformed_record`), so for those it is stated and
+  unmeasured.
 - `diagnostics[].adapter` — that it names the adapter that raised the
   diagnostic. Nothing states it, nothing asserts it, and the value can be
   invented at the boundary with the suite green.
@@ -330,13 +336,13 @@ the library rely on that no document states and no test asserts?*
 
 ## Measured — what a change at the schema boundary breaks
 
-One perturbation per field, whole suite each time, at the commit that adds this
-file. Reproduced so the Asserted column can be re-derived rather than trusted.
+One perturbation per field, whole suite each time. Reproduced so the Asserted
+column can be re-derived rather than trusted.
 
 ### The eleven fields nothing asserts
 
-Changing any of these in `serialize.py` leaves the suite entirely green — **1179 passed, 2 skipped**, which is the suite as it stood immediately
-before this file added its own:
+Changing any of these in `serialize.py` leaves the suite entirely green — **1335 passed, 2 skipped**, the whole suite including this file's own
+checks:
 
 ```text
 meta.spanweave_version
@@ -363,7 +369,7 @@ far the permissive default reaches, and it is the same measurement that made
 |---|---|
 | `schema_version` | 6 |
 | `trace_id` | 2 |
-| `nodes[].id` | 13 |
+| `nodes[].id` | 14 |
 | `nodes[].name` | 1 |
 | `nodes[].operation` | 1 |
 | `nodes[].status_note` | 1 |
@@ -380,15 +386,22 @@ far the permissive default reaches, and it is the same measurement that made
 | `edges[].src` | 5 |
 | `edges[].dst` | 5 |
 | `edges[].basis` | 1 |
-| `diagnostics[].code` | 5 |
+| `diagnostics[].code` | 7 |
 | `diagnostics[].node_id` | 1 |
-| `diagnostics[].source` | 2 |
+| `diagnostics[].source` | 4 |
 | `annotations[].namespace` | 1 |
 | `annotations[].node_id` | 1 |
 | `annotations[].value` | 1 |
 
-Nine of these twenty-five go red in exactly one test, and in seven of the nine
-that one test is the expected-graph comparison — a pin.
+**Fourteen** of these twenty-five go red in exactly one test, and in **eight** of
+the fourteen that one test is a pin rather than a rule. A field whose only
+guard is one comparison against a committed graph is a field the corpus notices
+changing and nothing explains.
+
+*(The first version of this paragraph said "nine … and in seven of the nine",
+which was wrong in both figures. It was caught by the recount that the
+`SPEC.md` §3.7 correction forced, not by anyone reading it — which is the
+finding this file is about, occurring inside the file itself.)*
 
 ---
 
@@ -480,33 +493,54 @@ by `span_links` pinning `kind: chain` (`expected/coverage.json`, and 2.16's
 pending decision). A third dialect added without that is a third dialect that
 leaves this row exactly where it is.
 
-### F-E. `Diagnostic.source`'s catch-all row is stated and unasserted
+### F-E. §3.7's `source` catch-all was stated and false — corrected in this session
 
-§3.7's table names four codes and then says *everything else — the offending
-fragment, verbatim*. Measured, the ten other codes emit:
+**As found.** §3.7's table named four codes and then said *everything else — the
+offending fragment, verbatim*. Measured, the ten other codes emit:
 
 | Code | `source` observed |
 |---|---|
-| `unknown_span_kind` | `str` — the dialect's kind string |
+| `unknown_span_kind` | `str` — the dialect's kind string, or the whole record when there was no kind attribute |
 | `orphan_parent` | `str` — the missing parent's span id |
 | `unmapped_attributes` | `list[str]` — attribute keys (declared) |
 | `nonmonotonic_time` | `list[float]` — `[started_at, ended_at]` |
 | `ordering_cycle` | `list[str]` — **spanweave node ids** |
 | `missing_timestamp` | `null` |
 | `payload_parse_failed` | `null` |
-| `duplicate_source_id`, `malformed_record`, `multi_trace_input` | not emitted by any fixture |
+| `duplicate_source_id` | `str` — the duplicated source id (no fixture emits it) |
+| `multi_trace_input` | `str` — the foreign trace id (no fixture emits it) |
+| `malformed_record` | `str` — the line's text, declared (no fixture emits it) |
 
-Three of these do not match the catch-all's words. `missing_timestamp` and
+Three of these did not match the catch-all's words. `missing_timestamp` and
 `payload_parse_failed` carry **no fragment at all**; `ordering_cycle` carries a
 list of ids the library computed, which is derived output rather than a verbatim
-fragment of the input. `tests/test_codes.py` asserts the two unpaired codes, and
-checks the table's other direction only as *declared shapes ⊆ real codes* — so
-nothing would notice a code whose `source` shape changed, or one that started
-carrying a fragment where it carries `null`.
-
-This is the same species as the 2.10 defect it was written to fix, one level
+fragment of the input. That is a document making a false statement about the
+library — a smaller instance of exactly what this inventory exists to find, and
+the same species as the 2.10 defect the table was written to fix, one level
 down: the remedy stated the shape for the codes that motivated it and left a
 prose catch-all over the rest.
+
+**As fixed.** §3.7 now carries a row for each of the three, the catch-all reads
+*"the offending fragment, as the type it arrived as"*, and the two shapes the
+catch-all leaves genuinely open — `unknown_span_kind`'s string-or-record, and
+`nonmonotonic_time`'s assembled pair — are named in prose rather than left for a
+reader to infer from one example. The rows state what the library emits; they
+are **not** a vocabulary adapters are held to, and §3.7 says so.
+
+**And asserted, because a table nothing checks is how this happened.**
+`tests/test_codes.py` gained three checks, verified by planting rather than by
+reading: a code the table calls `null` that starts carrying a fragment goes red;
+a code carrying nothing whose row claims a fragment goes red; and
+`ordering_cycle`'s source is asserted to be node ids of the graph it came from.
+The table's older direction — *declared shapes ⊆ real codes* — could not have
+caught any of this, because a wrong shape passes it.
+
+**One thing deliberately left alone.** `spanweave/read.py` has a defensive branch
+that would emit `malformed_record` with the parsed document rather than a `str`,
+contradicting that code's declared row. It is unreachable: the branch fires only
+if text whose first non-space byte is `[` parses to a non-list, which valid JSON
+cannot do. It is recorded here rather than in `SPEC.md`, because the document
+should describe what the library does and not what an unreachable branch would.
 
 ### F-F. Three fields are the same fact written twice, with nothing relating them
 

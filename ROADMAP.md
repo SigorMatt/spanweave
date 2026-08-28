@@ -77,7 +77,10 @@ here rather than next to the launch.
   `TASKS.md` with its cause. Detection, if kept, picks the right adapter with no
   ambiguity; if deferred, `--adapter` is required and the deferral is recorded.
 - **Shareable:** "the same run, two instrumentors, one graph" — the diff that
-  isn't.
+  isn't. *Bounded after the fact, at `TASKS.md` 3.2: the diff that isn't is a
+  diff over everything `canonical()` compares **except `Node.name`**, which 16
+  of the 17 both-dialect scenarios declare dialect-varying. Show the diff with
+  that said, not without it.*
 
 ## If Phase 2 slips — the cut order (decided in advance)
 
@@ -288,12 +291,68 @@ schedule, unfrozen — nothing here moves breadth earlier or adds a condition to
 publishing. Decoupling the two is what makes this affordable: the irreversible
 decision waits for the evidence, and the reversible one does not.
 
-Known already, and waiting on exactly this: `Edge.basis` is a free `str`, is
-compared by `canonical()`, is adapter-supplied — and both adapter-supplied bases
-are invisible to the cross-dialect claim today, so the vocabulary is unstated and
-**unmeasurable by construction** with two dialects (`TASKS.md` 2.14). It is the
-fourth instance of the pattern, caught before it bit, and dialect three is what
-would measure it.
+Known already, and waiting on exactly this — **two** instances now, both caught
+before they bit, both unstated and **unmeasurable by construction** with two
+dialects:
+
+| | Why it is unmeasurable today |
+|---|---|
+| **4. `Edge.basis`** (2.14) | a free `str`, compared by `canonical()`, adapter-supplied — and both adapter-supplied bases are invisible to the cross-dialect claim |
+| **5. `Usage.extra`'s keys** (3.2) | an open key vocabulary, compared by `canonical()`, adapter-supplied and **dialect-derived verbatim** — each adapter takes its own attribute suffix, so `llm.token_count.cache_read` becomes `cache_read` and `gen_ai.usage.cache_read_input_tokens` becomes `cache_read_input_tokens` for the same concept. Two dialects would disagree, and it is `{}` on every node of every fixture in the repository, so the disagreement is unreachable |
+
+### The gate is necessary and, for these two, not sufficient
+
+Stated here because it is exactly the kind of thing that is otherwise discovered
+*at* freeze time. **"A third dialect rendered across the corpus" satisfies the
+gate as written, and still leaves both rows above where they are** unless the
+conditions below also hold. That is a qualification of the gate, not a
+weakening of it: the gate stays a hard precondition, and these are additional
+conditions on the two specific fields it was partly written to measure.
+
+The reason is the measurement, and 3.2 sharpened it in a way 2.14 could not
+have: **an adapter-supplied field is only measured when two adapters that
+*chose* a value have to agree on it.** Agreement on a value neither author
+chose is structural, the way the builder's four `basis` strings are — real, but
+not evidence about a vocabulary.
+
+**What would be sufficient for `Edge.basis`.** Three conditions, and only the
+first is a corpus act:
+
+1. **A `link`-carrying scenario that a second dialect can render.**
+   `span_links` is the corpus's only one and is declared unrenderable in
+   `otel_genai` — blocked by the `invoke_workflow` → `chain` decision
+   (`TASKS.md` 2.16), *not* by link support: `fixtures/captured/genai_workflow.jsonl`
+   proves the `otel_genai` adapter reads a real span link and emits an
+   `EdgeKind.link` with `basis` `span.link`. Either that decision is taken, or a
+   `link`-carrying scenario that does not pin `kind: chain` is authored.
+2. **An adapter that has to choose a different `basis`.** Both current adapters
+   take `SpanLink.basis`'s *default*, `"span.link"` (`TASKS.md` 3.2). Two
+   dialects agreeing on a default measures the default, not the vocabulary. The
+   measurement needs a dialect whose links come from somewhere other than the
+   OTel record-level `links` field — which is a property of whatever dialect
+   three turns out to be, and cannot be arranged by choosing one.
+3. **For `DeclaredDataEdge.basis`, an adapter that emits one at all.** 2.14
+   recorded that `otel_genai` produces none; 3.2 found `openinference` produces
+   none either — both reach the same relation through `received_call_ids`, whose
+   `basis` the *builder* supplies. It is a required seam field that nothing has
+   ever populated, in either dialect. If dialect three also names no data
+   relation with both ends on one span, that is itself the finding, and a seam
+   field three dialects never populate is a candidate for removal — which is a
+   **shape** change and belongs in the freeze decision rather than after it.
+
+**What would be sufficient for `Usage.extra`.** Less, and differently: it is
+blocked by the *corpus*, not by what dialect three is. Both current dialects
+already define counted attributes the model has no field for; what is missing is
+a scenario whose renderings carry one. A scenario exercising a non-standard
+token count in two dialects would measure the disagreement immediately — subject
+to `FIXTURES.md` §5.1, which forbids deriving a rendering from a reading of a
+dialect rather than from observed output.
+
+**Neither of these licenses stating a contract early.** Writing one for a field
+no second implementation has had to agree with is the same defect inverted, and
+that is why the enumeration (`CONTRACTS.md`, `TASKS.md` 3.2) states no contracts
+and this section states no vocabulary. What is recorded here is what the
+instrument would have to be.
 
 - **Exit:** three or more community-contributable adapters passing conformance;
   schema frozen at `1`; `1.0.0` published.

@@ -230,8 +230,9 @@ into diagnostics is an unnecessary exposure surface.
 #### `source`, per code
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
-rather than inferred. Two codes carry an object; the rest carry the offending
-fragment as the type it arrived as.
+rather than inferred. Most codes carry the offending fragment as the type it
+arrived as; two carry an object, two carry nothing, and one carries something
+the library computed rather than something it was given.
 
 | Code | `source` |
 |---|---|
@@ -239,7 +240,31 @@ fragment as the type it arrived as.
 | `unpaired_result` | `{"call_id": str, "operation": str \| null}` |
 | `unmapped_attributes` | `list[str]` — attribute keys, never values |
 | `malformed_record` | `str` — the line's text |
-| everything else | the offending fragment, verbatim |
+| `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
+| `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
+| `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
+| everything else | the offending fragment, as the type it arrived as |
+
+The three rows above the catch-all were added at `TASKS.md` 3.2, which measured
+what each code actually carries and found that the catch-all's older wording —
+*"the offending fragment, verbatim"* — was **false for exactly these three**.
+Two carry no fragment at all, and `ordering_cycle` carries library output rather
+than source. That is a document making a false statement about the library,
+which is a smaller instance of what 3.2 exists to find, so it is corrected here
+rather than left for a consumer to discover.
+
+Two things the catch-all still leaves open, said plainly rather than implied.
+`unknown_span_kind`'s fragment is the dialect's kind **string** when there was
+one and the **whole record** when there was not — both are the offending
+fragment, and which one arrives depends on why the kind was unknown.
+`nonmonotonic_time`'s is a two-element array assembled from `started_at` and
+`ended_at`; the values are reported, the array is not. Neither contradicts the
+row, and neither is a shape a consumer should infer from a single example.
+
+The rows here state what the library emits today; they are not a vocabulary
+adapters are held to for codes an adapter raises, and no second implementation
+has yet had to agree with them. `CONTRACTS.md` carries `Diagnostic.source` as an
+inventory row and says which half is which.
 
 `operation` is the name the dialect gave the tool, and is `null` when the
 dialect named none. It is not a guess: a dialect that states a requested call's

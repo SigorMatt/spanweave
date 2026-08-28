@@ -85,6 +85,14 @@ Every scenario in `fixtures/conformance/` is expressed in **multiple dialects**
 that must all produce the **same canonical graph**. That equivalence is the
 library's entire reason to exist, and it is a test, not a claim.
 
+**With one field set aside, said here rather than found later.** A scenario may
+declare a field *dialect-varying* — a reviewable file in the corpus, never a
+branch in the comparison code (`FIXTURES.md` §4.4). One field is declared
+almost everywhere: `name`, the span name, which two instrumentors are least
+likely to spell the same way. 16 of the 17 scenarios rendered in two dialects
+declare it, so the equivalence above is a statement about everything else.
+`CONTRACTS.md` carries the measurement.
+
 ## Status
 
 Early development. Phase 1 is the vertical slice — one dialect (OpenInference)

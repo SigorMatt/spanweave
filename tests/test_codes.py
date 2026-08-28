@@ -191,3 +191,96 @@ def test_the_unpaired_codes_emit_the_object_the_spec_declares():
             assert sorted(entry["source"]) == ["call_id", "operation"]
             assert isinstance(entry["source"]["call_id"], str)
     assert seen == {diagnostics.UNPAIRED_CALL, diagnostics.UNPAIRED_RESULT}
+
+
+# --------------------------------------------------------------------------
+# The catch-all row, which was false for three codes until `TASKS.md` 3.2
+# --------------------------------------------------------------------------
+#
+# §3.7 said "everything else — the offending fragment, verbatim" and covered
+# ten codes. Two of them carry no fragment at all, and `ordering_cycle`
+# carries node ids the library computed. Nothing noticed, because the table
+# was checked only in the direction "every declared shape is a real code" —
+# which a wrong shape passes.
+#
+# This is the other direction, and it is the same shape of check as
+# `test_the_compared_list_names_every_field_that_is_compared`: the code is the
+# source of truth for what is emitted, and the document must keep up with it.
+
+
+def observed_sources() -> dict[str, set[bool]]:
+    """Code -> whether a `source` was carried, over the whole corpus."""
+    import spanweave
+    from spanweave.serialize import to_document
+
+    corpus = pathlib.Path(__file__).resolve().parent.parent / "fixtures"
+    carried: dict[str, set[bool]] = {}
+    paths = sorted(corpus.glob("conformance/*/dialects/*.jsonl")) + sorted(
+        corpus.glob("captured/*.jsonl")
+    )
+    for path in paths:
+        try:
+            document = to_document(spanweave.build(path))
+        except spanweave.SpanweaveError:  # a scenario that must not build
+            continue
+        for entry in document["diagnostics"]:
+            carried.setdefault(entry["code"], set()).add(entry["source"] is not None)
+    return carried
+
+
+def codes_declared_empty() -> set[str]:
+    """Codes whose §3.7 row says they carry `null`."""
+    return {
+        code for code, shape in source_shapes().items() if shape.startswith("`null`")
+    }
+
+
+def test_a_code_the_spec_says_carries_no_source_carries_none():
+    declared = codes_declared_empty()
+    assert declared, (
+        "the §3.7 table declares no empty source -- the regex has gone stale"
+    )
+    for code, carried in observed_sources().items():
+        if code in declared:
+            assert carried == {False}, (
+                f"SPEC.md §3.7 says {code} carries no source, and it carries one"
+            )
+
+
+def test_a_code_that_carries_a_source_is_not_one_the_spec_calls_empty():
+    # The other direction. A code that starts carrying a fragment must leave
+    # the `null` rows, and one that stops must enter them; neither can be done
+    # by editing one half.
+    declared = codes_declared_empty()
+    for code, carried in observed_sources().items():
+        if carried == {False}:
+            assert code in declared, (
+                f"{code} carries no source and SPEC.md §3.7 does not say so; "
+                f"its row claims a fragment it does not have"
+            )
+
+
+def test_the_ordering_cycle_source_is_node_ids_the_library_computed():
+    """The one row that says `source` is derived rather than transcribed.
+
+    Worth asserting on its own: it is the row a reader is most likely to take
+    for a fragment of the input, and the reason the catch-all could not cover
+    it.
+    """
+    import spanweave
+    from spanweave.serialize import to_document
+
+    corpus = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
+    document = to_document(
+        spanweave.build(corpus / "cyclic_parents/dialects/openinference.jsonl")
+    )
+    ids = {node["id"] for node in document["nodes"]}
+    found = [
+        d for d in document["diagnostics"] if d["code"] == diagnostics.ORDERING_CYCLE
+    ]
+    assert found, "cyclic_parents no longer produces an ordering_cycle diagnostic"
+    for entry in found:
+        assert entry["source"], f"{diagnostics.ORDERING_CYCLE} carries no node ids"
+        assert set(entry["source"]) <= ids, (
+            "ordering_cycle's source must be node ids of this graph, not source content"
+        )

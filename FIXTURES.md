@@ -150,6 +150,17 @@ dialect-varying (§4.4). It is the library's central claim, and the reason a
 declaration is a file in the corpus rather than a branch in the comparison
 code.
 
+**How much claim 2 actually covers, counted rather than assumed.** A field that
+every scenario declares is a field claim 2 never tests, and the count is not
+visible from any one scenario. Measured at `TASKS.md` 3.2: **`name` is declared
+dialect-varying by 16 of the 17 scenarios rendered in two dialects**, and the
+seventeenth (`duplicate_span_ids`) must not build, so claim 2 has never compared
+`name` at all. That is the mechanism working as designed — `name` is what two
+instrumentors are least likely to agree on — but it means "the same run, two
+instrumentors, one graph" is a statement about everything *else* `canonical()`
+compares. Quote the claim with that bound attached; `CONTRACTS.md` carries the
+row.
+
 Two scenarios in the seed corpus have no `expected/graph.json`, for two
 **different** reasons, and they get two different mechanisms because they are
 two different statements. Conflating them would make the corpus unable to say

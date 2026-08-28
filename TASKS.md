@@ -1585,7 +1585,9 @@ below:
 > `make check` green (1155 tests), `make conformance` green, `make gates`
 > green, `review_corpus.py` exit 0. The phase's central claim, over 17 of 21
 > scenarios rendered in both dialects: **16 byte-identical canonical graphs,
-> 1 identical refusal, 0 differ.**
+> 1 identical refusal, 0 differ** — **not including `Node.name`, which 16 of
+> the 17 declare dialect-varying (measured at 3.2; see 2.14's evidence block
+> before quoting the figure).**
 >
 > **Read 2.14.** It is the phase-exit artifact and the input to the Phase 4
 > freeze decision. Its headline: `spanweave/model.py` was **not touched** in
@@ -2296,6 +2298,11 @@ below:
   > described by two independent instrumentors, produces one graph — and the
   > graphs are byte-identical, not merely equal after allowances. This is the
   > phase's central claim, evidenced.**
+  >
+  > *Bounded at 3.2: "after allowances" is doing real work for one field —
+  > `Node.name` is declared dialect-varying by 16 of the 17 scenarios rendered
+  > in both dialects, so it is not among what agrees. See 2.14's evidence
+  > block.*
   >
   > ### `make conformance`
   >
@@ -3323,6 +3330,28 @@ below:
   > request from an echo**, produces one graph. `llm_tool_llm` is the reference
   > case and was the first evidence, at 2.9.
   >
+  > > ### The bound on that figure, added at 3.2 — read it beside the number
+  > >
+  > > **The 16 do not include `Node.name`.** `canonical()` compares `name`, and
+  > > **16 of those 17 scenarios declare it dialect-varying** in
+  > > `expected/comparison.json`; the 17th is `duplicate_span_ids`, the
+  > > identical refusal, which produces no graph to compare. So `name` has
+  > > **never been compared across dialects, in any scenario, at any point in
+  > > this project** — measured at `TASKS.md` 3.2 and rowed in `CONTRACTS.md`.
+  > >
+  > > This does not weaken the claim; it states it. `name` is the field two
+  > > instrumentors are *least* likely to agree on, which is precisely why §4.4's
+  > > declaration mechanism exists — one dialect names a span
+  > > `ChatCompletion`, the other `chat gpt-oss-120b`, and neither is wrong. The
+  > > sentence above is true of everything the corpus compares. It is simply not
+  > > a claim about `name`, and a reader quoting "16 byte-identical canonical
+  > > graphs" without this would overstate it.
+  > >
+  > > **The `phase-2-exit` tag message carries the unqualified form.** It was
+  > > written before this was measured and is **superseded by this block**; the
+  > > tag is an annotated object and published history, and it is not rewritten.
+  > > A reader who finds the tag first should be led here.
+  >
   > ## Model changes, with cause and classification
   >
   > Two, and only one touches a public contract.
@@ -3504,7 +3533,9 @@ below:
   > ## Definition of done
   >
   > - [x] Both dialects produce identical canonical graphs for every scenario in
-  >       scope — 16 byte-identical, 1 identical refusal, 0 differ.
+  >       scope — 16 byte-identical, 1 identical refusal, 0 differ. **Bounded at
+  >       3.2: not including `Node.name`, which 16 of the 17 declare
+  >       dialect-varying — see the block under *The evidence*.**
   > - [x] P5 resolved in `PREDICTIONS.md` (REFUTED, scoped) by the human at 2.4;
   >       O1 amended by the human at 2.10. Neither file touched by the agent.
   > - [x] Every model change recorded above with its cause and classification.
@@ -4443,6 +4474,107 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
   > - [x] A test fails if a field appears without an entry, and if an entry
   >       appears without a field.
   > - [x] `make check` green.
+
+  > # 3.2 follow-ups — approved and worked in the same session
+  >
+  > Three, all arising from 3.2's findings, all before 3.3. `make check` green
+  > (1335 passed, 2 skipped), `make conformance` green, `make gates` green,
+  > `review_corpus.py` exit 0. Nothing under `spanweave/` changed.
+  >
+  > ## 1. The Phase 2 headline is bounded, in five places
+  >
+  > "16 byte-identical canonical graphs" does **not** include `Node.name`. The
+  > bound is now stated beside the figure at **2.14's evidence block** (the
+  > canonical statement), and at every other place the claim is made: 2.14's
+  > definition-of-done line, **2.9's HALT-DISCHARGED note**, the `[2a]` session
+  > marker, `ROADMAP.md`'s Phase 2 *Shareable*, `FIXTURES.md` §4 (with the
+  > count, where the declaration mechanism is defined), and `README.md`'s
+  > *Conformance* section — which had the unqualified claim in the most-read
+  > place and no mention of the declaration mechanism at all.
+  >
+  > The claim is not weakened, it is stated. `name` is what two instrumentors
+  > are least likely to agree on, which is why §4.4 exists.
+  >
+  > **The `phase-2-exit` tag carries the unqualified form and is not
+  > rewritten.** It is an annotated object and published history. 2.14's record
+  > now says the tag message predates this finding and is superseded by that
+  > block, so a reader who finds the tag first is led to the correction.
+  >
+  > `README.md`'s stale *Status* section (it still describes Phase 2 as
+  > upcoming) was **left alone**: that is 3.8's docs truth pass, not this.
+  >
+  > ## 2. The freeze gate is qualified — necessary, and not sufficient
+  >
+  > In `ROADMAP.md`, *The third dialect is a freeze precondition*. The gate
+  > stands unweakened; what is added is that **"a third dialect rendered"
+  > satisfies the gate as written and still leaves `Edge.basis` unmeasured**,
+  > because 3.2's two corrections changed the instrument: no adapter emits a
+  > `DeclaredDataEdge` at all, and neither adapter has ever *chosen* a
+  > `SpanLink.basis` — both take the default.
+  >
+  > The principle now stated there, which 2.14 could not have: **an
+  > adapter-supplied field is only measured when two adapters that *chose* a
+  > value have to agree on it.** Agreement on a default is structural, the way
+  > the builder's four `basis` strings are.
+  >
+  > What would be sufficient is written out: (1) a `link`-carrying scenario a
+  > second dialect can render — `span_links` is the only one and is blocked by
+  > the `invoke_workflow` → `chain` decision (2.16), *not* by link support;
+  > (2) an adapter that has to choose a different basis, which is a property of
+  > whatever dialect three turns out to be and cannot be arranged; (3) for
+  > `DeclaredDataEdge.basis`, an adapter that emits one at all — and if dialect
+  > three emits none either, a seam field three dialects never populate is a
+  > removal candidate, which is a **shape** change and belongs in the freeze
+  > decision rather than after it.
+  >
+  > **`Usage.extra` added as the fifth instance** of the pattern, beside
+  > `Edge.basis` as the fourth. It is blocked differently and that is recorded:
+  > by the **corpus**, not by what dialect three is — both current dialects
+  > already define counted attributes the model has no field for, so a scenario
+  > carrying one in two dialects would measure the disagreement immediately,
+  > subject to `FIXTURES.md` §5.1.
+  >
+  > ## 3. `SPEC.md` §3.7's `source` catch-all is corrected and asserted
+  >
+  > The catch-all read *"everything else — the offending fragment, verbatim"*
+  > and was **false for three of the ten codes it covered**:
+  > `missing_timestamp` and `payload_parse_failed` carry no fragment at all, and
+  > `ordering_cycle` carries spanweave node ids, which is derived output.
+  >
+  > **Fixing it needed no decision, so it did not halt.** The correction makes
+  > the document *less* claiming than it was: three rows added for what those
+  > codes actually carry, the catch-all narrowed to "as the type it arrived
+  > as", and the two shapes it still leaves open named in prose
+  > (`unknown_span_kind` carries the kind string *or* the whole record;
+  > `nonmonotonic_time`'s array is assembled from two reported values). §3.7
+  > now says explicitly that these rows state what the library emits and are
+  > **not** a vocabulary adapters are held to — no second implementation has
+  > agreed with them, so stating one would be 3.2's defect inverted.
+  >
+  > **Asserted, because a table nothing checks is how this happened.** Three
+  > checks in `tests/test_codes.py`, each verified by planting: a `null` row
+  > that starts carrying a fragment, a code carrying nothing whose row claims
+  > one, and `ordering_cycle`'s source being node ids of its own graph. The
+  > table's older direction — *declared shapes ⊆ real codes* — passes a wrong
+  > shape, which is why it caught nothing.
+  >
+  > **Left alone deliberately:** `read.py` has an unreachable defensive branch
+  > that would emit `malformed_record` with a parsed document rather than a
+  > `str`. Recorded in `CONTRACTS.md` F-E, not in `SPEC.md`, because the spec
+  > should describe what the library does rather than what an unreachable
+  > branch would.
+  >
+  > ## And one thing the re-measurement caught inside 3.2 itself
+  >
+  > Correcting §3.7 changed what three probes break, so the whole sweep was
+  > re-run. That recount found a **false sentence in `CONTRACTS.md` as
+  > approved**: it said "nine of these twenty-five go red in exactly one test,
+  > and in seven of the nine that one test is the expected-graph comparison".
+  > The real figures are **fourteen** and **eight**. Corrected, with the
+  > correction left visible in the document — a prose count that nobody
+  > recomputes is the same species as an unstated field that nobody asserts,
+  > occurring inside the file written to find it. The eleven green fields were
+  > unchanged by the re-run.
 
 ---
 
