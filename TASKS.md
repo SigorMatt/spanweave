@@ -4159,7 +4159,7 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 
 ### `[prereq]`
 
-- [ ] **3.1 Re-scope `AGENT.md` and `ENVIRONMENT.md` for Phase 3.** `[prereq]`
+- [x] **3.1 Re-scope `AGENT.md` and `ENVIRONMENT.md` for Phase 3.** `[prereq]`
   As 2.1 did for Phase 2, and for the same reason: a cold session reads
   `AGENT.md` first and is currently told that Phase 3 must not start. Rewrite
   *Scope of this run* for Phase 3, **keeping every halt point**, discharging the
@@ -4197,6 +4197,72 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
   *Artifact for the decision:* the diff of `AGENT.md`'s *Scope of this run* and
   *Halt-and-hand-back points* sections and `ENVIRONMENT.md`'s network and
   credentials sections, side by side with the old text.
+  > **Scope change authorised explicitly by the human before this ran**, since
+  > `AGENT.md` scoped the run to the Phase 2 exit and this is the task that
+  > changes that. The **HALT still stands**: 3.2 has not been started, and the
+  > new scope wants approval before it is.
+  > **Halts: eight kept, one moved, three retired, five added.** The eight
+  > standing entries are unchanged in force — captured fixtures, any model
+  > change, `OPEN_QUESTIONS.md`, editing `PREDICTIONS.md`, the freeze /
+  > `schema_version` semantics, the license and `SPEC.md` scope, live
+  > credentials and network, and the phase exit. The one that moved is the
+  > **phase exit**, now Phase 3's (3.11), with 1.9 and 2.14 recorded as
+  > discharged rather than deleted.
+  > **The three retired are named as retired, with why each is now false** —
+  > the 2.2 / 2.6 capture runs (both ran; the general captured-fixtures halt is
+  > what survives them, and it now also forbids describing 3.4's generated load
+  > input as captured), the 2b timebox (closed; the human has marked P5
+  > **REFUTED — scoped**), and the first cross-dialect equivalence run (it
+  > happened, and both dialects have agreed since 2.13). Deleted rather than
+  > left standing, for 2.1's reason: a halt that is already false is how a list
+  > of halts stops being read.
+  > **Five added**, one more than this task listed. The four it named: the PyPI
+  > publish (3.10), the `schema_version` decision at its task (3.7), the
+  > consumers' findings records and the resolution artifact (3.3, 3.4, 3.5,
+  > because a human marks P1–P4), and — as an explicit instance rather than a
+  > new licence — a type change **forced by the 3.2 inventory**, which 3.2
+  > marks HALT and which the halt list otherwise reached only through the
+  > general model-change entry. The fifth is **adding a core runtime
+  > dependency**: `ENVIRONMENT.md` has always called it *"a halt point
+  > (`AGENT.md`)"* and `AGENT.md` did not carry it. A cross-reference that
+  > resolves to nothing is not a halt, and this phase's must-not list depends
+  > on it.
+  > **The must-not list gained what Phase 3 newly forbids, not only lost what
+  > it newly permits** — the argument is 2.1's and it held: a scope section
+  > that only removes prohibitions reads as open season. It now forbids the
+  > freeze and `SCHEMA_FROZEN` and `schema_version` `1`; a third dialect (Phase
+  > 4, and *now also a freeze precondition*, which makes doing it early cost
+  > more than it used to, not less); resolving or editing `PREDICTIONS.md`;
+  > widening the shape/operational distinction to classify a want as
+  > operational; a core runtime dependency added to make an example easier;
+  > publishing to PyPI **or TestPyPI**; and — carried forward unweakened —
+  > editing an `expected/graph.json` or weakening `canonical()`, which no Phase
+  > 3 task should touch, so an apparent need to is itself a finding.
+  > Two things Phase 2 forbade are now named as **required**: the confirmatory
+  > consumers (3.3, 3.4), and **preparing** a PyPI distribution. The
+  > prepare/push line is drawn in the scope text and again in the publish zone.
+  > **One line changed outside the four requested sections**, and it is in the
+  > artifact below: **run loop step 3**. As written it tells a session to author
+  > the fixture and its expected graph before implementing. No Phase 3 task
+  > authors a fixture — the consumers read committed ones — and a session
+  > following step 3 literally would write the fixture its own consumer is then
+  > measured against, which is the consumer setting its own exam. The step now
+  > says so and calls the apparent need a finding.
+  > `ENVIRONMENT.md`: the network policy is **four zones**, and the new one is
+  > stated as differing *in kind* — the first three are inbound or none (build
+  > and capture both *pull*), and pushing to an external index is outward-facing,
+  > credentialed, and effectively irreversible on a name-plus-version. It says
+  > what the agent **may** do — `uv build`, and installing a locally built wheel
+  > into a throwaway venv, which reaches PyPI only as zone 1 does — so that 3.6
+  > and 3.10 are not blurred by the same rule. Credentials now names **two**
+  > human-run credentialed steps rather than "the single credentialed step":
+  > the model API key, and a PyPI/TestPyPI token the agent must not hold and
+  > must not be given "just to test the upload".
+  > Two things this task offered conditionally were **not** done, because their
+  > condition is unmet: `make install-check` is not in the commands list (3.6
+  > has not built it, and a contract naming a command that does not run is the
+  > `fixtures/captured/README.md` failure in advance), and the `otlp` extra
+  > keeps its "(Phase 4)" annotation because it has not moved.
 
 ---
 

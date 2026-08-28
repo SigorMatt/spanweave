@@ -63,7 +63,7 @@ fix one deliberately, don't let them drift.
 - `tests/`                — pytest, including the invariant gates (0.4–0.6) and
   the acceptance checks (0.8).
 
-## Network policy (three zones — do not blur them)
+## Network policy (four zones — do not blur them)
 
 1. **Build / CI:** may reach PyPI (via uv) to install dependencies. Nothing else.
 2. **Library core (`spanweave/`):** makes **no network connection, ever** —
@@ -73,6 +73,19 @@ fix one deliberately, don't let them drift.
 3. **`capture/` harness:** may use the network, a model API, and framework
    dependencies — but it is human-run (`make capture`), lives outside the
    package, and never runs in the library's path.
+4. **Publish (`TASKS.md` 3.10):** **outbound, credentialed, human-run.** The
+   first three zones are inbound or none — build *pulls* from PyPI, core
+   connects nowhere, capture *pulls* from a model API. Pushing an artifact **to**
+   an external index is a fourth thing and differs in kind, not degree: it is
+   outward-facing, it needs a credential the agent does not have, and a
+   name-plus-version on PyPI cannot be reused, which makes it the closest thing
+   in this project to irreversible. It happens from a human's environment, once
+   per release. The agent may **build** the distribution (`uv build` → `dist/`)
+   and may install a locally built wheel into a throwaway venv — the wheel-install
+   check arriving at `TASKS.md` 3.6 reaches PyPI only as **zone 1** does, for
+   dependencies. The agent must never run `uv publish`, `twine upload`, or any
+   equivalent, **including to TestPyPI**, which is an external index with a
+   credential like any other.
 
 `examples/` may not use the network either; they consume committed fixtures so
 that anyone can run them reproducibly.
@@ -81,9 +94,17 @@ that anyone can run them reproducibly.
 
 - The **autonomous agent runs with no secrets and no API keys.** It therefore
   cannot — and must not — capture a real trace (`AGENT.md` halt point,
-  `FIXTURES.md` §6).
-- The single credentialed step is the human-run `make capture`, which may need a
-  model API key and a framework install in the human's own environment. Keep
-  keys out of the repo and out of the agent's environment.
+  `FIXTURES.md` §6), nor publish one line of this project anywhere.
+- There are exactly **two** credentialed steps, both human-run, both in the
+  human's own environment and never in the agent's:
+  - a **model API key**, for `make capture`, which may also need a framework
+    install;
+  - a **PyPI token** (and a TestPyPI token, if the recommended
+    TestPyPI-first sequence is used), for the publish — network zone 4,
+    `TASKS.md` 3.10. Human-only. The agent must not hold one, must not be given
+    one "just to test the upload", and prepares the publish command **unrun**.
+- Keep keys out of the repo and out of the agent's environment. No token belongs
+  in `pyproject.toml`, the `Makefile`, CI configuration, an example, or a task
+  record — including a revoked one, which still teaches the shape.
 - Captured traces are **reviewed and redacted by a human before commit**, and
   the redaction is recorded in the provenance file.
