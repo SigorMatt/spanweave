@@ -426,3 +426,80 @@ def test_a_link_to_a_span_outside_the_trace_is_named_not_dropped():
     ]
     assert outside == ["s9"]
     assert inside == ["s1"]
+
+
+# -- the P2 perturbation measurement, pinned ------------------------------
+
+
+def _collapse_sweep():
+    """Re-render state `a` as state `b`, one directed pair at a time.
+
+    3.2's instrument: a distinction that is *used* is one whose removal
+    changes the output. `branch` is what a harness acts on (`availability`,
+    `complete`); `anything` includes the printed `reason`.
+    """
+    traces = _every_committed_trace()
+
+    def observe(branch_only):
+        seen = []
+        for result in trajectory_dump.transcribe_all(traces):
+            if not isinstance(result, trajectory_dump.Transcript):
+                continue
+            for step in result.steps:
+                for line in step.lines:
+                    seen.append(
+                        (line.availability, line.complete)
+                        if branch_only
+                        else (line.availability, line.complete, line.reason)
+                    )
+        return seen
+
+    original = dict(trajectory_dump.STATE_RENDERINGS)
+    base_branch, base_all = observe(True), observe(False)
+    rows = {}
+    try:
+        for first in sorted(PayloadState):
+            for second in sorted(PayloadState):
+                if first is second:
+                    continue
+                trajectory_dump.STATE_RENDERINGS = {**original, first: original[second]}
+                rows[(str(first), str(second))] = (
+                    observe(False) != base_all,
+                    observe(True) != base_branch,
+                )
+                trajectory_dump.STATE_RENDERINGS = original
+    finally:
+        trajectory_dump.STATE_RENDERINGS = original
+    return rows
+
+
+#: The measurement `TASKS.md` 3.3 reports. Pinned because the first version of
+#: that record carried a **wrong** count (it said 8 of 20, off an earlier
+#: undirected run) and nothing recomputed it — the same species as an unstated
+#: field nothing asserts, which is what 3.2 exists to find.
+COLLAPSES = {"total": 20, "anything": 16, "branch": 14, "wording_only": 2, "none": 4}
+
+
+def test_the_perturbation_counts_in_the_3_3_record_still_hold():
+    rows = _collapse_sweep()
+    counts = {
+        "total": len(rows),
+        "anything": sum(1 for anything, _ in rows.values() if anything),
+        "branch": sum(1 for _, branch in rows.values() if branch),
+        "wording_only": sum(
+            1 for anything, branch in rows.values() if anything and not branch
+        ),
+        "none": sum(1 for anything, _ in rows.values() if not anything),
+    }
+    assert counts == COLLAPSES
+
+
+def test_the_two_named_collapses_are_the_ones_the_record_names():
+    rows = _collapse_sweep()
+    # The one pair this consumer does not separate on the branch.
+    assert rows[("absent", "redacted")] == (True, False)
+    assert rows[("redacted", "absent")] == (True, False)
+    # `truncated` in either direction changes nothing: no committed trace
+    # contains one, so the distinction never had the opportunity to be used.
+    for other in ("absent", "empty", "present", "redacted"):
+        assert rows[("truncated", other)] == (False, False), other

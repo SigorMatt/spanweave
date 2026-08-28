@@ -4701,11 +4701,26 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > **Measured by perturbation, not by reading** — 3.2's instrument, 20 runs,
   > one directed collapse each (`a` re-rendered as `b`, whole-corpus sweep
-  > re-run and diffed):
+  > re-run and diffed). **Pinned as a test** at the follow-up, not left in
+  > prose: `test_the_perturbation_counts_in_the_3_3_record_still_hold` and
+  > `test_the_two_named_collapses_are_the_ones_the_record_names` recompute it
+  > every run, which is what the first version of this figure lacked.
   >
-  > - **8 of 20 collapses change the branch** a reader acts on. `absent`↔`empty`
-  >   is one of them, which is `SPEC.md` §3.3's central claim holding up under a
-  >   consumer that had a reason to care.
+  > - **14 of 20 collapses change the branch** a reader acts on, and 16 change
+  >   the output at all. `absent`↔`empty` is among them, which is `SPEC.md`
+  >   §3.3's central claim holding up under a consumer that had a reason to
+  >   care.
+  >
+  >   > **This figure was wrong in the record as first written** — it read *"8
+  >   > of 20"*, which is the count off an earlier *undirected* run of the same
+  >   > sweep, carried across when the measurement was redone directionally. Two
+  >   > of the twenty change only the wording and four change nothing, so 14 is
+  >   > the branch count and 16 the any-change count. Corrected on
+  >   > re-measurement against the final code, with the correction left visible:
+  >   > a prose count nobody recomputes is the same species as an unstated field
+  >   > nobody asserts — which is the defect 3.2's own follow-up caught inside
+  >   > `CONTRACTS.md`, occurring here one task later in the file written to
+  >   > report it.
   > - **`absent` read as `redacted` (and the reverse) changes only the printed
   >   reason.** This consumer puts both on `unavailable`, so a harness branching
   >   on `availability` cannot tell them apart. Recorded as evidence in P2's
@@ -4959,7 +4974,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > # 3.3 follow-ups — the review's rulings, and one rot fixed
   >
   > Worked in the same session, after the human ruled on F-1, F-2 and F-3.
-  > `make check` green (**1393 passed, 2 skipped**), `make gates` green,
+  > `make check` green (**1395 passed, 2 skipped**), `make gates` green,
   > `make conformance` green, `review_corpus.py` exit 0. Nothing under
   > `spanweave/` changed. `PREDICTIONS.md` untouched.
   >
@@ -5036,7 +5051,25 @@ consumer's findings go in the exit record beside these and carry more weight.
   > checked, found by something else having to agree with it — one layer out, in
   > an example rather than a spec.
   >
-  > ## 3. P2's resolution wording, drafted and handed over
+  > ## 3. One count in the 3.3 record was wrong, and is now executable
+  >
+  > Re-measuring against the final code before drafting P2's wording found the
+  > record's perturbation figure was **wrong**: it read *"8 of 20 collapses
+  > change the branch"*, carried across from an earlier *undirected* run of the
+  > same sweep. The directed figures are **14** on the branch and **16** on any
+  > change, with 2 wording-only and 4 no-change. Corrected in place with the
+  > correction left visible.
+  >
+  > **And pinned, because prose was the problem.** The sweep now runs as two
+  > tests (`test_the_perturbation_counts_in_the_3_3_record_still_hold`,
+  > `test_the_two_named_collapses_are_the_ones_the_record_names`), so the
+  > numbers in the record are recomputed on every `make check` rather than read.
+  > This is 3.2's own follow-up finding — *a prose count that nobody recomputes
+  > is the same species as an unstated field that nobody asserts* — happening
+  > one task later, in the record written to report it. The remedy the second
+  > time is a test rather than a correction.
+  >
+  > ## 4. P2's resolution wording, drafted and handed over
   >
   > Written in `PREDICTIONS.md`'s own form, carrying its scope the way P5's
   > does: what the consumer read, what it did not exercise, and that `truncated`
