@@ -4640,8 +4640,12 @@ consumer's findings go in the exit record beside these and carry more weight.
   > `Diagnostic` code or query primitive was wanted.** The consumer is built
   > entirely from what `spanweave/__init__.py` already exports, and every
   > question it had to answer it answered from an existing field. The findings
-  > below are three bounds on evidence and two observations; **none of them is a
-  > want**, and each says so explicitly rather than being left to read as one.
+  > below are **two bounds on evidence, one spec gap, and two observations**;
+  > each carries its classification explicitly rather than being left to read as
+  > one. The spec gap (F-2) is not a gate failure and does not become one: the
+  > gate measures what a consumer **could not express**, and F-2 is a fact the
+  > model expresses and no document states — O1 is the worked precedent for
+  > that distinction, and unlike O1 this one carries no shape cost.
   >
   > That is the gate passing, which is what this phase expects. It is *not*
   > evidence that the model is general — it is evidence that **this** consumer,
@@ -4751,9 +4755,15 @@ consumer's findings go in the exit record beside these and carry more weight.
   > - **`usage` is not read at all.** That is 3.4's consumer, deliberately; this
   >   one produces no evidence about P1.
   >
-  > ## Findings — three bounds and two observations. **None is a want.**
+  > ## Findings — two bounds, one spec gap, two observations
   >
-  > ### F-1. The transcript's natural label is the one field never compared
+  > **Classified at review**, and the classifications are the human's: F-1 no
+  > want and no classification, a bound; **F-2 SPEC GAP**; F-3 a bound and not a
+  > proposal. The gate is unaffected in every case — a spec gap is not a shape
+  > change (`PREDICTIONS.md`, and O1 is the worked precedent).
+  >
+  > ### F-1 (bound). `Node.name` is the transcript's natural label, and the one
+  > field the equivalence claim has never compared
   >
   > A transcript wants a short human label per step. The obvious field is
   > `Node.name`; it is also the field 16 of 17 two-dialect scenarios declare
@@ -4768,20 +4778,22 @@ consumer's findings go in the exit record beside these and carry more weight.
   > apart only by their node id. The field that would distinguish them is the
   > dialect-varying one.
   >
-  > **Not a want.** Nothing new is needed; the consumer chose a different
-  > existing field. **Not classifiable as a spec gap either**, and it is left
-  > unfitted rather than forced: a spec gap is *"a need the model could express
-  > … but which nothing populates"*, and here the model expresses it and
-  > something populates it. What is missing is a **statement, in what ships**,
-  > that `name` does not agree across dialects. That fact lives in `FIXTURES.md`
-  > §4 and `CONTRACTS.md` F-B, neither of which is in the wheel
-  > (`[tool.hatch.build] packages = ["spanweave"]`), so a stranger installing
-  > `0.9.x` gets `name` and no warning. The 2.10 boundary check was run and
-  > comes back **negative**: `nodes[].name` does cross the schema boundary, but
-  > saying it is dialect-varying changes neither its type nor its value, so
-  > there is no shape cost. For 3.8 and for the human, not for this task.
+  > **No want, and no classification.** Nothing new is needed; the consumer
+  > chose a different existing field, and there is therefore nothing to
+  > classify — recorded as a **bound on the equivalence claim**, beside F-3 and
+  > 3.2's own `nodes[].name` bound (F-B), which are the same fact reached three
+  > ways. **The 2.10 boundary check settles it:** `nodes[].name` does cross the
+  > schema boundary, but declaring it dialect-varying changes neither its type
+  > nor its value, so there is **no shape cost**.
   >
-  > ### F-2. Nothing on a `Diagnostic` says what it is scoped to — F7, met again
+  > One consequence stays live for 3.8, and is a docs item rather than a
+  > finding: the fact that `name` does not agree across dialects lives in
+  > `FIXTURES.md` §4 and `CONTRACTS.md` F-B, and **neither ships in the wheel**
+  > (`[tool.hatch.build] packages = ["spanweave"]`), so a stranger installing
+  > `0.9.x` gets `name` and no warning.
+  >
+  > ### F-2 (SPEC GAP). Nothing states what a `Diagnostic` is scoped to, or
+  > which codes bear on ordering — 2.4's F7, with independent evidence
   >
   > Building the transcript found it was under-reporting, twice, and both had
   > the same root. A transcript **is an ordering**, so a diagnostic that bears
@@ -4792,28 +4804,55 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > Both are fixed (`qualifiers`, `notes`, and three `limit:` lines printed
   > **before** the steps — a reader who learns the order is untrustworthy after
-  > reading it has learned it too late). What the fix required is the finding:
-  > the consumer learns "graph-scoped" from `node_id is None` **by
-  > observation**, and learns which codes bear on ordering by **reading §3.7's
-  > prose and hard-coding three code strings** (`ORDERING_CODES`). Nothing
-  > states either.
+  > reading it has learned it too late). What the fix required is the finding.
+  > The consumer learns "graph-scoped" from `node_id is None` **by
+  > observation**, and — the sharper half — it learns which codes bear on
+  > ordering by **reading `SPEC.md` §3.7's prose and hard-coding three code
+  > strings** (`ORDERING_CODES = {"ordering_cycle", "missing_timestamp",
+  > "nonmonotonic_time"}`). **It depends on a document, not on an API.** A
+  > consumer that re-reads §3.7 after a code is added gets it right; one that
+  > does not gets it silently wrong, and nothing in the schema or the types can
+  > tell it which it is.
   >
-  > That is 2.4's **F7** — *nothing states which diagnostic codes are
-  > node-scoped* — reached independently by a second consumer with a different
-  > job. It is already a `CONTRACTS.md` row (`diagnostics[].node_id`, *Relies
-  > on*); this is corroboration, and it raises the stake, because the ordering
-  > half of it is not just unstated but *unstatable from the schema*.
+  > **This is 2.4's F7** — *nothing states which diagnostic codes are
+  > node-scoped* — classified `operational` there only because the spec-gap
+  > category did not yet exist, and named in `PREDICTIONS.md`'s spec-gap
+  > definition as the candidate to re-read against it. **This is that re-read,
+  > and it carries independent evidence**: a second consumer, with a different
+  > job, hit the same gap without reference to the first. F7 came from a
+  > counting rollup asking which codes it could attribute to a node; this came
+  > from an ordered transcript asking which codes invalidate an order. Two
+  > consumers, one unstated fact.
   >
-  > **Not a want.** No new field or code is needed to fix the transcript, and
-  > none was added. Classified against the binding test: an existing
-  > `graph.json` already expresses everything the consumer needed — it just does
-  > not say what any of it is scoped to. **Left unfitted**: it is not shape, it
-  > is not operational, and it is not cleanly the spec-gap category either,
-  > since the remedy is a document stating what the library already emits rather
-  > than an adapter populating something new.
+  > **Why SPEC GAP is the right category, against the definition as written.**
+  > The need is expressible with **no** new field, `NodeKind`, `EdgeKind`,
+  > warrant, `Payload` state, `Diagnostic` code or query primitive — `node_id`
+  > already carries the scope and `code` already carries the identity. It is
+  > therefore not shape. It is not operational either: it changes nothing about
+  > what you *keep* or *how you get it*. What is missing is that **no document
+  > states it**, which is the category exactly.
   >
-  > ### F-3. The captured matched pair disagrees on `status`, and the
-  > conformance corpus cannot show it
+  > One refinement, because the definition's wording does not line up in one
+  > respect and forcing it would be the thing this file exists to prevent. The
+  > definition says the remedy is *"a spec change plus an adapter change"*. Here
+  > **the remedy is spec-only**: `node_id` is already populated correctly, so no
+  > adapter has to start emitting anything. That makes this a *cheaper* instance
+  > than O1, not a worse-fitting one — and the ordering half is the cleaner fit
+  > of the two, since nothing anywhere populates "this code bears on ordering".
+  >
+  > **The 2.10 amendment was checked and does not bite.** `diagnostics[].node_id`
+  > and `diagnostics[].code` both cross the schema boundary, so the check is
+  > required — and stating what they mean changes neither type nor value.
+  > **No shape cost, and no halt.** Unlike O1, whose remedy changed
+  > `Diagnostic.source`'s serialized type, this one changes nothing that is
+  > serialized.
+  >
+  > **Not resolved here.** The remedy is a `SPEC.md` §3.7 change, which is a
+  > spec conversation and not this task's diff. Recorded for the human, with the
+  > `CONTRACTS.md` row it corroborates (`diagnostics[].node_id`, *Relies on*).
+  >
+  > ### F-3 (bound). The captured matched pair disagrees on `status`, and the
+  > conformance corpus cannot surface it **by construction**
   >
   > Transcribing `openai_tool_call.jsonl` and `genai_tool_call.jsonl` — the
   > matched pair of the same tool-using conversation
@@ -4836,16 +4875,30 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > Why it matters: `canonical()` **compares `status`**, and §4.4's declaration
   > mechanism covers `name`, one `attributes` key, and payload `value`/`mime` —
-  > **not `status`**. The conformance corpus cannot surface this because both
-  > renderings of a scenario are authored from one scenario description, which
-  > fixes the status by construction. This is recorded in no provenance file and
-  > in no fixture note today.
+  > **not `status`**.
+  >
+  > **The structural reason the corpus cannot show it.** Both renderings of a
+  > conformance scenario descend from **one `scenario.md`**, which fixes the
+  > status before either dialect file is written. A hand-authored pair can only
+  > disagree where its author knew to make it disagree, so a real instrumentor
+  > disagreement on a field nobody suspected is **invisible to the conformance
+  > corpus by construction** — not missing from it, unreachable in it. That is
+  > the same shape as `FIXTURES.md` §5.1's rule (transcribe a rendering from a
+  > captured trace, never write it from a reading of the dialect), seen from the
+  > other side: §5.1 stops a rendering from being wrong, and cannot make a pair
+  > disagree about something its author did not anticipate.
+  >
+  > **This is the second bound found by reading captured traces rather than the
+  > corpus**, and it belongs with the first. The first is F-1/F-B — `name`,
+  > which the corpus handles by declaration; this one the corpus cannot reach at
+  > all. Both say the same thing about where the remaining evidence has to come
+  > from, and both are arguments for the third dialect being *run against real
+  > captures* rather than rendered (`ROADMAP.md` Phase 4).
   >
   > **Not a want, and explicitly not a proposal to make `status` declarable** —
   > widening the erasable set is exactly the move `FIXTURES.md` §4.4 forbids for
   > `state`, and proposing it here under launch pressure would be that
-  > rationalization. It is a **bound on the equivalence claim**, a sibling of
-  > F-B, and a human call.
+  > rationalization. It is a bound, and a human call.
   >
   > ### F-4 (observation). The transcript compares diagnostics per node, and the
   > two dialects still agree
@@ -4902,6 +4955,94 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       measured by perturbation, and separated from whether the corpus ever
   >       exercised it.
   > - [x] `make check` green.
+
+  > # 3.3 follow-ups — the review's rulings, and one rot fixed
+  >
+  > Worked in the same session, after the human ruled on F-1, F-2 and F-3.
+  > `make check` green (**1393 passed, 2 skipped**), `make gates` green,
+  > `make conformance` green, `review_corpus.py` exit 0. Nothing under
+  > `spanweave/` changed. `PREDICTIONS.md` untouched.
+  >
+  > ## 1. The three findings are classified, and the classifications are the
+  > human's
+  >
+  > **F-1 — no want, no classification, recorded as a bound.** The 2.10 boundary
+  > check settles it: `nodes[].name` crosses the schema boundary, and declaring
+  > it dialect-varying changes neither type nor value, so there is no shape
+  > cost. It now sits beside F-3 and 3.2's `nodes[].name` row (`CONTRACTS.md`
+  > F-B) as one of three routes to the same bound.
+  >
+  > **F-2 — SPEC GAP.** 2.4's F7, which `PREDICTIONS.md`'s spec-gap definition
+  > names as the candidate to re-read once the category had been exercised. This
+  > is that re-read, and it carries **independent evidence**: a second consumer,
+  > with a different job, hit the same unstated fact without reference to the
+  > first. F7 came from a counting rollup asking which codes it could attribute
+  > to a node; this came from an ordered transcript asking which codes
+  > invalidate an order.
+  >
+  > The sharpest part is recorded as the sharpest part: the consumer
+  > **hard-codes three code strings read out of `SPEC.md` §3.7's prose**
+  > (`ORDERING_CODES`). *It depends on a document, not on an API.* A consumer
+  > that re-reads §3.7 after a code is added gets it right; one that does not
+  > gets it silently wrong, and nothing in the schema or the types can say which.
+  >
+  > **The 2.10 amendment does not bite.** `diagnostics[].node_id` and
+  > `diagnostics[].code` both cross the schema boundary, so the check was
+  > required — and stating what they mean changes neither type nor value. **No
+  > shape cost, no halt**, and unlike O1 nothing serialized changes.
+  >
+  > One refinement is recorded rather than smoothed over: the definition says a
+  > spec gap's remedy is *"a spec change plus an adapter change"*, and here the
+  > remedy is **spec-only** — `node_id` is already populated correctly, so no
+  > adapter has to start emitting anything. A cheaper instance than O1, not a
+  > worse-fitting one, and the ordering half is the cleaner fit of the two since
+  > nothing anywhere populates "this code bears on ordering".
+  >
+  > **F-3 — a bound, with its structural reason now stated.** Both renderings of
+  > a conformance scenario descend from **one `scenario.md`**, which fixes the
+  > status before either dialect file is written. A hand-authored pair can only
+  > disagree where its author knew to make it disagree, so a real instrumentor
+  > disagreement on a field nobody suspected is **invisible to the conformance
+  > corpus by construction** — not missing from it, unreachable in it. F-3 is
+  > named as the **second bound found by reading captured traces rather than the
+  > corpus**, beside F-1/F-B, and both are recorded as arguments for the third
+  > dialect being *run against real captures* rather than rendered
+  > (`ROADMAP.md` Phase 4).
+  >
+  > The gate section is amended to match, and says why a spec gap is not a gate
+  > failure: the gate measures what a consumer **could not express**, and F-2 is
+  > a fact the model expresses and no document states.
+  >
+  > ## 2. The `fleet_aggregate` rot, fixed and pinned
+  >
+  > `examples/fleet_aggregate/__main__.py` printed *"...by the tool it asked
+  > for: not available (see limit below)"* while the JSON form carried a
+  > populated `by_tool` — false since the O1 remedy landed at 2.10 — and pointed
+  > at a `limit:` that is only emitted when a dialect named no tool, so the
+  > pointer resolved to nothing too. A document making a false statement about
+  > the library, in the one example a stranger is most likely to run.
+  >
+  > Fixed: the text form prints the `by_tool` table exactly as it prints
+  > `by_model`, and the column width now accounts for tool names.
+  >
+  > **Pinned, because a stale line is what happens when nothing compares the two
+  > forms.** `test_the_text_report_states_every_by_tool_count_the_json_form_carries`
+  > reads `--format json`, reads the text report, and asserts the text carries
+  > every `by_tool` count the JSON does. **Verified by planting**: restoring the
+  > old line turns it red, and the count comparison was checked non-vacuous
+  > (`by_tool == printed == {"lookup": 1}`) rather than assumed.
+  >
+  > This is the same species as §3.7's catch-all at 3.2 — a statement nothing
+  > checked, found by something else having to agree with it — one layer out, in
+  > an example rather than a spec.
+  >
+  > ## 3. P2's resolution wording, drafted and handed over
+  >
+  > Written in `PREDICTIONS.md`'s own form, carrying its scope the way P5's
+  > does: what the consumer read, what it did not exercise, and that `truncated`
+  > **had no opportunity to occur** rather than surviving. **Handed to the human
+  > as text; `git diff PREDICTIONS.md` is empty.** The file is read-only to the
+  > agent in every phase and a human marks P2.
 
 - [ ] **3.4 Cost & latency attributor.** `[consumers]` Tests `PREDICTIONS.md` P1.
   Roll `usage` and duration up the `parent` tree, applying the **consumer's own**
