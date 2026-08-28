@@ -4592,7 +4592,7 @@ work and `PREDICTIONS.md` exists because *the designer also picks the exam*.
 Finding a stranger is a human act, not an agent task. If one appears, their
 consumer's findings go in the exit record beside these and carry more weight.
 
-- [ ] **3.3 Trajectory dumper.** `[consumers]` Tests `PREDICTIONS.md` P2.
+- [x] **3.3 Trajectory dumper.** `[consumers]` Tests `PREDICTIONS.md` P2.
   Flatten a run into an ordered call/result transcript an eval harness could
   read. It walks `parent` + `call_result`, reads payloads across all five states,
   and — per blocker 2 — names an unfulfilled call's tool from
@@ -4623,6 +4623,285 @@ consumer's findings go in the exit record beside these and carry more weight.
   Cutting it defers P2's Phase 3 evidence; P2's predicted outcome is
   REFUTED-as-harmless with no model consequence, which is what makes it the
   cheaper of the two to lose. Record the cut and say P2 is unmarked because of it.
+
+  > # 3.3 record — the trajectory dumper, and what it could not exercise
+  >
+  > `examples/trajectory_dump/` (new, `__init__.py` + `__main__.py`) +
+  > `tests/test_example_trajectory_dump.py` (new, 57 tests). `make check` green
+  > (**1392 passed, 2 skipped**; +57 from this file), `make gates` green,
+  > `make conformance` green (419), `review_corpus.py` exit 0.
+  > **`git diff --stat spanweave/` is empty.** No fixture was authored, no
+  > `expected/graph.json` was touched, `canonical()` was not weakened, and no
+  > dependency was added.
+  >
+  > ## The gate — zero shape changes, and it held
+  >
+  > **No new field, `NodeKind`, `EdgeKind`, warrant, `Payload` state,
+  > `Diagnostic` code or query primitive was wanted.** The consumer is built
+  > entirely from what `spanweave/__init__.py` already exports, and every
+  > question it had to answer it answered from an existing field. The findings
+  > below are three bounds on evidence and two observations; **none of them is a
+  > want**, and each says so explicitly rather than being left to read as one.
+  >
+  > That is the gate passing, which is what this phase expects. It is *not*
+  > evidence that the model is general — it is evidence that **this** consumer,
+  > chosen by the same process that built the model, needed nothing new
+  > (`PREDICTIONS.md`, *the designer also picks the exam*).
+  >
+  > ## Blocker 2 — the O1 remedy landed, measured rather than asserted
+  >
+  > The tool of a call that never ran is read in **one line**
+  > (`_asked_for`: `diagnostic.source.get("operation")`), and it is **the same
+  > line in both dialects**. No payload is walked. Asserted two ways:
+  > `test_the_tool_of_an_unfulfilled_call_is_read_off_the_diagnostic` passes a
+  > bare `Diagnostic` with no graph behind it — if the name needed
+  > `outputs.value[...]` it could not pass at all — and the transcripts below
+  > carry the identical line in both dialects.
+  >
+  > ```
+  > openinference                            otel_genai
+  >   2    llm demo-model   [s1] ok  0.800s    2    llm demo-model   [s1] ok  0.800s
+  >          ! asked for lookup — nothing ran         ! asked for lookup — nothing ran
+  >   3    tool other   [s2] ok  0.800s        3    tool other   [s2] ok  0.800s
+  >          ! no call in this trace asked           ! no call in this trace asked
+  >            for this                                for this
+  > ```
+  >
+  > The full pair for `unpaired_tool_call` differs on exactly three things: the
+  > source path, the two `dialect-local:` lines, and the payload content the
+  > scenario declares dialect-varying. Nothing else.
+  >
+  > ## P2 — the per-state record. **Do not read an outcome off this; a human
+  > marks P2.**
+  >
+  > The consumer decides per state rather than calling `Payload.has_content` —
+  > which is itself P2's predicted collapse, since it answers True for `present`
+  > and `truncated` and False for the other three. The table
+  > (`STATE_RENDERINGS`) splits what a reader **branches on** (`availability`,
+  > `complete`) from what it **prints** (`reason`), because that is the only way
+  > to say "used" without inflating it.
+  >
+  > | state | availability | exercised on the corpus |
+  > |---|---|---|
+  > | `present` | `content` | 92 payloads |
+  > | `empty` | `none` | 4 |
+  > | `absent` | `unavailable` | 114 |
+  > | `redacted` | `unavailable` | 2 |
+  > | `truncated` | `content`, `complete=False` | **0** |
+  >
+  > A sixth rendering exists and is **not** a sixth state: `present` with
+  > `value is None` (`SPEC.md` §3.3's parse failure) is reached from an existing
+  > state plus an existing field, 2 payloads. It was expressible; it is recorded
+  > because "the consumer needed a distinction" and "the model lacked one" are
+  > different claims.
+  >
+  > **Measured by perturbation, not by reading** — 3.2's instrument, 20 runs,
+  > one directed collapse each (`a` re-rendered as `b`, whole-corpus sweep
+  > re-run and diffed):
+  >
+  > - **8 of 20 collapses change the branch** a reader acts on. `absent`↔`empty`
+  >   is one of them, which is `SPEC.md` §3.3's central claim holding up under a
+  >   consumer that had a reason to care.
+  > - **`absent` read as `redacted` (and the reverse) changes only the printed
+  >   reason.** This consumer puts both on `unavailable`, so a harness branching
+  >   on `availability` cannot tell them apart. Recorded as evidence in P2's
+  >   direction on that one pair, not hidden.
+  > - **All four `truncated` collapses change nothing at all.** Not "unused" —
+  >   *unexercised*: no committed trace contains one, so the distinction never
+  >   had the opportunity to be used or refused.
+  >
+  > **Why `truncated` is zero, and why that is structural rather than a corpus
+  > gap to fill:** neither shipped adapter can emit it.
+  > `spanweave/adapters/openinference.py` says so in its module docstring — the
+  > dialect signals redaction with a marker string and has no truncation signal
+  > — and the GenAI convention states none either. So a fixture could only
+  > produce one by being written to. **Per 3.1's re-scoped run-loop step 3, that
+  > would be the consumer setting its own exam, and it was not done.**
+  >
+  > **The `WORSE` condition was not met.** No state the enum lacks was wanted:
+  > `sampled_out`, `deferred` and `elided_by_option` never came up, and nothing
+  > this consumer needed to say about a payload was unsayable.
+  >
+  > ## What the dumper reads, and what that bounds
+  >
+  > **All 41 committed traces**: 38 conformance renderings (21 scenarios — 17 in
+  > both dialects, 4 in `openinference` only) and **all 3 captured traces**. 39
+  > transcribe; **2 are refused** and reported rather than raised —
+  > `duplicate_span_ids` in both dialects, `DuplicateNodeIdError`
+  > [`duplicate_node_id`], which is the fixture doing its job.
+  >
+  > All 7 `NodeKind`s, all 4 explicit `EdgeKind`s and 9 of the 12 seed
+  > diagnostic codes appear. **What it did not exercise is the bound**, and it
+  > is the same species of bound `nodes[].name` turned out to need:
+  >
+  > - **`chain`, `retriever` and `embedding` appear only in single-dialect
+  >   scenarios.** Their transcripts were never cross-dialect compared, by this
+  >   consumer or by anything else.
+  > - **`link` edges appear only in single-dialect renderings** — `span_links`
+  >   (`openinference` only) and the captured `genai_workflow` (`otel_genai`
+  >   only). So `links_to` / `links_outside` are pinned within a dialect and
+  >   compared across none. This is 3.2's follow-up finding arriving from the
+  >   consumer side: `span_links` is the blocked scenario, and it is blocked by
+  >   2.16's `invoke_workflow` → `chain` decision, not by link support.
+  > - **`redacted` is `openinference`-only by construction**, since the
+  >   `otel_genai` adapter has no redaction signal to read. Its 2 payloads are
+  >   one scenario in one dialect.
+  > - **`duplicate_source_id`, `multi_trace_input` and `malformed_record` never
+  >   appear.** No transcript was produced under them.
+  > - **`usage` is not read at all.** That is 3.4's consumer, deliberately; this
+  >   one produces no evidence about P1.
+  >
+  > ## Findings — three bounds and two observations. **None is a want.**
+  >
+  > ### F-1. The transcript's natural label is the one field never compared
+  >
+  > A transcript wants a short human label per step. The obvious field is
+  > `Node.name`; it is also the field 16 of 17 two-dialect scenarios declare
+  > dialect-varying, so the corpus has never compared it (`CONTRACTS.md` F-B).
+  > This consumer therefore keys on `kind` + `operation` and demotes `name` to a
+  > `dialect_local` block — arrived at independently, and it lands on exactly
+  > what the corpus declares.
+  >
+  > The cost is real and is not a model failure: where `operation` is `None` —
+  > every `agent` span, every `unknown` node — the portable label degrades to
+  > the bare kind, so two sibling agent spans read identically and are told
+  > apart only by their node id. The field that would distinguish them is the
+  > dialect-varying one.
+  >
+  > **Not a want.** Nothing new is needed; the consumer chose a different
+  > existing field. **Not classifiable as a spec gap either**, and it is left
+  > unfitted rather than forced: a spec gap is *"a need the model could express
+  > … but which nothing populates"*, and here the model expresses it and
+  > something populates it. What is missing is a **statement, in what ships**,
+  > that `name` does not agree across dialects. That fact lives in `FIXTURES.md`
+  > §4 and `CONTRACTS.md` F-B, neither of which is in the wheel
+  > (`[tool.hatch.build] packages = ["spanweave"]`), so a stranger installing
+  > `0.9.x` gets `name` and no warning. The 2.10 boundary check was run and
+  > comes back **negative**: `nodes[].name` does cross the schema boundary, but
+  > saying it is dialect-varying changes neither its type nor its value, so
+  > there is no shape cost. For 3.8 and for the human, not for this task.
+  >
+  > ### F-2. Nothing on a `Diagnostic` says what it is scoped to — F7, met again
+  >
+  > Building the transcript found it was under-reporting, twice, and both had
+  > the same root. A transcript **is an ordering**, so a diagnostic that bears
+  > on ordering qualifies the whole artifact — and `cyclic_parents`'
+  > `ordering_cycle` was being dropped entirely, because it carries no
+  > `node_id`. `clock_skew`'s `nonmonotonic_time` was likewise invisible next to
+  > a step printing `-0.500s`.
+  >
+  > Both are fixed (`qualifiers`, `notes`, and three `limit:` lines printed
+  > **before** the steps — a reader who learns the order is untrustworthy after
+  > reading it has learned it too late). What the fix required is the finding:
+  > the consumer learns "graph-scoped" from `node_id is None` **by
+  > observation**, and learns which codes bear on ordering by **reading §3.7's
+  > prose and hard-coding three code strings** (`ORDERING_CODES`). Nothing
+  > states either.
+  >
+  > That is 2.4's **F7** — *nothing states which diagnostic codes are
+  > node-scoped* — reached independently by a second consumer with a different
+  > job. It is already a `CONTRACTS.md` row (`diagnostics[].node_id`, *Relies
+  > on*); this is corroboration, and it raises the stake, because the ordering
+  > half of it is not just unstated but *unstatable from the schema*.
+  >
+  > **Not a want.** No new field or code is needed to fix the transcript, and
+  > none was added. Classified against the binding test: an existing
+  > `graph.json` already expresses everything the consumer needed — it just does
+  > not say what any of it is scoped to. **Left unfitted**: it is not shape, it
+  > is not operational, and it is not cleanly the spec-gap category either,
+  > since the remedy is a document stating what the library already emits rather
+  > than an adapter populating something new.
+  >
+  > ### F-3. The captured matched pair disagrees on `status`, and the
+  > conformance corpus cannot show it
+  >
+  > Transcribing `openai_tool_call.jsonl` and `genai_tool_call.jsonl` — the
+  > matched pair of the same tool-using conversation
+  > (`fixtures/captured/README.md`) — the two agree on step count, order, kind,
+  > `operation`, depth, `call_result` pairing and every payload **state**, and
+  > disagree on `status`:
+  >
+  > | span | `openinference` | `otel_genai` |
+  > |---|---|---|
+  > | agent | `unset` | `unset` |
+  > | llm (both turns) | **`ok`** | **`unset`** |
+  > | tool | `unset` | `unset` |
+  >
+  > Read back from the raw records: the OpenInference instrumentor sets
+  > `status: "OK"` on LLM spans and the GenAI instrumentor leaves them `"UNSET"`.
+  > Both runs succeeded, so this is a property of the two instrumentors, not of
+  > the two runs — with the honest caveat that they are **two separate captures
+  > of two separate runs**, so it is strong evidence and not a controlled
+  > comparison.
+  >
+  > Why it matters: `canonical()` **compares `status`**, and §4.4's declaration
+  > mechanism covers `name`, one `attributes` key, and payload `value`/`mime` —
+  > **not `status`**. The conformance corpus cannot surface this because both
+  > renderings of a scenario are authored from one scenario description, which
+  > fixes the status by construction. This is recorded in no provenance file and
+  > in no fixture note today.
+  >
+  > **Not a want, and explicitly not a proposal to make `status` declarable** —
+  > widening the erasable set is exactly the move `FIXTURES.md` §4.4 forbids for
+  > `state`, and proposing it here under launch pressure would be that
+  > rationalization. It is a **bound on the equivalence claim**, a sibling of
+  > F-B, and a human call.
+  >
+  > ### F-4 (observation). The transcript compares diagnostics per node, and the
+  > two dialects still agree
+  >
+  > `canonical()` compares diagnostics by **code and global count**
+  > (`FIXTURES.md` §4). This consumer's `notes` are the same codes **scoped to a
+  > node**, and the cross-dialect test compares them — so it asserts something
+  > strictly stronger than the corpus does, on every two-dialect scenario, and
+  > it passes. Pinned in
+  > `test_the_transcript_compares_diagnostics_per_node_and_they_still_agree`,
+  > with a non-vacuity floor so it cannot go quiet.
+  >
+  > ### F-5 (observation). Declared `data` edges were read; none was ever wanted
+  > inferred
+  >
+  > For 3.5, stated plainly rather than left to silence: the transcript shows
+  > `data` edges **the telemetry declared** (`⇒ feeds …(declared)`), all
+  > `warrant=explicit`, and **never compares two payload values to decide that
+  > one flowed into the other**. The consumer did not want
+  > `--infer-data-edges` and had no occasion to. Per `PREDICTIONS.md` P3 and
+  > 3.5's own wording, **that is not a refutation** — P3's friction never had the
+  > opportunity to occur here. `OPEN_QUESTIONS.md` §7 is untouched.
+  >
+  > ## Divergences from the task as written
+  >
+  > - **The transcript grew two things 3.3 did not name** — graph-scoped
+  >   qualifiers and per-node diagnostic notes (F-2), and `link` targets
+  >   including the ones outside the trace (§4.0). Both were found by running
+  >   the thing, both use existing fields, and leaving them out would have made
+  >   the consumer look like it needed less than it did.
+  > - **`ENVIRONMENT.md`'s `examples/` line was left alone.** It still reads
+  >   *"the confirmatory ones in Phase 3"*, which is now half-true. That is
+  >   3.8's docs truth pass, and 3.1's precedent — do not write a contract line
+  >   ahead of its condition — cuts the same way in reverse. Named here so it is
+  >   not rediscovered as a surprise.
+  > - **One stale line was found in the *other* example and not fixed.**
+  >   `examples/fleet_aggregate/__main__.py` still prints *"...by the tool it
+  >   asked for: not available (see limit below)"* in its text report, though
+  >   `by_tool` has been populated since the O1 remedy landed at 2.10 and the
+  >   JSON form carries it. It is a rot in a Phase 2 artifact, outside this
+  >   task's diff, and it is recorded rather than silently swept.
+  >
+  > ## Definition of done
+  >
+  > - [x] `uv run python -m examples.trajectory_dump <fixture>` prints an
+  >       ordered transcript for a committed fixture in **both** dialects.
+  > - [x] The two outputs agree where the canonical graphs agree — asserted for
+  >       every two-dialect scenario, using the corpus's own
+  >       `expected/comparison.json` declarations rather than a list written in
+  >       the test.
+  > - [x] Byte-identical on re-run, and identical under reversed input order.
+  > - [x] `git diff --stat spanweave/` empty for this task.
+  > - [x] Per state, whether the consumer used the distinction or collapsed it —
+  >       measured by perturbation, and separated from whether the corpus ever
+  >       exercised it.
+  > - [x] `make check` green.
 
 - [ ] **3.4 Cost & latency attributor.** `[consumers]` Tests `PREDICTIONS.md` P1.
   Roll `usage` and duration up the `parent` tree, applying the **consumer's own**
