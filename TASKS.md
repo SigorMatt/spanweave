@@ -5077,7 +5077,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > as text; `git diff PREDICTIONS.md` is empty.** The file is read-only to the
   > agent in every phase and a human marks P2.
 
-- [ ] **3.4 Cost & latency attributor.** `[consumers]` Tests `PREDICTIONS.md` P1.
+- [x] **3.4 Cost & latency attributor.** `[consumers]` Tests `PREDICTIONS.md` P1.
   Roll `usage` and duration up the `parent` tree, applying the **consumer's own**
   price table — the table lives in `examples/`, never in `spanweave/`, and the
   word `cost` never appears under the package (`CLAUDE.md` 1, and it is banned
@@ -5118,6 +5118,652 @@ consumer's findings go in the exit record beside these and carry more weight.
   it **defers P1 to Phase 4** — write that in the exit record in those words, not
   "forfeits little", because P1 then has no test anywhere in this phase and the
   freeze inherits an unmarked prediction.
+
+  > # 3.4 record — the cost & latency attributor, and what it measured
+  >
+  > `examples/cost_latency/` (new: `__init__.py`, `__main__.py`, `load.py`) +
+  > `tests/test_example_cost_latency.py` (new, 145 tests, 2 skipped).
+  > `make check` green (**1540 passed, 4 skipped**; +145/+2 from this file),
+  > `make gates` green (69), `make conformance` green (419),
+  > `review_corpus.py` exit 0. **`git diff --stat spanweave/` is empty.** No
+  > fixture was authored, no `expected/graph.json` was touched, `canonical()`
+  > was not weakened, and no dependency was added — core or otherwise; the
+  > measurement uses stdlib `sys.getsizeof`, `tracemalloc` and `dataclasses`.
+  >
+  > ## The gate — zero shape changes, and it held
+  >
+  > **No new field, `NodeKind`, `EdgeKind`, warrant, `Payload` state,
+  > `Diagnostic` code or query primitive was wanted.** The consumer is built
+  > entirely from what `spanweave/__init__.py` already exports, plus stdlib
+  > `dataclasses.replace` applied to those public frozen types.
+  >
+  > The findings below are **one correction to two committed documents, one
+  > spec gap, one thing that does not fit the test and goes over unfitted, and
+  > three bounds.** Each carries its classification explicitly. Two of them
+  > need saying at the top, because both could be misread as the gate failing
+  > and neither is:
+  >
+  > - **F-2 is a SPEC GAP with a shape cost**, in the 2.10 sense — the model
+  >   expresses the fact, no document states the vocabulary, and the honest
+  >   remedy changes what is serialized. That is O1's structure exactly, and
+  >   O1 is the worked precedent for it not being a gate failure: the gate
+  >   measures what a consumer **could not express**, and this consumer
+  >   expressed the fact fine. What it could not do is *use* it portably.
+  > - **F-3 does not fit the shape/operational test as written**, so per
+  >   `AGENT.md` it goes to the human unfitted rather than being widened into
+  >   a fit. It is not a want of this consumer at all; it is a measured
+  >   property of the remedy P1 itself predicts.
+  >
+  > That the gate passed is what this phase expects. It is *not* evidence that
+  > the model is general — it is evidence that **this** consumer, chosen by the
+  > same process that built the model, needed nothing new (`PREDICTIONS.md`,
+  > *the designer also picks the exam*).
+  >
+  > ## P1 — the measurement. **Do not read an outcome off this; a human marks P1.**
+  >
+  > ### Method
+  >
+  > Three instruments, in the order the question needs them.
+  >
+  > 1. **Does this consumer read anything losslessness retains?** Asked as a
+  >    comparison rather than by reading the source for field accesses: build
+  >    each committed trace, drop payload `value`, payload `raw` and
+  >    `RawRecord.source` through the public API, and attribute **both**.
+  >    `test_the_attribution_is_identical_with_every_verbatim_byte_removed`
+  >    runs it over all 41 committed traces and the two forms are byte-identical
+  >    on every one, with
+  >    `test_the_strip_removed_something_on_every_trace_it_ran_on` as the
+  >    non-vacuity floor so a no-op strip could not pass it.
+  > 2. **What does it weigh?** `deep_bytes` — `sys.getsizeof`, recursive,
+  >    deduplicated by object identity, walking frozen dataclasses by their
+  >    declared fields because the model's types are `slots=True` and have no
+  >    `__dict__`. Interpreter-dependent by construction, so the figures below
+  >    name the interpreter and the consumer's own output never contains them.
+  > 3. **What was the high-water mark?** `tracemalloc`, read after the build and
+  >    again after the strip. This is the instrument the task did not name and
+  >    the one that decides the question, for the reason under *Wanted, or
+  >    accepted?* below.
+  >
+  > Measured on **cpython 3.12.3**.
+  >
+  > ### On the committed corpus — 39 buildable traces, 107 nodes
+  >
+  > | | bytes | per node |
+  > |---|---|---|
+  > | built | 501,785 | 4,689.6 |
+  > | stripped | 231,397 | 2,162.6 |
+  > | **retained** | **46.1%** | |
+  >
+  > Of the 231,397 stripped bytes, **42,931 (18.6%) are `diagnostics`, which
+  > the strip does not touch** — see F-4. On the three captured traces alone
+  > the figures are 124,597 → 41,957 (**33.7% retained**), of which 13,386
+  > (31.9%) is `diagnostics`.
+  >
+  > ### Extrapolated to P1's stated size, and then measured at it
+  >
+  > The corpus figure extrapolates to **469.0 MB built / 216.3 MB stripped at
+  > 100,000 spans**, and that extrapolation is **wrong in the conservative
+  > direction**, which is why it was checked rather than quoted. Bytes-per-node
+  > is dominated by payload length, and the corpus is one to nine spans each
+  > with toy payloads.
+  >
+  > Checked with a **generated load input** — `examples/cost_latency/load.py`,
+  > written to `out/` (gitignored), which `generate` **refuses** to write under
+  > `fixtures/` (`test_the_load_generator_refuses_to_write_where_fixtures_live`).
+  > It is synthesized, it is **not captured**, it never enters `fixtures/`, and
+  > it says nothing whatever about what real traces contain. The only thing it
+  > can answer is how memory scales with span count and payload length.
+  >
+  > At **100,000 spans with 1,500-character payloads** — P1's stated size, at a
+  > payload length in the range the captured traces actually show (350–3,557
+  > characters of source record):
+  >
+  > | | bytes | per node |
+  > |---|---|---|
+  > | built | 970,435,988 (970.4 MB) | 9,704.4 |
+  > | stripped | 145,636,086 (145.6 MB) | 1,456.4 |
+  > | **retained** | **15.0%** | |
+  >
+  > **85% of resident bytes are bytes this consumer never reads.** At
+  > 200-character payloads the same 100,000 spans give 450.4 MB → 145.6 MB
+  > (32.3% retained). The stripped figure barely moves — 1,456.4 vs 1,456.4
+  > B/node — which is F-4.
+  >
+  > ### The reading that decides it — peak, not steady state
+  >
+  > `tracemalloc`, same 100,000 × 1,500 run:
+  >
+  > | | current | peak |
+  > |---|---|---|
+  > | after build | 970,447,036 | 1,051,982,764 |
+  > | after strip | 145,627,790 | **1,074,069,428** |
+  >
+  > `current` falls by 85%. **`peak` does not fall — it rises**, because the
+  > strip itself allocates. That is not a limitation of the reading; it is the
+  > finding, and it is asserted rather than described
+  > (`test_a_post_build_strip_lowers_residency_and_cannot_lower_the_peak`).
+  >
+  > ### Wanted, or accepted? — the task asks for this plainly, so plainly:
+  >
+  > **Wanted, and specifically as a build-time option.** The two halves are
+  > different and only the second is P1's predicted friction:
+  >
+  > - **Steady state: not wanted.** The consumer can already drop every byte it
+  >   does not read, today, through the public API — `dataclasses.replace` over
+  >   the public frozen types plus `Graph.of`, which is what `without_verbatim`
+  >   is. A library option would buy it nothing it cannot already have.
+  > - **Peak: wanted, and unreachable from the consumer's side.** `build()`
+  >   returns only after the verbatim bytes exist, so the high-water mark is
+  >   already paid by the time any consumer-side strip can run. At P1's stated
+  >   size that is 1.05 GB to end up holding 146 MB. Nothing a consumer can
+  >   write reaches it; only `retain_payloads=False` / `retain_raw=False` at
+  >   build time would.
+  >
+  > So the friction P1 predicts **occurred**, at the size P1 named, and the
+  > remedy P1 names is the remedy — for the reason P1 gives *(memory it has no
+  > use for)* rather than the one a reader might assume *(residency)*.
+  >
+  > ### Scope of the measurement — four bounds, and the last two are load-bearing
+  >
+  > - **The 100k figure was measured on a generated input, not a trace.** No
+  >   committed trace approaches 100k spans; the largest is **nine**. What was
+  >   measured is how memory scales with span count and payload length. That it
+  >   scales says nothing about whether any real trace is that big.
+  > - **One consumer, and the designer picked it.** Same bound as P2's. A
+  >   different aggregation consumer — one that holds many graphs at once, or
+  >   one that streams — was not written.
+  > - **The payload length was chosen.** 1,500 characters is in the captured
+  >   traces' range, but it is a setting, and the retained fraction is entirely
+  >   a function of it (15.0% at 1,500; 32.3% at 200). A corpus of short
+  >   payloads would make P1 look much weaker, and did: 46.1%.
+  > - **`usage` itself is barely exercised**, which bounds everything the
+  >   attribution half of this consumer can claim. See **F-5**.
+  >
+  > ## Blocker 1 — 2b's negative evidence, carried with its scope
+  >
+  > Phase 2b's fleet aggregator asked for **no retention option**: findings
+  > F1–F9 (2.4) contain no retention item, no memory item, and nothing about
+  > losslessness being cost. That is real evidence, it is negative, and it is
+  > carried to 3.5 rather than discarded — **with the three reasons 3.4's
+  > blocker 1 gives for why it was not P1's test**, all three of which this
+  > task's measurement now confirms from the other side:
+  >
+  > - **The fleet could not exert the pressure.** Fourteen traces of a handful
+  >   of spans each, built one at a time. Measured here: the whole committed
+  >   corpus, 39 traces and 107 nodes, is **501,785 bytes built**. A prediction
+  >   about memory at 100k spans cannot be refuted by an input three orders of
+  >   magnitude below it.
+  > - **The aggregator was not the consumer P1 describes.** It never read
+  >   `usage` and never read a timestamp. This consumer reads both and nothing
+  >   that costs memory, which is what makes the identical-attribution
+  >   comparison meaningful at all.
+  > - **A counting rollup discards as it goes**, so it structurally cannot want
+  >   a retention option. This consumer is the same shape *per trace* — and
+  >   that is exactly why the finding landed on **peak** rather than residency:
+  >   a per-trace consumer's peak is one graph, and P1's case is one graph of
+  >   100k spans.
+  >
+  > **Corroboration, with scope, not a partial answer.** 2b's silence is a
+  > different consumer at a size that could not have produced the friction.
+  >
+  > ## What it read, and what it did not
+  >
+  > **Reads** (`READS`, pinned exhaustive against `Node`'s fields by
+  > `test_the_reads_and_never_read_lists_account_for_every_node_field`):
+  > `id`, `kind`, `operation`, `started_at`, `ended_at`, `usage` — plus
+  > `parent` edges via `children`/`parents`/`descendants`/`ancestors`,
+  > `graph.trace_id`, and `meta.adapters` for the dialect-local label.
+  >
+  > **Never reads** (`NEVER_READ`): `inputs`, `outputs`, `raw`, `name`,
+  > `status`, `status_note`, `attributes`, `provenance` — and **no
+  > diagnostics at all**, and no `data`, `link`, `temporal` or `call_result`
+  > edge.
+  >
+  > **`usage` is untouched by every consumer before this one**, so this is its
+  > first exercise, and what that exercise did *not* reach is the bound (F-5).
+  >
+  > ## Findings
+  >
+  > ### F-1 (correction). `Usage.extra` is **not** empty on the committed
+  > corpus, and two committed documents say it is
+  >
+  > `fixtures/captured/openai_tool_call.jsonl` carries
+  > `llm.token_count.prompt_details.cache_read` on both of its `llm` spans, and
+  > the OpenInference adapter maps it: the built graph has
+  > `usage.extra == {"prompt_details.cache_read": 80}` and `{... : 144}`, and
+  > both survive serialization. Total over the corpus: **224 tokens, 2 nodes,
+  > 1 trace.**
+  >
+  > Two committed statements are therefore false:
+  >
+  > - `CONTRACTS.md` **F-C**: *"**Never non-empty.** `extra` is `{}` on every
+  >   node of every conformance rendering and every captured trace in this
+  >   repository. The disagreement is therefore unreachable: it cannot be
+  >   observed by the corpus as it stands."*
+  > - `ROADMAP.md` Phase 4, freeze-gate row 5: *"…and it is `{}` on every node
+  >   of every fixture in the repository, so the disagreement is unreachable."*
+  >
+  > **This matters beyond the correction**, and that is why it is F-1 rather
+  > than a footnote: F-C's conclusion — that a Phase 4 contract for this field
+  > is *"more likely than most to be a shape change"* — was reached while
+  > believing the field was never populated. It is populated, in a **captured**
+  > trace, in the dialect the second adapter cannot match, and the first
+  > consumer to read `usage` hit it immediately. The conclusion survives; the
+  > premise it was reached from does not.
+  >
+  > **Classification: none — it is not a want.** It is a factual error in a
+  > document, found by the first consumer to exercise the field. Pinned so it
+  > cannot rot back: `test_usage_extra_is_non_empty_on_the_committed_corpus`
+  > asserts the exact dict and names both documents in its docstring.
+  >
+  > **Not fixed here, deliberately.** `CONTRACTS.md` and `ROADMAP.md` are
+  > `[contract]` and phase-planning artifacts; this is a `[consumers]` session
+  > and `AGENT.md` says never to mix workstreams in one context. 3.3's handling
+  > of the stale `ENVIRONMENT.md` line is the precedent: name it so it is not
+  > rediscovered as a surprise, and leave the edit to the workstream that owns
+  > it. (3.3's other precedent — fixing the `fleet_aggregate` rot — was an
+  > edit *inside* its own workstream, which this is not.)
+  >
+  > ### F-2 (SPEC GAP, with a shape cost). A price table cannot be keyed on
+  > `Usage.extra`, because nothing states what its keys mean
+  >
+  > This is the finding this consumer went looking for without knowing it
+  > existed, and it is the one number it had and could not use.
+  >
+  > Cached input tokens are the canonical thing a cost attributor prices
+  > differently — they are typically a fraction of the full input rate, and a
+  > table that ignores them overstates. The corpus supplies them (F-1). The
+  > consumer **cannot price them**, and the reason is not that the model lacks
+  > a field: the key and the count are both right there. It is that the key is
+  > each adapter's own attribute suffix carried verbatim —
+  > `prompt_details.cache_read` from `llm.token_count.prompt_details.cache_read`
+  > in OpenInference; `cache_read_input_tokens` from
+  > `gen_ai.usage.cache_read_input_tokens` under the GenAI convention — and
+  > **no document states the vocabulary**. `SPEC.md` §3.4's comment reads
+  > *"cache reads, reasoning tokens, etc."*, which is an illustration and not a
+  > key list.
+  >
+  > So a rate row keyed on `prompt_details.cache_read` is a rate row keyed on
+  > **one dialect**, in a consumer whose whole discipline is not to become one.
+  > The consumer refuses: it reports `extra` counts by key, excludes them from
+  > `charge`, and says why in `limits` (`EXTRA_UNPRICED`). Pinned by
+  > `test_extra_token_counts_are_reported_and_never_priced`, which also asserts
+  > the charge is exactly the input/output arithmetic and nothing else.
+  >
+  > **Why SPEC GAP is the right category, against the definition as written.**
+  > The need is expressible with **no** new field, `NodeKind`, `EdgeKind`,
+  > warrant, `Payload` state, `Diagnostic` code or query primitive — `extra`
+  > already carries the key and the count. Not shape. It is not operational
+  > either: it changes nothing about what you *keep* or *how you get it*. What
+  > is missing is that no document states it. That is the category exactly.
+  >
+  > One difference from 3.3's F-2, recorded rather than smoothed over: there
+  > the remedy was **spec-only**, because `node_id` was already populated
+  > correctly. Here the field is populated but with values two adapters spell
+  > differently, so the remedy is **a spec change plus an adapter change** —
+  > the definition's canonical form, and O1's.
+  >
+  > **The 2.10 amendment bites, and this is the difference that matters.**
+  > `nodes[].usage.extra` **does** cross the schema boundary. Stating the
+  > contract means either normalizing the keys — which changes what is
+  > serialized on the captured trace today, `prompt_details.cache_read`
+  > becoming something else — or declaring the keys dialect-local and not
+  > comparable, which changes what `canonical()` compares. **Either way
+  > something at the boundary moves, so this spec gap carries a shape cost**,
+  > like O1 and unlike 3.3's F-2.
+  >
+  > **What this is evidence *for*, stated carefully.** `CONTRACTS.md`
+  > pre-registered `nodes[].usage.extra` as one of two rows *"likeliest to meet
+  > [the halt condition] in Phase 4"* and said, correctly at the time:
+  > *"No consumer has run: 3.3 and 3.4 come after this task. Nothing here is
+  > evidence for or against that gate in either direction."* **This is that
+  > consumer, and there is now evidence.** It is evidence that the field's
+  > contract needs stating and that stating it is not free. It is **not** a
+  > Phase 3 gate failure, and must not be recorded as one: 3.2's halt condition
+  > is about the *inventory* forcing a type change, this phase's gate is about
+  > a *consumer* being unable to express something, and this consumer expressed
+  > the fact perfectly well — it printed the counts by key. Resolving it is
+  > Phase 4's, with dialect three, exactly where 2.14 put it.
+  >
+  > **Not resolved here.** The remedy is a `SPEC.md` §3.4 change plus adapter
+  > work, which is a spec conversation and not this task's diff.
+  >
+  > ### F-3 (does not fit the test — over unfitted). There is no honest
+  > in-model representation of an elided payload, and P1's own remedy needs one
+  >
+  > Measured, not argued. `without_verbatim` takes the honest route: it keeps
+  > `state` and `mime` and drops `value` and `raw`. What comes out is
+  > `Payload(state=present, value=None, raw=None)` — and `SPEC.md` §3.3 defines
+  > `present` as *"a payload was reported and carries content"*. It carries
+  > none. `Payload.has_content` still answers **True**, which is the branch a
+  > harness reads. The other route, `Payload.absent()`, misstates in the
+  > opposite direction: `absent` means *"the instrumentor emitted no payload
+  > attribute at all"*, and it did. Asserted in
+  > `test_dropping_a_payload_leaves_no_state_that_says_it_was_dropped`, which
+  > also pins the enum's exact membership so the claim cannot go quiet.
+  >
+  > **This consumer has no want here, and that is stated first because it is
+  > what the test asks.** It never serializes the stripped graph, never hands
+  > it to anything, and never needs to tell an elided payload from a reported
+  > one — the attribution is byte-identical either way, which is the whole
+  > point of the measurement above.
+  >
+  > **What does not fit.** The thing measured is a property of *the remedy P1
+  > predicts*, not of a consumer. A `retain_payloads=False` build option
+  > returns exactly this graph to a caller **who did not do the stripping** and
+  > has no way to know it happened. P1 classes its own remedy as operational
+  > and names, under `WORSE`, *"a 'was this elided?' marker that doesn't
+  > exist"* — and P2's `WORSE` names `elided_by_option` in the same words. So
+  > the remedy cannot be delivered without either a new `Payload` state
+  > (**shape**) or a `SPEC.md` §3.3 statement about what `state` asserts on an
+  > elided payload (**spec gap**).
+  >
+  > The test as written asks *what did a consumer want*. No consumer wanted
+  > this. Widening the test to cover "what would the predicted remedy require"
+  > would be re-reading the boundary under launch pressure, which `AGENT.md`
+  > forbids by name. **So it goes over unfitted**: the fact, the two documents
+  > it bears on, and no classification.
+  >
+  > ### F-4 (bound). The residue is not payload data, and one third of it is
+  > outside both of P1's option names
+  >
+  > Two measured facts, and the second is the sharper.
+  >
+  > **The stripped size is flat in payload length.** 1,456.4 B/node at 1,500
+  > characters and 1,456.4 at 200, on identical 100,000-span inputs; on a
+  > 1,000-span input, 1,420.6 B/node at 200, 1,500 **and** 6,000 characters,
+  > while the built size ran 4,468.5 → 9,668.5 → 27,668.5. Pinned by
+  > `test_the_saving_grows_with_payload_length_which_is_the_extrapolations_bound`,
+  > which asserts the stripped bytes are *equal* across two payload sizes.
+  >
+  > The consequence is a bound on every figure derived from the corpus alone:
+  > the corpus's **46.1% retained** is an artifact of toy payloads, and the
+  > committed corpus therefore **understates P1's case by a factor of three**.
+  > A reader who quoted the corpus figure and stopped would have written a much
+  > weaker P1 finding, honestly and wrongly.
+  >
+  > **Losslessness lives in three places and P1 names two.** `Diagnostic.source`
+  > holds verbatim fragments too — `unmapped_attributes` carries key lists — and
+  > the strip does not touch it. It is **42,931 of 231,397 stripped bytes
+  > (18.6%)** over the corpus and **13,386 of 41,957 (31.9%)** over the three
+  > captured traces. Neither `retain_payloads` nor `retain_raw` covers it.
+  >
+  > **Not a want.** This consumer reads no diagnostics, and on a large trace the
+  > term is negligible (40 bytes on a 100,000-span load input, because a
+  > generated trace has almost nothing unmapped). It is recorded because P1's
+  > remedy is named in terms of two options, and a third region exists that
+  > neither names — and because on a *real* trace, where unmapped attributes are
+  > what the captured pair shows they are, the term is a third of what remains.
+  >
+  > ### F-5 (bound). `usage` is thin in the corpus, and this is its first
+  > exercise
+  >
+  > The bound `nodes[].name` needed at 3.3, and `status` at F-3 there: naming
+  > what was not reached. Over all 41 committed traces:
+  >
+  > | | count | where |
+  > |---|---|---|
+  > | nodes carrying `usage` | **16** of 107 | **7** traces; all `llm` |
+  > | `input_tokens` + `output_tokens` | 16 | every one |
+  > | `total_tokens` reported | **2** | `openai_tool_call` only |
+  > | `usage.extra` non-empty | **2** | `openai_tool_call` only |
+  > | one count without the other | **0** | never — `PARTIAL_COUNTS` never fires |
+  > | `usage` on a non-`llm` node | **0** | never |
+  > | `llm` nodes with **no** `usage` | **11** | the hole the rollup reports |
+  >
+  > **Cross-dialect, `usage` is compared on two scenarios and two fields.**
+  > Only `llm_tool_llm` and `shuffled_order` render `usage` in both dialects,
+  > and both carry `input_tokens` + `output_tokens` and nothing else. So
+  > `total_tokens` and `extra` have **never been compared across dialects by the
+  > corpus** — which is F-6, arriving from the other side.
+  >
+  > **What that bounds.** The equivalence claim for this consumer is real and
+  > it is narrow: `test_the_two_dialects_attribute_alike` passes on all **16**
+  > two-dialect scenarios that build — the seventeenth is `duplicate_span_ids`,
+  > which the library refuses in both dialects — and needs **no exemption list
+  > at all**, because
+  > `usage` and the timestamps are fields §4.4's declaration mechanism cannot
+  > reach. That is a stronger statement than the trajectory dumper could make.
+  > It is also a statement about two token fields on two scenarios.
+  >
+  > ### F-6 (bound). The captured matched pair disagrees on `usage`, and the
+  > conformance corpus cannot surface it **by construction**
+  >
+  > Structurally identical to 3.3's F-3 on `status`, on a different field,
+  > found the same way — by reading captured traces rather than the corpus.
+  > `openai_tool_call.jsonl` and `genai_tool_call.jsonl` are the matched pair of
+  > the same tool-using conversation (`fixtures/captured/README.md`). Their
+  > `usage` does not agree:
+  >
+  > | | `openinference` | `otel_genai` |
+  > |---|---|---|
+  > | `input_tokens` / `output_tokens` | reported | reported |
+  > | `total_tokens` | **175, 225** | **`None`, `None`** |
+  > | `extra` | **`{prompt_details.cache_read: 80}`, `{…: 144}`** | **`{}`, `{}`** |
+  >
+  > Read back from the raw records: the OpenInference instrumentor emits
+  > `llm.token_count.total` and `llm.token_count.prompt_details.cache_read`; the
+  > GenAI instrumentor emits `gen_ai.usage.input_tokens` and
+  > `gen_ai.usage.output_tokens` and nothing else. Same caveat as 3.3's F-3, and
+  > it is the honest one: **two separate captures of two separate runs**, so
+  > this is strong evidence about the two instrumentors and not a controlled
+  > comparison.
+  >
+  > Why it matters: `canonical()` **compares `usage`**, and §4.4's declaration
+  > mechanism reaches `name`, one `attributes` key, and payload `value`/`mime`
+  > — **not `usage`**, and there is no node-field equivalent for it. So a
+  > conformance scenario that rendered this disagreement would fail equivalence
+  > with nowhere to record that it was expected. Pinned in
+  > `test_the_captured_matched_pair_disagrees_about_usage_and_nothing_can_declare_it`,
+  > which asserts both the disagreement and that `canonical()` keeps `usage` on
+  > every node.
+  >
+  > **The structural reason the corpus cannot show it**, and it is 3.3's F-3's
+  > reason verbatim: both renderings of a conformance scenario descend from
+  > **one `scenario.md`**, which fixes `usage` before either dialect file is
+  > written. A hand-authored pair can only disagree where its author knew to
+  > make it disagree.
+  >
+  > **This is the third bound found by reading captured traces rather than the
+  > corpus** — after F-1/F-B (`name`, which the corpus handles by declaration)
+  > and 3.3's F-3 (`status`, which it cannot reach). All three argue the same
+  > thing about where the remaining evidence has to come from, and all three are
+  > arguments for the third dialect being *run against real captures* rather
+  > than rendered (`ROADMAP.md` Phase 4).
+  >
+  > **Not a want, and explicitly not a proposal to make `usage` declarable.**
+  > Widening the erasable set is the move §4.4 forbids for `state`, and
+  > proposing it here under launch pressure would be that rationalization. A
+  > bound, and a human call.
+  >
+  > ## Observations — not findings, recorded so 3.5 does not have to infer them
+  >
+  > ### O-a. P1's own sketch is one field short
+  >
+  > P1 says a cost/latency consumer *"needs `usage` and timestamps and nothing
+  > else"*. A price table is keyed by **model**, and the model's name is
+  > `Node.operation` (`SPEC.md` §3.1, §3.2). This consumer reads it, and
+  > without it every row would price at a default or not at all. A correction
+  > to the prediction's premise, not a finding about the model — `operation` is
+  > a short string and costs nothing to retain, so it changes none of the
+  > memory arithmetic above.
+  >
+  > ### O-b. The roll-up needed to know the `parent` edges form a tree, and
+  > derived that itself
+  >
+  > `cyclic_parents` has **no root at all** — every node has an incoming
+  > `parent` edge — so a trace total taken over roots would be silently zero.
+  > The consumer detects it from `graph.parents` and `graph.descendants` alone
+  > and says so (`NO_ROOT`, `IN_CYCLE`, and a per-step `in_cycle` flag).
+  >
+  > **It did not need 3.3's F-2 remedy to do it.** That graph also carries
+  > `ordering_cycle`, and this consumer reads no diagnostics at all;
+  > `test_a_parent_cycle_is_detected_structurally_and_without_a_diagnostic`
+  > asserts the diagnostic exists *and* that the finding is reached without it.
+  > So 3.3's F-2 — *nothing states which codes bear on ordering* — is
+  > **neither corroborated nor contradicted** here: this consumer's question
+  > was structural rather than code-based, and it had a structural answer.
+  > Recorded because a second consumer silently not hitting a live spec gap is
+  > worth as much as one hitting it, and the reason matters.
+  >
+  > ### O-c. Latency does not roll up by addition, and the model says enough
+  > to know it
+  >
+  > The consumer carries three numbers per node where it carries one for
+  > tokens — `descendants_seconds_sum`, `descendants_seconds_union`,
+  > `unattributed_seconds` — because children run *inside* their parents
+  > (containment) and siblings run *beside* each other (concurrency), and
+  > adding either would report a 4.0-second run as 6.4 seconds. It needed
+  > nothing new: `started_at` and `ended_at` per node are sufficient, and the
+  > union is arithmetic. Recorded as a positive result about the model's
+  > timestamps, which nothing before this had read.
+  >
+  > ### O-d. P3 — no `data` edge was inferred, and none was wanted
+  >
+  > For 3.5, stated plainly rather than left to silence: this consumer reads
+  > **no `data` edges at all** — declared or otherwise — and never compares two
+  > values to decide anything. It did not want `--infer-data-edges` and had no
+  > occasion to. Per `PREDICTIONS.md` P3 and 3.5's wording, **that is not a
+  > refutation**; P3's friction never had the opportunity to occur here, as it
+  > did not at 3.3. `OPEN_QUESTIONS.md` §7 is untouched.
+  >
+  > ### O-e. P4 — determinism was kept, and was not what made this work
+  >
+  > Byte-identical output on re-run and under reversed input order are both
+  > asserted (`test_the_attribution_is_byte_identical_on_re_run`,
+  > `test_input_order_does_not_change_the_attribution`), and both pass. But the
+  > honest record is that **nothing this consumer needed depended on
+  > determinism**: a cost rollup would have been just as correct with
+  > non-deterministic node ordering, because it sums. The one place determinism
+  > earned its keep is the *test suite* — the identical-attribution comparison
+  > (P1's instrument) compares two serialized forms byte for byte, and that
+  > comparison is only available because the library guarantees it.
+  >
+  > ## Divergences from the task as written
+  >
+  > - **A third instrument was added.** The task names one measurement —
+  >   resident bytes with payloads and `RawRecord` dropped after the build. That
+  >   was done and is reported, and **on its own it cannot answer the question
+  >   the task then asks**: a post-build strip is something the consumer can
+  >   already do, so the getsizeof figure alone supports "would accept" and not
+  >   "wants". `tracemalloc`'s high-water reading is what separates them, and it
+  >   is why this record can answer *wanted, specifically as a build-time
+  >   option* rather than hedging.
+  > - **"reads `usage` and timestamps and nothing else" was not literally
+  >   achievable**, and the four extra reads are named rather than glossed:
+  >   `operation` (O-a), `kind` (only to tell an `llm` span with no `usage` from
+  >   a `tool` span that legitimately has none), `id`, and the `parent` edges,
+  >   without which there is nothing to roll up.
+  > - **`out/` now holds generated load inputs during a run.** They are removed
+  >   after measuring, `out/` is already gitignored, and no test writes outside
+  >   `tmp_path`. `git status` is clean.
+  > - **One committed statement is false and was left unfixed** — F-1, in
+  >   `CONTRACTS.md` F-C and `ROADMAP.md` Phase 4 row 5. Named here so it is not
+  >   rediscovered as a surprise, and left to `[contract]`.
+  > - **`ENVIRONMENT.md`'s `examples/` line is still half-true**, as 3.3 left
+  >   it: it reads *"the confirmatory ones in Phase 3"*, and both now exist.
+  >   Still 3.8's docs truth pass.
+  >
+  > ## P1's resolution wording — drafted, handed over, **not written**
+  >
+  > `git diff PREDICTIONS.md` is empty and stays empty; the file is read-only to
+  > the agent in every phase and **a human marks P1**. What follows is a draft in
+  > that file's own form, carrying its scope the way P5's and P2's do. It is
+  > text for the human to accept, edit or reject — not an outcome.
+  >
+  > > **Status: CONFIRMED — scoped.** Resolved at 3.4, Phase 3.
+  > >
+  > > A cost & latency attributor over the committed corpus — the consumer P1
+  > > describes — reads `usage`, timestamps, `operation` and the `parent`
+  > > edges, and **nothing that losslessness retains**. Established by
+  > > comparison rather than by inspection: the attribution of a graph with
+  > > payload `value`, payload `raw` and `RawRecord.source` removed is
+  > > **byte-identical** to the attribution of the graph it was built from, on
+  > > all 41 committed traces, with a non-vacuity floor asserting the strip
+  > > removed something each time.
+  > >
+  > > **Measured, at the size P1 names.** At 100,000 spans with 1,500-character
+  > > payloads: 970.4 MB built, 145.6 MB stripped — **85% of resident bytes are
+  > > bytes the consumer never reads**. The committed corpus alone gives 46.1%
+  > > retained and *understates the case by a factor of three*, because the
+  > > stripped size is flat in payload length (1,456 B/node at both 200 and
+  > > 1,500 characters) while the built size is not.
+  > >
+  > > **The friction is at peak, not at residency, and that is the finding.**
+  > > The consumer can already drop every byte it does not read, today, through
+  > > the public API. What it cannot do is avoid allocating them: `build()`
+  > > returns only after the verbatim bytes exist. `tracemalloc` across the same
+  > > run — peak 1.05 GB after the build; after the strip, `current` falls to
+  > > 145.6 MB and **peak rises to 1.07 GB**. So `retain_payloads=False` /
+  > > `retain_raw=False` is wanted **as a build-time option** and would buy
+  > > nothing as a post-hoc one.
+  > >
+  > > **Class: operational**, as P1 predicted — with one thing the prediction
+  > > did not anticipate, recorded beside it rather than folded into it. See
+  > > *the elision problem*, below.
+  > >
+  > > **Scope of the confirmation.** Four things bound it, and the last two are
+  > > load-bearing.
+  > >
+  > > - **The 100k figure was measured on a generated load input, not a
+  > >   trace.** The largest committed trace is **nine spans**. What was
+  > >   measured is how memory scales with span count and payload length; that
+  > >   it scales says nothing about whether real traces reach that size.
+  > > - **One consumer, and the designer picked it.** The exam-picking problem
+  > >   `PREDICTIONS.md` exists to name. A consumer holding many graphs at
+  > >   once, or streaming, was not written.
+  > > - **The payload length is a setting**, and the retained fraction is
+  > >   entirely a function of it: 15.0% at 1,500 characters, 32.3% at 200,
+  > >   46.1% on the corpus. A corpus of short payloads makes P1 look weak.
+  > > - **`usage` itself is barely exercised.** 16 of 107 nodes carry it, in 7
+  > >   traces, all `llm`; `total_tokens` is reported on **2 nodes in one trace** and
+  > >   `usage.extra` on the same 2; no committed trace ever reports one token
+  > >   count without the other. Cross-dialect, `usage` is compared on **two
+  > >   scenarios and two fields**.
+  > >
+  > > **The `WORSE` condition was not met by a consumer — and the remedy needs
+  > > what `WORSE` names.** P1's `WORSE` reads *"needs losslessness to be
+  > > selective per node kind, or needs a 'was this elided?' marker that
+  > > doesn't exist"*. This consumer needed neither: it never publishes the
+  > > stripped graph. But a stripped payload is
+  > > `Payload(state=present, value=None, raw=None)`, and §3.3 defines
+  > > `present` as *"a payload was reported and carries content"* — it carries
+  > > none, and `has_content` still answers True. `Payload.absent()` misstates
+  > > in the other direction. So the option P1 predicts cannot be shipped
+  > > without either a new `Payload` state (**shape**) or a §3.3 statement
+  > > about what `state` asserts on an elided payload (**spec gap**). That is a
+  > > property of the remedy, not a want of a consumer, and it is recorded
+  > > unfitted rather than classified.
+  > >
+  > > **What would falsify this confirmation:** a build option that elides
+  > > payloads and turns out to cost nothing at peak either — which would mean
+  > > the allocation happens somewhere this measurement did not look. Or a real
+  > > 100k-span trace whose payloads are short enough that the corpus's 46% is
+  > > the representative figure after all.
+  > >
+  > > Honest claim: *P1's friction occurred, in one confirmatory consumer, on a
+  > > generated 100,000-span input at a chosen payload length, measured as an
+  > > 85% residency saving and an unreachable 1.05 GB peak — and the remedy it
+  > > names needs something the model cannot currently say.*
+  >
+  > ## Definition of done
+  >
+  > - [x] `uv run python -m examples.cost_latency <fixture>` attributes tokens
+  >       and duration up the parent tree for a committed fixture in **both**
+  >       dialects.
+  > - [x] The two dialects attribute alike on all 16 two-dialect scenarios
+  >       that build, with **no exemption list** — `usage` and the timestamps
+  >       are outside §4.4's declaration mechanism entirely.
+  > - [x] The measurement is recorded with its method: three instruments, the
+  >       interpreter named, the extrapolation labelled as one and then checked
+  >       against a generated load input that is **not** a fixture.
+  > - [x] Stated plainly whether the consumer **wanted** the option or would
+  >       merely have accepted it: **wanted, and only as a build-time option**.
+  > - [x] 2b's negative evidence carried with its scope (blocker 1).
+  > - [x] Byte-identical on re-run, and identical under reversed input order.
+  > - [x] `git diff --stat spanweave/` empty for this task.
+  > - [x] `git diff PREDICTIONS.md` empty.
+  > - [x] `make check` green.
 
 - [ ] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
   Assemble, for each of P1–P4, the evidence this phase produced, in the form the
