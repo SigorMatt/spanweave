@@ -82,7 +82,122 @@ elided by request.
 per node kind, or needs a "was this elided?" marker that doesn't exist. That is
 a `Payload` state or `Meta` field — shape.
 
-**Status:** open.
+**Status: CONFIRMED — operational, scoped.** Resolved at 3.4, Phase 3.
+
+A cost & latency attributor over the committed corpus — the consumer P1
+describes — reads `usage`, timestamps, `operation` and the `parent`
+edges, and **nothing that losslessness retains**. Established by
+comparison rather than by inspection: the attribution of a graph with
+payload `value`, payload `raw` and `RawRecord.source` removed is
+**byte-identical** to the attribution of the graph it was built from, on
+all 41 committed traces, with a non-vacuity floor asserting the strip
+removed something each time.
+
+**Measured at the size P1 names.** At 100,000 spans with 1,500-character
+payloads: **970.4 MB built, 145.6 MB stripped — 85% of resident bytes are
+bytes the consumer never reads.** The committed corpus alone gives 46.1%
+retained and **understates the case by a factor of three**, because the
+stripped size is flat in payload length (1,456 B/node at both 200 and
+1,500 characters) while the built size is not. That understatement is why
+the corpus figure was checked against a generated load input rather than
+quoted.
+
+**The friction is at peak, not at residency, and that distinction is the
+finding.** The consumer can already drop every byte it does not read,
+today, through the public API — `dataclasses.replace` over the public
+frozen types plus `Graph.of`. What it cannot do is avoid *allocating*
+them: `build()` returns only after the verbatim bytes exist.
+`tracemalloc` across the same run — peak **1.05 GB** after the build;
+after the strip, `current` falls to 145.6 MB and **peak rises to
+1.07 GB**, because the strip itself allocates. So `retain_payloads=False`
+/ `retain_raw=False` is **wanted as a build-time option** and would buy
+nothing as a post-hoc one. That is a want rather than a preference: no
+code a consumer can write reaches the reading.
+
+**Class: operational**, as predicted. The graph's shape is unchanged and
+a field is elided by request — but see the next paragraph, which is the
+part the prediction did not anticipate and which "operational" alone
+would hide.
+
+**The remedy carries a latent shape cost, and P1's own `WORSE` condition
+names it.** A stripped payload is
+`Payload(state=present, value=None, raw=None)`, and `SPEC.md` §3.3
+defines `present` as *"a payload was reported and carries content"*. It
+carries none, and `Payload.has_content` still answers **True** — the
+branch a harness reads. The other route, `Payload.absent()`, misstates in
+the opposite direction: `absent` means *"the instrumentor emitted no
+payload attribute at all"*, and it did. There is no third route, because
+no state means *"reported, and elided by request"*.
+
+This consumer needs no such state: it never publishes the stripped graph,
+and its attribution is byte-identical either way. **But the option would
+hand exactly that graph to a consumer that does publish it, and to one
+that did not do the stripping and has no way to know it happened.** So
+the operational remedy cannot ship without either a new `Payload` state
+(**shape**) or a §3.3 statement about what `state` asserts on an elided
+payload (**spec gap**). P1's `WORSE` reads *"needs … a 'was this elided?'
+marker that doesn't exist"*, and P2's names `elided_by_option` in the
+same words.
+
+**`WORSE` is not the mark, and the reason is worth stating precisely.**
+The condition is written about what *a consumer* needs, and no consumer
+needed it — this one least of all, since it is the consumer that does not
+need the fix. What was found is a property of the **fix**, reached by
+implementing the measurement rather than the remedy. It is recorded here
+rather than classified, because widening the test to cover *"what would
+the predicted remedy require"* is exactly the boundary re-reading this
+file exists to prevent. **Whoever implements `retain_payloads=False`
+inherits it as a halt point, not as a detail.**
+
+**Scope of the confirmation.** Five things bound it; the last three are
+load-bearing.
+
+- **The 100k figure was measured on a generated load input, not a
+  trace.** It is synthesized, gitignored, never entered `fixtures/`, and
+  is not captured. The largest committed trace is **nine spans**. What
+  was measured is how memory scales with span count and payload length;
+  that it scales says nothing about whether real traces reach that size.
+- **One consumer, and the designer picked it.** The exam-picking problem
+  this file exists to name. A consumer holding many graphs at once, or
+  streaming, or reading payloads *and* usage, was not written.
+- **The payload length is a setting**, and the retained fraction is
+  entirely a function of it: 15.0% at 1,500 characters, 32.3% at 200,
+  46.1% on the corpus. A corpus of short payloads makes P1 look weak, and
+  did.
+- **`usage` itself is barely exercised**, and this was its first
+  exercise by any consumer. 16 of 107 nodes carry it, in 7 traces, all
+  `llm`; `total_tokens` is reported on **2 nodes in one trace** and
+  `usage.extra` on the same 2; no committed trace ever reports one token
+  count without the other. Cross-dialect, `usage` is compared on **two
+  scenarios and two fields**.
+- **Losslessness lives in three places and P1 names two.**
+  `Diagnostic.source` retains verbatim fragments that neither
+  `retain_payloads` nor `retain_raw` covers — 18.6% of what survives the
+  strip over the corpus, 31.9% over the three captured traces. Negligible
+  on a generated input and not negligible on a real one.
+
+**2b's negative evidence, carried with its scope.** The Phase 2b fleet
+aggregator asked for no retention option (2.4, F1–F9: no retention item,
+no memory item, nothing about losslessness being cost). That is real
+evidence and it is negative — and it was **not P1's test**: fourteen
+traces of a handful of spans, built one at a time, by a consumer that
+never read `usage` and never read a timestamp. For scale, the *entire*
+committed corpus — 39 traces, 107 nodes — is 501,785 bytes built. A
+prediction about memory at 100k spans cannot be refuted by an input three
+orders of magnitude below it. Corroboration, at a size that could not
+have produced the friction.
+
+**What would falsify this confirmation:** a `retain_payloads=False`
+implementation that turns out not to move the peak either, which would
+mean the allocation happens somewhere this measurement did not look; or a
+real 100k-span trace whose payloads are short enough that the corpus's
+46% is the representative figure after all.
+
+Honest claim: *P1's friction occurred, in one confirmatory consumer, on a
+generated 100,000-span input at a chosen payload length — measured as an
+85% residency saving and a 1.05 GB peak unreachable through the public
+API — and the operational remedy it names cannot be built without saying
+something about payloads the model currently cannot say.*
 
 ---
 
