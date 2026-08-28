@@ -298,12 +298,45 @@ def test_an_llm_span_with_no_usage_is_a_hole_and_not_zero_tokens():
 def test_usage_extra_is_non_empty_on_the_committed_corpus():
     """The corpus DOES exercise `Usage.extra`, on the captured OpenInference pair.
 
-    Pinned because two committed documents say the opposite — `CONTRACTS.md`
-    F-C (*"`extra` is `{}` on every node of every conformance rendering and
-    every captured trace in this repository"*) and `ROADMAP.md`'s Phase 4 row 5
-    (*"it is `{}` on every node of every fixture in the repository, so the
-    disagreement is unreachable"*). Both were written before any consumer read
-    `usage`. This test is what keeps the correction from rotting back.
+    Two committed documents say the opposite — `CONTRACTS.md` F-C (*"`extra`
+    is `{}` on every node of every conformance rendering and every captured
+    trace in this repository"*) and `ROADMAP.md`'s Phase 4 row 5 (*"it is `{}`
+    on every node of every fixture in the repository, so the disagreement is
+    unreachable"*). Both are false: `fixtures/captured/openai_tool_call.jsonl`
+    carries `llm.token_count.prompt_details.cache_read` on both of its `llm`
+    spans, 80 and 144.
+
+    ---
+
+    **The pattern this is the third instance of, named here once rather than a
+    fourth time in a fourth task record.**
+
+    Neither document was careless. Both stated a **corpus-wide fact** —
+    a quantifier over every fixture — and then nothing recomputed it. A claim
+    like that is true when written and silently expires: the corpus grew a
+    captured trace, and the sentence stayed. This is the same failure mode as:
+
+    1. `CONTRACTS.md`'s own perturbation count at `TASKS.md` 3.2 (*"nine … and
+       in seven of the nine"*, both figures wrong, caught by a recount that
+       something else forced, not by anyone re-reading it);
+    2. the 3.3 record's *"8 of 20 collapses change the branch"*, carried across
+       from an earlier undirected run of the same sweep and corrected on
+       re-measurement to 14;
+    3. this.
+
+    Three tasks, three instances, and **the remedy has been the same each
+    time: a test, not a correction.** A corrected sentence is a sentence that
+    will expire again; a recomputed one cannot. `CONTRACTS.md`'s own follow-up
+    put it as *a prose count that nobody recomputes is the same species as an
+    unstated field that nobody asserts* — and a prose **quantifier** that
+    nobody recomputes is the same species again, one step more general,
+    because it also expires when the corpus changes rather than only when the
+    code does.
+
+    So this test asserts the exact dict, not merely non-emptiness: it goes red
+    both if `extra` empties out and if a *different* trace starts carrying one,
+    which is the case the two documents were written to describe and could not
+    have caught.
     """
     found: dict[str, dict[str, int]] = {}
     for source in _every_committed_trace():

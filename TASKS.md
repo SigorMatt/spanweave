@@ -4186,6 +4186,13 @@ adversarial finding, the unfrozen-schema notice (3.7, 3.8). **Never accelerate:*
 the freeze — which is now additionally gated on a third dialect (`ROADMAP.md`
 Phase 4), and that gate binds Phase 4, not this phase's launch.
 
+> **Status, after 3.4: this list is spent.** Both consumers landed and neither
+> was cut, so items 1 and 2 above are discharged and items 2 and 3 of
+> `ROADMAP.md`'s list were never scheduled here. **Nothing cuttable remains in
+> Phase 3.** A session that slips from here is choosing between never-cut items,
+> which is not a cut — it is a phase-exit conversation with a human. Said here
+> so that is discovered before the pressure rather than during it.
+
 ---
 
 ### `[prereq]`
@@ -4579,6 +4586,14 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 ---
 
 ### `[consumers]`
+
+> **This workstream is complete.** 3.3 (`examples/trajectory_dump/`) and 3.4
+> (`examples/cost_latency/`) both landed, **neither was cut**, and the gate held
+> for both: zero shape changes, `git diff --stat spanweave/` empty for each.
+> Their two findings records below — 3.3's five plus follow-ups, 3.4's six plus
+> follow-ups — are **the input to 3.5**, which is the next unchecked task and is
+> `[contract]`, not this tag. Nothing here is live; read the records, not this
+> block, unless you are writing a third consumer.
 
 Both consumers live in `examples/`, consume **committed fixtures only**
 (`ENVIRONMENT.md`: `examples/` may not touch the network), and change **nothing**
@@ -5352,9 +5367,19 @@ consumer's findings go in the exit record beside these and carry more weight.
   > premise it was reached from does not.
   >
   > **Classification: none — it is not a want.** It is a factual error in a
-  > document, found by the first consumer to exercise the field. Pinned so it
-  > cannot rot back: `test_usage_extra_is_non_empty_on_the_committed_corpus`
-  > asserts the exact dict and names both documents in its docstring.
+  > document, found by the first consumer to exercise the field.
+  >
+  > **Pinned, and the pin is where the *why* lives.**
+  > `test_usage_extra_is_non_empty_on_the_committed_corpus` asserts the exact
+  > dict — not merely non-emptiness, so it also goes red if a *different* trace
+  > starts carrying one — and its docstring names, once, the pattern this is
+  > the third instance of: **both documents stated a corpus-wide quantifier and
+  > nothing recomputed it.** The other two are 3.2's own perturbation count
+  > inside `CONTRACTS.md` and the 3.3 record's carried-over *"8 of 20"*; the
+  > remedy all three times has been a test rather than a correction, because a
+  > corrected sentence expires again and a recomputed one cannot. It is named
+  > **at the test** rather than here for the obvious reason — a fourth
+  > restatement in a fourth task record is the failure mode describing itself.
   >
   > **Not fixed here, deliberately.** `CONTRACTS.md` and `ROADMAP.md` are
   > `[contract]` and phase-planning artifacts; this is a `[consumers]` session
@@ -5403,14 +5428,44 @@ consumer's findings go in the exit record beside these and carry more weight.
   > differently, so the remedy is **a spec change plus an adapter change** —
   > the definition's canonical form, and O1's.
   >
-  > **The 2.10 amendment bites, and this is the difference that matters.**
+  > **The 2.10 amendment bites, and this is its second instance.**
   > `nodes[].usage.extra` **does** cross the schema boundary. Stating the
   > contract means either normalizing the keys — which changes what is
   > serialized on the captured trace today, `prompt_details.cache_read`
   > becoming something else — or declaring the keys dialect-local and not
   > comparable, which changes what `canonical()` compares. **Either way
-  > something at the boundary moves, so this spec gap carries a shape cost**,
-  > like O1 and unlike 3.3's F-2.
+  > something at the boundary moves, so this spec gap carries a shape cost.**
+  >
+  > Recorded **beside O1** deliberately, because a category with one instance
+  > is not yet a category — it is an anecdote with a definition attached. The
+  > amendment now has two, and they are unalike in every way except the one
+  > that matters:
+  >
+  > | | **O1** (2.10) | **F-2** (3.4) |
+  > |---|---|---|
+  > | Field | `diagnostics[].source` | `nodes[].usage.extra` |
+  > | Why the model could express it | `JsonValue` permits an object | `Mapping[str, int]` permits any key |
+  > | What was missing | nothing **populated** it | nothing **states what the keys mean** |
+  > | Found by | a fleet rollup asking which tool a call named | a price table asking which count is a cache read |
+  > | Remedy | spec change + adapter change | spec change + adapter change |
+  > | **Shape cost** | a serialized value **changed type** | a serialized value **would change spelling, or `canonical()` would stop comparing it** |
+  > | Halt point? | no | no |
+  > | Resolved | at 2.10 | **not here** — Phase 4, with dialect three |
+  >
+  > 3.3's F-2 is the counter-example that keeps the amendment from being
+  > vacuous: it is a spec gap where the 2.10 check was **run and did not
+  > bite**, because stating what `diagnostics[].node_id` and `code` mean
+  > changes neither type nor value. So across three instances the check has
+  > discriminated — twice yes, once no — which is what a category needs in
+  > order to be one. **The generalization the two positive instances support:**
+  > a spec gap carries a shape cost exactly when the unstated thing is the
+  > *vocabulary* of a serialized value rather than its *meaning*; stating a
+  > meaning is free, stating a vocabulary is not.
+  >
+  > `PREDICTIONS.md` §*The shape / operational distinction* is where the
+  > amendment lives and where a second instance would belong. **Not written
+  > there** — the file is read-only to the agent in every phase, and adding an
+  > instance to a definition is an edit to it. Handed over as this table.
   >
   > **What this is evidence *for*, stated carefully.** `CONTRACTS.md`
   > pre-registered `nodes[].usage.extra` as one of two rows *"likeliest to meet
@@ -5576,6 +5631,58 @@ consumer's findings go in the exit record beside these and carry more weight.
   > proposing it here under launch pressure would be that rationalization. A
   > bound, and a human call.
   >
+  > **Is the shared cause worth naming? Yes — and it is a field class, not a
+  > coincidence of two fields.**
+  >
+  > `canonical()` compares every node field it does not explicitly erase, and
+  > §4.4's declaration mechanism reaches exactly three things: `name`, one
+  > `attributes` key, and a payload's `value`/`mime`. Everything else compared
+  > is in a class with no escape hatch — *must agree, and cannot be declared to
+  > disagree*. Enumerated, that class is:
+  >
+  > | Field | Can a real instrumentor disagreement be shown? |
+  > |---|---|
+  > | `id` | derived by the library (`SPEC.md` §3.6) — not an instrumentor's to differ on |
+  > | `kind` | untested against a real pair |
+  > | `operation` | untested against a real pair |
+  > | `started_at` / `ended_at` | differ between any two runs; never compared across captures |
+  > | `status` | **known to disagree** — 3.3 F-3 |
+  > | `status_note` | untested against a real pair |
+  > | `usage` | **known to disagree** — F-6 |
+  > | payload `state` | undeclarable *on purpose* (§4.4), and must stay so |
+  > | every `edge`, and `diagnostics` by code+count | untested against a real pair |
+  >
+  > **Two of the nine are now known to disagree between the two real
+  > instrumentors, and both were found the same way — by reading captured
+  > traces, by two consumers with unrelated jobs, neither looking for it.** The
+  > cause is one sentence: *the set of fields the corpus compares strictly is
+  > much larger than the set it can prove two real instrumentors agree on*,
+  > because both renderings of a scenario descend from one `scenario.md` and a
+  > hand-authored pair can only disagree where its author knew to make it.
+  >
+  > Naming it earns three things a second per-field bound would not:
+  >
+  > - It **predicts**. A third instance is expected rather than surprising, and
+  >   the table says where to look first — `kind`, `operation`, `status_note`,
+  >   and the edge set, in that order of how little any pair has exercised them.
+  > - It **prices dialect three correctly.** `ROADMAP.md` Phase 4 already
+  >   requires dialect three be *run against the corpus*; this says the corpus
+  >   run is the weaker half. Rendering a third dialect by hand cannot surface
+  >   a single row of that table. Only a **captured** third dialect can, which
+  >   is the third independent argument for it (after F-1/F-B on `name` and
+  >   3.3's F-3 on `status`) and the first that says *why* in general terms.
+  > - It **bounds the equivalence claim honestly** for the `0.9.x` README,
+  >   which is 3.8's to say: two dialects agree on the corpus, and the corpus
+  >   cannot ask them about most of what it compares.
+  >
+  > **What naming it is not.** It is not an argument to widen the declarable
+  > set — the opposite. Every row above that acquired an escape hatch would
+  > stop being evidence, and payload `state` is the standing proof that the
+  > right response to *"two dialects might disagree here"* is a finding, not a
+  > declaration. It is also not a defect in `canonical()`: comparing strictly
+  > is what makes the two known disagreements *findable at all*. The gap is in
+  > what the corpus can **ask**, not in what it does with the answer.
+  >
   > ## Observations — not findings, recorded so 3.5 does not have to infer them
   >
   > ### O-a. P1's own sketch is one field short
@@ -5664,87 +5771,14 @@ consumer's findings go in the exit record beside these and carry more weight.
   >   it: it reads *"the confirmatory ones in Phase 3"*, and both now exist.
   >   Still 3.8's docs truth pass.
   >
-  > ## P1's resolution wording — drafted, handed over, **not written**
+  > ## P1's resolution wording
   >
   > `git diff PREDICTIONS.md` is empty and stays empty; the file is read-only to
-  > the agent in every phase and **a human marks P1**. What follows is a draft in
-  > that file's own form, carrying its scope the way P5's and P2's do. It is
-  > text for the human to accept, edit or reject — not an outcome.
-  >
-  > > **Status: CONFIRMED — scoped.** Resolved at 3.4, Phase 3.
-  > >
-  > > A cost & latency attributor over the committed corpus — the consumer P1
-  > > describes — reads `usage`, timestamps, `operation` and the `parent`
-  > > edges, and **nothing that losslessness retains**. Established by
-  > > comparison rather than by inspection: the attribution of a graph with
-  > > payload `value`, payload `raw` and `RawRecord.source` removed is
-  > > **byte-identical** to the attribution of the graph it was built from, on
-  > > all 41 committed traces, with a non-vacuity floor asserting the strip
-  > > removed something each time.
-  > >
-  > > **Measured, at the size P1 names.** At 100,000 spans with 1,500-character
-  > > payloads: 970.4 MB built, 145.6 MB stripped — **85% of resident bytes are
-  > > bytes the consumer never reads**. The committed corpus alone gives 46.1%
-  > > retained and *understates the case by a factor of three*, because the
-  > > stripped size is flat in payload length (1,456 B/node at both 200 and
-  > > 1,500 characters) while the built size is not.
-  > >
-  > > **The friction is at peak, not at residency, and that is the finding.**
-  > > The consumer can already drop every byte it does not read, today, through
-  > > the public API. What it cannot do is avoid allocating them: `build()`
-  > > returns only after the verbatim bytes exist. `tracemalloc` across the same
-  > > run — peak 1.05 GB after the build; after the strip, `current` falls to
-  > > 145.6 MB and **peak rises to 1.07 GB**. So `retain_payloads=False` /
-  > > `retain_raw=False` is wanted **as a build-time option** and would buy
-  > > nothing as a post-hoc one.
-  > >
-  > > **Class: operational**, as P1 predicted — with one thing the prediction
-  > > did not anticipate, recorded beside it rather than folded into it. See
-  > > *the elision problem*, below.
-  > >
-  > > **Scope of the confirmation.** Four things bound it, and the last two are
-  > > load-bearing.
-  > >
-  > > - **The 100k figure was measured on a generated load input, not a
-  > >   trace.** The largest committed trace is **nine spans**. What was
-  > >   measured is how memory scales with span count and payload length; that
-  > >   it scales says nothing about whether real traces reach that size.
-  > > - **One consumer, and the designer picked it.** The exam-picking problem
-  > >   `PREDICTIONS.md` exists to name. A consumer holding many graphs at
-  > >   once, or streaming, was not written.
-  > > - **The payload length is a setting**, and the retained fraction is
-  > >   entirely a function of it: 15.0% at 1,500 characters, 32.3% at 200,
-  > >   46.1% on the corpus. A corpus of short payloads makes P1 look weak.
-  > > - **`usage` itself is barely exercised.** 16 of 107 nodes carry it, in 7
-  > >   traces, all `llm`; `total_tokens` is reported on **2 nodes in one trace** and
-  > >   `usage.extra` on the same 2; no committed trace ever reports one token
-  > >   count without the other. Cross-dialect, `usage` is compared on **two
-  > >   scenarios and two fields**.
-  > >
-  > > **The `WORSE` condition was not met by a consumer — and the remedy needs
-  > > what `WORSE` names.** P1's `WORSE` reads *"needs losslessness to be
-  > > selective per node kind, or needs a 'was this elided?' marker that
-  > > doesn't exist"*. This consumer needed neither: it never publishes the
-  > > stripped graph. But a stripped payload is
-  > > `Payload(state=present, value=None, raw=None)`, and §3.3 defines
-  > > `present` as *"a payload was reported and carries content"* — it carries
-  > > none, and `has_content` still answers True. `Payload.absent()` misstates
-  > > in the other direction. So the option P1 predicts cannot be shipped
-  > > without either a new `Payload` state (**shape**) or a §3.3 statement
-  > > about what `state` asserts on an elided payload (**spec gap**). That is a
-  > > property of the remedy, not a want of a consumer, and it is recorded
-  > > unfitted rather than classified.
-  > >
-  > > **What would falsify this confirmation:** a build option that elides
-  > > payloads and turns out to cost nothing at peak either — which would mean
-  > > the allocation happens somewhere this measurement did not look. Or a real
-  > > 100k-span trace whose payloads are short enough that the corpus's 46% is
-  > > the representative figure after all.
-  > >
-  > > Honest claim: *P1's friction occurred, in one confirmatory consumer, on a
-  > > generated 100,000-span input at a chosen payload length, measured as an
-  > > 85% residency saving and an unreachable 1.05 GB peak — and the remedy it
-  > > names needs something the model cannot currently say.*
+  > the agent in every phase and **a human marks P1**. A draft stood here and is
+  > **superseded** by the final wording at *3.4 follow-ups* §1 below, after the
+  > human ruled **CONFIRMED — operational** and required F-3 carried into the
+  > resolution. Kept as one pointer rather than two versions of the same text,
+  > because a record holding two drafts is a record a reader has to date.
   >
   > ## Definition of done
   >
@@ -5764,6 +5798,253 @@ consumer's findings go in the exit record beside these and carry more weight.
   > - [x] `git diff --stat spanweave/` empty for this task.
   > - [x] `git diff PREDICTIONS.md` empty.
   > - [x] `make check` green.
+
+  > # 3.4 follow-ups — the review's rulings, and one pattern named
+  >
+  > Worked in the same session, after the human ruled **P1 CONFIRMED —
+  > operational** and ruled on F-1, F-2, F-4, F-5 and F-6. `make check` green
+  > (**1540 passed, 4 skipped**), `make gates` green, `make conformance` green
+  > (419), `review_corpus.py` exit 0. Nothing under `spanweave/` changed.
+  > `PREDICTIONS.md` untouched. No fixture authored, no `expected/graph.json`
+  > edited, `canonical()` not weakened.
+  >
+  > ## 1. P1's resolution wording — final, ready to paste, **still not written**
+  >
+  > `git diff PREDICTIONS.md` is empty. A human pastes this; the file is
+  > read-only to the agent in every phase and the mark is theirs. The draft that
+  > stood in the 3.4 record is superseded by this, for one reason the ruling
+  > gives: *"CONFIRMED, operational" without F-3 understates what you found.*
+  >
+  > > **Status: CONFIRMED — operational, scoped.** Resolved at 3.4, Phase 3.
+  > >
+  > > A cost & latency attributor over the committed corpus — the consumer P1
+  > > describes — reads `usage`, timestamps, `operation` and the `parent`
+  > > edges, and **nothing that losslessness retains**. Established by
+  > > comparison rather than by inspection: the attribution of a graph with
+  > > payload `value`, payload `raw` and `RawRecord.source` removed is
+  > > **byte-identical** to the attribution of the graph it was built from, on
+  > > all 41 committed traces, with a non-vacuity floor asserting the strip
+  > > removed something each time.
+  > >
+  > > **Measured at the size P1 names.** At 100,000 spans with 1,500-character
+  > > payloads: **970.4 MB built, 145.6 MB stripped — 85% of resident bytes are
+  > > bytes the consumer never reads.** The committed corpus alone gives 46.1%
+  > > retained and **understates the case by a factor of three**, because the
+  > > stripped size is flat in payload length (1,456 B/node at both 200 and
+  > > 1,500 characters) while the built size is not. That understatement is why
+  > > the corpus figure was checked against a generated load input rather than
+  > > quoted.
+  > >
+  > > **The friction is at peak, not at residency, and that distinction is the
+  > > finding.** The consumer can already drop every byte it does not read,
+  > > today, through the public API — `dataclasses.replace` over the public
+  > > frozen types plus `Graph.of`. What it cannot do is avoid *allocating*
+  > > them: `build()` returns only after the verbatim bytes exist.
+  > > `tracemalloc` across the same run — peak **1.05 GB** after the build;
+  > > after the strip, `current` falls to 145.6 MB and **peak rises to
+  > > 1.07 GB**, because the strip itself allocates. So `retain_payloads=False`
+  > > / `retain_raw=False` is **wanted as a build-time option** and would buy
+  > > nothing as a post-hoc one. That is a want rather than a preference: no
+  > > code a consumer can write reaches the reading.
+  > >
+  > > **Class: operational**, as predicted. The graph's shape is unchanged and
+  > > a field is elided by request — but see the next paragraph, which is the
+  > > part the prediction did not anticipate and which "operational" alone
+  > > would hide.
+  > >
+  > > **The remedy carries a latent shape cost, and P1's own `WORSE` condition
+  > > names it.** A stripped payload is
+  > > `Payload(state=present, value=None, raw=None)`, and `SPEC.md` §3.3
+  > > defines `present` as *"a payload was reported and carries content"*. It
+  > > carries none, and `Payload.has_content` still answers **True** — the
+  > > branch a harness reads. The other route, `Payload.absent()`, misstates in
+  > > the opposite direction: `absent` means *"the instrumentor emitted no
+  > > payload attribute at all"*, and it did. There is no third route, because
+  > > no state means *"reported, and elided by request"*.
+  > >
+  > > This consumer needs no such state: it never publishes the stripped graph,
+  > > and its attribution is byte-identical either way. **But the option would
+  > > hand exactly that graph to a consumer that does publish it, and to one
+  > > that did not do the stripping and has no way to know it happened.** So
+  > > the operational remedy cannot ship without either a new `Payload` state
+  > > (**shape**) or a §3.3 statement about what `state` asserts on an elided
+  > > payload (**spec gap**). P1's `WORSE` reads *"needs … a 'was this elided?'
+  > > marker that doesn't exist"*, and P2's names `elided_by_option` in the
+  > > same words.
+  > >
+  > > **`WORSE` is not the mark, and the reason is worth stating precisely.**
+  > > The condition is written about what *a consumer* needs, and no consumer
+  > > needed it — this one least of all, since it is the consumer that does not
+  > > need the fix. What was found is a property of the **fix**, reached by
+  > > implementing the measurement rather than the remedy. It is recorded here
+  > > rather than classified, because widening the test to cover *"what would
+  > > the predicted remedy require"* is exactly the boundary re-reading this
+  > > file exists to prevent. **Whoever implements `retain_payloads=False`
+  > > inherits it as a halt point, not as a detail.**
+  > >
+  > > **Scope of the confirmation.** Five things bound it; the last three are
+  > > load-bearing.
+  > >
+  > > - **The 100k figure was measured on a generated load input, not a
+  > >   trace.** It is synthesized, gitignored, never entered `fixtures/`, and
+  > >   is not captured. The largest committed trace is **nine spans**. What
+  > >   was measured is how memory scales with span count and payload length;
+  > >   that it scales says nothing about whether real traces reach that size.
+  > > - **One consumer, and the designer picked it.** The exam-picking problem
+  > >   this file exists to name. A consumer holding many graphs at once, or
+  > >   streaming, or reading payloads *and* usage, was not written.
+  > > - **The payload length is a setting**, and the retained fraction is
+  > >   entirely a function of it: 15.0% at 1,500 characters, 32.3% at 200,
+  > >   46.1% on the corpus. A corpus of short payloads makes P1 look weak, and
+  > >   did.
+  > > - **`usage` itself is barely exercised**, and this was its first
+  > >   exercise by any consumer. 16 of 107 nodes carry it, in 7 traces, all
+  > >   `llm`; `total_tokens` is reported on **2 nodes in one trace** and
+  > >   `usage.extra` on the same 2; no committed trace ever reports one token
+  > >   count without the other. Cross-dialect, `usage` is compared on **two
+  > >   scenarios and two fields**.
+  > > - **Losslessness lives in three places and P1 names two.**
+  > >   `Diagnostic.source` retains verbatim fragments that neither
+  > >   `retain_payloads` nor `retain_raw` covers — 18.6% of what survives the
+  > >   strip over the corpus, 31.9% over the three captured traces. Negligible
+  > >   on a generated input and not negligible on a real one.
+  > >
+  > > **2b's negative evidence, carried with its scope.** The Phase 2b fleet
+  > > aggregator asked for no retention option (2.4, F1–F9: no retention item,
+  > > no memory item, nothing about losslessness being cost). That is real
+  > > evidence and it is negative — and it was **not P1's test**: fourteen
+  > > traces of a handful of spans, built one at a time, by a consumer that
+  > > never read `usage` and never read a timestamp. For scale, the *entire*
+  > > committed corpus — 39 traces, 107 nodes — is 501,785 bytes built. A
+  > > prediction about memory at 100k spans cannot be refuted by an input three
+  > > orders of magnitude below it. Corroboration, at a size that could not
+  > > have produced the friction.
+  > >
+  > > **What would falsify this confirmation:** a `retain_payloads=False`
+  > > implementation that turns out not to move the peak either, which would
+  > > mean the allocation happens somewhere this measurement did not look; or a
+  > > real 100k-span trace whose payloads are short enough that the corpus's
+  > > 46% is the representative figure after all.
+  > >
+  > > Honest claim: *P1's friction occurred, in one confirmatory consumer, on a
+  > > generated 100,000-span input at a chosen payload length — measured as an
+  > > 85% residency saving and a 1.05 GB peak unreachable through the public
+  > > API — and the operational remedy it names cannot be built without saying
+  > > something about payloads the model currently cannot say.*
+  >
+  > ## 2. F-2 recorded beside O1 — the 2.10 amendment now has two instances
+  >
+  > Ruled **SPEC GAP with a shape cost**, and recorded as the amendment's
+  > second instance rather than as a second finding that happens to resemble
+  > the first. The reason is the ruling's: *a category with a single instance
+  > is not yet a category.*
+  >
+  > The comparison table is in the F-2 section of the record above, so it sits
+  > with the evidence rather than in a follow-up a reader may not reach. Three
+  > things it establishes, and only the third is new:
+  >
+  > - **The two instances are unalike in everything except the mechanism.**
+  >   Different field, different permissive type, different missing thing
+  >   (nothing *populated* `Diagnostic.source`; nothing *states what
+  >   `Usage.extra`'s keys mean*), different consumer with a different job.
+  > - **The check discriminates.** 3.3's F-2 is a spec gap where the 2.10
+  >   check was run and did **not** bite — stating what `diagnostics[].node_id`
+  >   and `code` mean changes neither type nor value. Two positives and one
+  >   negative across three instances is what stops the amendment being a
+  >   formality that always says yes.
+  > - **A generalization the two positives support**, offered as a candidate
+  >   and not as a rule: *a spec gap carries a shape cost exactly when the
+  >   unstated thing is the **vocabulary** of a serialized value rather than
+  >   its **meaning**.* Stating a meaning is free; stating a vocabulary either
+  >   changes the values or changes what `canonical()` compares.
+  >
+  > **Not written into `PREDICTIONS.md`.** The amendment lives in that file's
+  > *shape / operational distinction* section, and adding an instance to a
+  > definition is an edit to it — read-only to the agent in every phase. Handed
+  > over as the table.
+  >
+  > **Not resolved.** `nodes[].usage.extra` stays where `CONTRACTS.md` put it:
+  > pre-registered as one of two rows likeliest to meet 3.2's halt condition in
+  > **Phase 4, with dialect three**. What changed is that the row now has a
+  > consumer behind it. What did not change is that resolving it needs an
+  > instrument this phase does not have.
+  >
+  > ## 3. F-1 — correction only, pinned, unfixed, and the pattern named at the
+  > pin
+  >
+  > Ruled correction-only, `[contract]`, unfixed. `CONTRACTS.md` F-C and
+  > `ROADMAP.md` Phase 4 row 5 both still assert a corpus-wide emptiness that
+  > is false; neither is edited here, because both belong to a workstream this
+  > session is not in (`AGENT.md`: never mix them in one context).
+  >
+  > **Why they were wrong is now recorded once, at the pin.**
+  > `test_usage_extra_is_non_empty_on_the_committed_corpus`'s docstring carries
+  > it: both documents stated a **corpus-wide quantifier** — a claim over every
+  > fixture — and nothing recomputed it. Such a claim is true when written and
+  > expires silently; the corpus grew a captured trace and the sentence stayed.
+  >
+  > It is the **third instance in three tasks**, and the docstring names all
+  > three: 3.2's own perturbation count inside `CONTRACTS.md` (*"nine … and in
+  > seven of the nine"*, both figures wrong), the 3.3 record's *"8 of 20"*
+  > carried across from an undirected run, and this. **The remedy every time
+  > has been a test rather than a correction**, because a corrected sentence
+  > expires again and a recomputed one cannot.
+  >
+  > The pin was strengthened to match the diagnosis: it asserts the **exact
+  > dict**, so it goes red both if `extra` empties out *and* if a different
+  > trace starts carrying one — the second being the case the two documents
+  > were written to describe and could not have caught.
+  >
+  > **Named at the pin and not here**, per the ruling: a fourth restatement in
+  > a fourth task record would be the failure mode describing itself. This
+  > section is the pointer.
+  >
+  > ## 4. F-4 through F-6 — bounds, unchanged; F-6's shared cause named
+  >
+  > F-4 and F-5 stand as written. F-6 gains the verdict the ruling asked for,
+  > in the record's F-6 section: **yes, the shared cause is worth naming, and
+  > it is a field class rather than two fields.**
+  >
+  > `canonical()` compares every node field it does not erase; §4.4's
+  > declaration mechanism reaches three things (`name`, one `attributes` key,
+  > payload `value`/`mime`). Everything else compared is *must agree, cannot be
+  > declared to disagree* — nine entries, tabulated in F-6. **Two of the nine
+  > are now known to disagree between the two real instrumentors**, `status`
+  > (3.3 F-3) and `usage` (F-6), and both were found the same way: by reading
+  > captured traces, by consumers with unrelated jobs, neither looking.
+  >
+  > One sentence for the cause: *the set of fields the corpus compares strictly
+  > is much larger than the set it can prove two real instrumentors agree on*,
+  > because both renderings of a scenario descend from one `scenario.md` and a
+  > hand-authored pair can only disagree where its author knew to make it.
+  >
+  > Naming it buys what a third per-field bound would not: it **predicts**
+  > where the next instance is (`kind`, `operation`, `status_note`, the edge
+  > set), it **prices dialect three** — the corpus run is the weaker half, and
+  > only a *captured* third dialect can surface a row of that table, which is
+  > the first argument for capture stated in general terms rather than
+  > per-field — and it **bounds the equivalence claim** for the `0.9.x` README,
+  > which is 3.8's to write.
+  >
+  > And what it is not: **not** an argument to widen the declarable set. Every
+  > row that acquired an escape hatch would stop being evidence, and payload
+  > `state` is the standing proof that the answer to *"two dialects might
+  > disagree here"* is a finding rather than a declaration. Nor is it a defect
+  > in `canonical()`: comparing strictly is what made both disagreements
+  > findable. The gap is in what the corpus can **ask**.
+  >
+  > ## Definition of done
+  >
+  > - [x] P1's wording final, carrying F-3's latent shape cost, in
+  >       `PREDICTIONS.md`'s own form and ready to paste —
+  >       **`git diff PREDICTIONS.md` empty.**
+  > - [x] F-2 recorded beside O1, with the discriminating third instance
+  >       (3.3's F-2) that keeps the amendment from being vacuous.
+  > - [x] F-1's *why* named once, at the pin, with its three instances; the
+  >       pin strengthened to assert the exact dict.
+  > - [x] F-6's shared cause named as a field class, with the enumeration, what
+  >       it predicts, and what it is explicitly not.
+  > - [x] `git diff --stat spanweave/` empty; `make check` green.
 
 - [ ] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
   Assemble, for each of P1–P4, the evidence this phase produced, in the form the
