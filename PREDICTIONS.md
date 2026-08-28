@@ -103,7 +103,72 @@ harmless rather than friction.
 **What would make it WORSE:** if a consumer wants a state the enum lacks —
 `sampled_out`, `deferred`, `elided_by_option` (see P1). Shape.
 
-**Status:** open.
+**Status: REFUTED — scoped.** Resolved at 3.3, Phase 3.
+
+A trajectory dumper over the committed corpus — the consumer P2 describes,
+since it is the only one that must decide what a transcript line says for
+each state — **did not collapse the five states**. It reaches a decision
+table rather than `Payload.has_content`, which is P2's predicted collapse in
+one method: `has_content` answers True for `present` and `truncated` and
+False for the other three, i.e. "did I get a string or not".
+
+**Measured by perturbation rather than asserted** (`TASKS.md` 3.2's
+instrument): each state was re-rendered as each other state, one directed
+pair at a time, and the whole-corpus sweep re-run and diffed. Of the twenty
+collapses, **fourteen change the branch a reader acts on** and sixteen change
+the output at all. `absent`↔`empty` is among the fourteen, which is §3.3's
+central honesty claim holding up under a consumer that had a reason to care:
+a tool that returned nothing failed to answer, and a tool whose output the
+instrumentor never recorded is a hole in the telemetry, and scoring those
+alike scores the tracing setup as if it were the agent.
+
+**Scope of the refutation.** Four things bound it, and the last two are the
+load-bearing ones.
+
+- **One consumer, and the designer picked it.** P2 says *most* consumers.
+  This is a sample of one, chosen for being the consumer that reads payloads
+  — which is the exam-picking problem this file exists to name, in its purest
+  form. A dashboard, a viewer, or a notebook was not tested and is exactly
+  where P2's "most" would live.
+- **The table is this consumer's design.** The perturbation shows the
+  distinctions are load-bearing *given that table*; it cannot show that an
+  independently written transcript would have drawn the same lines. What it
+  does show is that the lines, once drawn, are not decorative.
+- **`absent` and `redacted` were collapsed** — on the branch a harness reads,
+  this consumer puts both on `unavailable` and only the printed explanation
+  differs. That is P2's predicted behaviour, observed, on one pair of five.
+- **Two states were barely exercised and one not at all.** `redacted` is 2
+  payloads in one scenario in one dialect (the `otel_genai` adapter has no
+  redaction signal, so it cannot produce one). `truncated` is **zero across
+  all 41 committed traces**.
+
+**`truncated` is not refuted — it had no opportunity to occur.** Neither
+shipped adapter can emit it: OpenInference signals redaction with a marker
+string and has no truncation signal, and the GenAI convention states none
+either. So the state is unexercised rather than unused, and a fixture could
+only produce one by being written to — which would make the consumer its own
+exam (`AGENT.md` run loop, step 3). All four `truncated` collapses change
+nothing at all, and that measures the corpus, not the consumer. **On
+`truncated`, P2 is unresolved and this refutation says nothing.**
+
+**The `WORSE` condition was not met.** No state the enum lacks was wanted:
+`sampled_out`, `deferred` and `elided_by_option` never came up, and nothing
+the consumer needed to say about a payload was unsayable. One sixth
+*rendering* was needed and is not a sixth state — `present` with `value is
+None`, §3.3's parse failure — reached from an existing state plus an existing
+field, 2 payloads.
+
+**What would falsify this refutation:** a consumer that reads payloads and is
+*not* an audit-shaped one — a viewer, a dashboard, a notebook, or an eval
+harness written by someone who did not read `SPEC.md` §3.3 first. If such a
+consumer reads `Payload.value` and never `Payload.state`, P2 reopens on the
+four exercised states. Separately, an adapter that can emit `truncated` — a
+dialect with a truncation signal — would test the fifth for the first time.
+
+Honest claim: *P2 survived a single confirmatory consumer over 41 committed
+traces, which separated four of the five states on the branch a reader acts
+on, collapsed `absent` against `redacted`, and never met a `truncated`
+payload at all.*
 
 ---
 
