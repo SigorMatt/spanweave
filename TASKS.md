@@ -4268,7 +4268,7 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 
 ### `[contract]`
 
-- [ ] **3.2 Inventory every permissively-typed serialized field.** `[contract]`
+- [x] **3.2 Inventory every permissively-typed serialized field.** `[contract]`
   From 2.14's freeze instruction, split per blocker 3: **this task produces the
   list and the tripwire, and states no contract it cannot evidence.**
 
@@ -4310,6 +4310,139 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
   **Cut order:** not on `ROADMAP.md`'s list — it did not exist when the list was
   written. If cut, it joins the resolution half in Phase 4, and the cost is that
   0.9.x publishes an unenumerated surface. Record the cut; do not let it vanish.
+
+  > # 3.2 record — the inventory, and what it measured
+  >
+  > `CONTRACTS.md` (new) + `tests/test_contracts.py` (new). `make check` green
+  > (1332 passed, 2 skipped; +153 from this file), `make conformance` green,
+  > `make gates` green, `review_corpus.py` exit 0. Nothing under `spanweave/`
+  > changed. No fixture was authored, no `expected/graph.json` was touched, and
+  > `canonical()` was not weakened.
+  >
+  > ## The halt condition — tested, and NOT met
+  >
+  > **No type change is forced.** Every row was recorded without writing a
+  > contract, and no row needed what is serialized to change in order to be
+  > *enumerated*. Naming a field as unmeasured is not the act of stating its
+  > contract, which is the distinction the task rests on.
+  >
+  > Two rows are **pre-registered** as the likeliest to force one in Phase 4,
+  > and saying so now is not the same as meeting the condition now:
+  > `nodes[].usage.extra` (any honest key contract changes what is serialized or
+  > what `canonical()` compares) and `diagnostics[].source` (closing §3.7's
+  > catch-all may change what three codes emit). Both are argued in
+  > `CONTRACTS.md`, *The halt condition*.
+  >
+  > **And it is not a Phase 3 gate failure, in either direction.** That gate
+  > measures what a *confirmatory consumer* could not express; no consumer has
+  > run, because 3.3 and 3.4 come after this task. This produces no evidence for
+  > or against it. Recorded as both things separately, as the task asks, rather
+  > than as whichever reads better.
+  >
+  > ## What was measured, and how
+  >
+  > **36** permissively-typed serialized fields, enumerated from the model by a
+  > type test rather than from 3.2's known-members list (which named 7; the
+  > other 29 came from the model). Each was then **perturbed in the serializer,
+  > one at a time, with the whole suite run** — 39 runs, the three payload
+  > fields split per side. That is the instrument that made the 2.10 defect
+  > visible in the first place: *changing its type broke zero tests*.
+  >
+  > **Eleven of thirty-six can be changed at the schema boundary with the suite
+  > green.** That is the headline, and it is the answer to the question the task
+  > asks rather than "it is typed permissively": `meta.spanweave_version`,
+  > `meta.source_digest`, `meta.adapters[].id`, `meta.adapters[].version`,
+  > `nodes[].raw.source_id`, `nodes[].provenance.adapter_version`,
+  > `nodes[].provenance.dialect_note`, `edges[].adapter`,
+  > `diagnostics[].message`, `diagnostics[].adapter`, `annotations[].key`.
+  >
+  > ## Findings beyond the rows
+  >
+  > - **`nodes[].name` has never been compared across dialects.** `canonical()`
+  >   compares it; 16 of the 17 scenarios rendered in both dialects declare it
+  >   dialect-varying, and the 17th is a scenario that must not build. This is a
+  >   bound on what "16 byte-identical canonical graphs" (2.14) proves, and it
+  >   belongs beside that figure rather than under it.
+  > - **`Usage.extra` is a second `Edge.basis`, and 2.14 did not name it.**
+  >   Adapter-supplied, dialect-derived verbatim (`cache_read` vs
+  >   `cache_read_input_tokens` for the same concept), compared by `canonical()`,
+  >   and empty in every fixture in the repo — so the disagreement is unreachable
+  >   by construction. Same species, same resolution: Phase 4, dialect three.
+  > - **`Edge.basis`, refined — two corrections to 2.14.** (1) *No adapter emits
+  >   a `DeclaredDataEdge` at all*; 2.14 says `otel_genai` produces none, and
+  >   `openinference._data_edges` also returns `()` and says why. It is a
+  >   required seam field nothing has ever populated. (2) *Neither adapter has
+  >   ever chosen a `SpanLink.basis`* — both take the default `"span.link"`.
+  >   2.14's conclusion is unchanged and stronger; what changes is the
+  >   instrument: **dialect three does not resolve this unless the corpus also
+  >   gains a `link` scenario a second dialect can render**, which `span_links`
+  >   currently blocks (2.16's pending decision). A third dialect added without
+  >   that leaves the row exactly where it is.
+  > - **§3.7's `source` catch-all is stated and unasserted.** "Everything else —
+  >   the offending fragment, verbatim" covers ten codes; measured, three do not
+  >   match its words (`missing_timestamp` and `payload_parse_failed` carry no
+  >   fragment at all; `ordering_cycle` carries spanweave node ids, which are
+  >   derived output). `tests/test_codes.py` asserts the two unpaired codes and
+  >   checks the table's other direction only as *declared shapes ⊆ real codes*.
+  >   Same species as the defect the remedy fixed, one level down.
+  > - **F7 is now a field row.** "Nothing states which diagnostic codes are
+  >   node-scoped" (2.4) is `diagnostics[].node_id`'s *Relies on* note.
+  > - **One field is excluded by the scope rule and named anyway:**
+  >   `meta.adapters[].declared_confidence` is `float | None`, so constrained by
+  >   type, yet `ADAPTERS.md` §2 states a `[0.0, 1.0]` range nothing enforces.
+  >   Same species, differently-typed field; widening the rule to catch it would
+  >   make the rule a judgement instead of a type test, so it is named in
+  >   `CONTRACTS.md` rather than rowed.
+  >
+  > ## Divergences from the task as written
+  >
+  > - **Three statuses, not two.** 3.2 says record *exactly one of* `stated +
+  >   asserted` or `unstated, unmeasured`. Applied literally, `Edge.basis` and
+  >   `Node.operation` get the same label, though one is invisible to the
+  >   cross-dialect claim by construction and the other is agreed by two
+  >   independent adapters in 15 of 16 compared scenarios. Collapsing those loses
+  >   exactly the information the task exists to preserve. The vocabulary is
+  >   therefore a **2×2 over the task's own two questions** — is it stated, is it
+  >   asserted — plus `pinned` for "a fixture detects a change but nothing states
+  >   what the value should be". Six values, closed, and derived mechanically
+  >   from each row's own cells so a status cannot be written by hand.
+  > - **`Asserted` is measured at the schema boundary, not read.** A field can be
+  >   asserted at the *model* level and still show `—` (`meta.source_digest` and
+  >   `edges[].basis` both are). That is a different gap and the notes keep them
+  >   apart; the boundary is what `0.9.x` publishes.
+  > - **`AGENT.md`'s document map gained one line** for `CONTRACTS.md`. A cold
+  >   session reads that file outline-first, and an inventory it cannot find is
+  >   an inventory that rots.
+  >
+  > ## The tripwire
+  >
+  > `tests/test_contracts.py`, both directions in five places: the object map vs.
+  > a real document; every serialized key vs. its model type and every model
+  > field vs. what is written (with `RawRecord.line_number` and
+  > `Meta.schema_version` **declared** unserialized, so neither can quietly start
+  > or stop); every permissive field vs. a row and every row vs. a permissive
+  > field; the *Relies on* list vs. the rows; and the document's own
+  > eleven-unasserted list vs. the rows whose Asserted cell is empty. Each row's
+  > cited sections and test node ids must resolve, and each row's type must be
+  > the model's.
+  >
+  > **Verified by planting, not by reading:** eight violations — a new
+  > permissively-typed serialized field, a status that does not follow from its
+  > cells, a citation to a section that does not exist, one to a test that does
+  > not exist, a stale eleven-field list, a missing *Relies on* note, a model
+  > field dropped from the serializer, and a declared type drifting from the
+  > model — each went red in the intended test, and each was reverted.
+  >
+  > ## Definition of done
+  >
+  > - [x] Every permissively-typed serialized field enumerated **from the model**
+  >       (36; 3.2's list named 7).
+  > - [x] Each records what states it, what asserts it, and — where nothing does
+  >       — that, with why no contract is written now.
+  > - [x] No contract invented to close a row. Four rows say `unstated`.
+  > - [x] A test fails if a field appears without an entry, and if an entry
+  >       appears without a field.
+  > - [x] `make check` green.
 
 ---
 

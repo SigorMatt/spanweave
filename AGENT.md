@@ -15,6 +15,11 @@ of this run, and the points where you must stop and hand back to a human.
 - `FIXTURES.md` — the conformance corpus contract (fixture layout, the
   cross-dialect equivalence rule, hand-authored vs. captured).
 - `ADAPTERS.md` — how to write an adapter. Follow it exactly for any new dialect.
+- `CONTRACTS.md` — the permissively-typed serialized field inventory (`TASKS.md`
+  3.2). An **enumeration**, not a set of contracts: it records what states and
+  what asserts each field that crosses the schema boundary, and says *unstated,
+  unmeasured* where nothing does. Stating those contracts is Phase 4, with
+  dialect three. `tests/test_contracts.py` fails if a field appears without a row.
 - `ENVIRONMENT.md` — runtime & toolchain contract (exact commands, network
   zones, credentials). Conform to it; never choose your own runtime or invent
   commands.
