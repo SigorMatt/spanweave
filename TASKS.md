@@ -3977,29 +3977,542 @@ Starting Phase 3 is still a separate decision.
   > - [ ] **Renderable only if the convention grows an embedding content
   >       attribute (blocker 1) *and* 2.16 is reversed (blocker 2).** HALT.
 
-## Phase 3 — Confirm, package, launch  *(provisional)*
+## Phase 3 — Confirm, package, launch
 
-Bounded work only. Falsification happened in Phase 2; nothing open-ended sits
-next to the launch date.
+Sharpened from the provisional bullets after the Phase 2 exit (2.14) and the
+post-exit follow-up (2.17), per this file's resolution rule. Falsification
+happened in Phase 2; this phase is **confirmation and packaging**, and nothing
+open-ended sits next to a launch date.
 
-- `examples/trajectory_dump/` and `examples/cost_latency/` — confirmatory,
-  expected to pass, demonstrative rather than evidentiary. Prefer a
-  **stranger-chosen** consumer over either.
-- **Gate:** zero **shape** changes to `spanweave/` — no new field, `NodeKind`,
-  `EdgeKind`, warrant, `Payload` state, `Diagnostic` code, or query primitive.
-  **Operational** options (retention, multi-trace handling, laziness) are
-  permitted, additive, and recorded. The distinction is defined in
-  `PREDICTIONS.md` and binding as written there; do not widen it mid-phase.
-- Mark **every** prediction CONFIRMED / REFUTED / WORSE. A `WORSE` blocks the
-  freeze until the model is fixed. This is ~an hour of work and is **never** cut
-  (`ROADMAP.md`, cut order).
-- **Publish `0.9.x` to PyPI with `schema_version` `0.x`** and a loud unfrozen
-  notice in README and `--help`. **Do not freeze here** — publishing is
-  reversible, freezing is not, and keeping them separate takes the only
-  irreversible decision off the launch's critical path.
-- **Exit:** both consumers work with zero shape changes; every prediction marked;
-  `pip install spanweave` works at `0.9.x`; install-and-build in ~60s for a
-  stranger.
+**Read before starting any task here:** `ROADMAP.md` Phase 3 and its cut order,
+`PREDICTIONS.md` P1–P4 and the binding shape/operational test, the Phase 2 exit
+record (2.14), and 2.15–2.17. Several tasks below are what they are *because* of
+what those records found, and the blockers section immediately following says
+which.
+
+**Workstreams. Never mix them in one session's context.** Every task is tagged
+`[prereq]`, `[contract]`, `[consumers]`, or `[launch]`. A cold session picks the
+lowest-numbered unchecked task and works only that tag.
+
+**Ordering — decided, do not re-litigate.** `[contract]` (3.2) runs **before**
+the consumers. Phase 2's most transferable finding is that the *permissive
+default won* three times and each defect was invisible until something else had
+to agree with it; a consumer written against a field whose type then changes is
+that lesson paid for twice. The counter-argument — that the consumers are this
+phase's evidence and the inventory is bookkeeping — is real and loses on cost,
+not on importance.
+
+**The gate this phase is measured by: zero shape changes.** A new field,
+`NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code or query
+primitive wanted by a confirmatory consumer means the model could not express
+what a real consumer needed. Classify with `PREDICTIONS.md`'s binding test, **as
+written there** — widening the distinction mid-phase to accommodate whatever
+happened is the exact rationalization that file exists to prevent.
+
+**HALT markers.** A task marked **HALT** ends the session. It names the artifact
+the human needs in order to decide. Do not proceed past one alone. The standing
+halt points in `AGENT.md` still apply on top of these — any model change,
+anything in `OPEN_QUESTIONS.md`, any edit to `PREDICTIONS.md`, any change to
+`schema_version` semantics, any credentialed or networked step.
+
+### What Phase 2 changed that Phase 3's plan predates
+
+`ROADMAP.md`'s Phase 3 was written before Phase 2 ran. Four things it could not
+have accounted for. Each says plainly whether it **blocks** a task or
+**under-specifies** one, so that none of them is rediscovered mid-phase.
+
+**1. P1's predicted friction did not appear in 2b — and 2b was not P1's test.
+*Under-specifies 3.4. Does not block it, and does not partly resolve P1.***
+
+P1 predicts a cost/latency attributor will want `retain_payloads=False` or
+`retain_raw=False`, because retaining full payloads for a 100k-span trace is
+memory it has no use for. Phase 2b's fleet aggregator asked for **no such
+option**: findings F1–F9 (2.4) contain no retention item, no memory item, and
+nothing about losslessness being cost. That is real evidence and it is negative,
+so it is recorded rather than discarded.
+
+It is also **not the test P1 names**, in three specific ways, and each is a
+requirement on 3.4 rather than a caveat to be waved through:
+
+- **The fleet could not exert the pressure.** Fourteen traces of a handful of
+  spans each, built one at a time and released. Peak residency was one small
+  graph. A prediction about memory at 100k spans cannot be refuted by an input
+  that never approaches it.
+- **The aggregator was not the consumer P1 describes.** It counted node kinds,
+  diagnostic codes, per-tool calls and status. It never read `usage` and never
+  read a timestamp — which is exactly the pair P1 says a cost/latency consumer
+  needs *and nothing else*. The consumer that would feel losslessness as dead
+  weight has not been built yet.
+- **A counting rollup discards as it goes.** It never holds a corpus in memory,
+  so it structurally cannot want a retention option — the same shape of scoping
+  that limited P5's refutation (`PREDICTIONS.md` P5, *Scope of the refutation*).
+
+So P1 keeps its full test at **3.4**, and 3.4 is written to *apply the
+pressure*, not to demonstrate an attributor. 2b's negative evidence is carried
+to the human at **3.5** as corroboration, labelled for what it is: a different
+consumer, at a size that could not have produced the friction.
+
+**2. `Diagnostic.source` changed type in Phase 2, and `schema_version` did not.
+*Under-specifies 3.7 — and 3.7 is a HALT for it. Constrains 3.3.***
+
+O1's remedy changed `Diagnostic.source` on `unpaired_call` / `unpaired_result`
+from a bare id string to `{"call_id", "operation"}`, classified **SHAPE** at
+2.14. `SPEC.md` §3.7 now states `source`'s shape per code, and
+`tests/test_codes.py` asserts that table against what the library emits — so the
+contract half is done and needs nothing in Phase 3.
+
+What needs accounting for is the **version**. `SCHEMA_VERSION` was `"0.1"` before
+the change and is `"0.1"` after it. A consumer pinning on `schema_version` across
+those two releases sees one value describing two different serialized contracts.
+0.9.x publishes that to strangers. The decision — bump to `"0.2"`, or state
+explicitly that `0.x` is a single unfrozen bucket that never bumps and that
+pinning must therefore be on the *library* version — is `AGENT.md`'s
+*"any change to `schema_version` semantics"* halt point, and it is **3.7**.
+
+It also constrains **3.3**: the remedy exists so a consumer can name an
+unfulfilled call's tool in one line, identically in every dialect. If either
+Phase 3 consumer reaches that name by walking `outputs.value[...]` instead, the
+remedy did not land, and that is a finding about the remedy rather than a detail
+of the example.
+
+**3. The three-defects pattern: audit now, resolve later. *Neither blocks. The
+inventory half is Phase 3 (3.2); the resolution half stays Phase 4.***
+
+2.14's instruction reads *"before freezing `schema_version`, audit every
+serialized field typed permissively (`JsonValue`, free `str`) for a stated
+contract and an asserting test"*, and names `Edge.basis` as the next one. The
+freeze is Phase 4, so the sentence has been read as placing the whole audit
+there. It places the **resolution** there, and the two halves have different
+costs and different evidence:
+
+- **Enumerating** the permissively-typed serialized fields is cheap, needs no
+  dialect, and is worth most *before* 0.9.x — because publishing is what turns an
+  unstated serialized field into something strangers observe and pin behavior to.
+  A de-facto contract formed by observation is harder to correct than an unstated
+  one nobody has seen. **Phase 3, task 3.2.**
+- **Stating a contract** for a field whose vocabulary no second implementation
+  has ever had to agree with is the *same mistake in the other direction* — it
+  is one author writing down one implementation's behavior and calling it a
+  contract, which is precisely how all three defects were born. `Edge.basis` is
+  unmeasurable by construction today (2.14): both adapter-supplied bases are
+  invisible to the cross-dialect claim. **Phase 4, with dialect three**, exactly
+  where 2.14 put it.
+
+3.2 therefore produces a list and a tripwire, not a set of new contracts. Where a
+field has no evidence, it records *"unstated, unmeasured, needs dialect three"*
+and stops. This is also the second argument for the freeze gate recorded in
+`ROADMAP.md` Phase 4: the audit's own instrument is a third dialect.
+
+**4. `AGENT.md` and `ENVIRONMENT.md` still deliver Phase 2. *Blocks everything —
+it is 3.1.***
+
+`AGENT.md`'s *Scope of this run* delivers through 2.14 and then halts, its
+must-not list explicitly forbids the confirmatory consumers as "Phase 3", and its
+live phase-exit halt is Phase 2's. A cold Phase 3 session reads that file first
+and is told to stop — the same condition 2.1 found and fixed for Phase 2.
+`ENVIRONMENT.md` needs less but needs it precisely: its three network zones have
+no zone for *publishing to an external index*, and PyPI credentials are a
+category it currently does not mention at all.
+
+### The cut order, re-read after Phase 2
+
+`ROADMAP.md`'s Phase 3 cut order **still stands, and one item in it is now
+wrong** — wrong because of something Phase 2 did, which is why it is corrected
+here rather than left to be discovered under pressure.
+
+**That Phase 2's timeboxes never bound is not evidence about Phase 3.** Both
+boxes were insurance and both went unused; nothing ran long. But Phase 2 had no
+external date, which the cut order itself names as the reason it was *easier* to
+cut sloppily there. Phase 3 is the **first phase with a launch date**, so it is
+the first phase where the pressure the cut order was written for actually exists.
+An unused box says the estimate was good, not that the next phase's will be.
+
+**The correction.** The list says cut *"confirmatory consumer 2, then consumer
+1"* — consumer 1 being the trajectory dumper and consumer 2 the cost/latency
+attributor — on the grounds that both are expected to pass and "cutting one
+forfeits little". Phase 2 falsified the premise:
+
+- The cost/latency attributor is now the **only** test P1 has (blocker 1). The
+  same list names the prediction resolutions **never-cut**. So cutting the first
+  item on the cut list silently cuts a never-cut item, which is the failure mode
+  the list exists to prevent, executed by the list itself.
+- The trajectory dumper is the only consumer that reads payloads across the five
+  states, which makes it P2's only real test.
+
+So neither consumer "forfeits little" any more; each carries a prediction that
+must be marked before the freeze. **Cut the trajectory dumper (3.3) first** — P2's
+predicted outcome is REFUTED-as-harmless with no model consequence, so its
+evidence is the cheaper of the two to defer. **Cutting the attributor (3.4)
+defers P1 to Phase 4** and must be recorded as that, in the exit record, in
+those words. Neither cut may be described as forfeiting little.
+
+Items 2 and 3 of the list — the `CONTRIBUTING.md` adapter walkthrough and the
+compatibility policy — are already Phase 4 and appear in no task below. Nothing
+here can cut them because nothing here schedules them.
+
+**Never cut, unchanged:** the prediction resolutions (3.5), the Phase 2
+adversarial finding, the unfrozen-schema notice (3.7, 3.8). **Never accelerate:**
+the freeze — which is now additionally gated on a third dialect (`ROADMAP.md`
+Phase 4), and that gate binds Phase 4, not this phase's launch.
+
+---
+
+### `[prereq]`
+
+- [ ] **3.1 Re-scope `AGENT.md` and `ENVIRONMENT.md` for Phase 3.** `[prereq]`
+  As 2.1 did for Phase 2, and for the same reason: a cold session reads
+  `AGENT.md` first and is currently told that Phase 3 must not start. Rewrite
+  *Scope of this run* for Phase 3, **keeping every halt point**, discharging the
+  Phase 2 exit halt by moving it forward rather than deleting it, and adding what
+  this phase newly needs:
+
+  - **New halts:** the PyPI publish (3.10 — credentialed, outward-facing, and a
+    name-plus-version on PyPI cannot be reused, so it is closer to irreversible
+    than any other step in this phase); the `schema_version` decision (3.7 —
+    already a standing halt as *"any change to `schema_version` semantics"*, named
+    at its task so it is not missed); each consumer's findings record, because
+    **a human marks P1–P4** in a file the agent may not edit.
+  - **New must-nots:** freeze the schema or change `SCHEMA_FROZEN`; add a third
+    dialect (still Phase 4, and now also a freeze precondition — see the gate in
+    `ROADMAP.md`); resolve or edit `PREDICTIONS.md`; widen the shape/operational
+    distinction to classify a consumer's finding as operational; add a runtime
+    dependency to make an example easier.
+  - **Retire what Phase 2 discharged:** the 2b timebox, the 2.2/2.6 capture
+    halts (the general captured-fixtures halt stays standing — 2.15's capture ran
+    and further ones are still human acts), and the first-equivalence-run halt.
+    A halt that is already false is how a list of halts stops being read (2.1).
+  - `ENVIRONMENT.md`: add the **publish zone** to the network policy — it has
+    three zones, all of them *inbound or none*, and pushing an artifact to an
+    external index is a fourth; add **PyPI credentials** to the credentials
+    section as human-only, alongside the model API key; drop the `otlp` extra's
+    "Phase 4" annotation only if it moves, and otherwise leave it; add
+    `make install-check` (3.6) to the commands list once it exists.
+
+  *Done when `AGENT.md`'s scope section names Phase 3, its must-not list no
+  longer forbids the confirmatory consumers, its halt list contains every entry
+  it had minus only the ones Phase 2 discharged plus the new ones above,
+  `ENVIRONMENT.md` names a publish zone and PyPI credentials, and `make check` is
+  green.*
+  **HALT** — the run scope is a human decision, not an agent's.
+  *Artifact for the decision:* the diff of `AGENT.md`'s *Scope of this run* and
+  *Halt-and-hand-back points* sections and `ENVIRONMENT.md`'s network and
+  credentials sections, side by side with the old text.
+
+---
+
+### `[contract]`
+
+- [ ] **3.2 Inventory every permissively-typed serialized field.** `[contract]`
+  From 2.14's freeze instruction, split per blocker 3: **this task produces the
+  list and the tripwire, and states no contract it cannot evidence.**
+
+  Enumerate every field that crosses the schema boundary and is typed
+  permissively — `JsonValue`, a free `str`, `dict`/`list` of anything. Known
+  members: `Diagnostic.source` (stated at `SPEC.md` §3.7, asserted by
+  `tests/test_codes.py` — the worked example of what "done" looks like),
+  `Edge.basis`, `Node.attributes`, `Payload.value`, `Payload.mime`,
+  `RawRecord`'s contents, `Meta.adapters[].id`. Find the rest from the model
+  rather than from this list.
+
+  For each, record exactly one of:
+  - **stated + asserted** — the document that states it and the test that
+    asserts it;
+  - **unstated, unmeasured** — and *why no contract is being written now*.
+    `Edge.basis` is the reference case: adapter-supplied, compared by
+    `canonical()`, and both of its adapter-supplied instances are invisible to
+    the cross-dialect claim (2.14), so any contract written today would be one
+    author describing one implementation — the mechanism that produced all three
+    Phase 2 defects. It stays Phase 4, with dialect three.
+
+  **Do not invent a contract to close a row.** An honest "unmeasured" row is the
+  deliverable for those fields; a plausible one is the defect.
+
+  *Done when a test enumerates the permissively-typed serialized fields from the
+  model and fails if one appears without an inventory entry — the same
+  both-directions shape as `test_the_compared_list_names_every_field_that_is_compared`
+  — and `make check` is green.*
+  **HALT — only if the inventory forces a type change**, i.e. a field whose
+  stated contract cannot be written without changing what is serialized. That is
+  a shape change and it is a human call *before* 0.9.x publishes the field.
+  Record it under this task with `PREDICTIONS.md`'s binding test; it is **not**
+  a Phase 3 gate failure, because the gate measures what a *consumer* could not
+  express — say so explicitly rather than letting the two be conflated in either
+  direction.
+  *Artifact for the decision:* the inventory, the field, what it serializes
+  today, and what stating its contract would change.
+
+  **Cut order:** not on `ROADMAP.md`'s list — it did not exist when the list was
+  written. If cut, it joins the resolution half in Phase 4, and the cost is that
+  0.9.x publishes an unenumerated surface. Record the cut; do not let it vanish.
+
+---
+
+### `[consumers]`
+
+Both consumers live in `examples/`, consume **committed fixtures only**
+(`ENVIRONMENT.md`: `examples/` may not touch the network), and change **nothing**
+under `spanweave/`. Every want is a finding, classified by `PREDICTIONS.md`'s
+binding test — the 2.3/2.4 discipline, which is why 2b produced nine findings
+instead of nine patches.
+
+**Better than either, and still true:** a consumer chosen by a stranger is worth
+more than both of these together, because these are the uses already believed to
+work and `PREDICTIONS.md` exists because *the designer also picks the exam*.
+Finding a stranger is a human act, not an agent task. If one appears, their
+consumer's findings go in the exit record beside these and carry more weight.
+
+- [ ] **3.3 Trajectory dumper.** `[consumers]` Tests `PREDICTIONS.md` P2.
+  Flatten a run into an ordered call/result transcript an eval harness could
+  read. It walks `parent` + `call_result`, reads payloads across all five states,
+  and — per blocker 2 — names an unfulfilled call's tool from
+  `Diagnostic.source["operation"]`, **in one line and the same line in both
+  dialects**. If it needs to walk `outputs.value[...]` to get that name, the O1
+  remedy did not land and that is the finding.
+
+  P2 predicts most consumers collapse the five payload states to "did I get a
+  string or not". This consumer is the test: it must decide, per state, what a
+  transcript line says, and record which distinctions it actually used. An unused
+  state is P2 confirmed-as-harmless; a **wanted-but-absent** state
+  (`sampled_out`, `deferred`, `elided_by_option`) is **WORSE** and a shape
+  failure.
+
+  *Done when `uv run python -m examples.trajectory_dump <fixture>` prints an
+  ordered transcript for a committed fixture in **both** dialects, the two
+  outputs agree where the canonical graphs agree, output is byte-identical on
+  re-run, `git diff --stat spanweave/` is empty for this task, and `make check`
+  is green.*
+  **HALT** — **a human marks P2**, in a file the agent must not edit
+  (`AGENT.md`). Record the findings; do not describe an outcome in their place.
+  *Artifact for the decision:* the findings record, the transcript for one
+  fixture in both dialects, and — per state — whether the consumer used the
+  distinction or collapsed it.
+
+  **Cut order: cut this one first** (`ROADMAP.md` Phase 3 cut list, item 1, **as
+  corrected in the blockers section above** — the list's own order is wrong).
+  Cutting it defers P2's Phase 3 evidence; P2's predicted outcome is
+  REFUTED-as-harmless with no model consequence, which is what makes it the
+  cheaper of the two to lose. Record the cut and say P2 is unmarked because of it.
+
+- [ ] **3.4 Cost & latency attributor.** `[consumers]` Tests `PREDICTIONS.md` P1.
+  Roll `usage` and duration up the `parent` tree, applying the **consumer's own**
+  price table — the table lives in `examples/`, never in `spanweave/`, and the
+  word `cost` never appears under the package (`CLAUDE.md` 1, and it is banned
+  vocabulary in the neutrality gate).
+
+  **Written to apply P1's pressure, not to demonstrate an attributor** — blocker
+  1 is why. It reads `usage` and timestamps and *nothing else*, which is the
+  consumer P1 describes, and it must answer the retention question with a
+  measurement rather than an impression:
+
+  - Measure resident bytes per span for a built graph, and separately with
+    payloads and `RawRecord` dropped after the build, on the committed corpus.
+  - Extrapolate to P1's stated 100k spans, and **label it an extrapolation**.
+  - A generated load input may be used to check the extrapolation. It is a
+    **load input, not a fixture**: it says nothing about what real traces
+    contain, it is gitignored, it never enters `fixtures/`, and it is never
+    described as captured (`AGENT.md`'s fabrication halt point).
+  - Then state plainly whether the consumer **wanted** `retain_payloads=False` /
+    `retain_raw=False`, or merely would have accepted it. Those are different
+    findings and only the first is P1's predicted friction.
+
+  A refutation here must carry its scope the way P5's does: *what size, what
+  consumer, what was actually measured.*
+
+  *Done when `uv run python -m examples.cost_latency <fixture>` attributes tokens
+  and duration up the parent tree for a committed fixture in both dialects, the
+  measurement above is recorded with its method, `git diff --stat spanweave/` is
+  empty for this task, and `make check` is green.*
+  **HALT** — **a human marks P1**. Same rule as 3.3.
+  *Artifact for the decision:* the findings record, the memory measurement with
+  its extrapolation stated as one, 2b's negative evidence and why it was not P1's
+  test (blocker 1), and — if anything classified shape — the exact field,
+  `NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code or query
+  primitive that would have to exist.
+
+  **Cut order: cut this one second, and only after 3.3.** `ROADMAP.md`'s list
+  names it first; that ordering predates Phase 2 and is corrected above. Cutting
+  it **defers P1 to Phase 4** — write that in the exit record in those words, not
+  "forfeits little", because P1 then has no test anywhere in this phase and the
+  freeze inherits an unmarked prediction.
+
+- [ ] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
+  Assemble, for each of P1–P4, the evidence this phase produced, in the form the
+  human needs in order to mark it. **Do not mark them. Do not touch
+  `PREDICTIONS.md`** — it is read-only to the agent in every phase, and the
+  file's entire value is in its timestamps.
+
+  Per prediction, and honestly:
+  - **P1** — 3.4's measurement, plus 2b's negative evidence with its scope
+    (blocker 1).
+  - **P2** — 3.3's per-state record. Unused ≠ unwanted ≠ missing.
+  - **P3** — *neither Phase 3 consumer wants inferred `data` edges.* Say that
+    plainly. A prediction whose friction never had the opportunity to occur is
+    **not REFUTED by silence** — REFUTED would claim the model was more general
+    than expected, and nothing here tested it. Hand the human the fact and the
+    gap. P3 is also flagged in its own entry as a boundary case that must not be
+    waved through on the operational technicality, and it is tracked as
+    `OPEN_QUESTIONS.md` §7, which an agent may not resolve.
+  - **P4** — determinism was kept regardless and the entry says to keep it
+    regardless. The honest record is whether it was ever what made a consumer
+    work. It was not, unless this phase shows otherwise; say so.
+
+  *Done when the artifact names, for each of P1–P4, the evidence, its scope, and
+  what the evidence cannot support — and `git diff PREDICTIONS.md` is empty.*
+  **HALT** — **the human marks all four.**
+  *Artifact for the decision:* the assembled evidence, one section per
+  prediction.
+
+  **Cut order: NEVER CUT** (`ROADMAP.md`, and `PREDICTIONS.md`'s own closing
+  argument). It costs about an hour. "No time" can therefore never be the true
+  reason it was skipped, so if it is skipped the stated reason will be schedule
+  and the real reason will be that writing **WORSE** next to your own design is
+  uncomfortable.
+
+---
+
+### `[launch]`
+
+- [ ] **3.6 `make install-check` — prove what ships works.** `[launch]`
+  `make check` runs everything under `uv run`, with the source tree on the path.
+  Nothing in this repo currently builds the wheel and runs it from **outside** the
+  repo, so a packaging break — a module missing from `[tool.hatch.build]`, a
+  console script that does not resolve, a data file that exists in the tree and
+  not in the distribution — passes every gate and fails for the first stranger.
+  `tests/test_acceptance.py::test_the_installed_console_script_reports_its_version`
+  looks like this check and is not: it finds the *development* install.
+
+  Build the wheel, install it into a throwaway venv, `cd` outside the repo, and
+  run `spanweave --version`, `spanweave adapters`, and a `spanweave build` over a
+  fixture path.
+
+  *Done when `make install-check` passes from a clean tree, and fails when a
+  module is deliberately removed from the wheel's package list — verify both
+  directions, as tasks 0.4–0.6 did for the gates.*
+
+  **Cut order:** not on `ROADMAP.md`'s list. Cutting it means 0.9.x is published
+  without any check that the published artifact runs. Do not cut it before 3.3.
+
+- [ ] **3.7 Version to `0.9.0`, and decide what `schema_version` means while
+  unfrozen.** `[launch]`
+  Two things, and the second is the reason this is a halt.
+
+  `__version__` and `pyproject.toml` go to `0.9.0` together
+  (`tests/test_version.py` already pins them to each other). `SCHEMA_FROZEN`
+  stays `False` — the unfrozen notice in `--help`, in `--version`, in `inspect`'s
+  output and in the README is **never cut**.
+
+  Then: `SCHEMA_VERSION` is `"0.1"`, and it was `"0.1"` before Phase 2 changed
+  `Diagnostic.source`'s serialized type (blocker 2). Publishing leaves one value
+  describing two contracts. The options are to bump to `"0.2"` now, or to state
+  in `SPEC.md` §3.9 that `0.x` is a single unfrozen bucket that does not track
+  changes and that pinning must be on the library version. Both are defensible;
+  neither is the agent's call.
+
+  *Done when the version is `0.9.0` everywhere `tests/test_version.py` checks,
+  `spanweave --version` still says `UNFROZEN`, and `make check` is green.*
+  **HALT** — `AGENT.md`: *any change to `schema_version` semantics*.
+  *Artifact for the decision:* the list of serialized changes made since `"0.1"`
+  was assigned, and, for each option, what a consumer pinning on
+  `schema_version` at 0.9.x could and could not conclude.
+
+- [ ] **3.8 The docs truth pass, before anything is published.** `[launch]`
+  0.9.x is the first time these files are read by someone who cannot check them
+  against the tree. Three are false today:
+
+  - `README.md`'s **Status** section still says Phase 1 is the vertical slice and
+    "a second adapter … is Phase 2". Two adapters ship.
+  - `fixtures/captured/README.md` still says the directory is *"Currently empty —
+    the first one lands at `TASKS.md` 1.9"*. It has held two fixtures since 2.6
+    and three since 2.15. Noted at 2.15 and left for the human whose directory it
+    is; it cannot ship this way. A stale claim in the one directory whose subject
+    is provenance is worse than a stale claim anywhere else.
+  - There is **no installation section at all**. The install instruction must be
+    the one that resolves **today** — from source / from the built wheel. The
+    `pip install spanweave` line lands in the same change as 3.10's publish and
+    not before, because a README promising an install that 404s is the first
+    thing a stranger tries.
+
+  *Done when a test asserts each claim against the tree — at minimum, that
+  `fixtures/captured/README.md` does not claim emptiness while the directory is
+  non-empty, and that the README names no install command that does not resolve
+  at the current published state — and `make check` is green.*
+
+  **Cut order:** the unfrozen notice inside these files is **never cut**
+  (`ROADMAP.md`). The rest of the pass is cuttable only down to *"nothing in the
+  shipped docs is false"*, which is the floor, not a target.
+
+- [ ] **3.9 The sixty-second stranger path.** `[launch]`
+  `ROADMAP.md`'s exit says a stranger builds a graph from their own trace in ~60
+  seconds. Verify it rather than assert it: from a clean venv, install the wheel
+  3.6 built, run the README's quickstart **verbatim**, and build a graph from a
+  committed fixture. Time it and record the number.
+
+  The README's Python and shell blocks are the script. If they do not run as
+  written, the README is wrong — fix the README, not the test.
+
+  *Done when a check runs the README's quickstart blocks verbatim against the
+  installed wheel and they succeed, and the elapsed time is recorded in this
+  task.*
+
+  **Cut order:** not on the list. It is the only thing that tests the exit
+  criterion "a stranger can build a graph in ~60 seconds", so cutting it means
+  the exit criterion is asserted rather than met — record it that way.
+
+- [ ] **3.10 Publish `0.9.x` to PyPI.** `[launch]` **HUMAN-RUN. The agent
+  prepares and stops.**
+  This is the one outward-facing, credentialed, effectively irreversible step in
+  the phase: a name-plus-version on PyPI cannot be reused, and a bad 0.9.0 is
+  spent forever. `ENVIRONMENT.md`'s network policy has no zone for pushing to an
+  external index and 3.1 adds one; the agent has no PyPI token and must not have
+  one.
+
+  The agent prepares: `uv build`, the sdist and wheel in `dist/`, 3.6's
+  `install-check` green against the built wheel, the exact publish command, and
+  the recommendation to push to **TestPyPI first** and install from there. It does
+  not publish, and it does not add a `pip install spanweave` line to any document
+  until the publish has happened (3.8).
+
+  *Done when `uv build` produces both artifacts, `make install-check` passes
+  against the built wheel, and the publish command is recorded here unrun.*
+  **HALT** — credentialed, outward-facing, irreversible. A human publishes.
+  *Artifact for the decision:* the built `dist/` artifacts, `install-check`
+  output against the wheel, the exact command, and what is in the sdist that is
+  not in the wheel.
+
+- [ ] **3.11 Phase 3 exit record.** `[launch]`
+  The mirror of 2.14, and the direct input to the Phase 4 freeze decision.
+  Record:
+
+  - **Shape changes: the count, and it must be zero.** If it is not zero, the
+    model could not express what a real consumer needed, and the fix comes before
+    the freeze. Classify with `PREDICTIONS.md`'s binding test **as written
+    there** — including a change forced by 3.2 rather than by a consumer, which
+    is a shape change but *not* a failure of this gate, and must be recorded as
+    both rather than as whichever is more convenient.
+  - **Every finding from 3.3 and 3.4**, with cause and classification, the way
+    F1–F9 are recorded at 2.4.
+  - **Every prediction's state** — marked by the human at 3.5, with what the
+    evidence does and does not support. Any prediction left unmarked because its
+    consumer was cut is named, with the words from that task's cut note.
+  - **Everything cut**, with what it cost.
+  - **The Phase 4 freeze gate as it now stands:** predictions resolved, Phase 2
+    finding absorbed, real users have exercised 0.9.x, **and a third dialect
+    rendered in the corpus** (`ROADMAP.md` Phase 4). Say which of the four are
+    met on the day this record is written. Also carry forward the two items 2.14
+    left open — the `erase`-both-sides proposal and `Edge.basis` — plus 3.2's
+    unmeasured rows, so the freeze reads one list rather than three.
+  - **Whether the launch met its own exit criteria**, from 3.9's measured number
+    rather than from the claim.
+
+  *Done when the record above exists, `pip install spanweave` resolves at 0.9.x
+  from an environment that is not this repo, `make check`, `make conformance` and
+  `make install-check` are green, and `git diff PREDICTIONS.md` is empty for
+  every agent commit in the phase.*
+  **HALT — Phase 3 exit, for human review, as 1.9 and 2.14 were.** Do not start
+  Phase 4. **Do not freeze the schema** — it is gated on evidence this phase does
+  not produce, and *never accelerate the freeze* is `ROADMAP.md`'s standing rule.
+  *Artifact for the decision:* the exit record, the two consumers' findings, the
+  prediction table, and the four-item freeze gate with each item's status.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
@@ -4010,9 +4523,18 @@ next to the launch date.
 - `CONTRIBUTING.md` adapter walkthrough, written against a **real merged**
   adapter.
 - **Freeze `schema_version` `1`; release `1.0.0`; publish the compatibility
-  policy** — once predictions are resolved, the Phase 2 finding is absorbed, and
-  real users have exercised the schema at `0.9.x`. If a fifth adapter still
-  forces a model change, the schema was not ready.
+  policy** — once predictions are resolved, the Phase 2 finding is absorbed,
+  real users have exercised the schema at `0.9.x`, **and a third dialect is
+  rendered in the conformance corpus**. That fourth condition is a stated gate,
+  not an implication of this phase's ordering (`ROADMAP.md` Phase 4, *The third
+  dialect is a freeze precondition*): all three Phase 2 contract defects were
+  found by two implementations having to agree, and none by any number of tests
+  written by one author against one dialect. The gate is that dialect three has
+  been **run**, not that it found nothing. If a fifth adapter still forces a
+  model change, the schema was not ready.
+- **The permissively-typed serialized fields left unmeasured at 3.2**, with
+  `Edge.basis` first — the resolution half of 2.14's freeze audit, held here
+  because dialect three is its instrument.
 - **Exit:** three or more contributable adapters passing conformance; schema
   frozen; `1.0.0` published.
 

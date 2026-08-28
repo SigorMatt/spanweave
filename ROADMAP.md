@@ -234,13 +234,66 @@ Also here, because both want a real merged adapter to exist first:
 - **The `CONTRIBUTING.md` adapter walkthrough**, written against an actual
   merged contribution rather than a hypothetical one.
 - **The freeze.** `schema_version` `1` and `1.0.0`, once the predictions are
-  resolved, the Phase 2 adversarial finding is absorbed, and real users have
-  exercised the schema at `0.9.x`. Plus the compatibility policy: additive-only
-  thereafter, version bump for anything breaking (`CLAUDE.md` 7).
+  resolved, the Phase 2 adversarial finding is absorbed, real users have
+  exercised the schema at `0.9.x`, **and a third dialect is rendered in the
+  conformance corpus** — see the gate below. Plus the compatibility policy:
+  additive-only thereafter, version bump for anything breaking (`CLAUDE.md` 7).
 
 Dialects three through six are the real test of the freeze decision. If a fifth
 adapter still forces a model change, the schema was not ready — and finding that
 out at `0.9.x` costs a minor release instead of a migration.
+
+### The third dialect is a freeze precondition, not a nice-to-have
+
+This phase already implies breadth-before-freeze by its ordering. **An implied
+gate is one that gets skipped under launch pressure**, so it is stated here as a
+condition rather than left to be inferred from the order of the bullets: the
+freeze does not happen until a third dialect has been rendered across the
+conformance corpus and run against the cross-dialect equivalence test.
+
+**It comes from measured evidence, not from caution.** Phase 2 produced three
+defects in the project's own contract, and all three have the same shape
+(`TASKS.md` 2.14):
+
+| Found | What the project relied on | What stated it |
+|---|---|---|
+| 2.8 | `canonical()` compares `Payload.mime` | nothing — absent from `FIXTURES.md` §4's Compared list for two phases |
+| 2.10 | `canonical()` compares `Node.attributes` | nothing — absent for three |
+| 2.10 | `Diagnostic.source` carries a specific shape per code | nothing — no test asserted it, so changing its type broke **zero** tests |
+
+Each is a property the library depends on that no document stated and no test
+asserted. None was a drafting slip: in every case the **permissive default won**
+— `canonical()` keeps a field unless told otherwise, `JsonValue` permits any
+shape — so the code was right, the contract was absent, and nothing was red.
+
+The part that makes this a gate is the **discovery mechanism**, which was the
+same all three times: *two independent implementations had to agree on
+something.* No number of tests written by one author against one dialect finds a
+defect of this species, because the author's single implementation is the only
+thing the tests can be written against. A second dialect found three. A third is
+the only instrument known to find the fourth.
+
+**What satisfies the gate.** A third dialect *rendered in the corpus* — its
+scenarios participating in the equivalence test — not an adapter that merely
+parses its files. Declared coverage is permitted and recorded as `FIXTURES.md`
+§4.3 requires; a scenario a dialect genuinely cannot express is a finding, not a
+failure.
+
+**The gate is that dialect three has been run, not that it found nothing.**
+Defects it surfaces are fixed before the freeze, which is the entire point: at
+`0.9.x` that costs a minor release, after the freeze it costs a migration.
+
+**It binds the freeze, not the launch.** `0.9.x` still ships from Phase 3, on
+schedule, unfrozen — nothing here moves breadth earlier or adds a condition to
+publishing. Decoupling the two is what makes this affordable: the irreversible
+decision waits for the evidence, and the reversible one does not.
+
+Known already, and waiting on exactly this: `Edge.basis` is a free `str`, is
+compared by `canonical()`, is adapter-supplied — and both adapter-supplied bases
+are invisible to the cross-dialect claim today, so the vocabulary is unstated and
+**unmeasurable by construction** with two dialects (`TASKS.md` 2.14). It is the
+fourth instance of the pattern, caught before it bit, and dialect three is what
+would measure it.
 
 - **Exit:** three or more community-contributable adapters passing conformance;
   schema frozen at `1`; `1.0.0` published.
