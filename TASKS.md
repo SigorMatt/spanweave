@@ -4306,6 +4306,22 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 
 ### `[contract]`
 
+> **This workstream is complete. One thing in it is live: `PREDICTIONS.md` P3
+> and P4 are still unmarked, and a human marks them.** 3.5's record carries
+> paste-ready wording for both, with the *first line* — the mark — left blank
+> on purpose, plus the candidate first lines and what each commits to. Nothing
+> else in Phase 3 waits on that; `[launch]` (3.6 onward) is the next work.
+>
+> Settled, as pointers: **3.2** produced `CONTRACTS.md` and
+> `tests/test_contracts.py`, and stated *unstated, unmeasured* where nothing
+> asserts a field. **3.5** assembled the evidence for P1–P4 and marked nothing
+> — P1 (CONFIRMED — operational, scoped) and P2 (REFUTED — scoped) were
+> already marked by a human at 3.4 and 3.3; **P3 is untested rather than
+> supported** (every piece of evidence concerns *declared* `data` edges, and
+> the prediction is about inferred ones) and **P4 was needed by neither
+> consumer and would have been noticed by both**. Counts are executable in
+> `tests/test_prediction_evidence.py`.
+
 - [x] **3.2 Inventory every permissively-typed serialized field.** `[contract]`
   From 2.14's freeze instruction, split per blocker 3: **this task produces the
   list and the tripwire, and states no contract it cannot evidence.**
@@ -4597,9 +4613,9 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 > the honest record for both unmarked ones is that their friction never had the
 > opportunity to occur (3.3 F-5, 3.4 O-d, 3.4 O-e).
 >
-> Their two findings records below are **the input to 3.5**, which is the next
-> unchecked task and is `[contract]`, not this tag. Nothing here is live; read
-> the records, not this block, unless you are writing a third consumer.
+> Their two findings records below were **the input to 3.5**, which is done and
+> is `[contract]`, not this tag. Nothing here is live; read the records, not
+> this block, unless you are writing a third consumer.
 
 Both consumers live in `examples/`, consume **committed fixtures only**
 (`ENVIRONMENT.md`: `examples/` may not touch the network), and change **nothing**
@@ -6120,7 +6136,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       three compared against the existing captured pair.
   > - [x] `git diff --stat spanweave/` empty; `make check` green.
 
-- [ ] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
+- [x] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
   Assemble, for each of P1–P4, the evidence this phase produced, in the form the
   human needs in order to mark it. **Do not mark them. Do not touch
   `PREDICTIONS.md`** — it is read-only to the agent in every phase, and the
@@ -6152,6 +6168,549 @@ consumer's findings go in the exit record beside these and carry more weight.
   reason it was skipped, so if it is skipped the stated reason will be schedule
   and the real reason will be that writing **WORSE** next to your own design is
   uncomfortable.
+
+  > # 3.5 record — the prediction resolution artifact, P1 through P4
+  >
+  > `tests/test_prediction_evidence.py` (new, 7 tests). `make check` green
+  > (**1547 passed, 4 skipped**; +7 from this file), `make gates` green (69),
+  > `make conformance` green (419). **`git diff --stat spanweave/` is empty**
+  > and **`git diff PREDICTIONS.md` is empty and stays empty.** No fixture was
+  > authored, no `expected/graph.json` touched, `canonical()` not weakened, no
+  > dependency added, `OPEN_QUESTIONS.md` §7 untouched.
+  >
+  > **Two of the four are marked and two are not, and 3.5 does not close that
+  > gap by writing prose.** A human marked **P1 CONFIRMED — operational,
+  > scoped** (3.4) and **P2 REFUTED — scoped** (3.3). **P3 and P4 are
+  > unmarked**, and the sections below hand over evidence, its scope, and what
+  > it cannot support — plus paste-ready wording for each, with the *first
+  > line* — the mark — left as the human's choice, because choosing it is the
+  > act `AGENT.md` reserves.
+  >
+  > ## 0. What was re-measured rather than carried
+  >
+  > A resolution artifact that quotes the records it summarises inherits their
+  > errors. Every corpus count below was recomputed from the committed traces
+  > in this task, and every count this record states is asserted in
+  > `tests/test_prediction_evidence.py` with a non-vacuity floor — 3.3's
+  > perturbation count needed a follow-up commit to become executable
+  > (`35165e8`), and a number in a record is a number that rots.
+  >
+  > The corpus, recomputed: **41 committed traces**, of which **39 build**
+  > (`duplicate_span_ids` refuses in both dialects, by design) and **30 have
+  > more than one node**. **107 nodes.** Payload states across them:
+  > `absent` 114, `present` 94, `empty` 4, `redacted` 2, **`truncated` 0**.
+  > Nodes carrying `usage`: **16**. Edges by kind and warrant:
+  > `parent`/explicit 63, `call_result`/explicit 14, `data`/explicit **12**,
+  > `link`/explicit 3, `temporal`/derived 36. **The only derived edges in the
+  > entire corpus are `temporal` ones.** Every figure agrees with what the P1
+  > and P2 marks already say; nothing below corrects either.
+  >
+  > ## 1. P1 — marked CONFIRMED — operational, scoped. What it cannot be cited for
+  >
+  > **The mark and its evidence stand as written** in `PREDICTIONS.md` (human,
+  > after 3.4): the attributor reads nothing losslessness retains, proven by a
+  > byte-identical strip comparison over all 41 traces; 85% of resident bytes
+  > unread at 100k spans; the friction is at **peak**, not residency, and is
+  > unreachable through the public API; and the operational remedy carries a
+  > latent shape cost that P1's own `WORSE` condition names.
+  >
+  > What 3.5 adds is the citation limit, because Phase 4's freeze is where this
+  > mark will be cited. **P1's confirmation cannot support:**
+  >
+  > - **that `retain_payloads=False` / `retain_raw=False` would in fact move
+  >   the peak.** Nobody implemented it. The mark's own falsification condition
+  >   says so, and it remains untested.
+  > - **that any real trace reaches the size measured.** The 100k figure is a
+  >   generated load input; the largest committed trace is nine spans.
+  > - **that the corpus fraction is representative.** 46.1% retained on the
+  >   corpus versus 15.0% at 1,500-character payloads is a property of payload
+  >   length, which is a setting.
+  > - **that `usage` is well exercised.** 16 of 107 nodes, all `llm`, in 7
+  >   traces — recomputed here and unchanged.
+  > - **that the remedy is safe to ship.** The `Payload(state=present,
+  >   value=None, raw=None)` problem is inherited by whoever implements it, as
+  >   a halt point.
+  >
+  > ## 2. P2 — marked REFUTED — scoped. What it cannot be cited for
+  >
+  > **The mark and its evidence stand as written** (human, after 3.3): the
+  > trajectory dumper did not collapse the five states; fourteen of twenty
+  > directed collapses change the branch a reader acts on; `absent`↔`empty`
+  > is among them.
+  >
+  > **P2's refutation cannot support:**
+  >
+  > - **anything about `truncated`.** Recomputed here: **zero** across the
+  >   corpus, and neither shipped adapter can emit one. Unexercised, not
+  >   unused. The mark says this itself and it is the single easiest thing to
+  >   lose in a summary.
+  > - **anything about a non-audit consumer.** One consumer, chosen by the
+  >   designer, and P2's claim was about *most* consumers. A viewer, a
+  >   dashboard or a notebook is where P2's "most" lives and none was written.
+  > - **`absent` versus `redacted`.** Collapsed on the branch a harness reads.
+  >   That pair is P2's predicted behaviour, observed.
+  > - **two states outside a single scenario.** `redacted` is 2 payloads, one
+  >   scenario, one dialect. `empty` is 4.
+  >
+  > One footnote the mark does not carry: "zero across all 41 committed
+  > traces" is exact but slightly generous to itself — **39** of the 41 build,
+  > and the two that refuse have no payload state at all rather than a
+  > `truncated` one. The claim holds; its denominator is worth stating once.
+  >
+  > ## 3. P3 — the evidence exists, and it is about a different edge
+  >
+  > ### 3a. What Phase 3 found: nothing, and it could not have found anything
+  >
+  > **Neither Phase 3 consumer wants inferred `data` edges** (3.3 F-5, 3.4
+  > O-d). Stated plainly, and stronger than "neither wanted one" — of the
+  > three consumers this repo has written, **two could not have wanted one**:
+  >
+  > | consumer | phase | what it reads from the graph |
+  > |---|---|---|
+  > | `fleet_aggregate` | 2b | nodes and diagnostics. **No edges at all.** |
+  > | `cost_latency` | 3.4 | `parent` edges only. No `data` edge is read. |
+  > | `trajectory_dump` | 3.3 | `parent`, `call_result`, `data`, `link` |
+  >
+  > So the sample for P3 is **one consumer**, and it read `data` edges the
+  > telemetry declared and never compared two values to decide that one flowed
+  > into the other. 2b's nine findings (F1–F9) contain no data-edge item
+  > either — real negative evidence, at a consumer that structurally could not
+  > have produced the friction, which is the same shape as the negative
+  > evidence P1 carries from 2b and must be labelled the same way.
+  >
+  > **Recomputed:** every `data` edge in the corpus is declared — **12 edges
+  > over 11 of the 39 buildable traces, all `warrant=explicit`, all with the
+  > single basis `tool_call_id in tool-result message`**, three of them in
+  > captured traces. **Zero derived `data` edges exist anywhere.**
+  >
+  > ### 3b. The Phase 2 evidence is about *declared* edges, and P3 is about inferred ones
+  >
+  > Phase 2 produced the only substantial thing anyone has learned about
+  > `EdgeKind.data`, and it was recorded three times with the same caveat —
+  > at 2.9 (*"three things recorded here as evidence, none of them a
+  > resolution"*), at 2.14 (*"evidence for `OPEN_QUESTIONS.md` §7 and
+  > `PREDICTIONS.md` P3, resolving neither"*), and in `OPEN_QUESTIONS.md` §7's
+  > own evidence block. In summary: `SPEC.md` §4.2.1 was confirmed on **real
+  > captured telemetry in a second dialect**, and the two dialects **disagree
+  > on the mechanism** — OpenInference separates said-from-shown by attribute
+  > prefix (`llm.output_messages.` vs `llm.input_messages.`), GenAI by a part
+  > `type` inside the payload (`tool_call` vs `tool_call_response`) — while
+  > §4.4's rule survived unchanged, having been re-implemented against the
+  > second mechanism. A rule that holds across two mechanisms is general;
+  > across two spellings of one mechanism it is lucky.
+  >
+  > **That evidence settles something, and it is not P3.** What it settles is
+  > that §7's stated premise was false: `EdgeKind.data` is **not** near-vacuous
+  > in v1, so the argument *"relax the prohibition or `data` is an edge kind
+  > nothing populates"* is gone. §7 records exactly this, and says the question
+  > is untouched by it.
+  >
+  > **The gap, stated as the task asks:** P3 is about **inferred** edges, and
+  > every piece of evidence in this repo — Phase 2's dialect-two confirmation,
+  > the 12 corpus edges, 3.3's `⇒ feeds …(declared)` line — is about
+  > **declared** ones. A declared edge is not an inferred one. Nothing has
+  > tested whether a consumer wants value-match inference, whether the warrant
+  > system carries it honestly in practice, or whether the matching parameters
+  > can be made consumer-supplied (§7(c)'s decisive question). **P3 is
+  > untested, not supported.** REFUTED would claim the model turned out more
+  > general than expected here, and nothing measured generality of inference;
+  > CONFIRMED would claim the friction occurred, and it did not occur because
+  > no consumer that could produce it was written. This is the same structure
+  > as P2's `truncated` — *no opportunity to occur* — and the human has already
+  > accepted that phrasing once, in P2's mark.
+  >
+  > ### 3c. Found while assembling: P3's own classification does not match `SPEC.md` §4.1
+  >
+  > P3 classifies its remedy as a boundary case that is *"by the letter of the
+  > rule … operational"*, on the ground that `--infer-data-edges` **"uses an
+  > existing `EdgeKind` and an existing warrant"**. Two facts, both checked:
+  >
+  > 1. **The combination does not exist and cannot be constructed.**
+  >    `Edge(kind=data, warrant=derived)` raises `ValueError` in
+  >    `spanweave/model.py` (`ALLOWED_WARRANTS`, present since Phase 0,
+  >    `d8e2c37`): *"data edges are explicit-only; refusing to build one with
+  >    warrant 'derived' (SPEC.md §4.1). A computed relation never becomes an
+  >    explicit one."* Pinned in
+  >    `test_a_derived_data_edge_cannot_be_constructed`.
+  > 2. **The letter of the rule says the opposite of what P3 says it says.**
+  >    `SPEC.md` §4.1, verbatim: *"If a rule is ever added that infers a
+  >    relation of an explicit-only kind, **it does not become that kind — it
+  >    becomes a new kind, through a spec change.**"* A new `EdgeKind` is a
+  >    **shape** change and an `AGENT.md` halt point.
+  >
+  > **This is not drift.** `git show c266c9e:SPEC.md` — the seed commit, the
+  > same commit that created `PREDICTIONS.md` — already carries §4.1 in those
+  > exact words. P3 and §4.1 were written on the same day by the same hand and
+  > disagree about what an inferred `data` edge would cost.
+  >
+  > That does not decide P3, and 3.5 does not. What it does is **remove the
+  > technicality** §7(d) warns against being waved through on: there is no
+  > "operational by the letter" reading available, because the letter already
+  > answers the other way. Whoever resolves §7 is choosing between *keep the
+  > prohibition* and *change the spec and the model* — not between a policy and
+  > a flag.
+  >
+  > ### 3d. Found while assembling: the one consumer that reads `data` edges does not filter on warrant
+  >
+  > P3's substantive argument is that *"the warrant system already makes
+  > inference safe: anything computed is labeled `derived`, and consumers
+  > filter on warrant."* The first half is the library's; the second half is a
+  > claim about consumers, and this repo has exactly one that reads `data`
+  > edges. **It does not filter on warrant.** `trajectory_dump` reads
+  > `graph.children(node.id, edge_kinds=EdgeKind.DATA)` with no warrant
+  > filter, and `__main__.py` prints the string `(declared)` as a **literal**.
+  >
+  > Measured rather than asserted, by the same perturbation discipline 3.3 and
+  > 3.4 used: a `data` edge with `warrant=derived` was forced past the
+  > validator with `object.__setattr__` — **a simulation of the
+  > `--infer-data-edges` world, not a use of the library** — added to a
+  > scenario that declares none, and put through the consumer. The transcript
+  > prints `⇒ feeds s2 (declared)` over a derived edge. Pinned in
+  > `test_the_only_consumer_reading_data_edges_does_not_filter_on_warrant`.
+  >
+  > **Scope, and it matters:** the assumption cost nothing to make, because no
+  > derived `data` edge can exist today; the field's own docstring says
+  > "declared"; and the discriminator *is* in the serialized graph, so the
+  > consumer could filter and chose not to. This is evidence about what
+  > consumers do when a warrant is currently uniform — **not** proof they
+  > would not filter if inference shipped. It is one consumer, written by the
+  > same repo that wrote the prediction. It is nevertheless the only empirical
+  > test P3's "consumers filter on warrant" premise has ever had, and it
+  > failed 1 for 1.
+  >
+  > ### 3e. What the P3 evidence cannot support
+  >
+  > - **That inferred `data` edges are unwanted.** No consumer that would want
+  >   them was written; two of three could not have wanted them; the third is
+  >   an audit-shaped transcript.
+  > - **That the prohibition is or is not stricter than the architecture
+  >   requires.** That is §7(b)'s argument and no Phase 3 work touched it.
+  > - **That inference would be operational.** §4.1 and the model both say new
+  >   kind. Whether §4.1 should say that is the open question, unresolved.
+  > - **Anything about matching parameters being consumer-suppliable** (§7(c)'s
+  >   decisive question) — never attempted.
+  >
+  > ## 4. P4 — determinism was kept, and the prediction has two clauses that came apart
+  >
+  > ### 4a. Did either consumer need it?
+  >
+  > **No.** 3.4 O-e says so for the attributor (*"a cost rollup would have been
+  > just as correct with non-deterministic node ordering, because it sums"*)
+  > and 3.5 measured the same question for both consumers at once, by
+  > perturbation: for each of the **30 multi-node committed traces**, rebuild
+  > the graph through the public `Graph.of` with the node tuple reversed — what
+  > a library that ordered differently would hand a consumer — and re-run both
+  > consumers.
+  >
+  > - **Every per-node value and every total is unchanged: 30/30.** With the
+  >   step `index` dropped and list order normalised, both consumers' documents
+  >   are identical. No number either consumer reports depends on the order.
+  > - **Both consumers' serialized output changes: 30/30.** The attributor's
+  >   `steps` and `roots` come out in a different order; the transcript comes
+  >   out as a different transcript.
+  >
+  > Pinned in
+  > `test_reordering_the_nodes_changes_both_consumers_output_and_neither_result`.
+  >
+  > ### 4b. Would either have noticed its absence?
+  >
+  > **Both would have.** This is where P4's two clauses — *"does not care"* and
+  > *"will never notice"* — come apart, and only the second is testable from
+  > where we stand.
+  >
+  > - **The transcript's product *is* the order.** `flatten()` walks
+  >   `graph.nodes()` and numbers the steps `1..n`; the library's ordering is
+  >   transcribed wholesale into the consumer's output.
+  > - **And that order is a choice on most traces.** A topological order is not
+  >   unique. Replaying the builder's Kahn loop over the committed corpus: on
+  >   **22 of 30** multi-node traces at least two nodes were ready at once, so
+  >   the emitted order was decided by `SPEC.md` §5.2's stated tie-break rather
+  >   than forced by the graph; on **2 of 30** (`parallel_tools`, both
+  >   dialects) two nodes reported the **same** `started_at`, so even a library
+  >   ordering by start time would have had to invent something. Pinned in
+  >   `test_the_emitted_order_is_a_choice_on_most_traces`.
+  > - **Edge order reaches the transcript too, on 2 of 30.** Reversing the edge
+  >   tuple changes `parallel_tool_calls` in both dialects: the ids of the
+  >   results one call produced come out `('s2','s3')` or `('s3','s2')`. The
+  >   attributor is unaffected on **0 of 30**. Pinned in
+  >   `test_edge_order_reaches_the_transcript_and_not_the_attribution`.
+  > - **Both consumers' test suites are byte comparisons and would fail.**
+  >   3.4 O-e already records this for the attributor — the identical-strip
+  >   comparison that is P1's whole instrument exists only because the library
+  >   guarantees byte-identity. It is at least as true for 3.3, whose central
+  >   claim is that two *different* inputs produce the same transcript.
+  >
+  > So: determinism was not what made either consumer **work**, and it is what
+  > made both consumers **checkable**. Whether "a consumer's regression test
+  > needs it" counts as "the consumer needs it" is a judgement, and it is the
+  > human's; 3.5 states both halves rather than choosing the flattering one.
+  >
+  > ### 4c. Is "neither needed it" evidence *for* P4, or merely consistent with it?
+  >
+  > **Mostly the latter, and the asymmetry is the point.** P4's predicted class
+  > is **none** — a cost the library pays — so there is no friction to observe
+  > when the prediction is right. Refutation *is* observable: a consumer whose
+  > correctness depended on byte-identity would have refuted P4 loudly. None
+  > did. Confirmation is only ever the absence of that, over a sample.
+  >
+  > The sample is bad for the inference, in a way `PREDICTIONS.md`'s own
+  > opening names. **P4 names a viewer, a dashboard, an exploratory notebook.
+  > Neither Phase 3 consumer is any of those** — both are batch, file-in
+  > file-out tools with golden test suites, i.e. members of the class most
+  > likely to notice. So the two consumers that ran are close to the worst
+  > available sample for P4's "most consumers", and they still did not need it.
+  > That is corroboration at a point P4 did not claim, plus a contradiction of
+  > its "never notice" clause at the same point. **It is not a test of the
+  > class P4 names, and no such consumer was written.**
+  >
+  > The only decisive test is a build that is genuinely non-deterministic, run
+  > past a real consumer. `CLAUDE.md` 4 forbids it, no phase ran it, and the
+  > perturbation above is a surrogate: it changes the order a consumer is
+  > *handed*, not the builder that chose it. **Its bound is that it is a larger
+  > perturbation than a plausible non-deterministic implementation would
+  > produce** — a reversed tuple is not necessarily a valid topological order —
+  > which is exactly why the 22/30 tie-break count is reported beside it: that
+  > count *is* measured on valid alternatives.
+  >
+  > ### 4d. What the P4 evidence cannot support
+  >
+  > - **That determinism should be dropped or relaxed.** Nobody proposed it,
+  >   nothing tested it, and P4's own entry says keep it regardless.
+  > - **Anything about a viewer, a dashboard or a notebook** — the three
+  >   consumers P4 names, none of which exists.
+  > - **That a non-deterministic library would be invisible.** Measured false
+  >   for both consumers that exist.
+  > - **That the perturbation models a real non-deterministic build.** It
+  >   models a differently-ordered *graph*, not a differently-ordering
+  >   *builder*.
+  >
+  > ## 5. P3 — wording, ready to paste
+  >
+  > `git diff PREDICTIONS.md` is empty and stays empty. **The first line is the
+  > human's**; the three candidates are set out under the block. The body below
+  > is written to be true under any of them.
+  >
+  > > **Status: _____.** Assessed at 3.5, Phase 3. Tracked as
+  > > `OPEN_QUESTIONS.md` §7.
+  > >
+  > > **Neither Phase 3 consumer wants inferred `data` edges, and the friction
+  > > this prediction describes never had the opportunity to occur.** Of the
+  > > three consumers written against this library, two read no `data` edge at
+  > > all — the 2b fleet aggregator reads no edges of any kind, and the 3.4
+  > > cost attributor reads only `parent` — and the third, the 3.3 trajectory
+  > > dumper, reads the ones the telemetry **declared** and never compares two
+  > > values to decide that one flowed into the other (3.3 F-5, 3.4 O-d). A
+  > > prediction about inference cannot be refuted by consumers that performed
+  > > none.
+  > >
+  > > **What the corpus says, recomputed at 3.5:** every `data` edge in it is
+  > > declared — 12 edges over 11 of the 39 buildable traces, all
+  > > `warrant=explicit`, all with the single basis `tool_call_id in
+  > > tool-result message`, three of them in captured traces. The only
+  > > `derived` edges anywhere in the corpus are `temporal` ones. So the
+  > > inferred `data` edge is **unexercised**, in the same sense `truncated` is
+  > > unexercised for P2, and for the same reason: nothing that ships can
+  > > produce one.
+  > >
+  > > **The one substantial piece of evidence is about declared edges, and it
+  > > is worth carrying anyway.** `SPEC.md` §4.2.1 was confirmed on real
+  > > captured telemetry in a second dialect, by a **different mechanism** —
+  > > OpenInference separates said-from-shown by attribute prefix, OTel GenAI
+  > > by a part `type` inside the payload — with §4.4's rule surviving
+  > > unchanged after being re-implemented against that second mechanism (2.9,
+  > > 2.14, `OPEN_QUESTIONS.md` §7). It falsifies §7's stated premise that
+  > > `EdgeKind.data` is near-vacuous in v1, and so removes one argument for
+  > > relaxing the prohibition. **It says nothing about inference.**
+  > >
+  > > **Two things found at 3.5 that bear on this entry's own reasoning.**
+  > >
+  > > 1. **The class this entry assigns itself does not survive contact with
+  > >    `SPEC.md` §4.1.** The reading that `--infer-data-edges` is
+  > >    "operational by the letter, because it uses an existing `EdgeKind` and
+  > >    an existing warrant" is not available: `Edge(kind=data,
+  > >    warrant=derived)` raises at construction (`ALLOWED_WARRANTS`, Phase 0),
+  > >    and §4.1 states that a rule inferring a relation of an explicit-only
+  > >    kind *"does not become that kind — it becomes a new kind, through a
+  > >    spec change"* — i.e. **shape**, and an `AGENT.md` halt point. §4.1
+  > >    carries those words in the seed commit that created this file, so the
+  > >    disagreement is contemporaneous, not drift.
+  > > 2. **The premise that consumers filter on warrant has one data point and
+  > >    it went the other way.** The only consumer that reads `data` edges
+  > >    does not read their warrant: it renders every one as `(declared)`, a
+  > >    string literal. Measured by forcing a `derived` `data` edge past the
+  > >    validator and putting it through the consumer, which printed
+  > >    `⇒ feeds s2 (declared)`. Scope: the assumption is currently free —
+  > >    no derived `data` edge can exist — and the warrant *is* in the
+  > >    serialized graph, so the consumer could filter and did not.
+  > >
+  > > **What this cannot support.** That inferred `data` edges are unwanted
+  > > (no consumer that would want one was written, and two of three could not
+  > > have). That the prohibition is, or is not, stricter than the architecture
+  > > requires — §7(b)'s argument is untouched. That the matching parameters
+  > > could be made consumer-supplied, which is §7(c)'s decisive question and
+  > > was never attempted.
+  > >
+  > > Honest claim: *P3 was not tested in Phase 3. Two confirmatory consumers
+  > > and one adversarial one performed no value comparison and wanted no
+  > > inferred edge; the only edge-related evidence the phase produced concerns
+  > > **declared** `data` edges in two dialects; and assembling that evidence
+  > > showed P3's own "operational by the letter" classification is
+  > > contradicted by `SPEC.md` §4.1, which has said "new kind, through a spec
+  > > change" since the day this prediction was written.*
+  >
+  > **The three candidate first lines, and what each commits to:**
+  >
+  > - **`Status: open. Tracked as OPEN_QUESTIONS.md §7.`** — unchanged, with
+  >   the body above appended as evidence. Commits to: P3 outlived Phase 3
+  >   untested and resolves at Phase 4 or later. This is the only one of the
+  >   three that claims nothing the evidence does not carry, and it is the one
+  >   3.5's task text points at (*"not REFUTED by silence"*).
+  > - **`Status: UNTESTED — no consumer could have produced the friction.`** —
+  >   a fourth marker, not among the three `PREDICTIONS.md` defines. Adding one
+  >   is a change to how this file resolves predictions and therefore a
+  >   deliberate act, not a convenience. It says more plainly than "open" that
+  >   the phase named as its test *ran* and produced nothing.
+  > - **`Status: REFUTED — scoped.`** — **the evidence does not support this**,
+  >   and it is recorded here only so the refusal is explicit. REFUTED claims
+  >   the model was more general than expected; no consumer exercised the
+  >   generality in question.
+  >
+  > ## 6. P4 — wording, ready to paste
+  >
+  > Same rule: `git diff PREDICTIONS.md` is empty, and the first line is the
+  > human's.
+  >
+  > > **Status: _____.** Assessed at 3.5, Phase 3, against the two
+  > > confirmatory consumers.
+  > >
+  > > **Determinism was kept, and it was not what made either consumer work.**
+  > > Measured rather than asserted, over the 30 multi-node committed traces:
+  > > rebuilding each graph through the public `Graph.of` with the node tuple
+  > > reversed — what a differently-ordering library would hand a consumer —
+  > > leaves **every per-node value and every total unchanged in both
+  > > consumers, 30/30**, once the step index and list order are normalised.
+  > > Nothing either consumer computes depends on the order it was given.
+  > >
+  > > **Both consumers would nevertheless have noticed its absence, and that
+  > > half of the prediction is false for both.** The same perturbation changes
+  > > the serialized output of both consumers on **30 of 30** traces. For the
+  > > trajectory dumper the order *is* the product: it walks `graph.nodes()`
+  > > and numbers the steps, so the library's ordering is transcribed
+  > > wholesale. And that ordering is a **choice**, not a consequence: on
+  > > **22 of 30** traces two or more nodes were topologically ready at once
+  > > and `SPEC.md` §5.2's stated tie-break decided the order; on **2 of 30**
+  > > (`parallel_tools`, both dialects) two nodes reported the same
+  > > `started_at`, so the `node_id` rule decided it. Edge order reaches the
+  > > transcript too, on **2 of 30** (`parallel_tool_calls`, both dialects:
+  > > the results one call produced come out `('s2','s3')` or `('s3','s2')`),
+  > > and reaches the attributor on **0 of 30**.
+  > >
+  > > **Where determinism did earn its keep is the verification, not the
+  > > function** (3.4 O-e). P1's entire instrument is a byte-for-byte
+  > > comparison of two serialized attributions, and 3.3's central claim is
+  > > that two *different* inputs produce the same transcript. Both consumers'
+  > > test suites would fail without byte-identity. Whether that counts as a
+  > > consumer needing it is a judgement this resolution does not make for the
+  > > reader.
+  > >
+  > > **Scope, and it is the load-bearing part.** P4's predicted class is
+  > > **none**, so when the prediction is right there is no friction to
+  > > observe; the observation "neither consumer needed it" is what a correct
+  > > P4 predicts *and* what an untested P4 looks like. Refutation would have
+  > > been visible — a consumer whose correctness required byte-identity — and
+  > > none appeared. Four bounds:
+  > >
+  > > - **Neither consumer is one of the three P4 names.** A viewer, a
+  > >   dashboard and a notebook are the class the prediction is about; both
+  > >   consumers written are batch file-in/file-out tools with golden test
+  > >   suites — the class *most* likely to notice. They still did not need it.
+  > > - **The designer picked both**, and picked them to test P1 and P2. P4 was
+  > >   observed in passing by consumers aimed elsewhere.
+  > > - **No non-deterministic build was ever run.** `CLAUDE.md` 4 forbids one.
+  > >   The perturbation is a surrogate that changes the order a consumer is
+  > >   *handed*, not the builder that chose it, and it is a **larger**
+  > >   perturbation than a plausible non-deterministic implementation would
+  > >   produce — which is why the 22/30 tie-break count is reported beside it,
+  > >   since that count is measured on genuinely valid alternative orders.
+  > > - **Two consumers, one library, one corpus of 41 traces**, the largest
+  > >   nine spans.
+  > >
+  > > **What this cannot support.** That determinism should be relaxed —
+  > > nobody proposed it and this entry says to keep it regardless. Anything
+  > > about a viewer, dashboard or notebook. That a non-deterministic library
+  > > would be invisible to consumers: measured false for both that exist.
+  > >
+  > > Honest claim: *neither confirmatory consumer's results depended on
+  > > byte-identical determinism, both consumers' bytes did, and neither
+  > > consumer belongs to the class of consumer P4 is about.*
+  >
+  > **The candidate first lines, and what each commits to:**
+  >
+  > - **`Status: CONFIRMED — none, scoped.`** — reads the prediction's
+  >   substantive clause (*unnecessary*) as the one being marked, and carries
+  >   the "never notice" clause as measured-false inside the body. Defensible,
+  >   and the strongest claim the evidence will bear.
+  > - **`Status: CONFIRMED — none, scoped; the "never notice" clause is
+  >   REFUTED.`** — says both halves in the mark itself. Costs nothing and is
+  >   harder to cite loosely at the freeze; also the first mark in this file to
+  >   split a prediction, which is a precedent worth setting deliberately.
+  > - **`Status: open.`** — on the ground that no consumer of the class P4
+  >   names was written, so the phase named as its test did not test it. This
+  >   is the same reasoning P3's "open" rests on; the difference is that P4's
+  >   friction *could* have appeared here and did not, whereas P3's could not
+  >   have appeared at all. If both end up "open" for different reasons, say
+  >   which reason in each.
+  >
+  > ## 7. Divergences from the task as written
+  >
+  > - **A test file was added, and 3.5's task text asks only for an artifact.**
+  >   `tests/test_prediction_evidence.py` pins every count this record states
+  >   about P3 and P4. The reason is `35165e8`: 3.3 quoted a perturbation count
+  >   in prose, it was wrong, and the fix was to make it executable. A
+  >   resolution artifact is the last place a rotting number should live.
+  > - **It imports both examples, which are `[consumers]` artifacts, from a
+  >   `[contract]` task.** `AGENT.md` says never to mix workstreams in one
+  >   session's context. Nothing under `examples/` or `spanweave/` was
+  >   modified — the file only reads them — and the alternative was an
+  >   unexecutable record. Recorded rather than glossed.
+  > - **Two tests deliberately construct a state the library forbids.**
+  >   `object.__setattr__` is used to force `warrant=derived` onto a `data`
+  >   edge, bypassing `Edge.__post_init__`. It is labelled in the module
+  >   docstring and in the test as a **simulation of the `--infer-data-edges`
+  >   world, not a use of the library**. No library code path was changed to
+  >   permit it, and the validator's refusal is itself asserted in the test
+  >   beside it.
+  > - **3.5's task text says "P4 — … It was not, unless this phase shows
+  >   otherwise; say so."** It was not, and this record says so — but the
+  >   phase *did* show something the task did not anticipate: both consumers
+  >   would have noticed. Reported as found rather than trimmed to the
+  >   expected answer.
+  > - **No mark was written, and no fourth marker was invented.** P3's second
+  >   candidate first line proposes one; proposing is not adding, and
+  >   `PREDICTIONS.md` is untouched.
+  > - **`ENVIRONMENT.md`'s `examples/` line is still half-true**, as 3.3 and
+  >   3.4 both left it. Still 3.8's docs truth pass. Named so the count of
+  >   sessions that noticed and deferred it stays honest at three.
+  >
+  > ## Definition of done
+  >
+  > - [x] P1 — the mark as it stands, its evidence, its scope, and five things
+  >       it cannot be cited for at the freeze.
+  > - [x] P2 — the same, including that `truncated` is unexercised rather than
+  >       unused, recomputed (0 across the corpus).
+  > - [x] P3 — the evidence, its scope, and the gap stated plainly: every piece
+  >       of it concerns **declared** edges, so P3 is **untested rather than
+  >       supported**, and is not refuted by silence. `OPEN_QUESTIONS.md` §7
+  >       untouched.
+  > - [x] P4 — measured on both consumers: needed by neither, noticed by both,
+  >       and why a confirmation and an untested prediction look alike from the
+  >       consumer side.
+  > - [x] Every count in this record asserted in
+  >       `tests/test_prediction_evidence.py`, with non-vacuity floors.
+  > - [x] `git diff PREDICTIONS.md` empty. `git diff --stat spanweave/` empty.
+  > - [x] `make check` green (1547 passed, 4 skipped).
+  > - [x] **HALT — the human marks P3 and P4.** Paste-ready wording at §5 and
+  >       §6; the first line of each is the human's.
 
 ---
 
