@@ -300,14 +300,16 @@ dialects:
 | **4. `Edge.basis`** (2.14) | a free `str`, compared by `canonical()`, adapter-supplied — and both adapter-supplied bases are invisible to the cross-dialect claim |
 | **5. `Usage.extra`'s keys** (3.2) | an open key vocabulary, compared by `canonical()`, adapter-supplied and **dialect-derived verbatim** — each adapter takes its own attribute suffix, so `llm.token_count.cache_read` becomes `cache_read` and `gen_ai.usage.cache_read_input_tokens` becomes `cache_read_input_tokens` for the same concept. Two dialects would disagree, and it is `{}` on every node of every fixture in the repository, so the disagreement is unreachable |
 
-### The gate is necessary and, for these two, not sufficient
+### The gate is necessary and, for these three, not sufficient
 
 Stated here because it is exactly the kind of thing that is otherwise discovered
 *at* freeze time. **"A third dialect rendered across the corpus" satisfies the
 gate as written, and still leaves both rows above where they are** unless the
-conditions below also hold. That is a qualification of the gate, not a
-weakening of it: the gate stays a hard precondition, and these are additional
-conditions on the two specific fields it was partly written to measure.
+conditions below also hold — and leaves a **third** thing untouched entirely,
+which is not a row above but a whole class of node fields (`TASKS.md` 3.4 F-6).
+That is a qualification of the gate, not a weakening of it: the gate stays a
+hard precondition, and these are additional conditions on the specific fields —
+and now the one field class — it was partly written to measure.
 
 The reason is the measurement, and 3.2 sharpened it in a way 2.14 could not
 have: **an adapter-supplied field is only measured when two adapters that
@@ -347,6 +349,59 @@ a scenario whose renderings carry one. A scenario exercising a non-standard
 token count in two dialects would measure the disagreement immediately — subject
 to `FIXTURES.md` §5.1, which forbids deriving a rendering from a reading of a
 dialect rather than from observed output.
+
+**What would be sufficient for the nine strictly-compared node fields.**
+Different from both of the above, and the difference is what makes it worth
+stating: for these, *rendering in the corpus buys nothing at all* — it is the
+weaker half of the gate rather than an incomplete one.
+
+`canonical()` compares nine groups of node field that `FIXTURES.md` §4.4's
+declaration mechanism cannot reach — *must agree, cannot be declared to
+disagree*. **Two of the nine are already known to disagree between the two real
+instrumentors**: `status` (`TASKS.md` 3.3, F-3) and `usage` (`TASKS.md` 3.4,
+F-6). Both were found by reading **captured** traces, by consumers with
+unrelated jobs, neither looking for it. The enumeration of the nine, the
+argument, and what it predicts are recorded at `TASKS.md` 3.4 F-6 and are not
+repeated here; what belongs in a gate is the consequence.
+
+The consequence is that no amount of rendering reaches them. Both renderings of
+a conformance scenario descend from **one `scenario.md`**, so a hand-authored
+pair can only disagree where its author knew to make it — which is precisely
+what nobody knew in either case. A third dialect rendered across the corpus
+adds a third rendering of that same single decision. It cannot surface a row.
+
+**What would be sufficient: a *captured* trace from dialect three, of a
+scenario `fixtures/captured/`'s existing pair also covers, compared against
+that pair field by field on the nine.** Two properties of that condition matter
+more than its content:
+
+- **It asks nothing of *what* dialect three is.** Unlike `Edge.basis`, whose
+  condition 2 depends on a property no one can arrange by choosing a dialect,
+  any third instrumentor will do. The requirement is only that it be
+  **captured**, not rendered.
+- **It is therefore schedulable, and it is a human act.** Capturing is a halt
+  point (`AGENT.md`; `FIXTURES.md` §6) — an agent builds the harness and stops.
+  So this is the one of the three conditions that can be planned for now, and
+  the one most likely to be assumed rather than done.
+
+Its bound, stated with it, and it is **scenario** coverage rather than field
+coverage: the existing captured pair is *one* scenario, a tool-using
+conversation. It already compares seven of the nine and agrees on five —
+`TASKS.md` 3.3 F-3 records the pair agreeing on step count, order, `kind`,
+`operation`, depth, `call_result` pairing and every payload `state`, and
+disagreeing on `status`; 3.4 F-6 adds `usage`. So the fields are not the gap.
+What that one scenario never contains is: an `error` status, any
+`status_note` at all, a `retriever`, an `embedding`, a `chain`, an `unknown`
+kind, or a `link` edge — so a disagreement about any of those is out of reach
+for the same reason. (It does carry `parent`, `call_result`, `data` and
+`temporal` edges in both dialects, which is four of the five `EdgeKind`s and
+the one part of row 9 the pair genuinely does compare.) Widening means **more captured scenarios**, which
+is more human acts, not more renderings.
+
+*(Row 5 above says the `Usage.extra` disagreement "is unreachable". That clause
+is false as of 3.4: `fixtures/captured/openai_tool_call.jsonl` carries one, and
+the captured pair disagrees on it. `TASKS.md` 3.4 F-1 records the correction and
+where it is pinned; the correction itself is not made here.)*
 
 **Neither of these licenses stating a contract early.** Writing one for a field
 no second implementation has had to agree with is the same defect inverted, and

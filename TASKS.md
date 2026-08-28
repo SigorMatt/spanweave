@@ -4587,13 +4587,19 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 
 ### `[consumers]`
 
-> **This workstream is complete.** 3.3 (`examples/trajectory_dump/`) and 3.4
-> (`examples/cost_latency/`) both landed, **neither was cut**, and the gate held
-> for both: zero shape changes, `git diff --stat spanweave/` empty for each.
-> Their two findings records below — 3.3's five plus follow-ups, 3.4's six plus
-> follow-ups — are **the input to 3.5**, which is the next unchecked task and is
-> `[contract]`, not this tag. Nothing here is live; read the records, not this
-> block, unless you are writing a third consumer.
+> **This workstream is complete, and both its HALTs are discharged.** 3.3
+> (`examples/trajectory_dump/`) and 3.4 (`examples/cost_latency/`) both landed,
+> **neither was cut**, and the gate held for both: zero shape changes,
+> `git diff --stat spanweave/` empty for each. A human has marked both
+> predictions in `PREDICTIONS.md` — **P2 REFUTED — scoped** (3.3) and **P1
+> CONFIRMED — operational, scoped** (3.4). **P3 and P4 remain open**, and
+> neither consumer tested either: 3.5 inherits two marked and two unmarked, and
+> the honest record for both unmarked ones is that their friction never had the
+> opportunity to occur (3.3 F-5, 3.4 O-d, 3.4 O-e).
+>
+> Their two findings records below are **the input to 3.5**, which is the next
+> unchecked task and is `[contract]`, not this tag. Nothing here is live; read
+> the records, not this block, unless you are writing a third consumer.
 
 Both consumers live in `examples/`, consume **committed fixtures only**
 (`ENVIRONMENT.md`: `examples/` may not touch the network), and change **nothing**
@@ -5770,6 +5776,16 @@ consumer's findings go in the exit record beside these and carry more weight.
   > - **`ENVIRONMENT.md`'s `examples/` line is still half-true**, as 3.3 left
   >   it: it reads *"the confirmatory ones in Phase 3"*, and both now exist.
   >   Still 3.8's docs truth pass.
+  > - **One file outside `[consumers]` was edited, on an explicit ruling.**
+  >   `ROADMAP.md`'s Phase 4 freeze gate gained a third *"necessary and not
+  >   sufficient"* entry — follow-ups §5. It is recorded as a divergence
+  >   because `AGENT.md` says never to mix workstreams in one context and this
+  >   does; the two things that make it the right call anyway are that it makes
+  >   the gate **harder** to claim satisfied (the *never accelerate the freeze*
+  >   standing rule cutting in reverse) and that the finding it records has no
+  >   other home — F-6 is a `[consumers]` finding whose only consequence is a
+  >   `[launch]`-adjacent planning fact. `CONTRACTS.md` was **not** edited, and
+  >   F-1's correction to it remains unmade.
   >
   > ## P1's resolution wording
   >
@@ -5802,7 +5818,9 @@ consumer's findings go in the exit record beside these and carry more weight.
   > # 3.4 follow-ups — the review's rulings, and one pattern named
   >
   > Worked in the same session, after the human ruled **P1 CONFIRMED —
-  > operational** and ruled on F-1, F-2, F-4, F-5 and F-6. `make check` green
+  > operational** and ruled on F-1, F-2, F-4, F-5 and F-6 — then, in a second
+  > pass once P1 was marked and pushed, approved §4 and directed the freeze-gate
+  > consequence at §5, which is the one edit outside `[consumers]`. `make check` green
   > (**1540 passed, 4 skipped**), `make gates` green, `make conformance` green
   > (419), `review_corpus.py` exit 0. Nothing under `spanweave/` changed.
   > `PREDICTIONS.md` untouched. No fixture authored, no `expected/graph.json`
@@ -6033,6 +6051,58 @@ consumer's findings go in the exit record beside these and carry more weight.
   > in `canonical()`: comparing strictly is what made both disagreements
   > findable. The gap is in what the corpus can **ask**.
   >
+  > ## 5. The freeze gate gained a second qualification — `ROADMAP.md` edited
+  >
+  > Added after the human approved §4 and ruled that the field class changes
+  > the freeze gate a second time. **The only edit to `ROADMAP.md` in this
+  > task**, and it makes the gate strictly harder to claim satisfied — the
+  > standing *never accelerate the freeze* cuts the same way in reverse.
+  >
+  > `ROADMAP.md` Phase 4's *"The gate is necessary and, for these two, not
+  > sufficient"* is now *"…for these three"*. The two existing entries
+  > (`Edge.basis`, `Usage.extra`) are untouched; a third joins them in the same
+  > form — **what "rendered in the corpus" does not by itself buy, and what
+  > would.**
+  >
+  > **The analysis is not restated there.** The enumeration of the nine fields,
+  > the argument, and what it predicts stay at F-6 above; the gate section
+  > carries the consequence and a pointer, per the ruling. Three sentences of
+  > consequence: rendering reaches none of the nine, because both renderings
+  > descend from one `scenario.md` and a third dialect rendered across the
+  > corpus adds a third rendering of that same single decision.
+  >
+  > **What it names as sufficient:** a **captured** trace from dialect three,
+  > of a scenario `fixtures/captured/`'s existing pair also covers, compared
+  > against that pair field by field on the nine. Two properties recorded with
+  > it, because they are what make it actionable rather than decorative:
+  >
+  > - **It asks nothing of *what* dialect three is** — unlike `Edge.basis`,
+  >   whose condition 2 depends on a property nobody can arrange by choosing a
+  >   dialect. Any third instrumentor will do; the requirement is that it be
+  >   *captured*, not rendered.
+  > - **It is therefore schedulable, and it is a human act** (`AGENT.md`'s
+  >   captured-fixtures halt, `FIXTURES.md` §6). Of the three conditions it is
+  >   the one that can be planned for now, and the one most likely to be
+  >   assumed rather than done.
+  >
+  > **Its bound is scenario coverage, not field coverage**, and that was
+  > corrected during drafting rather than shipped wrong: a first draft said the
+  > captured pair "barely touches" four of the nine, which is false —
+  > 3.3's F-3 records the pair comparing `kind`, `operation`, depth,
+  > `call_result` pairing and payload `state` and *agreeing*, and it carries
+  > four of the five `EdgeKind`s. The real gap is that one scenario contains no
+  > `error` status, no `status_note`, no `retriever`/`embedding`/`chain`/
+  > `unknown` kind and no `link` edge. Checked against the two traces rather
+  > than asserted. Widening means **more captured scenarios** — more human
+  > acts, not more renderings.
+  >
+  > **One thing named and deliberately not fixed.** The new subsection sits
+  > directly under row 5, whose *"the disagreement is unreachable"* clause F-1
+  > showed to be false. Leaving a silent contradiction three lines apart would
+  > be worse than either fixing or naming it, so the addition **names** it in
+  > one parenthetical and points at F-1 — *"the correction itself is not made
+  > here."* The correction stays `[contract]`'s, per the earlier ruling.
+  >
   > ## Definition of done
   >
   > - [x] P1's wording final, carrying F-3's latent shape cost, in
@@ -6044,6 +6114,10 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       pin strengthened to assert the exact dict.
   > - [x] F-6's shared cause named as a field class, with the enumeration, what
   >       it predicts, and what it is explicitly not.
+  > - [x] `ROADMAP.md`'s freeze gate carries the consequence as a third
+  >       qualification — gate unweakened, analysis pointed at rather than
+  >       restated, and the sufficient condition named as a *captured* dialect
+  >       three compared against the existing captured pair.
   > - [x] `git diff --stat spanweave/` empty; `make check` green.
 
 - [ ] **3.5 The prediction resolution artifact — P1 through P4.** `[contract]`
