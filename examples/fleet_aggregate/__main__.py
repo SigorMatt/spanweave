@@ -50,6 +50,7 @@ def report(fleet: Fleet) -> str:
         *rollup["diagnostics"],
         *rollup["models"],
         *rollup["unfulfilled_calls"]["by_model"],
+        *rollup["unfulfilled_calls"]["by_tool"],
     )
     width = max([10, *(len(name) for name in named)])
 
@@ -96,7 +97,16 @@ def report(fleet: Fleet) -> str:
         lines += _table(
             "  ...by the model that asked", unfulfilled["by_model"], width=width
         )
-        lines += ["  ...by the tool it asked for: not available (see limit below)", ""]
+        # Printed, not apologised for. This line read "not available (see
+        # limit below)" for a whole phase after `SPEC.md` 3.7 put the tool
+        # name on the diagnostic (`TASKS.md` 2.10) -- the JSON form carried
+        # `by_tool` and the text form still said it could not, and it pointed
+        # at a `limit:` that is only emitted when a dialect named no tool. An
+        # example a stranger runs, stating something false about the library.
+        # Found and fixed at 3.3.
+        lines += _table(
+            "  ...by the tool it asked for", unfulfilled["by_tool"], width=width
+        )
 
     if rollup["unbuildable"]:
         lines.append("unbuildable:")

@@ -215,3 +215,27 @@ def test_no_arguments_is_an_error_not_a_traceback() -> None:
     done = _run()
     assert done.returncode != 0
     assert b"Traceback" not in done.stderr
+
+
+def test_the_text_report_states_every_by_tool_count_the_json_form_carries() -> None:
+    """The text form must not say a number is unavailable that the JSON has.
+
+    For a whole phase after `SPEC.md` §3.7 put the tool name on the diagnostic
+    (`TASKS.md` 2.10) it printed *"by the tool it asked for: not available (see
+    limit below)"* while `by_tool` was populated — and pointed at a `limit:`
+    that is only emitted when a dialect named no tool. An example a stranger
+    runs, making a false statement about the library. Found at `TASKS.md` 3.3.
+    """
+    traces = _traces()
+    rollup = json.loads(_run("--format", "json", *traces).stdout)
+    by_tool = rollup["unfulfilled_calls"]["by_tool"]
+    assert by_tool, "fixture no longer produces an unfulfilled call"
+    text = _run(*traces).stdout.decode()
+    assert "not available" not in text
+    lines = [line.split() for line in text.splitlines() if line.startswith("  ")]
+    printed = {
+        parts[0]: int(parts[1])
+        for parts in lines
+        if len(parts) == 2 and parts[1].isdigit() and parts[0] in by_tool
+    }
+    assert printed == by_tool
