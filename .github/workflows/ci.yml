@@ -34,6 +34,14 @@ jobs:
       # plus the invariant gates and phase done-whens -- the acceptance
       # harness, task 0.8.
       - run: make check
+      # make check runs everything under `uv run`, with the source tree on the
+      # path -- so it can only answer questions about the repository. This is
+      # the only gate that builds the distribution, installs the wheel into a
+      # throwaway venv and runs it from outside the repo (TASKS.md 3.6). A
+      # packaging break passes every other gate and fails for the first
+      # stranger. It reaches PyPI only as the step above does, for
+      # dependencies: ENVIRONMENT.md network zone 1. It never publishes.
+      - run: make install-check
 
   determinism:
     # Determinism is a cross-machine claim (CLAUDE.md 4), so it is worth

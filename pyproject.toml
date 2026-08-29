@@ -50,6 +50,31 @@ Issues = "https://github.com/SigorMatt/spanweave/issues"
 # development or human-run and are not part of the distributed package.
 packages = ["spanweave"]
 
+[tool.hatch.build.targets.sdist]
+# Declared rather than defaulted, and `make install-check` asserts it is true
+# (TASKS.md 3.6). Hatchling's default sdist is "everything `.gitignore` does
+# not exclude", which is NOT the same set as "the files this repository
+# tracks": untracked scratch, and anything excluded through
+# `.git/info/exclude` rather than `.gitignore`, ships too. That made the
+# published artifact a function of whatever happened to be lying in the
+# builder's working directory -- four local review scripts were in it. The
+# sdist carries more than the wheel on purpose: it is what someone rebuilds
+# and re-verifies this project from, so the corpus, the tests and the docs
+# belong in it.
+include = [
+    "/spanweave",
+    "/tests",
+    "/fixtures",
+    "/examples",
+    "/capture",
+    "/.github",
+    "/*.md",
+    "/LICENSE",
+    "/Makefile",
+    "/pyproject.toml",
+    "/uv.lock",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"

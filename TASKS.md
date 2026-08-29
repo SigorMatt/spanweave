@@ -6846,7 +6846,7 @@ consumer's findings go in the exit record beside these and carry more weight.
 
 ### `[launch]`
 
-- [ ] **3.6 `make install-check` — prove what ships works.** `[launch]`
+- [x] **3.6 `make install-check` — prove what ships works.** `[launch]`
   `make check` runs everything under `uv run`, with the source tree on the path.
   Nothing in this repo currently builds the wheel and runs it from **outside** the
   repo, so a packaging break — a module missing from `[tool.hatch.build]`, a
@@ -6865,6 +6865,76 @@ consumer's findings go in the exit record beside these and carry more weight.
 
   **Cut order:** not on `ROADMAP.md`'s list. Cutting it means 0.9.x is published
   without any check that the published artifact runs. Do not cut it before 3.3.
+
+  **Done.** `tests/install_check.py`, `make install-check`, run in CI next to
+  `make check`. 25 checks against the installed wheel, 3 plants, ~9s. Not a
+  prerequisite of `check` — `check` stays the fast gate, and a test asserts it
+  was not folded in. No shape change: nothing under `spanweave/` was touched.
+
+  **How it knows it is testing the wheel and not the working tree.** Being
+  outside the repo is asserted, not claimed. A probe runs inside the throwaway
+  venv and reports `sys.path` and `spanweave.__file__`; three checks judge
+  them — no `sys.path` entry may be the repo or under it, the imported package
+  must be under the venv's `site-packages`, and of everything loaded *after*
+  interpreter startup nothing may come from the repo or be third-party. The
+  `path-leak` plant is what proves those are live: with `PYTHONPATH` pointed at
+  the repo, **every CLI probe still passes** — same output, exit zero — and
+  only the three isolation checks fail. A version of this harness without them
+  would have been the defect species this project keeps finding: something that
+  looks like verification and is provably empty.
+
+  **Both directions, three plants**, each rebuilding the distribution in a
+  temporary copy (the working tree is never modified) and each required to fail
+  *the checks it was planted to fail*, not merely to fail:
+  - `missing-module` — `spanweave/adapters/otel_genai.py` excluded from the
+    wheel's package list. The done-when's named case. 12 checks fail.
+  - `outside-file` — a shipped module that reads a file living beside the
+    package (`../pyproject.toml`) at import time. It imports **fine from the
+    source tree** and `make check`'s gate rules find **zero** violations in it
+    — the harness runs both and prints the result — and it fails only from the
+    wheel. Exactly one check fails: `runtime: every shipped module imports`.
+  - `path-leak` — described above.
+
+  **The declaration was not true, and the sdist was the half that was wrong.**
+  3.6 says to check what `pyproject.toml` claims ships rather than assume it.
+  The wheel's claim held. The sdist had no declaration at all: hatchling's
+  default is "everything `.gitignore` does not exclude", which is **not** the
+  set of files git tracks, so four untracked local review scripts
+  (`phase.py`, `review_corpus.py`, `verify_gates.sh`, `corpus_review.log`,
+  excluded via `.git/info/exclude`, which hatchling does not read) were in the
+  built artifact — making the published sdist a function of whatever was lying
+  in the builder's working directory. `pyproject.toml` now declares
+  `[tool.hatch.build.targets.sdist]`, and the check asserts the sdist ships
+  nothing git does not track. **Consequence for 3.10:** an untracked file under
+  an included directory still ships, so `install-check` fails while one exists.
+  That is the intended reading — commit or remove before building a release —
+  and it is why the check is run from a clean tree.
+
+  **What is checked, beyond the three commands the task names.** Both
+  artifacts are audited (`uv build` builds the wheel *from* the sdist, so
+  auditing only the wheel would leave half the publish unexamined): the sdist
+  contains everything the wheel does and nothing untracked; the wheel contains
+  every file under `spanweave/` in the tree, every declared package, no
+  stowaway, and the console-script entry point. The existing
+  `zero_dependencies` gate is re-run over the **shipped bytes** rather than the
+  tree's, which reaches a lazy import inside a function body that no probe
+  executes. At runtime every shipped module is imported via `walk_packages`,
+  and the module set is compared against the tree's, so a module missing from
+  the wheel fails even if nothing imports it. `spanweave build` runs over three
+  fixtures — both dialects of `llm_tool_llm` and a captured trace — and each
+  result is compared **byte for byte** against the same build from the
+  development tree, which the determinism invariant makes a legitimate
+  comparison and which keeps the expectation in `fixtures/` rather than
+  duplicating it here.
+
+  **Divergences from the plan.** Three, all additive: the sdist audit and the
+  `pyproject.toml` sdist declaration (above); a third plant (`path-leak`)
+  beyond the one the done-when names, because the done-when's plant proves the
+  check notices a missing module but nothing else proves the check is not just
+  reading the source tree; and `make install-check` added to CI, so the
+  packaging break it exists to catch cannot reach a stranger through a green
+  CI. `ENVIRONMENT.md`'s command list gained the target only after it ran
+  (3.1's rule).
 
 - [ ] **3.7 Version to `0.9.0`, and decide what `schema_version` means while
   unfrozen.** `[launch]`

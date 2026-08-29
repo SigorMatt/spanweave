@@ -84,11 +84,87 @@ def test_ci_still_covers_every_supported_python():
 
 
 # --------------------------------------------------------------------------
+# The other harness: what SHIPS, not what the tree does (TASKS.md 3.6)
+# --------------------------------------------------------------------------
+
+
+def test_install_check_builds_and_runs_the_distribution():
+    assert "tests.install_check" in _recipe("install-check")
+
+
+def test_install_check_is_not_folded_into_check():
+    # `check` is the fast gate a task must pass; install-check builds a wheel
+    # and a venv. They also answer different questions, and merging them would
+    # make a slow gate out of the one that has to run constantly. CI runs both.
+    assert "install-check" not in _recipe("check").splitlines()[0]
+
+
+def test_ci_runs_install_check_as_well_as_check():
+    # The packaging break that install-check exists to catch passes every
+    # other gate, so CI running only `make check` would leave it uncaught
+    # until a stranger hit it.
+    assert "make install-check" in WORKFLOW
+
+
+def test_install_check_asserts_its_own_isolation():
+    """The check must not merely *be* outside the tree — it must say so.
+
+    A wheel check that runs with the repository on `sys.path` passes for the
+    wrong reason and is indistinguishable from one that works. These three
+    assertions are what make the harness non-vacuous, and `--plant path-leak`
+    is what proves they are live; this test is here so that deleting one of
+    them fails a gate rather than quietly emptying the check.
+    """
+    source = (REPO / "tests/install_check.py").read_text(encoding="utf-8")
+    for claim in (
+        "isolation: the working tree is not on the interpreter's path",
+        "isolation: the imported package is the installed one",
+        "isolation: the import drags in nothing outside the install",
+    ):
+        assert claim in source
+
+
+def test_install_check_plants_a_violation_for_each_direction_it_claims():
+    from tests import install_check
+
+    assert {plant.name for plant in install_check.PLANTS} == {
+        "missing-module",
+        "outside-file",
+        "path-leak",
+    }
+    # A plant that expects nothing to fail would "hold" against a check that
+    # does nothing at all.
+    assert all(plant.must_fail for plant in install_check.PLANTS)
+
+
+def test_the_sdist_contents_are_declared_rather_than_defaulted():
+    """Hatchling's default sdist is a function of the builder's directory.
+
+    It ships everything `.gitignore` does not exclude — which is not the set
+    of files this repository tracks. Four untracked local review scripts were
+    in the artifact before this was declared (TASKS.md 3.6).
+    """
+    import tomllib
+
+    metadata = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    sdist = metadata["tool"]["hatch"]["build"]["targets"]["sdist"]
+    assert "/spanweave" in sdist["include"]
+
+
+# --------------------------------------------------------------------------
 # What ships actually runs
 # --------------------------------------------------------------------------
 
 
 def test_the_installed_console_script_reports_its_version():
+    """The *development* install, and only that.
+
+    `shutil.which` resolves to whatever is on this environment's PATH, which
+    under `uv run` is this very tree. So this proves the entrypoint is wired
+    up; it proves nothing about the distribution. `make install-check` is the
+    check that does (TASKS.md 3.6), and it is a separate target because the
+    resemblance between the two is exactly what made this one look sufficient.
+    """
     executable = shutil.which("spanweave")
     command = [executable] if executable else [sys.executable, "-m", "spanweave.cli"]
     result = subprocess.run(

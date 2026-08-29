@@ -2,7 +2,7 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check lint types test gates conformance capture clean
+.PHONY: check install-check lint types test gates conformance capture clean
 
 check: lint types test gates
 	uv run spanweave --version
@@ -57,6 +57,22 @@ conformance:
 # needs; re-run, never edit a trace to add one.
 capture:
 	uv run --extra dev python -m capture.run $(ARGS)
+
+# Prove that what SHIPS works (TASKS.md 3.6). Everything `check` runs happens
+# under `uv run`, with the source tree on the path, so every gate it runs
+# answers a question about the REPOSITORY. This target builds the sdist and
+# wheel, installs the wheel into a throwaway venv, and runs it from a working
+# directory outside the repo -- and *asserts* that it is doing that, rather
+# than assuming it: the harness reports sys.path and spanweave.__file__ from
+# inside the interpreter under test. It also audits the artifacts against what
+# pyproject.toml declares they contain, and runs three planted violations, each
+# of which must fail the check (tests/install_check.py, "Both directions").
+#
+# Deliberately NOT a prerequisite of `check`: it builds a wheel and a venv, and
+# `check` is the fast gate a task must pass. CI runs both.
+# ARGS passes flags through: make install-check ARGS="--skip-plants"
+install-check:
+	uv run python -m tests.install_check $(ARGS)
 
 clean:
 	rm -rf .mypy_cache .ruff_cache .pytest_cache out/

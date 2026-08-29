@@ -41,6 +41,13 @@ fix one deliberately, don't let them drift.
   task counts as done; the Makefile target wraps the `uv run ...` calls above
   plus the phase done-whens)
 - Corpus:  `make conformance` (the cross-dialect equivalence suite)
+- Ships:   `make install-check` — builds the sdist and wheel, installs the
+  wheel into a throwaway venv, and runs it from **outside** the repo
+  (`TASKS.md` 3.6). `make check` runs everything under `uv run` with the
+  source tree on the path, so it can only answer questions about the
+  repository; this is the only gate that answers one about the distribution.
+  Reaches PyPI only as **zone 1** does, for dependencies. It never publishes —
+  that is zone 4 and human-run.
 - Capture: `make capture` — **human-run only**, see below
 
 ## Repo layout (expected)
