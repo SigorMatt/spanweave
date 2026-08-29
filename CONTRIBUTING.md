@@ -61,7 +61,11 @@ A mergeable PR:
 1. Read `ADAPTERS.md`.
 2. `spanweave/adapters/<dialect>.py` — implement `detect()` and `parse()`.
 3. Register it in `spanweave/adapters/__init__.py`.
-4. Render **every** scenario in `fixtures/conformance/*/dialects/<dialect>.*`.
+4. Account for **every** scenario: either render it in
+   `fixtures/conformance/<scenario>/dialects/<dialect>.*`, or declare in that
+   scenario's `expected/coverage.json` that your dialect cannot express it,
+   **with a reason** (`FIXTURES.md` §4.3). There is no third state — silence is
+   a failure, and four scenarios in the corpus today take the second route.
 5. `make conformance` — your renderings must produce the existing canonical
    graphs, unchanged.
 6. Capture one real trace, redact it, write its provenance file.

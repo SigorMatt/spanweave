@@ -470,9 +470,23 @@ keys, and one more:
   adapter or any document says they should be one.
 - **Compared.** `canonical()` keeps `usage`, so two dialects disagreeing on a
   key would fail equivalence.
-- **Never non-empty.** `extra` is `{}` on every node of every conformance
-  rendering and every captured trace in this repository. The disagreement is
-  therefore unreachable: it cannot be observed by the corpus as it stands.
+- **Populated, but in one dialect only.** `extra` is `{}` on every conformance
+  rendering, and **non-empty on two nodes of one captured trace**:
+  `fixtures/captured/openai_tool_call.jsonl` carries
+  `llm.token_count.prompt_details.cache_read` on both of its `llm` spans, which
+  the OpenInference adapter maps to `{"prompt_details.cache_read": 80}` and
+  `{"prompt_details.cache_read": 144}`. The **disagreement** is still
+  unreachable — captured traces are not part of the equivalence corpus, and no
+  `otel_genai` rendering populates the field at all — but the field is not
+  unexercised, and the difference matters: the first consumer to read `usage`
+  hit it immediately. *(Corrected at `TASKS.md` 3.8. This bullet previously
+  read "**Never non-empty.** `extra` is `{}` on every node of every conformance
+  rendering and every captured trace in this repository" — a corpus-wide
+  quantifier that was true when written, expired when the capture landed, and
+  was recomputed by nothing. Found by the 3.4 consumer as **F-1**; pinned by
+  `tests/test_example_cost_latency.py::test_usage_extra_is_non_empty_on_the_committed_corpus`,
+  and this sentence is now held to the corpus by
+  `tests/test_doc_truth.py`.)*
 - **And nothing states the vocabulary at all.** §3.4's comment reads "cache
   reads, reasoning tokens, etc." — an illustration, not a key list.
 

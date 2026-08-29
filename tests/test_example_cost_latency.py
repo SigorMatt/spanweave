@@ -298,13 +298,16 @@ def test_an_llm_span_with_no_usage_is_a_hole_and_not_zero_tokens():
 def test_usage_extra_is_non_empty_on_the_committed_corpus():
     """The corpus DOES exercise `Usage.extra`, on the captured OpenInference pair.
 
-    Two committed documents say the opposite — `CONTRACTS.md` F-C (*"`extra`
+    Two committed documents said the opposite — `CONTRACTS.md` F-C (*"`extra`
     is `{}` on every node of every conformance rendering and every captured
     trace in this repository"*) and `ROADMAP.md`'s Phase 4 row 5 (*"it is `{}`
     on every node of every fixture in the repository, so the disagreement is
-    unreachable"*). Both are false: `fixtures/captured/openai_tool_call.jsonl`
+    unreachable"*). Both were false: `fixtures/captured/openai_tool_call.jsonl`
     carries `llm.token_count.prompt_details.cache_read` on both of its `llm`
-    spans, 80 and 144.
+    spans, 80 and 144. **Both were corrected at `TASKS.md` 3.8**, the docs
+    truth pass, and `tests/test_doc_truth.py` now holds both sentences to what
+    this test measures — so the correction cannot silently expire the way the
+    original did.
 
     ---
 

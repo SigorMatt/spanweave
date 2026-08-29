@@ -7359,7 +7359,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   >   this phase. The fixture plant creates and removes a scenario inside one
   >   test and asserts the corpus is unchanged afterwards.
 
-- [ ] **3.8 The docs truth pass, before anything is published.** `[launch]`
+- [x] **3.8 The docs truth pass, before anything is published.** `[launch]`
   0.9.x is the first time these files are read by someone who cannot check them
   against the tree. Three are false today:
 
@@ -7384,6 +7384,164 @@ consumer's findings go in the exit record beside these and carry more weight.
   **Cut order:** the unfrozen notice inside these files is **never cut**
   (`ROADMAP.md`). The rest of the pass is cuttable only down to *"nothing in the
   shipped docs is false"*, which is the floor, not a target.
+
+  > **Done. Five documents corrected, one test docstring, and sixteen tests in a
+  > new file — `tests/test_doc_truth.py` — so that none of the five can expire
+  > again in silence.** Nothing under `spanweave/` moved; `git diff --stat
+  > spanweave/ fixtures/ PREDICTIONS.md` is empty. `make check` green (1586
+  > passed, 4 skipped), `make install-check` green (25 checks, 3 plants held).
+  > **No `pip install spanweave` line was added anywhere.**
+  >
+  > ## The headline: the false sentence was in the central claim, and the task
+  > did not name it
+  >
+  > The task listed three false things. One of them had already been fixed, one
+  > was as described, one was an absence. What none of them named is this, from
+  > `README.md`'s **Conformance** section — the paragraph carrying the reason
+  > this library exists:
+  >
+  > > *"Every scenario in `fixtures/conformance/` is expressed in **multiple
+  > > dialects** that must all produce the **same canonical graph**."*
+  >
+  > **Four of the twenty-one are not.** `cyclic_parents`, `redacted_payload`,
+  > `retriever_and_embedding` and `span_links` render `openinference` only, each
+  > with a `coverage.json` declaring which dialect cannot express it and why —
+  > which is the mechanism working exactly as `FIXTURES.md` §4.3 designs it, and
+  > which the sentence flatly contradicted. It was true at 1.9, when the corpus
+  > was one dialect and "multiple" was aspirational; it went false the moment
+  > 2.13 turned on the silence-is-a-failure rule and the first declaration
+  > landed, and it has been false through every session since.
+  >
+  > This is the same species as the three known items, and worse placed: the
+  > stale `Status` section describes *sequencing* a stranger has no stake in,
+  > while this one describes *what the corpus proves*. A reader who takes it at
+  > face value believes the equivalence claim covers 21 scenarios when it covers
+  > 17. Recorded as the find rather than folded into the fixes, because a docs
+  > truth pass that only checks the sentences it was handed is a docs truth pass
+  > that would have missed this one.
+  >
+  > ## Every correction, with the test that now holds it — or the reason none can
+  >
+  > | # | What was false, absent, or unheld | Fixed in | Held by |
+  > |---|---|---|---|
+  > | 1 | `README.md` **Status**: *"Phase 1 is the vertical slice … A second adapter … is Phase 2."* Two adapters ship. | `README.md` | `test_the_readme_status_names_every_adapter_that_ships` + `test_the_readme_status_is_not_written_in_phase_numbers` |
+  > | 2 | `ENVIRONMENT.md` `examples/`: *"the confirmatory ones in Phase 3."* All three exist. | `ENVIRONMENT.md` | `test_the_environment_examples_line_names_every_example` |
+  > | 3 | `README.md` **Conformance**: *"Every scenario … is expressed in multiple dialects."* 17 of 21. | `README.md` | `test_the_readme_conformance_numbers_are_the_corpus_s_numbers` + `test_every_scenario_rendered_in_one_dialect_declares_why` |
+  > | 4 | No installation section at all. | `README.md` | `test_the_readme_has_an_install_section_naming_the_version_it_ships` |
+  > | 5 | `README.md` opener: *"(OpenInference, OTel GenAI, and more)"* — "and more" is a promise nothing backs. | `README.md` | `test_the_readme_status_names_every_adapter_that_ships` (the honest list) |
+  > | 6 | `CONTRACTS.md` F-C and `ROADMAP.md` Phase 4 row 5: *"`{}` on every node of every fixture in the repository."* Non-empty on two nodes. | both | `test_the_documents_no_longer_claim_usage_extra_is_always_empty` |
+  > | 7 | `README.md` **Documents** table omitted `CONTRACTS.md`. | `README.md` | `test_the_readme_document_table_lists_every_document_and_no_ghosts` |
+  > | 8 | `CONTRIBUTING.md` step 4: *"Render **every** scenario"* — the corpus itself does not, and may not. | `CONTRIBUTING.md` | **nothing directly.** The fact behind it is held (row 3); the wording is not. See *What no test holds*. |
+  > | 9 | The quickstart prints `node.name` — the one field the corpus cannot check — 200 lines above the caveat. | `README.md` | `test_the_quickstart_warns_where_it_uses_the_field_the_corpus_cannot_check` |
+  > | 10 | `tests/test_example_cost_latency.py`'s pin said two documents *"say the opposite"*. After row 6 they no longer do. | that docstring | the same test as row 6 |
+  >
+  > Five more tests hold claims that were **true and unheld** — the state every
+  > one of the ten above was in before it expired:
+  >
+  > | Claim | Held by |
+  > |---|---|
+  > | No document offers an install from a package index while `TASKS.md` 3.10 is unchecked | `test_no_document_promises_an_install_that_does_not_resolve_yet` (+ a matcher non-vacuity test) |
+  > | Every `make <target>` a document names exists in the `Makefile` | `test_every_make_target_a_document_names_exists` |
+  > | Every `spanweave <subcommand>` a document puts in a code fence exists | `test_every_cli_subcommand_a_document_invokes_exists` |
+  > | `fixtures/captured/README.md` does not claim an emptiness that ended, names every trace, and every trace has provenance | `test_the_captured_readme_does_not_claim_an_emptiness_that_ended` |
+  > | `fixtures/conformance/README.md` names every scenario the corpus holds | `test_the_corpus_readme_names_every_scenario_it_holds` |
+  > | The `examples/` consumers import only `spanweave.__all__`, as **Status** claims | `test_the_examples_use_only_the_public_api_the_readme_claims` |
+  >
+  > **Every one of the sixteen was plant-checked.** Each was run against a
+  > deliberately broken tree — a wrong count, the retired quantifier reasserted,
+  > phase language put back in **Status**, `pip install spanweave` in a fence, an
+  > example dropped from `ENVIRONMENT.md`, an emptiness claim restored, a `make`
+  > target renamed to one the Makefile does not define, a CLI subcommand that
+  > does not exist put in a fence, a ghost table row, an extra
+  > scenario directory, an example reaching into `spanweave.model`, the
+  > quickstart caveat deleted — and each failed. The tree was restored between
+  > plants and is clean.
+  >
+  > ## Two decisions inside the tests worth naming
+  >
+  > **The publish permission is keyed to `TASKS.md` 3.10's checkbox, not to a
+  > flag.** The rule is *no document gains a `pip install spanweave` line until
+  > the publish has happened*, so the test needs to know whether it has. A
+  > hand-flipped boolean is the exact thing this task exists to catch. 3.10's
+  > checkbox is the repository's only record of the publish, and **ticking it is
+  > the same act as making the line true** — so the permission and the fact
+  > cannot drift apart. The test asserts the checkbox is still findable, so a
+  > reformat of that line fails loudly instead of passing vacuously.
+  >
+  > **The install scan reads code fences only.** `AGENT.md`, `ROADMAP.md`,
+  > `TASKS.md` and `README.md` all contain the literal string `pip install
+  > spanweave` — every one of them in order to *forbid or defer it*. A scan that
+  > could not tell a stated rule from a pasteable command would fire on the
+  > documents stating the rule, and would be switched off within a week. A fence
+  > is a command a reader will run; prose is not. The same distinction, in
+  > reverse, is why the `make` scan reads inline code too and the CLI scan does
+  > not: `SPEC.md` §7 and `OPEN_QUESTIONS.md` §4 name a `spanweave split` that is
+  > **deferred by decision**, and naming an unbuilt command while saying it is
+  > unbuilt is honest.
+  >
+  > ## What no test holds, said rather than left implied
+  >
+  > - **`CONTRIBUTING.md` step 4's wording.** The fact it was wrong about is
+  >   held (row 3), but "does this instruction describe the corpus's actual
+  >   rule" is a reading, not a computation.
+  > - **`README.md` Status: *"the two confirmatory ones needed no change to the
+  >   library."*** That is a fact about git history — 3.3 and 3.4 both recorded
+  >   `git diff --stat spanweave/` empty — and this file tests the tree, not the
+  >   log.
+  > - **Whether any of it reads correctly to someone arriving cold.** Named in
+  >   the file's own docstring. The one thing that could be *done* about it was
+  >   done: the `name` bound was moved to where the reader actually is (row 9),
+  >   rather than left correct-but-unreachable in a section 200 lines down.
+  >
+  > ## Divergences from the task as written
+  >
+  > - **One of the three named falsehoods was already fixed.**
+  >   `fixtures/captured/README.md` no longer says *"Currently empty — the first
+  >   one lands at `TASKS.md` 1.9"*; it says *"Three are present"* and names all
+  >   three. It was corrected at **`ff11065`**, *"Promote the GenAI workflow
+  >   capture"* — by the human whose directory it is, in the commit that made it
+  >   wrong for the third time. The task's done-when asks for the test
+  >   regardless, and that is the half that was missing: the sentence had been
+  >   wrong twice and corrected by hand twice. It is now recomputed.
+  > - **Two documents outside `[launch]` were edited: `CONTRACTS.md` and
+  >   `ROADMAP.md`** (row 6). `AGENT.md` says never to mix workstreams in one
+  >   context, and 3.4 correctly declined this edit as `[contract]`'s to make.
+  >   **`[contract]` has no unchecked task left** — 3.2 and 3.5 are both done —
+  >   so deferring again defers to nobody, and both files ship in the sdist,
+  >   which puts them under this task's floor: *nothing in the shipped docs is
+  >   false*. Recorded as a divergence because it is one, and because the
+  >   alternative was the fifth consecutive session to write down that a
+  >   sentence is false and leave it there.
+  > - **Six corrections were found that the task did not list** — rows 3, 5, 6,
+  >   7, 9 and 10. Row 3 is the one that matters; row 10 is this failure mode
+  >   reproducing inside the remedy, since correcting the two documents made the
+  >   pin's own docstring stale in the same commit.
+  > - **`README.md` gained an Install section that says what is *not* possible.**
+  >   It opens by stating there is no `pip install spanweave` and why. `3.1`'s
+  >   precedent — do not write a contract line ahead of its condition — cuts
+  >   this way: the absence is deliberate and reads as deliberate, rather than
+  >   as an oversight a stranger routes around by guessing the index name.
+  > - **`make install-check` and `make shape` added to the README's Development
+  >   block.** Both exist and both have run; per 3.1's rule a command is listed
+  >   only after it has.
+  > - **`PREDICTIONS.md` and `fixtures/` untouched**, as in every agent commit
+  >   this phase.
+  >
+  > ## Definition of done
+  >
+  > - [x] A test asserts `fixtures/captured/README.md` does not claim emptiness
+  >       while the directory is non-empty — and, beyond the minimum, that its
+  >       count matches, that it names every trace, and that every trace has the
+  >       provenance file its own rule 2 requires.
+  > - [x] A test asserts no document names an install command that does not
+  >       resolve at the current published state, keyed to 3.10's checkbox.
+  > - [x] Every stale claim found is corrected, and each correction says whether
+  >       a test can hold it — 13 of 16 tests hold a specific correction; the 3
+  >       that cannot are named above rather than omitted.
+  > - [x] The unfrozen-schema notice is intact in `README.md` and in the CLI
+  >       (never cut, `ROADMAP.md`); `tests/test_version.py` still asserts both.
+  > - [x] No `pip install spanweave` line in any document (3.10 unrun).
+  > - [x] `make check` green (1586 passed, 4 skipped); `make install-check` green.
 
 - [ ] **3.9 The sixty-second stranger path.** `[launch]`
   `ROADMAP.md`'s exit says a stranger builds a graph from their own trace in ~60

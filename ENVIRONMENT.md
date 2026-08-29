@@ -70,11 +70,13 @@ fix one deliberately, don't let them drift.
   agent-generated.
 - `capture/`              — the capture harness. **Outside the package**;
   network and framework dependencies are allowed here and ONLY here.
-- `examples/`             — consumer code. The **adversarial** consumer arrives
-  in **Phase 2b** (`ROADMAP.md`; it is the pressure that phase exists to
-  apply), the confirmatory ones in Phase 3. **Outside the package**; free to be
-  as opinionated as they like, which is exactly why they must not live inside
-  it (`DESIGN.md` §8). The no-network rule below binds them all.
+- `examples/`             — consumer code. Three exist: `fleet_aggregate` (the
+  **adversarial** consumer, Phase 2b — it is the pressure that phase existed to
+  apply), and the two **confirmatory** ones, `trajectory_dump` and
+  `cost_latency`. **Outside the package**; free to be as opinionated as they
+  like, which is exactly why they must not live inside it (`DESIGN.md` §8).
+  They consume committed fixtures only, and the no-network rule below binds
+  them all.
 - `tests/`                — pytest, including the invariant gates (0.4–0.6) and
   the acceptance checks (0.8).
 

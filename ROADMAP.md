@@ -321,7 +321,7 @@ dialects:
 | | Why it is unmeasurable today |
 |---|---|
 | **4. `Edge.basis`** (2.14) | a free `str`, compared by `canonical()`, adapter-supplied — and both adapter-supplied bases are invisible to the cross-dialect claim |
-| **5. `Usage.extra`'s keys** (3.2) | an open key vocabulary, compared by `canonical()`, adapter-supplied and **dialect-derived verbatim** — each adapter takes its own attribute suffix, so `llm.token_count.cache_read` becomes `cache_read` and `gen_ai.usage.cache_read_input_tokens` becomes `cache_read_input_tokens` for the same concept. Two dialects would disagree, and it is `{}` on every node of every fixture in the repository, so the disagreement is unreachable |
+| **5. `Usage.extra`'s keys** (3.2) | an open key vocabulary, compared by `canonical()`, adapter-supplied and **dialect-derived verbatim** — each adapter takes its own attribute suffix, so `llm.token_count.cache_read` becomes `cache_read` and `gen_ai.usage.cache_read_input_tokens` becomes `cache_read_input_tokens` for the same concept. Two dialects would disagree, and the disagreement is unreachable — but not for the reason this row gave until `TASKS.md` 3.8. It is `{}` on every **conformance** rendering, and **non-empty on two nodes** of `fixtures/captured/openai_tool_call.jsonl` (`{"prompt_details.cache_read": 80}` and `{... : 144}`); captured traces are not compared across dialects, so the field is exercised without ever being contested. Corrected from *"it is `{}` on every node of every fixture in the repository"* — a corpus-wide quantifier nothing recomputed (3.4's **F-1**) |
 
 ### The gate is necessary and, for these three, not sufficient
 
