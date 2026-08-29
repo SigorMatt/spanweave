@@ -114,7 +114,13 @@ fix one deliberately, don't let them drift.
 
    **The runbook is `TASKS.md` 3.10** — the exact commands in order, what to
    check between them, where the last reversible point is, and what a stranger
-   gets that no harness here can exercise. Prepared by an agent, unrun.
+   gets that no harness here can exercise. Prepared by an agent; **run by a
+   human for `0.9.0`**, which is on PyPI. That record now also carries what the
+   run measured, and two corrections the run forced — in particular, **do not
+   pin either artifact's hash as a target for a later build**: the sdist
+   contains this repository and the wheel's `METADATA` contains `README.md`, so
+   both move on a document change. Take your own hashes after your final commit
+   and record them as facts about what you published.
 
 `examples/` may not use the network either; they consume committed fixtures so
 that anyone can run them reproducibly.

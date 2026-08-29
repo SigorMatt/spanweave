@@ -7807,10 +7807,15 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > **Both 0.9.0 artifacts are therefore now unregenerable from this tree**, and
   > that is the correct end state rather than a loss: a published version's
-  > bytes are fixed on the index. The pair as uploaded is still in `dist/` at
-  > the two hashes above, and `dist/` is not tracked — so if they are wanted
-  > later, `pip download spanweave==0.9.0` is the source of truth, not a
-  > rebuild. **The runbook's step 2 wheel check is corrected below**, because as
+  > bytes are fixed on the index.
+  >
+  > The pair as uploaded is still in `dist/` at the two hashes above **and will
+  > not stay there** — `dist/` is untracked, and both `uv build` and
+  > `make install-check` empty it before rebuilding. Do not treat it as an
+  > archive. `pip download spanweave==0.9.0` is the source of truth for those
+  > bytes; if a local run must not disturb them, `make install-check
+  > ARGS="--out-dir <elsewhere>"` builds and audits somewhere else, which is
+  > how step 8 re-ran it. **The runbook's step 2 wheel check is corrected below**, because as
   > written it would send the *next* publisher into a stop-and-find-out over a
   > difference that is expected.
   >
@@ -8324,9 +8329,12 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       PyPI and verified from the index (step 7's table). The agent held no
   >       token at any point.
   > - [x] Step 8: the box ticked and the documents corrected, in one commit,
-  >       with `make check` green in it. The one thing step 8 asks for that this
-  >       session did not do — the closing cold read — is named above rather
-  >       than absorbed.
+  >       with `make check` green in it (1593 passed, 4 skipped), both
+  >       directions of the install guard plant-checked. `make install-check`
+  >       re-run **after** the README edit — 30 checks, 3 plants held — because
+  >       the README is in the wheel, which is the finding this step made. The
+  >       one thing step 8 asks for that this session did not do — the closing
+  >       cold read — is named above rather than absorbed.
   > **The HALT is discharged: the publish happened, by a human.** The next live
   > halt is the Phase 3 exit (3.11), and the schema stays unfrozen.
 
