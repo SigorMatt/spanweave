@@ -207,7 +207,7 @@ one layer out, applied to prose and to judgement instead of to code. **A cold
 reader is the cheapest instrument that supplies that independence.** It costs
 one prompt.
 
-Three uses so far, and what each returned:
+Four uses so far, and what each returned:
 
 - **2.6.** A blank session given only the captured trace and its graph found a
   **missing declared `data` edge** that 593 tests, six gates and two review
@@ -218,6 +218,14 @@ Three uses so far, and what each returned:
 - **3.10 step 4.** Two models asked to behave as a user who had just installed
   the package, told nothing about the suspicion. Result and its limits at that
   task's record.
+- **3.10 step 8, the closing read** — the same question asked again with a
+  **true** premise, once the package was installable. Both models read the
+  Install section **correctly**, both predicted the failure before typing it,
+  and **both gave the failing command as their second move.** Knowing did not
+  prevent doing. It confirmed `0.9.1` candidate C1 is fixing the right end,
+  produced C2, and refuted a third observation. **This is the use worth
+  reading before running one:** a clean read and a confused read are the two
+  outcomes anyone plans for, and the informative one was neither.
 
 **Two constraints, each stated with the failure that produced it — because a
 rule without its failure gets softened by the next person who finds it

@@ -4010,6 +4010,27 @@ Starting Phase 3 is still a separate decision.
 
 ## Phase 3 — Confirm, package, launch
 
+> **PHASE 3 IS COMPLETE. 3.1 through 3.11 are all checked, nothing was cut,
+> and the live halt is the Phase 3 exit itself (3.11).** Do not start Phase 4,
+> and **do not freeze the schema** — `SCHEMA_VERSION` is `"0.1"` and
+> `SCHEMA_FROZEN` is `False`, and the freeze is gated on evidence this phase
+> did not produce.
+>
+> **A cold session arriving here should read the 3.11 exit record and stop.**
+> It carries: the gate result (**zero shape changes**, with each consumer's
+> bound), all eleven consumer findings, all five predictions plus O1 as a human
+> marked them, the freeze gate at **two of four met**, the launch's measured
+> exit criterion, and the two `0.9.1` candidates with a recommendation.
+>
+> **The only unscheduled work is `0.9.1` candidates C1 and C2**, under
+> *Post-launch* near the end of this file. They are deliberately **not**
+> checkboxes: each is a measured defect in something already published, waiting
+> on a human decision. 3.11 §8 recommends shipping both as one release before
+> Phase 4; nobody has agreed to it yet, and publishing is a halt.
+>
+> Everything below this block is the phase as it was worked. Nothing in it is
+> live.
+
 Sharpened from the provisional bullets after the Phase 2 exit (2.14) and the
 post-exit follow-up (2.17), per this file's resolution rule. Falsification
 happened in Phase 2; this phase is **confirmation and packaging**, and nothing
@@ -4327,13 +4348,11 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 
 ### `[contract]`
 
-> **This workstream is complete. One thing in it is live: a human has ruled on
-> P3 and P4 but has not yet pasted the marks into `PREDICTIONS.md`.** The final
-> wording, first line included, is at *3.5 follow-ups* §2 and §3 — **P3
-> UNRESOLVED** (friction had no opportunity to occur, *and* its stated class is
-> wrong, so it is not resolvable as written) and **P4 CONFIRMED as to class
-> with the "will never notice" clause REFUTED**. Nothing else in Phase 3 waits
-> on that; `[launch]` (3.6 onward) is the next work.
+> **This workstream is complete and nothing in it is live.** All five
+> predictions are marked in `PREDICTIONS.md` by a human — **P3 UNRESOLVED**
+> and **P4 CONFIRMED as to class with the "will never notice" clause REFUTED**
+> were pasted at `c2857d0`, joining P1 and P2. The exit table for all five,
+> plus O1 and the scopes that limit three of them, is at **3.11 §3**.
 >
 > Settled, as pointers: **3.2** produced `CONTRACTS.md` and
 > `tests/test_contracts.py`, and stated *unstated, unmeasured* where nothing
@@ -4343,7 +4362,9 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
 > this project's artifacts that nothing recomputed*, named at the pin in
 > `tests/test_prediction_evidence.py`. `OPEN_QUESTIONS.md` §7 carries it as
 > evidence and is **not** resolved. P1 (CONFIRMED — operational, scoped) and P2
-> (REFUTED — scoped) were marked by a human at 3.4 and 3.3.
+> (REFUTED — scoped) were marked by a human at 3.4 and 3.3. The ordinal
+> *"fourth"* above is left as written; three running counts in this repo
+> disagree, and 3.11 §5 gives the single list built from the shape instead.
 
 - [x] **3.2 Inventory every permissively-typed serialized field.** `[contract]`
   From 2.14's freeze instruction, split per blocker 3: **this task produces the
@@ -8457,7 +8478,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > **The HALT is discharged: the publish happened, by a human.** The next live
   > halt is the Phase 3 exit (3.11), and the schema stays unfrozen.
 
-- [ ] **3.11 Phase 3 exit record.** `[launch]`
+- [x] **3.11 Phase 3 exit record.** `[launch]`
   The mirror of 2.14, and the direct input to the Phase 4 freeze decision.
   Record:
 
@@ -8496,6 +8517,396 @@ consumer's findings go in the exit record beside these and carry more weight.
   not produce, and *never accelerate the freeze* is `ROADMAP.md`'s standing rule.
   *Artifact for the decision:* the exit record, the two consumers' findings, the
   prediction table, and the four-item freeze gate with each item's status.
+
+  > # 3.11 record — the Phase 3 exit
+  >
+  > The mirror of 2.14, and the direct input to the Phase 4 freeze decision.
+  > **Nothing here freezes anything.** `SCHEMA_VERSION` is `"0.1"`,
+  > `SCHEMA_FROZEN` is `False`, and both stay that way — the freeze is Phase 4,
+  > gated on evidence this phase did not produce, and *never accelerate the
+  > freeze* is standing (`ROADMAP.md`).
+  >
+  > **State at the exit.** `make check` green (**1594 passed, 4 skipped**),
+  > `make gates` green (69), `make conformance` green (419),
+  > `make install-check` green (30 checks, 3 plants held).
+  > `spanweave 0.9.0` is on PyPI, published by a human at 3.10 and verified from
+  > the index. Nothing under `spanweave/` changed in this task; no fixture was
+  > authored, no `expected/graph.json` touched, `canonical()` not weakened, no
+  > dependency added, `PREDICTIONS.md` untouched.
+  >
+  > ## 1. Shape changes: **zero**, and here is the bound each consumer recorded
+  >
+  > **The gate this phase is measured by held.** No new field, `NodeKind`,
+  > `EdgeKind`, warrant, `Payload` state, `Diagnostic` code or query primitive
+  > was wanted by either confirmatory consumer. `git diff --stat spanweave/` is
+  > empty for **3.3** and for **3.4** individually, not merely at the end.
+  >
+  > **Stated bare, that number would be the most misleading line in this file**,
+  > so it is stated with what each consumer's record says about its own reach:
+  >
+  > | | `examples/trajectory_dump` (3.3) | `examples/cost_latency` (3.4) |
+  > |---|---|---|
+  > | Shape changes wanted | **0** | **0** |
+  > | Built from | `spanweave/__init__.py`'s exports alone | those exports plus stdlib `dataclasses.replace` on the public frozen types |
+  > | The bound its own record states | *"not evidence that the model is general — evidence that **this** consumer, chosen by the same process that built the model, needed nothing new"* | the identical sentence, written independently at 3.4 |
+  > | What it never exercised | `truncated` (0 in the corpus, unemittable by either adapter); any non-audit reader | any `data`, `call_result` or `link` edge — it reads `parent` only |
+  >
+  > **Three qualifications on the zero, and all three are in the phase's own
+  > records rather than added here:**
+  >
+  > 1. **The exam was set by its own author** (`PREDICTIONS.md`). Both consumers
+  >    were chosen by the person who built the model, and `[consumers]`'s own
+  >    intro says a consumer chosen by a stranger *"is worth more than both of
+  >    these together"*. **No stranger consumer exists.** The zero is a statement
+  >    about two uses already believed to work.
+  > 2. **A shape change happened in the phase, and it was not a gate failure.**
+  >    3.4's **F-2** is a SPEC GAP *with a shape cost* — the model expresses the
+  >    fact, no document states the vocabulary, and the honest remedy changes
+  >    what is serialized. It is not counted against the gate, which measures
+  >    what a consumer **could not express**, and this consumer expressed the
+  >    fact fine; what it could not do was *use* it portably. O1 (2.10) is the
+  >    worked precedent. **Recorded as both things**, per this task's own
+  >    instruction, rather than as whichever reads better: *a shape cost exists
+  >    in the phase, and the consumer gate is not what found it.*
+  > 3. **3.2 forced no type change**, so this phase's other route to a shape
+  >    change stayed shut. Its halt condition was tested and **not met**; five
+  >    fields came back *unstated, unmeasured*, which is the deliverable rather
+  >    than a gap (§6 below).
+  >
+  > ## 2. Every finding from 3.3 and 3.4, with cause and classification
+  >
+  > Recorded the way F1–F9 are at 2.4. **Eleven findings, and not one of them is
+  > a want the model could not express.**
+  >
+  > ### 3.3 — the trajectory dumper (`[consumers]`, tests P2)
+  >
+  > | | Finding | Classification | Cause |
+  > |---|---|---|---|
+  > | **F-1** | `Node.name` is the transcript's natural label and the one field the equivalence claim has never compared | **bound** — no want, and the human declined to classify it | 2.10's boundary decision: `name` is declared-incomparable, so the transcript's most natural label is the field the corpus cannot check |
+  > | **F-2** | Nothing states what a `Diagnostic` is scoped to, or which codes bear on ordering | **SPEC GAP** (2.4's F7, independently re-found) | the model carries `node_id`; no document says what a diagnostic's scope *means*, so a consumer grouping by it is guessing |
+  > | **F-3** | The captured matched pair disagrees on `status`, and the conformance corpus **cannot surface it by construction** | **bound on the equivalence claim** | both renderings of a scenario descend from one `scenario.md`, so a hand-authored pair disagrees only where its author knew to make it |
+  > | **F-4** | The transcript compares diagnostics per node and the two dialects still agree | **observation** (negative, and it is the good kind) | — |
+  > | **F-5** | Declared `data` edges were read; none was ever wanted **inferred** | **observation** | the consumer reads what the telemetry declared and never compares two values; P3's friction had no opportunity to occur |
+  >
+  > Also at 3.3, and not a finding about the model: **`examples/fleet_aggregate`
+  > had rotted** — it printed a claim about naming the tool that the O1 remedy
+  > had made false. Fixed and pinned in the same task.
+  >
+  > ### 3.4 — the cost/latency attributor (`[consumers]`, tests P1)
+  >
+  > | | Finding | Classification | Cause |
+  > |---|---|---|---|
+  > | **F-1** | `Usage.extra` is **not** empty on the committed corpus, and two committed documents said it was | **correction to two documents** | a corpus-wide quantifier, true when written, expired when a captured trace landed carrying `llm.token_count.prompt_details.cache_read`. Nothing recomputed it |
+  > | **F-2** | A price table cannot be keyed on `Usage.extra`, because nothing states what its keys mean | **SPEC GAP, with a shape cost** | each adapter derives keys verbatim from its own dialect's attribute suffix, so two dialects spell one concept two ways and no document arbitrates |
+  > | **F-3** | There is no honest in-model representation of an elided payload, and **P1's own remedy needs one** | **does not fit the shape/operational test — sent to the human unfitted** | `Payload(state=present, value=None, raw=None)` would lie; it is a property of the remedy P1 predicts, not a want of this consumer. Per `AGENT.md`, the test was **not widened** to make it fit |
+  > | **F-4** | The residue is not payload data, and one third of it is outside both of P1's option names | **bound** | P1's sketch names two knobs; the measured residue is not covered by either |
+  > | **F-5** | `usage` is thin in the corpus, and this is its first exercise | **bound** | 16 of 107 nodes, all `llm`, in 7 traces |
+  > | **F-6** | The captured matched pair disagrees on `usage`, and the conformance corpus **cannot surface it by construction** | **bound on the equivalence claim** | structurally identical to 3.3's F-3, on a different field — and the pair of them is what put the *nine strictly-compared node fields* into the freeze gate |
+  >
+  > Plus five observations, **O-a** through **O-e**: P1's own sketch is one field
+  > short; the roll-up needed to know the `parent` edges form a tree; latency
+  > does not roll up by addition and the model says enough to know that;
+  > **O-d** — no `data` edge was inferred and none was wanted; **O-e** —
+  > determinism was kept and was not what made this work.
+  >
+  > ### What the eleven have in common, which is the finding above the findings
+  >
+  > **Two SPEC GAPs, four bounds, one unfitted, one correction, three
+  > observations — and zero wants.** Every one of the four bounds says the same
+  > thing in a different field: *the conformance corpus cannot contest what a
+  > single `scenario.md` never disagreed about.* That is not a defect of the
+  > corpus, it is the limit of the instrument, and it is why the freeze gate now
+  > carries a **captured** dialect-three condition that rendering cannot satisfy
+  > (§6).
+  >
+  > ## 3. Every prediction's state, as a human marked it
+  >
+  > **All five are marked, and O1 is resolved.** The marks are the human's, in
+  > `PREDICTIONS.md`, in three commits (`c92e047`, `225692f`, `c2857d0`) that
+  > touch **that file and nothing else**. **Three of the six carry scopes that
+  > limit what they prove**, and the scopes are the load-bearing half.
+  >
+  > | | Mark | Where | Scope that limits it |
+  > |---|---|---|---|
+  > | **P1** — losslessness is pure cost to some consumers | **CONFIRMED — operational, scoped** | 3.4 | **Yes.** Cannot support that `retain_payloads=False` would move the peak (nobody implemented it), that any real trace reaches the measured size (100k spans is a *generated load input*; the largest committed trace is nine spans), that the corpus fraction is representative, that `usage` is well exercised, or that the remedy is safe to ship — its `Payload(present, None, None)` problem is inherited as a halt |
+  > | **P2** — the five payload states are over-specified | **REFUTED — scoped** | 3.3 | **Yes.** Says nothing about `truncated` (**0** in the corpus; neither adapter can emit one — unexercised, not unused), nothing about a non-audit consumer (P2's claim was about *most* consumers; one was written, and it was an audit tool), nothing about `absent` vs `redacted` (collapsed, as predicted), and nothing about `empty`/`redacted` beyond one scenario each |
+  > | **P3** — the inferred-`data`-edge prohibition is too strict | **UNRESOLVED** | 3.5 | **Yes, and doubly.** The friction had no opportunity to occur — of three consumers ever written, two read no `data` edges at all and the third read only declared ones. **And its stated class is wrong**: P3 calls its remedy operational because it *"uses an existing `EdgeKind` and an existing warrant"*, but `Edge(kind=data, warrant=derived)` raises in `model.py` and `SPEC.md` §4.1 — in the **same seed commit that wrote P3** — says an inferred relation of an explicit-only kind *"becomes a new kind, through a spec change."* So it is not resolvable as written. Tracked as `OPEN_QUESTIONS.md` §7, **not resolved** |
+  > | **P4** — byte-identical determinism is unnecessary | **CONFIRMED as to class — none, scoped; the "will never notice" clause REFUTED** | 3.5 | A split result, both halves in the mark. Needed by neither consumer (30/30 traces: every value and total unchanged under a reversed node tuple); **noticed** by both (30/30: both consumers' serialized output changes). The sample is the *worst available* for P4's "most consumers" — P4 names a viewer, a dashboard, a notebook, and both consumers are batch tools with golden suites |
+  > | **P5** — "one trace = one graph" is the likeliest shape failure | **REFUTED — scoped** | 2.4, Phase 2b | Marked before this phase; carried here because the exit record reads one list |
+  > | **O1** — a requested-but-unfulfilled call has no representation | **RESOLVED — scoped, and partly self-refuting** | 2.10 | An **observation**, not a prediction — found after its test began, and recorded separately for exactly that reason. O1 said the cross-dialect payload walk *"does not raise — it reports a confident zero."* It **raises**; the confident zero is real but its mechanism is the consumer's own `try/except`. Remedy landed: `Diagnostic.source` on `unpaired_call`/`unpaired_result` now carries `{call_id, operation}`, byte-identical in both dialects |
+  >
+  > **What the agent did and did not do here, because it is the point of the
+  > exercise:** 3.5 assembled evidence and paste-ready wording with the *first
+  > line* — the mark — deliberately left blank. `git diff PREDICTIONS.md` is
+  > **empty for every agent commit in the phase**, verified mechanically over
+  > `21887f7^..HEAD`: exactly three commits touch the file, each touches nothing
+  > else, and each is a human's mark.
+  >
+  > ## 4. Everything cut: **nothing**
+  >
+  > No task in Phase 3 was cut. 3.1 through 3.11 are all checked; **both**
+  > consumers landed, so neither prediction was deferred and the cut note that
+  > 3.3 and 3.4 each carry — *"cutting the attributor defers P1 to Phase 4"* —
+  > was never invoked. The two never-cut items, the prediction resolutions (3.5)
+  > and the unfrozen-schema notice, were never at risk.
+  >
+  > **This is not a claim that the plan survived contact.** Nothing was cut; a
+  > great deal *diverged*, and every task record carries its own divergences
+  > block. The ones that changed what a later session did are §5's eight.
+  >
+  > ## 5. The pattern, at eight instances — and whether the remedy held
+  >
+  > **The remedy is a test, not a corrected sentence**, and this is where that
+  > claim is audited rather than repeated. The shape, every time: *the library
+  > or a document relies on something no document states and no test asserts;
+  > the permissive default wins; nothing is red.*
+  >
+  > | | Found | The unasserted reliance | Remedy | Test? |
+  > |---|---|---|---|---|
+  > | 1 | 2.8 | `canonical()` compares `Payload.mime` — absent from `FIXTURES.md` §4's Compared list for two phases | list + both-directions test | **yes** — `test_the_compared_list_names_every_field_that_is_compared` |
+  > | 2 | 2.10 | `canonical()` compares `Node.attributes` — absent for three phases | same test | **yes** |
+  > | 3 | 2.10 | `Diagnostic.source` carries a shape per code — changing its type broke **zero** tests | `SPEC.md` §3.7 table + assertions | **yes** — `tests/test_codes.py` |
+  > | 4 | 3.2 | §3.7's `source` catch-all was **stated and false** for 3 of the 10 codes it covered. **Found inside `CONTRACTS.md`, the inventory written to find exactly this** | narrowed catch-all, three rows added | **yes** — three checks in `test_codes.py`, each plant-verified |
+  > | 5 | 3.5 | P3's own classification is contradicted by `SPEC.md` §4.1 **in the seed commit that wrote both**. **Found inside `PREDICTIONS.md`, the file written to catch the model being wrong** | recorded as contemporaneous, with `git show` evidence | **yes** — `test_a_derived_data_edge_cannot_be_constructed` |
+  > | 6 | 3.7 | `a953a1f` renamed `meta.adapters[].confidence` → `declared_confidence` and deferred the version bump **in its own commit message**; the bump never came. `canonical()` drops `meta.adapters` whole, so the corpus, both dialects and the equivalence test were **structurally incapable** of noticing | `tests/serialized_shape.json` + `make shape` | **yes** — and `test_schema_shape.py` **replays `a953a1f` itself** as the plant |
+  > | 7 | 3.4 F-1 → 3.8 | *"`Usage.extra` is `{}` on every node of every fixture in the repository"* — a corpus-wide quantifier nothing recomputed, in `CONTRACTS.md` **and in `ROADMAP.md`'s freeze gate**. False on two captured nodes | both corrected | **yes** — `test_the_documents_no_longer_claim_usage_extra_is_always_empty`, which recomputes the sweep and permits the old sentence only as a *quotation* |
+  > | 8 | 3.10 | *"the wheel is a function of `spanweave/` alone and must still be `2ed231f5…`"* — false: `METADATA` embeds `README.md`, **which the same section says two paragraphs earlier**. It survived because every edit it was ever tested against was to a different file | runbook step 2 rewritten to check the wheel's *members* instead of its hash | **NO — a corrected sentence** |
+  >
+  > **Seven of eight got a test. The eighth did not, and it is the most recent
+  > one.** That is the honest audit result, and the shape of the exception
+  > matters: instance 8's remedy is prose in a runbook a human reads once,
+  > guarding a claim about build artifacts. **A test is available and was not
+  > written** — a check that the wheel's `METADATA` long description equals
+  > `README.md` byte for byte would make *"editing the README moves the wheel"*
+  > mechanical instead of remembered. It is recorded here rather than scheduled,
+  > because `install_check.py` is where it belongs and 3.11 authors no code.
+  > **Phase 4 inherits it as a named debt, not as a discovery waiting to
+  > happen.**
+  >
+  > **Two of the eight were found inside documents written to catch the
+  > pattern** (4 and 5). That is the most useful thing in this table: the
+  > instruments work, *and being the instrument confers no immunity*. It is also
+  > the argument for the third dialect in miniature — 4 and 5 were found because
+  > something new had to agree with an old claim, not because anyone re-read it.
+  >
+  > **Ordinals, honestly.** Three separate running counts exist in this repo and
+  > they do not reconcile: `TASKS.md` 3.7 calls `a953a1f` *"the fifth"*, 3.5
+  > calls the §4.1 finding *"the fourth"*, and `ROADMAP.md` counts
+  > *unmeasurable fields* on a different list where `Edge.basis` is fourth and
+  > `Usage.extra` fifth. 3.10 already declared *"the running ordinal is past
+  > being useful, the shape is not"*. The table above is the single list, built
+  > from the shape; **the count is eight and the ordinals in the older records
+  > are left as they were written**, because editing them would destroy the
+  > timestamps that make each one evidence.
+  >
+  > ## 6. The Phase 4 freeze gate, as it stands on the day this is written
+  >
+  > `ROADMAP.md` Phase 4's four conditions:
+  >
+  > | | Condition | Status |
+  > |---|---|---|
+  > | 1 | **The predictions are resolved** | **MET, with a qualification.** All five are marked and O1 is resolved. But **P3 is marked UNRESOLVED** — that *is* its resolution as a mark, and it is not a resolution of the question. §7 of `OPEN_QUESTIONS.md` is live and is a halt point. If "resolved" means "no prediction is open", this row is met; if it means "nothing predicted is still unknown", it is not |
+  > | 2 | **The Phase 2 adversarial finding is absorbed** | **MET.** All three 2.8/2.10 contract defects have a stated contract and an asserting test (§5, rows 1–3), and 3.2 enumerated the whole permissively-typed surface with `tests/test_contracts.py` failing on any field that appears without a row |
+  > | 3 | **Real users have exercised the schema at `0.9.x`** | **NOT MET, and it is the weakest row.** `0.9.0` is on PyPI and *nobody outside this repository is known to have used it.* Every consumer that exists was written by its author. The only outside contact so far is **four cold reads** by sessions with no project context (`AGENT.md`, *When the check is a human reading*) — two of them of the README, one of a trace and its graph, one an executed walk. Reading is not use, and none of the four ran the library against telemetry of their own |
+  > | 4 | **A third dialect rendered in the conformance corpus** | **NOT MET.** Two adapters ship. A third is Phase 4 work and is explicitly forbidden to this run |
+  >
+  > **Two of four met, and the gate is *necessary and not sufficient* for three
+  > specific things** — `ROADMAP.md` says so, and this phase added the third.
+  > The one list the freeze must read, merging 2.14's two open items and 3.2's
+  > unmeasured rows so it is not three lists:
+  >
+  > | | Carried from | What is unmeasurable, and what would be sufficient |
+  > |---|---|---|
+  > | **`Edge.basis`** | 2.14 | A free `str`, compared by `canonical()`, adapter-supplied — and **both** adapter-supplied instances are invisible to the cross-dialect claim. Needs three things, and only the first is a corpus act: a `link`-carrying scenario a second dialect can render; an adapter that has to **choose** a different `basis` (a property of whatever dialect three turns out to be — **not arrangeable**); and, for `DeclaredDataEdge.basis`, an adapter that emits one at all. **Neither shipped adapter ever has.** A seam field three dialects never populate is a removal candidate, which is a **shape** change and belongs *in* the freeze decision, not after it |
+  > | **`Usage.extra`'s keys** | 3.2 | An open key vocabulary, adapter-supplied and **dialect-derived verbatim** — `llm.token_count.cache_read` → `cache_read`, `gen_ai.usage.cache_read_input_tokens` → `cache_read_input_tokens`, same concept. Blocked by the **corpus**, not by what dialect three is: a scenario carrying a non-standard token count in two dialects measures the disagreement immediately, subject to `FIXTURES.md` §5.1 |
+  > | **The nine strictly-compared node fields** | 3.3 F-3 + 3.4 F-6 | **Rendering buys nothing at all here** — this is the weaker half of the gate rather than an incomplete one. Both renderings of a scenario descend from one `scenario.md`, so a hand-authored pair disagrees only where its author knew to. **Two of the nine are already known to disagree between the two real instrumentors** — `status` and `usage` — and both were found by reading **captured** traces, by consumers with unrelated jobs, neither looking. Sufficient: a **captured** dialect-three trace of a scenario `fixtures/captured/`'s pair also covers, compared field by field. It asks nothing of *what* dialect three is, it is **schedulable**, it is a human act (`FIXTURES.md` §6), and it is therefore the one most likely to be assumed rather than done |
+  > | **The unstated rows of the inventory** | 3.2 | Recounted from `CONTRACTS.md` at this exit rather than carried: **36 rows**, of which 15 *stated + asserted*, 9 *stated + pinned*, 8 **stated, unasserted**, 3 **unstated, unmeasured** (`meta.spanweave_version`, `nodes[].provenance.adapter_version`, `diagnostics[].adapter`) and 1 *unstated + pinned* (`nodes[].usage.extra`, which is the `Usage.extra` row above arriving from the other side). **12 rows carry no assertion at all** and 4 carry no statement. Each is honest rather than closed: *"do not invent a contract to close a row"* was the instruction and it was followed. They stay Phase 4, with dialect three |
+  >
+  > **What Phase 3 did *to* the gate, which is the opposite of the usual
+  > direction:** it made it **harder** to satisfy, twice, in `ROADMAP.md` edits
+  > made by the tasks that found the reasons — 3.4's F-6 added the third
+  > *necessary-and-not-sufficient* qualification, and 3.2 added `Usage.extra` as
+  > a second unmeasurable field. A phase under launch pressure that tightens its
+  > own freeze gate is the evidence that *never accelerate the freeze* is being
+  > obeyed rather than quoted.
+  >
+  > ## 7. Did the launch meet its own exit criteria?
+  >
+  > `ROADMAP.md`'s Phase 3 exit: *a stranger builds a graph from their own trace
+  > in ~60 seconds.*
+  >
+  > **Measured, not asserted (3.9): 5.76s best, 7.17s worst over four walks**
+  > (`make stranger`), against a ~60s budget. **spanweave's own step is 0.08s —
+  > 1.4% of the total; the rest is `pip`.**
+  >
+  > **The number is met and the criterion is not, and the gap is the finding.**
+  > Three bounds, from 3.9's own record:
+  >
+  > - **"From *their own* trace" was not walked.** What was walked is *a
+  >   stranger builds a graph in ~6 seconds of machine time **from a trace we
+  >   supply***. A stranger with their own trace must additionally have
+  >   telemetry in OpenInference or OTel GenAI form, in a file. Unmeasured and
+  >   **unmeasurable here** — it depends on their stack.
+  > - **On a 60s budget with 5.8s of machine time, the criterion is a
+  >   documentation budget, not a performance one.** That is why 3.8 and 3.9 are
+  >   the same work, and why the two live `0.9.1` candidates are both about a
+  >   reader's first minute rather than about the library.
+  > - **The path walked was the checkout, not the index** — there was no index
+  >   install to walk until 3.10. The index path has since been walked, and it
+  >   **fails**: C1. So the criterion is met on the path that was measurable
+  >   when it was measured, and the path a stranger actually takes today has a
+  >   known defect on its first command.
+  >
+  > **3.9 also found that the path did not run at all**: the README's quickstart
+  > read `trace.jsonl`, a file nobody has, so the opening example of the front
+  > door raised `FileNotFoundError` on the first line a reader would paste. No
+  > gate could see it — `test_docs.py` checks quoted fixtures, `test_doc_truth.py`
+  > checks claims about the tree, and **neither executed a code block.** Now one
+  > does.
+  >
+  > ## 8. The `0.9.1` candidates — and whether each ships before Phase 4
+  >
+  > This task must say, because *"a candidate list nobody decides on is a
+  > deferral that was never written down"* (3.7's finding, and instance 6 above).
+  > **This section is the record's recommendation for the halt, not a decision
+  > the agent may execute:** publishing is human-run, credentialed and
+  > irreversible, and it stays a halt.
+  >
+  > | | What it is | Evidence | Recommendation |
+  > |---|---|---|---|
+  > | **C1** | `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it. Add a second, secondary `hint:` line when the missing path is one of ours; keep the existing line byte for byte | A **mechanical measurement** from the published package, plus the closing cold read confirming the reader arrives at it regardless of how well the prose explains it | **SHIP** |
+  > | **C2** | The `fixtures/` explanation lands **92 lines downstream** of the paste. Make the sentence adjacent to the quickstart address the non-checkout reader | The **closing cold read**: both models understood the Install section, predicted the failure, and pasted anyway; one named the placement remedy unprompted | **SHIP, batched with C1 — and second in priority.** Its own record carries the caveat: the measurement that motivates it is evidence against its mechanism, since *more prose, better placed* is the instrument that just failed, differing only in an untested proximity |
+  > | *(third observation)* | A reader on 3.10 gets an import error | **Refuted.** `pip` refuses first and names the reason; `requires-python` reaches the wheel's `METADATA`. Now pinned by a test, plant-checked three ways | **Do not ship.** Listed so it is not re-proposed |
+  >
+  > ### The decision this task makes rather than inherits: does `0.9.1` ship for these two alone, or wait?
+  >
+  > **Recommendation: ship `0.9.1` for C1 + C2 alone, before Phase 4, and batch
+  > them into one release.** The reasoning, with the argument against it stated
+  > first because it is the stronger-sounding one:
+  >
+  > - **Against:** `0.9.1` is a fresh irreversible slot, batching is usually
+  >   right, and Phase 4 will produce a third dialect that certainly wants a
+  >   release. Waiting costs one slot and bundles more value into it.
+  > - **For, and it is decisive:** *the thing being fixed is the first command
+  >   on the page every new reader sees*, and the population hitting it grows
+  >   monotonically for as long as `0.9.0` is the only version on the index.
+  >   Phase 4 is a **third dialect plus a freeze** — the longest-dated work in
+  >   the plan — so "wait for Phase 4" is not a short deferral, and every reader
+  >   in the interval pays the same bad first minute that has now been measured
+  >   twice by two instruments.
+  > - **The two are one release, not two.** C2 edits `README.md`, which
+  >   `METADATA` embeds, so C2 alone spends a slot anyway (3.10's own finding).
+  >   Shipping C1 without C2 spends the identical slot and fixes one end of one
+  >   problem. There is no version of this where batching them costs more than
+  >   splitting them.
+  > - **Neither touches the schema, and that is what makes this cheap.** No
+  >   `NodeKind`, `EdgeKind`, warrant, `Payload` state or `Diagnostic` code; no
+  >   graph output changes; determinism untouched. `0.9.1` is a documentation
+  >   and stderr release. **It does not move the freeze one day earlier**, and
+  >   it must not be described as progress toward it.
+  >
+  > **What would change this recommendation:** a stranger consumer appearing
+  > (freeze-gate row 3, the weakest), which would make waiting worthwhile in
+  > order to ship whatever *they* find alongside. None exists.
+  >
+  > ## 9. What Phase 4 inherits
+  >
+  > Explicitly, so nothing arrives as a discovery:
+  >
+  > 1. **The freeze gate: two of four met** — predictions resolved (with P3's
+  >    qualification), Phase 2 finding absorbed. **Not met:** real outside users,
+  >    and a third dialect rendered in the corpus.
+  > 2. **Three *necessary-and-not-sufficient* qualifications** on that gate, plus
+  >    the inventory's unstated rows — 3 *unstated, unmeasured*, 12 carrying no
+  >    assertion at all, recounted at §6 — merged into a single list there so
+  >    the freeze reads one list rather than three.
+  > 3. **The one schedulable item in that list**, and the one most likely to be
+  >    assumed rather than done: a **captured** trace from dialect three, of a
+  >    scenario the existing captured pair also covers. It is a human act and a
+  >    halt point.
+  > 4. **`OPEN_QUESTIONS.md` §7, live and unresolved**, with P3 marked
+  >    UNRESOLVED and its own stated class shown to be wrong. Whoever resolves it
+  >    is choosing between *keep the prohibition* and *change the spec and the
+  >    model* — **not** between a policy and a flag. The technicality §7(d)
+  >    warned about is disarmed.
+  > 5. **Two shape-costed items** that are not gate failures and must not be
+  >    filed as either wants or nothing: 3.4 **F-2** (SPEC GAP with a shape cost)
+  >    and 3.4 **F-3** (does not fit the test, sent over unfitted).
+  > 6. **C1 and C2**, recommended to ship as one `0.9.1` before Phase 4 (§8),
+  >    with C2's tests written against the fix rather than now.
+  > 7. **One named debt from §5**: the wheel/`README.md` coupling has a
+  >    corrected sentence and no test, and it is the only one of eight that does.
+  > 8. **The schema, unfrozen.** `SCHEMA_VERSION = "0.1"`, `SCHEMA_FROZEN =
+  >    False`, `0.x` a single bucket that never tracks changes, pinning on the
+  >    library version, and `tests/serialized_shape.json` as the tripwire. A
+  >    session that wants to bump either, or to widen the tripwire's
+  >    `PASSTHROUGH` boundary, is at a halt.
+  >
+  > ## Divergences from the plan
+  >
+  > - **This task ran after two commits the plan did not schedule** — C1's
+  >   record and the closing cold read — and both are inputs to it. 3.10's step 8
+  >   named the cold read as outstanding rather than absorbing it, which is the
+  >   only reason it happened at all.
+  > - **The done-when's `pip install spanweave` clause was not re-run here, and
+  >   could not be.** It resolves at `0.9.0` from an environment that is not this
+  >   repo — measured by the human at 3.10 step 7, into `/tmp/pp` on CPython
+  >   3.12, with the served sdist byte-identical to the built one. **Zone 2 has
+  >   no network**, so this session verified everything else in the done-when
+  >   mechanically and carries this one clause as a **human measurement it did
+  >   not repeat**, rather than restating it as though it had.
+  > - **`make install-check` was run with `--out-dir` elsewhere**, deliberately.
+  >   `dist/` still holds the two published `0.9.0` artifacts at
+  >   `2ed231f5…` / `ec3eeae2…`, and both `uv build` and a default
+  >   `install-check` empty that directory before rebuilding. The 3.10 record
+  >   says `dist/` is not an archive; that is true and it was still worth not
+  >   destroying the bytes for no reason.
+  > - **One test was added in the phase's last two commits, and 3.11 as written
+  >   adds none.** `test_the_python_floor_the_readme_states_is_the_floor_the_package_declares`
+  >   landed with the cold-read record, not here, because a refuted observation
+  >   whose refutation rests on an unasserted field is instance 9 waiting to
+  >   happen. Recorded as a divergence rather than absorbed.
+  > - **The pattern count is stated as eight, and three older records carry
+  >   ordinals that disagree with it.** They are left as written; §5 explains
+  >   why, and the reason is the same one that makes `PREDICTIONS.md`
+  >   read-only.
+  > - **`AGENT.md` was edited, and only in one place.** *When the check is a
+  >   human reading* said *"three uses so far"*; there are four, and the fourth
+  >   is the one worth reading before running one — a read that was neither
+  >   clean nor confused. Leaving a stale count in the document that teaches the
+  >   instrument would have been instance 9, in the file that names the pattern.
+  >   **No halt point, no scope line and no constraint was touched**, and this
+  >   task does **not** re-scope `AGENT.md` for Phase 4: that is Phase 4's own
+  >   `[prereq]`, the mirror of 2.1 and 3.1, and starting it here would be
+  >   starting Phase 4.
+  > - **`TASKS.md`'s Phase 3 header gained a completion banner, and the
+  >   `[contract]` intro's one live item was retired.** That intro still said a
+  >   human had ruled on P3 and P4 *"but has not yet pasted the marks"*; they
+  >   were pasted at `c2857d0`. A stale live item at the top of a workstream
+  >   block is the exact failure `AGENT.md`'s *retire before adding* rule
+  >   describes, and it was found by writing §3 rather than by re-reading.
+  >
+  > ## Definition of done
+  >
+  > - [x] The record above exists, with shape changes, findings, predictions,
+  >       cuts, candidates, the freeze gate and the exit criteria.
+  > - [x] `make check` green (**1594 passed, 4 skipped**), `make conformance`
+  >       green (**419**), `make install-check` green (**30 checks, 3 plants
+  >       held**), `make gates` green (**69**).
+  > - [x] `git diff PREDICTIONS.md` is **empty for every agent commit in the
+  >       phase** — verified over `21887f7^..HEAD`: exactly three commits touch
+  >       the file, each touches nothing else, and each is a human's mark.
+  > - [x] `pip install spanweave` resolves at `0.9.0` from an environment that is
+  >       not this repo — **measured by a human at 3.10 step 7 and not re-run
+  >       here**, because zone 2 has no network. Carried as a human measurement,
+  >       named as such in the divergences.
+  > - [x] Nothing frozen. `SCHEMA_VERSION = "0.1"`, `SCHEMA_FROZEN = False`,
+  >       no third dialect, no model change, `PREDICTIONS.md` untouched.
+  >
+  > **HALT — Phase 3 exit, for human review, as 1.9 and 2.14 were.** Do not
+  > start Phase 4. Do not freeze the schema. The artifact for the decision is
+  > this record, the two consumers' findings (§2), the prediction table (§3),
+  > and the four-item freeze gate with each item's status (§6).
 
 ## Post-launch — `0.9.1` candidates  *(not scheduled, not tasks)*
 
