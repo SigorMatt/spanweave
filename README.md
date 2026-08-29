@@ -82,10 +82,9 @@ tool.lookup present present
 
 ## Install
 
-**`spanweave` is not on PyPI yet, so there is no `pip install spanweave`.** The
-two instructions below are the ones that resolve today; the index one lands in
-the same change as the first release, and not before — a README promising an
-install that 404s is the first thing a stranger tries.
+```
+$ pip install spanweave
+```
 
 From a checkout:
 
@@ -102,10 +101,10 @@ $ uv build
 $ pip install dist/spanweave-0.9.0-py3-none-any.whl
 ```
 
-Either way `import spanweave` and the `spanweave` command work with **no
-runtime dependencies**; Python 3.11+ is the only requirement. `make
-install-check` is the gate that proves the built wheel works from outside this
-repo.
+Any of the three gives you `import spanweave` and the `spanweave` command with
+**no runtime dependencies**; Python 3.11+ is the only requirement. Nothing is
+pulled in behind them: on a fresh `pip install spanweave`, `pip show spanweave`
+reports an empty `Requires`.
 
 The conformance corpus in `fixtures/` is deliberately **not** in the wheel — it
 is development data, not library code. The paths in the section above therefore
@@ -193,9 +192,9 @@ measurement.
 
 ## Status
 
-Early development. This is `0.9.0` — the first version meant for anyone outside
-this repository, not yet on a package index (see **Install**), and `0.9` rather
-than `1.0` on purpose: see the schema note below.
+Early development. This is `0.9.0` — the first version published for anyone
+outside this repository (`pip install spanweave`), and `0.9` rather than `1.0`
+on purpose: see the schema note below.
 
 **What exists.** Two adapters, `openinference` and `otel_genai`, both registered
 and both run against the whole corpus (`spanweave adapters`). The graph model,
