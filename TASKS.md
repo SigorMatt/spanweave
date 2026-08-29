@@ -7841,11 +7841,116 @@ consumer's findings go in the exit record beside these and carry more weight.
   >    was true this morning and false now. No test held that sentence; 3.8's
   >    rule did.
   >
-  > **Not done here, and outstanding:** step 8's closing instruction — the cold
-  > read with a **true** premise, *"you just ran `pip install spanweave`; what
-  > do you do next"*. It is the question step 4 asked wrongly, it is now
-  > askable for the first time, and it is not this session's to run. Carried in
-  > the stranger table below as the one row that is only half closed.
+  > **Not done in the step-8 session, and since run:** step 8's closing
+  > instruction — the cold read with a **true** premise, *"you just ran `pip
+  > install spanweave`; what do you do next"*. It is the question step 4 asked
+  > wrongly. It has now been asked correctly; the record is the next section,
+  > and the stranger table's half-closed row closes there.
+  >
+  > ## The closing cold read — asked with a true premise, and knowing did not prevent doing
+  >
+  > **Human-run, in a later commit than step 8, and this is the fourth use of
+  > the practice** (`AGENT.md`, *When the check is a human reading*). Two models
+  > with no project context were given the published page and the now-**true**
+  > premise *"you just ran `pip install spanweave`; what do you do next"*, and
+  > told nothing about what was suspected. Step 4 asked this question with a
+  > false premise and could only measure whether the document can argue back;
+  > this is the question it meant to ask.
+  >
+  > ### The measurement
+  >
+  > **Both models read the Install section correctly. Both predicted the
+  > `fixtures/` failure before typing it. Both still gave the failing command
+  > as their second move.**
+  >
+  > That is the whole finding, and it is a stronger result than either a clean
+  > read or a confused one would have been. The document did not mislead them —
+  > it informed them, they understood it, and it changed nothing about what
+  > they did. **Knowing did not prevent doing:** the example is what a reader
+  > came for, and prose upstream of it does not stop the paste.
+  >
+  > ### What it settles
+  >
+  > - **C1 is fixing the right end.** The reader reaches the error *regardless
+  >   of how well the prose explains it*, so the error is where the explanation
+  >   belongs. Before this read, C1 rested on a mechanical measurement plus an
+  >   assumption that the Install section was not doing the job; the assumption
+  >   is now measured, and it is worse than assumed — the section *does* do its
+  >   job and the reader arrives at the error anyway. C1's *"Change the README
+  >   instead"* alternative is correspondingly weaker than it read: this is
+  >   evidence that a README edit at the top of the page would not have
+  >   prevented the paste either.
+  > - **A second fix is now evidenced rather than proposed.** Qwen said the
+  >   distinction is *"buried in a paragraph under Install — it should be a
+  >   prominent warning next to the example."* Two independent readers reached
+  >   the placement problem unprompted, from opposite directions: one named the
+  >   remedy, and both demonstrated the defect by pasting anyway. Recorded as
+  >   `0.9.1` candidate **C2** under *Post-launch*, costed the way C1 is.
+  > - **The stranger-table row does NOT close.** This is the row's reading
+  >   half, and the answer is that the reading half does not rescue the
+  >   mechanical half. Both readers understood, and both would still have been
+  >   stuck. A row that records *"the explanation lands"* and stops there would
+  >   be true and useless; what the measurement supports is *"the explanation
+  >   lands and the reader gets stuck anyway"*, which closes nothing and
+  >   motivates two candidates. The row is updated to say that rather than
+  >   ticked.
+  >
+  > ### The third observation, measured and refuted
+  >
+  > `gpt-oss-120b` also observed that **Python 3.11+ appears only in the
+  > Install paragraph**, and concluded that a reader on 3.10 therefore gets an
+  > import error. Checked rather than acted on, because the first half is true
+  > and the conclusion depends on a packaging fact the model could not see.
+  >
+  > **`pip` refuses before installing anything, and names the reason.**
+  > `requires-python = ">=3.11"` is declared in `pyproject.toml` and travels
+  > into the wheel's `METADATA` as `Requires-Python: >=3.11` — read out of the
+  > published wheel at step 8's artifact block and re-read here. Measured on a
+  > throwaway package built for the purpose, with a floor *above* the
+  > interpreter to hand:
+  >
+  > ```
+  > $ pip install --no-index --find-links probe/d probefloor   # floor >=3.13, running 3.12.3
+  > ERROR: Package 'probefloor' requires a different Python: 3.12.3 not in '>=3.13'
+  > $ echo $?
+  > 1
+  > $ pip show probefloor
+  > WARNING: Package(s) not found: probefloor
+  > ```
+  >
+  > Nothing is installed, so nothing is imported, so there is no import error.
+  > **The observation is REFUTED, and it is recorded as refuted rather than
+  > actioned** — adding a Python version to the quickstart would be answering a
+  > question the packaging already answers, and every line added above the
+  > example makes the C2 problem worse rather than better.
+  >
+  > **Two bounds on that refutation, because the measurement is a surrogate.**
+  >
+  > 1. **The interpreter was not 3.10.** No 3.10 exists on this machine, so the
+  >    floor was moved above the running 3.12 instead of the interpreter below
+  >    the floor. That exercises the same pip code path against the same field;
+  >    it does not exercise 3.10. The obvious direct proxy was tried first and
+  >    is worth recording as a **trap**: `pip install --python-version 3.10
+  >    --only-binary :all: --target …` **installed spanweave 0.9.0 without
+  >    complaint** on pip 24.0. `--python-version` selects wheel tags, and the
+  >    package is `py3-none-any`; it is not a `Requires-Python` simulator, and a
+  >    session that had stopped at that result would have recorded the opposite
+  >    conclusion with equal confidence.
+  > 2. **The wheel path only.** `pip install spanweave` from the index prefers
+  >    the wheel, which is what was measured. The `--no-binary :all:` path could
+  >    not be measured here — building an sdist needs `hatchling` from the
+  >    network, and zone 2 has none. Named rather than assumed.
+  >
+  > **A test was added, and the reason is the refutation's shape rather than
+  > the observation.** The reassurance rests entirely on `requires-python`, and
+  > **no test asserted that field** — a prose claim resting on an unasserted
+  > packaging value is this project's recurring defect exactly.
+  > `test_the_python_floor_the_readme_states_is_the_floor_the_package_declares`
+  > (`tests/test_doc_truth.py`) holds the README's stated floor, the declared
+  > `requires-python`, and the lowest version classifier to one number.
+  > Plant-checked three ways: README moved to 3.12+, floor dropped to 3.10, and
+  > a 3.10 classifier added — **all three fail**, and the last is the one a
+  > human would most plausibly add by hand.
   >
   > ## Preparation record — as it stood before the upload
   >
@@ -8188,7 +8293,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > | A clean-venv install from a directory that is not this repo | needs the index | **CLOSED, step 7.** `/tmp/pp`, CPython 3.12, no checkout on the path |
   > | The console script, as installed from the index | needs the index | **CLOSED, step 7, on Linux.** `spanweave --version` and `spanweave adapters` both run from the venv's `bin/`, and `adapters` lists both. This does **not** close the macOS/Windows row below — the launchers are generated per platform |
   > | That the bytes PyPI serves are the bytes verified here | needs the index | **CLOSED, step 7.** The served sdist is byte-identical to the built one, `sha256 ec3eeae2…`, so `install-check`'s green transfers to what strangers download rather than to a hopefully-similar upload |
-  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **HALF CLOSED, and it found something.** The mechanical half is now a measurement: they *do* get stuck, and the error is illegible to exactly the reader who hits it. Recorded as `0.9.1` candidate **C1** under *Post-launch*, below — deliberately in its own commit, because the fix is a change to a shipped error message and wants its wording read before it ships. The reading half — does the Install section's explanation land — is still the cold read at the end of step 8, still unrun, and now askable with a true premise for the first time |
+  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **BOTH HALVES MEASURED, AND THE ROW DOES NOT CLOSE.** *Mechanical half:* they **do** get stuck, and the error is illegible to exactly the reader who hits it — `0.9.1` candidate **C1** under *Post-launch*, in its own commit because the fix is a change to a shipped error message and wants its wording read first. *Reading half:* the closing cold read ran with a true premise, and the Install section's explanation **lands** — both models read it correctly and predicted the failure — **and both pasted the failing command anyway.** So the row's answer is not "yes" or "no" but *"the explanation lands and the reader is stuck regardless"*, which closes nothing and produces a second candidate, **C2**. Ticking it would record the finding backwards |
   > | The rendered PyPI project page | PyPI renders it, not us | **open** — read it; especially that the quickstart's `fixtures/` paths are explained |
   > | The wheel on **3.11 and 3.13** | `install-check` installs into one venv, on whichever interpreter `uv` picks | **open.** Step 7 adds **3.12** from the index — a third interpreter, and neither of the two named. CI runs the matrix on the **source**, never on the wheel. The wheel is `py3-none-any` and stdlib-only, so this is low risk and it is **not zero** |
   > | The console script on **macOS or Windows** | Linux only here; entry-point launchers are generated per platform | **open** — ask one person on each |
@@ -8222,12 +8327,22 @@ consumer's findings go in the exit record beside these and carry more weight.
   >   sentences 3.8 spent itself on, and the first one this project has found by
   >   the condition it was waiting on actually arriving rather than by going
   >   looking.
-  > - **Step 8's closing cold read was not run in this session.** It is the
-  >   question step 4 asked with a false premise and could not answer — *"you
-  >   just ran `pip install spanweave`; what do you do next"* — and it is now
-  >   askable truthfully for the first time. Left open and named in the stranger
-  >   table rather than quietly dropped, and not substituted for by the
-  >   mechanical measurement below, which answers a different question.
+  > - **Step 8's closing cold read was not run in the step-8 session, and has
+  >   since been run.** It is the question step 4 asked with a false premise and
+  >   could not answer — *"you just ran `pip install spanweave`; what do you do
+  >   next"* — and it was askable truthfully for the first time after step 6. It
+  >   was left open and named in the stranger table rather than quietly dropped,
+  >   and it was **not** substituted for by the mechanical measurement, which
+  >   answers a different question. Both are now recorded: *The closing cold
+  >   read* above, and its two findings are C1's confirmation and C2.
+  > - **The cold read produced a document change and did not license one.** Its
+  >   remedies are two `0.9.1` candidates, neither scheduled, and the one edit
+  >   made on its account is a **test** — the Python-floor pin — added because
+  >   an observation was *refuted* and the refutation rested on an unasserted
+  >   field. `AGENT.md`'s rule is that a cold read's findings get a test
+  >   wherever one is possible; the placement finding's test is not possible
+  >   until the placement changes, so it ships with C2 rather than now, and
+  >   that is recorded there instead of being left to inference.
   > - **Whether step 5's TestPyPI rehearsal was run is not recorded here.** The
   >   agent did not observe it and will not describe it either way; what is
   >   recorded is what was measured at step 7. If it matters to 3.11, ask the
@@ -8332,9 +8447,13 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       with `make check` green in it (1593 passed, 4 skipped), both
   >       directions of the install guard plant-checked. `make install-check`
   >       re-run **after** the README edit — 30 checks, 3 plants held — because
-  >       the README is in the wheel, which is the finding this step made. The
-  >       one thing step 8 asks for that this session did not do — the closing
-  >       cold read — is named above rather than absorbed.
+  >       the README is in the wheel, which is the finding this step made.
+  > - [x] **Step 8's closing cold read.** Named as outstanding when step 8
+  >       landed rather than absorbed, and since run with a true premise. The
+  >       Install section's explanation **lands and does not prevent the paste**;
+  >       it confirms C1 is fixing the right end, produces C2, refutes a third
+  >       observation about the Python floor, and leaves the stranger table's
+  >       last row open on purpose. Recorded at *The closing cold read* above.
   > **The HALT is discharged: the publish happened, by a human.** The next live
   > halt is the Phase 3 exit (3.11), and the schema stays unfrozen.
 
@@ -8493,6 +8612,134 @@ whether the Install section's explanation lands for a reader who reads it,
 which is a human reading and the question 3.10's stranger table still carries
 open. Running one does not discharge the other, and shipping C1 before the cold
 read would be answering a question with the wrong instrument.
+
+### C2 — the `fixtures/` explanation lands, 92 lines downstream of the paste
+
+**The measurement, from the closing cold read at 3.10 step 8 — not predicted,
+and it is the same reading that confirms C1.** Two models with no project
+context were given the published page and the true premise *"you just ran `pip
+install spanweave`; what do you do next"*.
+
+**Both read the Install section correctly. Both predicted the `fixtures/`
+failure before typing it. Both gave the failing command as their second move
+anyway.**
+
+The document is not wrong and it is not unclear. It is *upstream of the thing
+the reader came for*, and being understood turned out not to be the same as
+being acted on. One of the two named the remedy without being asked:
+
+> the distinction is *"buried in a paragraph under Install — it should be a
+> prominent warning next to the example."*
+
+**Where the explanation actually is, measured rather than characterised.** The
+quickstart's first fenced command is `README.md` line 17; the sentence that
+explains `fixtures/` is line 109, in **Install** — **92 lines below it**, past
+one intervening heading and the whole of the Python example. C1's *"three
+paragraphs down a page they have already left"* was an estimate; this is the
+count, and it is the larger number. What *is* adjacent to the example — *"Point it at a
+trace. Every path below is a file that ships in this repository, so the whole
+of this section runs as written from a checkout"* — is true, is one line above
+the paste, and **is not a warning**: it states what holds in a checkout and
+says nothing about what happens outside one. A reader who is not in a checkout
+is not addressed by it, and both readers proved that reading it is compatible
+with pasting.
+
+#### The proposed change
+
+`README.md` only, and the smallest edit that changes what the *non*-checkout
+reader is told at the moment of the paste: turn the adjacent sentence from a
+statement of what holds into a statement of both cases, naming the failure and
+its remedy in the same breath.
+
+```
+Point it at a trace. Every path below ships in this repository, so this whole
+section runs as written **from a checkout or an unpacked sdist**. Installed
+from PyPI you have the library and not the corpus, and these commands will
+report a missing file — see **Install**. Point spanweave at any trace of your
+own and everything below is the same.
+```
+
+**Why that shape and not a callout box or a warning admonition.** The last
+sentence is the load-bearing one and it is the same sentence C1's hint ends on:
+*the tool reads your trace, the corpus is only ours.* A warning that says only
+*"this will fail for you"* leaves the reader thinking they installed the wrong
+thing, which is the exact misreading C1 was written to prevent. The edit adds
+three clauses and one cross-reference; it does not add a heading, a box, or a
+line above the `$` prompt.
+
+#### The caveat that belongs at the top rather than the bottom
+
+**The measurement that motivates this candidate is also evidence against its
+mechanism.** Both readers understood the explanation and pasted anyway. C2's
+remedy is *more prose, better placed* — the same class of instrument that just
+failed, differing only in proximity, and **proximity is exactly what was not
+measured.** Nothing here establishes that a sentence one line above the fence
+does what a sentence 140 lines below it did not.
+
+That is why C2 is **secondary to C1 and not a substitute for it**, and why the
+two are not the same fix at different ends: C1 changes what happens *after* the
+paste, which the measurement shows is where the reader reliably arrives; C2
+changes what they are told *before* it, which the measurement shows is a place
+they read and then walk past. If only one ships, it is C1.
+
+#### The cost, itemised
+
+| | |
+|---|---|
+| **Code** | none. `README.md`, one paragraph |
+| **Tests** | Two, and both are anti-staleness rather than prose-quality — no test can assert that a warning warns. (1) The sentence adjacent to the quickstart's first fence names the same path prefix that fence uses, **derived from the fence rather than restated**, so it cannot outlive a quickstart that stops using `fixtures/`. (2) It names the non-checkout case, keyed to `3.10`'s checkbox the way `test_the_readme_says_what_is_true_of_the_index_install_in_both_directions` already is — before a publish there is no non-checkout reader to warn |
+| **Shared with C1** | The prefix constant. If both ship, the CLI hint and the README warning must name the same prefix or one of them is lying; a single derived source is cheaper than two that agree by inspection |
+| **What it costs the page** | The *"library in one screen"* opener 3.9 built and 3.10 step 4 cold-read as clean. Three clauses, no new heading, so the first fenced output still lands above the fold on a normal window — but this is a real cost and 3.9 paid real work for what it is spending |
+| **`SPEC.md`** | nothing. This is a document change, not a behaviour change |
+| **Invariants** | None touched. No `NodeKind`, `EdgeKind`, warrant, `Payload` state or `Diagnostic` code; no network, no dependency; graph output and determinism untouched. **Not a halt** |
+| **The index slot** | **Zero if batched with C1, one if not.** A README edit changes the wheel — `METADATA` embeds the long description, which 3.10 step 8 measured — so shipping C2 alone still spends a `0.9.1`. This is the clearest case in the list for batching |
+
+#### The alternatives, with what each costs
+
+- **Do nothing, and ship C1 alone.** Cheapest, and defensible on this
+  measurement: C1 catches the reader where they demonstrably arrive, and C2's
+  mechanism is the one that was just observed not to work. What it costs is
+  that the reader still spends a failed command to learn something the page
+  could have told them — a bad first minute rather than a bad diagnosis.
+- **Move the whole `fixtures/` explanation up**, out of Install. Rejected: it
+  puts install-time material above the output that is the page's argument, and
+  it leaves Install saying less to the reader who is actually installing.
+- **Change the quickstart to use a trace the reader has.** There is no such
+  trace — that is the entire problem, and inventing one would mean shipping
+  `fixtures/` in the wheel, refused under C1 for reasons that have not changed.
+- **A callout box / `> **Warning**` admonition.** Rejected on the same evidence
+  that motivates the candidate: visual prominence is a stronger version of the
+  instrument that already failed, and PyPI's renderer does not style GitHub
+  admonitions, so the reader most affected — the one on the PyPI page — sees a
+  bare blockquote.
+
+#### What this candidate is *not*
+
+**Not a closure of the stranger table's last row.** That row asks whether a
+reader who actually installed from the index gets stuck. Both halves are now
+measured and the answer is *yes, and the explanation lands anyway* — which is
+why the row stays open with two candidates hanging off it rather than being
+ticked. Shipping C1 and C2 does not close it either; only a cold read against
+the **fixed** page would, and that is a fifth use of the practice, after a
+publish that has not happened.
+
+### A third observation from the same read, recorded as refuted rather than as a candidate
+
+`gpt-oss-120b` observed that Python 3.11+ appears only in the Install
+paragraph, and concluded a reader on 3.10 gets an import error. **They do not:
+`pip` refuses before installing anything and names the reason**, because
+`requires-python = ">=3.11"` is declared and reaches the wheel's `METADATA`.
+Measured at 3.10's cold-read record, with its two bounds — including the trap
+that `pip --python-version 3.10 --target` installs `spanweave 0.9.0` without
+complaint and is *not* a `Requires-Python` simulator. Pinned by
+`test_the_python_floor_the_readme_states_is_the_floor_the_package_declares`,
+plant-checked three ways.
+
+**It is listed here so that it is not re-proposed.** An observation that was
+checked and found wrong is worth as much shelf space as one that was checked
+and found right, and a candidate list that records only the survivors invites
+the next reader to raise the same point again.
+
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

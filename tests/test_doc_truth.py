@@ -667,3 +667,73 @@ def test_the_documents_no_longer_claim_usage_extra_is_always_empty():
                 f"replaced -- which is how a correction stays legible without "
                 f"becoming a fresh claim."
             )
+
+
+# -- The Python floor: stated in prose, enforced by packaging ---------------
+
+
+def declared_python_floor() -> tuple[int, int]:
+    """`pyproject.toml`'s `requires-python` floor, as a version tuple.
+
+    Read with stdlib `tomllib` -- available since 3.11, which is the floor
+    this function reads, so the test cannot run on an interpreter the package
+    refuses anyway.
+    """
+    import tomllib
+
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        spec = tomllib.load(handle)["project"]["requires-python"]
+    match = re.fullmatch(r">=\s*(\d+)\.(\d+)", spec.strip())
+    assert match, (
+        f"requires-python is {spec!r}, which this test cannot read. It parses "
+        f"a bare `>=X.Y` floor on purpose: a range or a set of exclusions is a "
+        f"packaging decision worth a human reading, not a regex widening."
+    )
+    return int(match.group(1)), int(match.group(2))
+
+
+def test_the_python_floor_the_readme_states_is_the_floor_the_package_declares():
+    """`TASKS.md` 3.10 step 8's cold read, second finding -- and it was wrong.
+
+    `gpt-oss-120b`, reading the published page cold, observed that Python 3.11+
+    appears only in the Install paragraph and concluded that a reader on 3.10
+    therefore gets an import error. Measured rather than accepted: they do not.
+    `pip` refuses before anything is installed, naming the reason and exiting
+    non-zero, because `requires-python` is declared and travels into the
+    wheel's `METADATA`. The observation is recorded as **refuted** at 3.11.
+
+    What made it worth a test anyway is the *shape* of the refutation: the
+    reassurance rests entirely on a packaging field, and no test asserted that
+    field. A prose claim resting on an unasserted field is this project's
+    recurring defect (this file's own docstring). Dropping the floor, or
+    letting the README's number drift from it, would make the answer given at
+    3.11 false with nothing red.
+
+    The classifiers are held to the same floor for the same reason: they are
+    what an index renders, and a classifier below the floor advertises support
+    the package refuses to install.
+    """
+    floor = declared_python_floor()
+    stated = re.search(r"Python (\d+)\.(\d+)\+", read("README.md"))
+    assert stated, (
+        "README.md no longer states a Python floor. It is the only place a "
+        "reader is told one before pip tells them."
+    )
+    assert (int(stated.group(1)), int(stated.group(2))) == floor, (
+        f"README states Python {stated.group(1)}.{stated.group(2)}+ and "
+        f"pyproject.toml declares >={floor[0]}.{floor[1]}. pip enforces the "
+        f"second; the reader reads the first."
+    )
+    classifiers = [
+        (int(match.group(1)), int(match.group(2)))
+        for match in re.finditer(
+            r"Programming Language :: Python :: (\d+)\.(\d+)",
+            read("pyproject.toml"),
+        )
+    ]
+    assert classifiers, "pyproject.toml names no Python version classifier"
+    assert min(classifiers) == floor, (
+        f"the lowest Python classifier is {min(classifiers)} and the declared "
+        f"floor is {floor}. An index renders the classifiers; pip obeys the "
+        f"floor. They must not disagree."
+    )
