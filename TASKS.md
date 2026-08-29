@@ -8183,7 +8183,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > | A clean-venv install from a directory that is not this repo | needs the index | **CLOSED, step 7.** `/tmp/pp`, CPython 3.12, no checkout on the path |
   > | The console script, as installed from the index | needs the index | **CLOSED, step 7, on Linux.** `spanweave --version` and `spanweave adapters` both run from the venv's `bin/`, and `adapters` lists both. This does **not** close the macOS/Windows row below — the launchers are generated per platform |
   > | That the bytes PyPI serves are the bytes verified here | needs the index | **CLOSED, step 7.** The served sdist is byte-identical to the built one, `sha256 ec3eeae2…`, so `install-check`'s green transfers to what strangers download rather than to a hopefully-similar upload |
-  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **HALF CLOSED, and it found something.** The mechanical half is now a measurement: they *do* get stuck, and the error is illegible to exactly the reader who hits it. Recorded as a `0.9.1` candidate in the commit that follows this one — deliberately not in this one, because the fix is a change to a shipped error message and wants its wording read before it ships. The reading half — does the Install section's explanation land — is still the cold read at the end of step 8, still unrun, and now askable with a true premise for the first time |
+  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **HALF CLOSED, and it found something.** The mechanical half is now a measurement: they *do* get stuck, and the error is illegible to exactly the reader who hits it. Recorded as `0.9.1` candidate **C1** under *Post-launch*, below — deliberately in its own commit, because the fix is a change to a shipped error message and wants its wording read before it ships. The reading half — does the Install section's explanation land — is still the cold read at the end of step 8, still unrun, and now askable with a true premise for the first time |
   > | The rendered PyPI project page | PyPI renders it, not us | **open** — read it; especially that the quickstart's `fixtures/` paths are explained |
   > | The wheel on **3.11 and 3.13** | `install-check` installs into one venv, on whichever interpreter `uv` picks | **open.** Step 7 adds **3.12** from the index — a third interpreter, and neither of the two named. CI runs the matrix on the **source**, never on the wheel. The wheel is `py3-none-any` and stdlib-only, so this is low risk and it is **not zero** |
   > | The console script on **macOS or Windows** | Linux only here; entry-point launchers are generated per platform | **open** — ask one person on each |
@@ -8197,7 +8197,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > What the prediction did not reach — and what running it did — is that the
   > *error message* is the part that misleads: it reports a missing file, which
   > is true, to a reader whose actual situation is that they followed our
-  > instructions without a checkout. That is the `0.9.1` candidate recorded in the commit after this one.
+  > instructions without a checkout. That is `0.9.1` candidate **C1**, under *Post-launch*.
   >
   > ## Divergences from the plan
   >
@@ -8346,6 +8346,11 @@ consumer's findings go in the exit record beside these and carry more weight.
     evidence does and does not support. Any prediction left unmarked because its
     consumer was cut is named, with the words from that task's cut note.
   - **Everything cut**, with what it cost.
+  - **The post-launch `0.9.1` candidates** — the section after this task, added
+    at 3.10 step 8. Each is a measured defect in something already published,
+    with a proposed change and its cost, and none is scheduled. Say for each
+    whether it ships before Phase 4, because a candidate list nobody decides on
+    is a deferral that was never written down (3.7's finding).
   - **The Phase 4 freeze gate as it now stands:** predictions resolved, Phase 2
     finding absorbed, real users have exercised 0.9.x, **and a third dialect
     rendered in the corpus** (`ROADMAP.md` Phase 4). Say which of the four are
@@ -8364,6 +8369,122 @@ consumer's findings go in the exit record beside these and carry more weight.
   not produce, and *never accelerate the freeze* is `ROADMAP.md`'s standing rule.
   *Artifact for the decision:* the exit record, the two consumers' findings, the
   prediction table, and the four-item freeze gate with each item's status.
+
+## Post-launch — `0.9.1` candidates  *(not scheduled, not tasks)*
+
+**Deliberately not written as checkboxes.** A cold session picks the
+lowest-numbered unchecked task (`AGENT.md`), and nothing here is a task: each
+entry is a **measured** defect in something already published, with a proposed
+change and its cost, waiting on a human decision about whether it ships and
+when. Adding a box here would hand a resumed session work nobody has agreed to.
+
+`0.9.0` cannot be re-uploaded. Anything below that ships, ships as `0.9.1`, and
+that is a fresh irreversible slot on the index — so the cost of *each* entry
+includes the cost of spending one, and batching is usually right.
+
+### C1 — `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it
+
+**The measurement, taken from the published package, not predicted.** This is
+the stranger test 3.10's step 4 could not run because its premise was false;
+the premise is true now.
+
+```
+$ python3 -m venv /tmp/pp && /tmp/pp/bin/pip install spanweave
+$ cd /tmp && /tmp/pp/bin/spanweave inspect fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl
+spanweave inspect: [Errno 2] No such file or directory: 'fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl'
+$ echo $?
+1
+```
+
+**Every word of that is true, and it lands wrong.** The command is the first
+one in `README.md`, which is the page PyPI renders — so the reader who hits it
+is precisely the reader who did what we told them to. What they see is a tool
+that cannot find a file it just told them to use, which reads as a broken
+package, and the correct diagnosis (*the corpus is not in the wheel*) is
+three paragraphs down a page they have already left.
+
+**Why the CLI can tell the two cases apart, which is the whole reason this is
+fixable rather than a documentation problem.** `fixtures/conformance/` is not a
+generic path — it is this project's own layout, quoted from this project's own
+README. A missing file under it and a missing file anywhere else are different
+situations with different remedies, and the CLI currently says the same
+sentence for both. It is the *same distinction the library makes everywhere
+else*: "we did not understand it" is a reportable outcome, not a discard
+(`CLAUDE.md` 2). This is that rule applied to the CLI's own surface.
+
+**It is not caught by anything, and could not have been.** `install-check`
+runs `spanweave build` over fixture paths **from the source tree**, so it
+exercises the succeeding case; `make stranger` walks the checkout path, where
+the file exists. No harness in zone 2 can install from an index. The failing
+case only exists for a reader who has the package and not the repository —
+which, before 3.10 step 6, was nobody.
+
+#### The proposed change
+
+Keep the existing line **byte for byte** — it is correct, it is what an
+`OSError` says, and anything parsing stderr keeps working — and add a second,
+clearly secondary line, only when the missing path is one of ours:
+
+```
+spanweave inspect: [Errno 2] No such file or directory: 'fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl'
+hint: if you pasted this from spanweave's README, note that the fixtures/
+      corpus ships in the source tree and not in the installed package. Those
+      examples run from a checkout or an unpacked sdist; spanweave itself reads
+      any trace file you point it at.
+```
+
+**Why that wording and not a shorter, more confident one.** The obvious version
+asserts the reader's situation — *"fixtures/ is spanweave's conformance corpus,
+so you need a checkout"* — and it is wrong for the reader who has their own
+`fixtures/` directory and mistyped a filename. `if you pasted this from
+spanweave's README` is true in both readings and costs one clause. **An error
+message is a document**, and this project has spent a whole task on documents
+that were true when written and false for the reader who arrived later.
+
+The last sentence is doing work too: *spanweave itself reads any trace file you
+point it at* is the thing the reader actually needs, and it is the sentence
+that keeps the hint from reading as *"you installed the wrong thing"*.
+
+#### The cost, itemised
+
+| | |
+|---|---|
+| **Code** | `spanweave/cli.py` only: a module-level prefix tuple and ~8 lines in the existing `except OSError` branch. The offending path comes from `OSError.filename`, so no subcommand needs to know it produced one — `build`, `inspect` and `validate` are covered by one change |
+| **Two gates it must not trip, and both are near** | The hint's text may contain no word from `SEMANTIC_VOCABULARY` (`tests/gates.py`) — it does not — and **no dialect id**, which rules out putting a worked example path in the string, since every real one contains `openinference` and `cli.py` is not under `spanweave/adapters/`. The prefix constant must therefore stop at `fixtures/` |
+| **Tests** | Three. It fires on a missing path under `fixtures/`; it does **not** fire on any other missing path, and the first line and exit code are unchanged in both; and — the anti-staleness one — every fixture path any document puts in a code fence is covered by the prefix the CLI matches, derived from the documents rather than restated, so the hint cannot outlive the README that motivates it |
+| **`SPEC.md`** | §7's CLI I/O contract gains a sentence. Spec-first is not optional here (`CLAUDE.md`, *Working agreement*), and stderr's shape is the kind of thing §3.10 already says callers must not match on — worth restating for a line that is explicitly advisory |
+| **Invariants** | None touched. Not a `NodeKind`, `EdgeKind`, warrant, `Payload` state or `Diagnostic` code, so **not a halt**; no network, no dependency, no graph output changes, determinism untouched (stderr is not graph output) |
+| **The index slot** | A `0.9.1` on PyPI, spent. This is the real cost and the reason this is a candidate rather than a patch |
+
+#### The alternatives, with what each costs
+
+- **Do nothing.** Free, and the measurement above is what it costs: every
+  reader who pastes the README's first command from a `pip install` gets a
+  message that reads as a broken package. Defensible only if that reader is
+  rare, and the PyPI front page is evidence that they are not.
+- **Change the README instead**, so the quickstart does not open on a path the
+  installed package lacks. Costs the *"the library in one screen"* opener 3.9
+  built and 3.10 step 4 cold-read as clean — and it does not reach the reader
+  who pasted from a copy of the README they already have, which after a publish
+  includes every rendered PyPI page of `0.9.0`, permanently.
+- **Ship `fixtures/` in the wheel.** Removes the problem at the root and is
+  refused: the corpus is development data, not library code (`README.md`,
+  *Install*), it is 153 files, and it would put three captured traces into
+  every installed environment rather than only into a deliberate download.
+- **A generic hint on any missing file.** Cheaper to reason about, and worse:
+  it adds noise for every reader with a typo while saying nothing to the one
+  reader whose situation is actually diagnosable.
+
+#### What this candidate is *not* a substitute for
+
+Step 8's closing cold read — a blank session given the published page and the
+now-**true** premise *"you just ran `pip install spanweave`; what do you do
+next"* — is still unrun. This entry is a **mechanical** measurement: it proves
+the command fails and that the failure is illegible. It says nothing about
+whether the Install section's explanation lands for a reader who reads it,
+which is a human reading and the question 3.10's stranger table still carries
+open. Running one does not discharge the other, and shipping C1 before the cold
+read would be answering a question with the wrong instrument.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
