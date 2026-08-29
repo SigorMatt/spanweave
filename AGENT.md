@@ -182,6 +182,91 @@ task pass:
 - **Shuffled-input determinism** — reordering input lines yields an identical
   graph. Never "fix" it by sorting the expected output.
 
+### When the check is a human reading — use a cold reader
+
+The rule above has a hole, and this is what goes in it. *"Add the check
+first"* has no answer when the question is **does this document land**, **does
+this graph represent this trace**, or **would a stranger get stuck** — none of
+which has an executable form. The temptation there is to read it yourself and
+call it verified, which is self-certifying by prose with extra steps.
+
+**The practice.** Give the task to a model with **no project context** — a
+blank session, ideally a different model than the one doing the work — and
+**do not tell it what you are worried about.** Ask for the thing itself
+("read this and tell me what it does", "you have this trace and this graph;
+do they agree", "you just installed this; what do you do next"), never for the
+suspicion.
+
+**Why it works, which is the part worth keeping.** Every internal check in this
+project was written by whoever wrote the thing it checks. The tests, the gates,
+the review scripts and the reviewer all share one author's model of what could
+go wrong, so they share its blind spots exactly. That is the same argument
+`TASKS.md` 2.14 made for two independent implementations having to agree, and
+the same one that makes a third dialect a freeze precondition (`ROADMAP.md`) —
+one layer out, applied to prose and to judgement instead of to code. **A cold
+reader is the cheapest instrument that supplies that independence.** It costs
+one prompt.
+
+Three uses so far, and what each returned:
+
+- **2.6.** A blank session given only the captured trace and its graph found a
+  **missing declared `data` edge** that 593 tests, six gates and two review
+  scripts had all agreed to miss. It became `SPEC.md` §4.2.1.
+- **3.9.** The stranger walk found the README's quickstart **did not run** —
+  the same defect class reached by *executing* rather than reading, which is
+  why that practice and this one are siblings rather than alternatives.
+- **3.10 step 4.** Two models asked to behave as a user who had just installed
+  the package, told nothing about the suspicion. Result and its limits at that
+  task's record.
+
+**Two constraints, each stated with the failure that produced it — because a
+rule without its failure gets softened by the next person who finds it
+inconvenient.**
+
+1. **The reader must not be told what to look for, and must not be able to
+   find out.** At 2.3 the constraint *"do not read the producer side"* sat in a
+   place the session reached only **after** the thing it was meant to hide; the
+   session read it, and said so. A constraint on what a cold reader may see is
+   a claim about **ordering**, not about wording: put it where the reader
+   arrives before the evidence, or accept that it is decoration.
+2. **The premise must be *true*, not merely unrevealing.** At 3.10 step 4 the
+   prompt asserted something the README contradicts — *"you have just run
+   `pip install spanweave`"*, which the document says is impossible. That is
+   1's failure inverted: instead of revealing what to hide, it supplied
+   something false, and the readers spent their attention arguing back. The
+   answer that came back was real but **narrower than the question**: it
+   measured whether the document can *correct* a mistaken reader, which is a
+   weaker claim than whether a correct reader gets stuck. A cold read whose
+   scenario the document contradicts tests the document's ability to argue,
+   not its ability to land.
+
+**When it does not apply.**
+
+- **It never replaces a test.** A clean cold read is one reader's experience,
+  not a guarantee, and it does not compound: two clean reads are two
+  anecdotes. The remedy for anything it *finds* is still a test wherever one
+  is possible — standing since 3.8, and the reason that task shipped sixteen
+  tests rather than sixteen corrected sentences.
+- **Never for a question with a mechanical answer.** Asking a model whether
+  the suite passes, whether a file is tracked, or what a count is, is strictly
+  worse than running the thing that knows. Reserve it for judgement, which is
+  the only thing it has that a check does not.
+- **A cold read cannot be run against a state that does not exist yet.** If
+  the scenario requires the package to be installable and it is not, the
+  question waits; see constraint 2.
+
+*Placement, argued rather than assumed: this section already states the rule
+this completes and is the only place a session meets it at the moment it
+applies, and every session reads this file first, cold, by instruction.
+**Not `CONTRIBUTING.md`** — its structure is a bar a PR must clear, so an
+instrument listed there becomes a merge requirement, which is precisely what
+this must never be. **Not `CLAUDE.md`** — everything in that file is a line
+that must not be crossed, and this is an instrument, not an invariant.
+**Not `DESIGN.md`**, though the independence argument lives there: it would be
+met only by someone reading about the adapter/builder seam, which is the wrong
+moment. **Not a new file** — a document nobody is told to read is a document
+nobody meets, and being reached at the moment of use is the whole point.*
+
 ## Halt-and-hand-back points (do NOT proceed past these alone)
 
 Every entry below is standing. Nothing here has been discharged by Phases 1 and

@@ -85,7 +85,22 @@ def fenced_lines(markdown: str) -> list[str]:
 
 
 def code_spans(markdown: str) -> list[str]:
-    """Fenced lines plus inline `code`, which is where prose names a command."""
+    """Fenced lines plus inline `code`, which is where prose names a command.
+
+    **Bound, stated rather than silently carried:** inline spans are matched
+    line by line, so a span wrapped across a line break is invisible here.
+    Widening it was tried at `TASKS.md` 3.10 and reverted the same hour: over
+    a 460 KB file of blockquoted records, pairing backticks across lines makes
+    a stray one swallow paragraphs, and "make the" and "make it" arrive as
+    targets. A scanner that has to be loosened to stay quiet is a scanner on
+    its way to being switched off, so the narrow version stays and the gap is
+    written down.
+
+    Nothing depends on the gap being closed: the one check that needed a
+    wrapped span -- the Install section's `make` targets -- reads the raw
+    section against the Makefile's closed set of targets instead, which is
+    precise because the candidates are enumerable.
+    """
     spans = fenced_lines(markdown)
     inside = False
     for line in markdown.splitlines():
@@ -190,6 +205,23 @@ def test_the_readme_says_what_is_true_of_the_index_install_in_both_directions():
     assert any(INDEX_INSTALL.search(line) for line in fenced_lines(install)), (
         "TASKS.md 3.10 is checked, so the README must offer the index install "
         "a reader will actually use, not only the checkout and wheel paths"
+    )
+    # The step 4 cold read's one real finding, carried here so it cannot go
+    # missing the way `a953a1f`'s written-down deferral did (3.7). Once the
+    # package is on an index, most readers of this section have a wheel and no
+    # Makefile, so a `make` target named here sends them to a command they
+    # cannot run. Development keeps its targets; it is written for a checkout.
+    targets = makefile_targets()
+    named = {
+        match.group(1)
+        for match in re.finditer(r"\bmake\s+([a-z][a-z-]+)", " ".join(install.split()))
+        if match.group(1) in targets
+    }
+    assert not named, (
+        f"TASKS.md 3.10 is checked, so readers of the Install section arrive "
+        f"from a package index with no Makefile — but it still names "
+        f"{sorted(named)}. Say what it means for them, or say nothing; the "
+        f"target belongs under Development (TASKS.md 3.10, step 8)."
     )
 
 

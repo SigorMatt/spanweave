@@ -7938,6 +7938,38 @@ consumer's findings go in the exit record beside these and carry more weight.
   > Decide you are happy with that ordering *before* it is public, because the
   > page is the first thing every stranger sees.
   >
+  > > **This step was cold-read, and the read is the first use of a practice
+  > > this project had never written down** — now `AGENT.md`, *When the check is
+  > > a human reading*. Two Nebius models were given the README and asked to
+  > > behave as someone who had just installed the package, told nothing about
+  > > what was suspected.
+  > >
+  > > **Result: clean.** Both read the Install section, correctly concluded that
+  > > `pip install spanweave` would fail, and were not misled by it.
+  > >
+  > > **And the result is narrower than the question, because the prompt was
+  > > wrong.** It asserted *"you have just run `pip install spanweave`"* — a
+  > > premise the README explicitly contradicts. So what was measured is
+  > > *whether the Install notice is visible enough to override a contradicting
+  > > instruction*, and it is. What was **meant** to be measured — does a reader
+  > > who genuinely installed from an index get stuck on the `fixtures/` paths —
+  > > **was not asked and cannot be** until the package is installable. It moves
+  > > to **after step 8**.
+  > >
+  > > This is 2.3's constraint failure inverted — there, the reader was told
+  > > what to hide; here it was told something untrue and spent its attention
+  > > arguing back. Both are recorded as the two design constraints in
+  > > `AGENT.md`: the premise must be **true**, not merely unrevealing.
+  > >
+  > > **One real finding, carried to step 8 rather than fixed here.**
+  > > `gpt-oss-120b` noted that the README names `make install-check` as the
+  > > gate proving the wheel works — in the **Install** section, with the target
+  > > listed again under **Development** — and *a reader who is not in a
+  > > checkout has no Makefile.* True today for anyone with the wheel, and true
+  > > for every reader arriving from PyPI after step 6. Not fixed now, because
+  > > the Install section is being rewritten at step 8 anyway and two edits to
+  > > one paragraph in two commits is how one of them goes missing.
+  >
   > > ——— everything above is reversible; everything below is not ———
   >
   > **5. TestPyPI first — recommended, and already irreversible there.**
@@ -7978,12 +8010,27 @@ consumer's findings go in the exit record beside these and carry more weight.
   > /tmp/pp/bin/spanweave adapters      # expect: openinference and otel_genai
   > ```
   >
-  > **8. Only now, tick the box and correct the documents — one commit.** Tick
-  > `3.10` in this file, and update `README.md`'s Install section: remove *"not
-  > on PyPI yet"* and add the `pip install spanweave` fence. **The suite forces
-  > both halves and will not let you do one without the other**
-  > (`tests/test_doc_truth.py`, below). `make check` must be green in that same
-  > commit.
+  > **8. Only now, tick the box and correct the documents — one commit.** Three
+  > edits, and the suite forces all three; `make check` must be green in that
+  > same commit.
+  >
+  > 1. Tick `3.10` in this file.
+  > 2. `README.md`'s Install section: remove *"not on PyPI yet"* and add the
+  >    `pip install spanweave` fence. **The suite will not let you do one
+  >    without the other** (`tests/test_doc_truth.py`).
+  > 3. **Remove `make install-check` from the Install section** — the step 4
+  >    cold read's one real finding. A reader arriving from PyPI has a wheel and
+  >    no Makefile, so naming the gate there sends them to a command they cannot
+  >    run. Say what it means for *them* instead, or say nothing; the target
+  >    keeps its place under **Development**, which is written for someone in a
+  >    checkout. `test_the_readme_says_what_is_true_of_the_index_install_in_both_directions`
+  >    asserts this from the moment the box is ticked, so the carry cannot go
+  >    missing the way `a953a1f`'s did (3.7).
+  >
+  > Then re-run the cold read that step 4 could not: give a blank session the
+  > published page and *"you just ran `pip install spanweave`"* — now a **true**
+  > premise — and ask what they do next. That is the question step 4 meant to
+  > ask.
   >
   > ## What a stranger gets that nothing here has tested
   >
@@ -7996,6 +8043,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > |---|---|---|
   > | Resolution of the name `spanweave` from PyPI | needs the index | step 7 |
   > | The rendered PyPI project page | PyPI renders it, not us | read it; especially that the quickstart's `fixtures/` paths are explained |
+  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | the cold read at the end of step 8 |
   > | The wheel on **3.11 and 3.13** | `install-check` installs into one venv, on whichever interpreter `uv` picks | CI runs the matrix on the **source**, never on the wheel. The wheel is `py3-none-any` and stdlib-only, so this is low risk and it is **not zero** |
   > | The console script on **macOS or Windows** | Linux only here; entry-point launchers are generated per platform | ask one person on each |
   > | Upload attestations / trusted publishing | credentialed | whatever the publisher chooses |
@@ -8038,6 +8086,25 @@ consumer's findings go in the exit record beside these and carry more weight.
   >   task needed from it.
   > - **`uvx twine check` was not run** (step 3), for the reason given there.
   >   The part of it that could be checked locally, was.
+  > - **Recorded after the fact, in a later commit:** step 4's cold read, its
+  >   narrowed scope, and the finding it carried to step 8 — together with the
+  >   practice itself, which this project had used three times without ever
+  >   writing down. It now lives in `AGENT.md`, *When the check is a human
+  >   reading*, with the placement argued there. That commit changes no task
+  >   state and ticks no box.
+  > - **The step-8 guard was vacuous on its first draft, and planting is what
+  >   said so.** It scanned `code_spans()`, which pairs backticks line by line
+  >   — and the sentence it was written to catch is `` `make\ninstall-check` ``,
+  >   wrapped across a line break, so the plant passed. Widening `code_spans()`
+  >   was tried and reverted within the hour: over this file's blockquoted
+  >   records a stray backtick swallows paragraphs and *"make the"* arrives as
+  >   a target. The guard now reads the raw Install section against the
+  >   Makefile's **closed set of targets**, which is precise for the same
+  >   reason the wide version was not; `code_spans()`'s line-by-line limit is
+  >   now written into its docstring as a bound rather than carried silently.
+  >   Recorded because a guard that passes its own plant is the exact species
+  >   this project keeps finding, and it was found here only because the plant
+  >   was run.
   >
   > ## Definition of done
   >
