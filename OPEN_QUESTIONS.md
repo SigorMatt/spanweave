@@ -272,6 +272,42 @@ the test, and its value is entirely in its timestamps (`AGENT.md`). This note
 exists so that whoever resolves either one does so knowing the premise was
 challenged, by whom, and on what evidence.
 
+**Evidence — (d)'s technicality was never true. The QUESTION is still open.**
+
+Added at `TASKS.md` 3.5, Phase 3, where P3 was marked **UNRESOLVED** by a
+human. **(d)** warns against waving this through *"on the technicality that it
+reuses an existing `EdgeKind` and warrant"*. There is no such technicality to
+wave anything through on, and there never was:
+
+- `Edge(kind=data, warrant=derived)` **raises at construction**.
+  `spanweave/model.py`'s `ALLOWED_WARRANTS` has refused the combination since
+  the first implementation commit (`d8e2c37`), and the error names §4.1.
+- **§4.1 already answers the classification question**, in the seed commit
+  (`c266c9e`) that also created this entry and `PREDICTIONS.md` P3: *"If a rule
+  is ever added that infers a relation of an explicit-only kind, it does not
+  become that kind — it becomes a new kind, through a spec change."* A new
+  `EdgeKind` is a shape change and an `AGENT.md` halt point.
+
+So the choice this entry frames is not *policy versus flag*. It is **keep the
+prohibition** versus **change `SPEC.md` §4.1 and the model** — which is the
+same deliberate decision (d) asks for, arrived at without needing (d)'s
+guardrail, and at a higher stated price than P3 assumed.
+
+One further data point, from the only consumer this repo has that reads `data`
+edges at all: **it does not filter on warrant.** `examples/trajectory_dump`
+renders every `data` edge as `(declared)`, a string literal, and printed that
+over a `derived` edge forced past the validator
+(`tests/test_prediction_evidence.py`). That bears on **(b)**'s argument that
+the warrant label makes inference safe — the label only helps if consumers
+read it. Scope, and it is doing real work here: the assumption is currently
+free, since no derived `data` edge can exist; the warrant *is* in the
+serialized graph, so the consumer could filter and chose not to; and it is one
+consumer, written by this repo.
+
+**Deliberately not resolved, again.** This is evidence about what saying yes
+would *cost* and about **(b)**'s premise. It decides nothing. `PREDICTIONS.md`
+was not edited by the agent, and §7 remains an `AGENT.md` halt point.
+
 ---
 
 ## 8. Can one span be both a requester and a fulfiller?

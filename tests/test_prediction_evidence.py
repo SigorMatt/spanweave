@@ -87,7 +87,36 @@ def test_every_data_edge_in_the_corpus_is_declared():
 
 
 def test_a_derived_data_edge_cannot_be_constructed():
-    """The state P3 calls "already expressible honestly" raises (`SPEC.md` §4.1)."""
+    """The state P3 calls "already expressible honestly" raises (`SPEC.md` §4.1).
+
+    ---
+
+    **The pattern this is the fourth instance of, named here at the pin rather
+    than a fourth time in a fourth task record** — the ruling that put the
+    third instance in
+    `tests/test_example_cost_latency.py::test_usage_extra_is_non_empty_on_the_committed_corpus`
+    rather than in a record applies unchanged.
+
+    `PREDICTIONS.md` P3 states, as its class, that `--infer-data-edges`
+    *"uses an existing `EdgeKind` and an existing warrant, so by the letter of
+    the rule it is operational"*. `SPEC.md` §4.1 — **in the same seed commit,
+    `c266c9e`** — already said the opposite: *"If a rule is ever added that
+    infers a relation of an explicit-only kind, it does not become that kind —
+    it becomes a new kind, through a spec change."* A new `EdgeKind` is a
+    **shape** change and an `AGENT.md` halt point. `ALLOWED_WARRANTS` has
+    enforced §4.1's side since the first implementation commit (`d8e2c37`).
+
+    Same species as the three named at that other pin: a prose claim about
+    this project's own artifacts that nothing recomputed. One step more
+    general again, and worth the widening — the first three were **quantifiers
+    over the corpus**, true when written and expiring silently as the corpus
+    grew. This one is a claim about the **model's own types**, and it was
+    never true: it did not expire, it arrived wrong, in the file this project
+    wrote to catch itself being wrong about its own design.
+
+    The remedy is the same for the fourth time: a test, not a corrected
+    sentence.
+    """
     with pytest.raises(ValueError) as raised:
         Edge(
             src="a",
