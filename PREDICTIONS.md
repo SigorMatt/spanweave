@@ -308,7 +308,92 @@ the letter of the rule it is operational. But it changes what the library is
 fires, do not wave it through on the operational technicality** — take it to
 `OPEN_QUESTIONS.md` §7 and decide it deliberately.
 
-**Status:** open. Tracked as `OPEN_QUESTIONS.md` §7.
+**Status: UNRESOLVED.** Assessed at 3.5, Phase 3. Not refuted, not
+confirmed. Tracked as `OPEN_QUESTIONS.md` §7.
+
+**Two reasons, and the second is the one that matters.**
+
+**First: the friction had no opportunity to occur.** Of the three
+consumers written against this library, two could not have produced it —
+the 2b fleet aggregator reads no edges of any kind, and the 3.4 cost
+attributor reads only `parent`. The third, the 3.3 trajectory dumper,
+reads `data` edges the telemetry **declared** and never compares two
+values to decide that one flowed into the other (3.3 F-5, 3.4 O-d). Every
+piece of evidence this phase produced concerns **declared** edges, and
+this prediction is about **inferred** ones. Recomputed at 3.5: 12 `data`
+edges over 11 of the 39 buildable traces, all `warrant=explicit`, all with
+the single basis `tool_call_id in tool-result message`; the only `derived`
+edges anywhere in the corpus are `temporal` ones. The inferred `data` edge
+is **unexercised**, in the same sense `truncated` is unexercised for P2,
+and for the same reason: nothing that ships can produce one. A prediction
+about inference is not refuted by consumers that performed none.
+
+**Second: the stated class is wrong, so this prediction cannot be resolved
+until what it claims is corrected.** The entry classifies its own remedy
+as a boundary case that is *"by the letter of the rule … operational"*,
+because `--infer-data-edges` *"uses an existing `EdgeKind` and an existing
+warrant"*. Both halves fail:
+
+- **The combination does not exist and cannot be constructed.**
+  `Edge(kind=data, warrant=derived)` raises `ValueError` —
+  `spanweave/model.py`'s `ALLOWED_WARRANTS`, present since the first
+  implementation commit (`d8e2c37`): *"data edges are explicit-only;
+  refusing to build one with warrant 'derived' (SPEC.md §4.1). A computed
+  relation never becomes an explicit one."*
+- **The letter of the rule says the opposite.** `SPEC.md` §4.1: *"If a
+  rule is ever added that infers a relation of an explicit-only kind, it
+  does not become that kind — **it becomes a new kind, through a spec
+  change**."* A new `EdgeKind` is a **shape** change and an `AGENT.md`
+  halt point — not an operational option.
+
+**This is contemporaneous, not drift.** `git show c266c9e` — the seed
+commit — created `SPEC.md`, `PREDICTIONS.md` and `OPEN_QUESTIONS.md`
+together, and §4.1 already carried the sentence above
+(`git show c266c9e:SPEC.md`, lines 265–269) while P3 already carried its
+class (`git show c266c9e:PREDICTIONS.md`, lines 108–112). They disagreed
+on arrival, by one author, on one day.
+
+So the choice this prediction frames does not exist as framed. It is not
+*policy versus flag*; it is **keep the prohibition** versus **change
+`SPEC.md` §4.1 and the model**, at a higher stated price than the entry
+assumed. `OPEN_QUESTIONS.md` §7(d) warned against waving this through *"on
+the technicality that it reuses an existing `EdgeKind` and warrant"* —
+there was never such a technicality to wave it through on, and §7 carries
+that as evidence.
+
+**One data point against this entry's own premise, with its scope.** The
+argument is that *"the warrant system already makes inference safe:
+anything computed is labeled `derived`, and consumers filter on warrant."*
+The second half is a claim about consumers, and this repo has exactly one
+that reads `data` edges. **It does not filter on warrant** — it renders
+every one as `(declared)`, a string literal — and it printed that over a
+`derived` edge forced past the validator
+(`tests/test_prediction_evidence.py`). Scope, and it is load-bearing: the
+assumption is currently **free**, since no derived `data` edge can exist;
+the warrant **is** in the serialized graph, so the consumer could filter
+and chose not to; and it is **one** consumer, written by this repo. It is
+nevertheless the only empirical test that premise has ever had, and it
+failed one for one.
+
+**What this cannot support.** That inferred `data` edges are unwanted — no
+consumer that would want one was written, and two of three could not have.
+That the prohibition is, or is not, stricter than the architecture
+requires: §7(b)'s argument is untouched. That the matching parameters
+could be made consumer-supplied — §7(c)'s decisive question, never
+attempted.
+
+**What would resolve it.** First, correct the class: an inferred `data`
+relation is a **new `EdgeKind` through a spec change** unless §4.1 is
+changed, and that correction is itself the halt. Then a consumer that
+actually wants value-match inference — one not written by this repo, since
+the designer also picks the exam — is what would confirm or refute the
+substance.
+
+Honest claim: *P3 was not tested in Phase 3 — two confirmatory consumers
+and one adversarial one performed no value comparison and wanted no
+inferred edge — and it is not resolvable as written, because the class it
+assigns itself was contradicted by `SPEC.md` §4.1 in the commit that
+created them both.*
 
 ---
 
@@ -325,7 +410,84 @@ consumer.
 that is expensive to add later and cheap to maintain now. Keep it regardless of
 the finding — but record honestly that it was not what made the consumers work.
 
-**Status:** open.
+**Status: CONFIRMED as to class — none, scoped; the "will never notice"
+clause REFUTED.** Resolved at 3.5, Phase 3, against the two confirmatory
+consumers. A split result, and both halves belong in the mark.
+
+**Needed by neither.** Measured rather than asserted, over the 30
+multi-node committed traces: rebuilding each graph through the public
+`Graph.of` with the node tuple reversed — what a differently-ordering
+library would hand a consumer — leaves **every per-node value and every
+total unchanged in both consumers, 30/30**, once the step index and list
+order are normalised. Nothing either consumer computes depends on the
+order it was given. 3.4 O-e reached the same conclusion for the attributor
+by reasoning (*"a cost rollup would have been just as correct with
+non-deterministic node ordering, because it sums"*); this is that claim
+measured, and extended to the dumper.
+
+**Noticed by both — so the prediction's second clause is false.** The same
+perturbation changes the **serialized output of both consumers on 30 of
+30**. For the trajectory dumper the order *is* the product: it walks
+`graph.nodes()` and numbers the steps, so the library's ordering is
+transcribed wholesale. And that ordering is a **choice**, not a
+consequence — on **22 of 30** traces two or more nodes were topologically
+ready at once and `SPEC.md` §5.2's stated tie-break decided the order; on
+**2 of 30** (`parallel_tools`, both dialects) two nodes reported the same
+`started_at`, so the `node_id` rule decided it. Edge order reaches the
+transcript too, on **2 of 30** (`parallel_tool_calls`, both dialects: the
+results one call produced come out `('s2','s3')` or `('s3','s2')`), and
+reaches the attributor on **0 of 30**. Every count is asserted in
+`tests/test_prediction_evidence.py`.
+
+**Where determinism earned its keep is the verification, not the
+function** (3.4 O-e). P1's entire instrument is a byte-for-byte comparison
+of two serialized attributions, and 3.3's central claim is that two
+*different* inputs produce the same transcript. Both consumers' test
+suites would fail without byte-identity.
+
+**Scope of the confirmation, and the first bound is the load-bearing one.**
+
+- **Neither consumer is one of the three this prediction names.** A
+  viewer, a dashboard and an exploratory notebook are the class it is
+  about; both consumers written are batch, file-in/file-out tools with
+  golden test suites — the class **most** likely to notice. So this does
+  not test the "most consumers" claim; it tests the hardest case for it,
+  and the substantive clause held there anyway.
+- **The class is `none`, so a right prediction produces no friction to
+  observe.** Refutation would have been visible — a consumer whose
+  correctness required byte-identity — and none appeared. Confirmation is
+  only ever the absence of that, over a sample.
+- **The designer picked both consumers**, and picked them to test P1 and
+  P2. P4 was observed in passing by consumers aimed elsewhere.
+- **No non-deterministic build was ever run.** `CLAUDE.md` 4 forbids one.
+  The perturbation is a surrogate: it changes the order a consumer is
+  *handed*, not the builder that chose it, and it is a **larger**
+  perturbation than a plausible non-deterministic implementation would
+  produce — which is why the 22/30 tie-break count is reported beside it,
+  that count being measured on genuinely valid alternative orders.
+- **Two consumers, one library, 41 committed traces**, the largest nine
+  spans.
+
+**The prediction's own instruction stands: keep determinism regardless.**
+Nothing here proposes relaxing it, and nothing tested what relaxing it
+would cost.
+
+**What this cannot support.** Anything about a viewer, a dashboard or a
+notebook — none was written. That a non-deterministic library would be
+invisible: measured false for both consumers that exist. That the
+perturbation models a real non-deterministic build — it models a
+differently-ordered *graph*, not a differently-ordering *builder*.
+
+**What would falsify this confirmation:** a consumer whose *results*, not
+bytes, change with node order — most plausibly one that reads
+`graph.nodes()` positionally, or takes "the first `llm` node" as meaning
+the first one to run. Separately, one of the three consumers this entry
+names — a viewer, a dashboard, a notebook — would be the first test of its
+"most consumers".
+
+Honest claim: *neither confirmatory consumer's results depended on
+byte-identical determinism, both consumers' bytes did on 30 of 30 traces,
+and neither consumer belongs to the class this prediction is about.*
 
 ---
 
