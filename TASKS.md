@@ -7543,7 +7543,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > - [x] No `pip install spanweave` line in any document (3.10 unrun).
   > - [x] `make check` green (1586 passed, 4 skipped); `make install-check` green.
 
-- [ ] **3.9 The sixty-second stranger path.** `[launch]`
+- [x] **3.9 The sixty-second stranger path.** `[launch]`
   `ROADMAP.md`'s exit says a stranger builds a graph from their own trace in ~60
   seconds. Verify it rather than assert it: from a clean venv, install the wheel
   3.6 built, run the README's quickstart **verbatim**, and build a graph from a
@@ -7559,6 +7559,181 @@ consumer's findings go in the exit record beside these and carry more weight.
   **Cut order:** not on the list. It is the only thing that tests the exit
   criterion "a stranger can build a graph in ~60 seconds", so cutting it means
   the exit criterion is asserted rather than met — record it that way.
+
+  > **Done, and the headline is that the path did not run.** The README's
+  > quickstart read `trace.jsonl` — a file no stranger has and this repository
+  > does not contain — so the opening example of the project's front door raised
+  > `FileNotFoundError` on the first line a reader would paste. Walked from
+  > outside the repo, exactly as written, it failed at step one.
+  >
+  > **Measured: 5.76s best, 7.17s worst over four walks** (`make stranger`),
+  > against `ROADMAP.md`'s *"~60 seconds"*. `make check` green (1592 passed, 4
+  > skipped); `make install-check` green (30 checks, up from 25; 3 plants held).
+  > Nothing under `spanweave/` or `fixtures/` moved; `PREDICTIONS.md` untouched.
+  >
+  > ## The defect, and why every gate this project has was blind to it
+  >
+  > Both blocks read `trace.jsonl`. They were **illustrative** when written —
+  > the filename standing in for *your trace here* — and that was a defensible
+  > choice for a README nobody could install. It stopped being one the moment
+  > the file became the only instruction a stranger gets, and nothing marked the
+  > transition, because **nothing had ever run them**. `tests/test_docs.py`
+  > checks quoted *fixtures*; `tests/test_doc_truth.py` (3.8) checks *claims
+  > about the tree*; neither executes a code block. This is 3.8's failure mode
+  > one level up: not a sentence that expired, but an example that was never
+  > executable and was read as though it were.
+  >
+  > A second, quieter one fell out of the same walk. `cd spanweave && pip
+  > install .` leaves a reader in a directory where `spanweave/` shadows the
+  > install, so the checkout path never exercises the installed artifact at all.
+  > Harmless for a stranger (same code), fatal for a *check* — so both harnesses
+  > run from a working directory that has `fixtures/` and emphatically not
+  > `spanweave/`, and the fixture explains why.
+  >
+  > ## What the stranger sees first — the question, and what changed
+  >
+  > The task asked whether the first true thing a reader learns is the thing we
+  > would want them to learn. It was not.
+  >
+  > **Before:** the first output was `tool.lookup present present` — a tool name
+  > and two payload states. Every trace viewer prints that. Worse, the first
+  > field on the line was `name`, which 3.8 had just established is the **one
+  > field the corpus does not compare across dialects**, and which therefore
+  > needed a two-line caveat bolted onto the opening example. The first lesson
+  > was the least distinctive thing the library does, delivered through its
+  > least defensible field.
+  >
+  > **After:** the first command is `spanweave inspect`, and its real output is
+  > shown. That one screen carries, in this order: `call_result (explicit)` and
+  > `temporal (derived)` — the warrant vocabulary, which is the central design
+  > idea; `outputs absent: 1` — the payload-state honesty claim; `diagnostics:
+  > 2` — losslessness, as a number rather than an adjective; and `schema: 0.1
+  > (NOT FROZEN)`. Four claims the project actually stakes itself on, none of
+  > them assertions in prose, all of them output the reader just produced. The
+  > Python block still prints `name` and still carries 3.8's caveat — **dropping
+  > it to dodge the caveat would be trimming the claim to fit the path**, and a
+  > stranger wants names.
+  >
+  > **The bullets under that transcript are new and are the point.** A
+  > transcript nobody knows how to read is decoration; those four bullets are
+  > what turns it into the first lesson.
+  >
+  > ## Every step, and whether a test holds it
+  >
+  > | Step | Held by | Where |
+  > |---|---|---|
+  > | `git clone <url>` | the URL equals `pyproject.toml`'s `Homepage` — `test_the_checkout_path_matches_the_projects_own_metadata` | `make check` |
+  > | `cd spanweave` | the directory equals the URL's last segment — same test | `make check` |
+  > | `pip install .` | the wheel builds, installs into a throwaway venv, and runs from outside the repo | `make install-check` (3.6), `make stranger` |
+  > | `$ spanweave inspect <fixture>` **and its 19 lines of output** | run verbatim, output compared byte for byte | `make check` *and* `make install-check` |
+  > | `$ spanweave build <fixture> -o graph.json` **and `wrote graph.json`** | same | `make check` *and* `make install-check` |
+  > | the Python block **and its two printed lines** | same | `make check` *and* `make install-check` |
+  > | every `fixtures/…` path the quickstart names | is a file **and** is tracked by git, so it is in the sdist | `make check` |
+  > | `uv build; pip install dist/spanweave-0.9.0-…whl` | the filename the README names is the one `uv build` produced | `make install-check` |
+  > | the elapsed time | **nothing, deliberately** — see below | `make stranger` measures it |
+  >
+  > **Two altitudes, on purpose.** `tests/test_readme_quickstart.py` runs the
+  > transcript against the **source tree** inside `make check`, so a change to
+  > the CLI's output fails on the commit that makes it. `probe_readme_quickstart`
+  > in `tests/install_check.py` runs the same transcript against the **installed
+  > wheel** from outside the repo, which is the run that answers the exit
+  > criterion. The parser is shared (`tests/readme_quickstart.py`) so the two can
+  > never drift into testing different documents.
+  >
+  > **Output is compared, not just exit codes.** A quickstart that runs and
+  > prints something else is still lying, and what it prints here is the four
+  > claims above. Change the warrant vocabulary, the payload states or the
+  > diagnostic count and the README must change in the same commit.
+  >
+  > ## The measurement, and what it excludes
+  >
+  > ```
+  > 0.06s  git clone            (local stand-in — see below)
+  > 3.32s  python3 -m venv      (not in the README; a stranger needs one)
+  > 2.30s  $ pip install .
+  > 0.08s  $ spanweave inspect fixtures/…/openinference.jsonl
+  > 5.76s  TOTAL
+  > ```
+  >
+  > **The slowest step in the stranger path is `python3 -m venv`, and the
+  > second is pip.** spanweave's own step is 0.08s — 1.4% of the total. Whatever
+  > this path costs, we are not most of it, which is worth knowing before anyone
+  > optimises the wrong thing.
+  >
+  > Excluded, and each is a real cost a human pays:
+  >
+  > - **A network clone.** The harness has no network, so the clone source is
+  >   this repo on disk. Seconds, not minutes — and the number is an
+  >   **underestimate**, which `make stranger` prints rather than banks.
+  > - **`python3 -m venv` is not in the README.** The timing includes it because
+  >   a stranger needs one; the document does not mention it. Named as a gap
+  >   rather than fixed, because `pip install .` into whatever environment a
+  >   reader already has is also legitimate and the README should not dictate.
+  > - **The human.** Reading, typing, deciding what to point it at. On a 60s
+  >   budget with 5.8s of machine time, **the criterion is a documentation
+  >   budget, not a performance one** — which is the finding, and it is why 3.8
+  >   and this task are the same work.
+  > - **"From *their own* trace."** `ROADMAP.md` says *their own*; this task's
+  >   own done-when says *a committed fixture*, and that is what was walked. A
+  >   stranger with their own trace must additionally have telemetry in
+  >   OpenInference or OTel GenAI form, in a file. That step is unmeasured and
+  >   **unmeasurable here** — it depends on their stack, not on ours. Recorded
+  >   as the bound on this number rather than glossed: what is verified is *a
+  >   stranger builds a graph in ~6 seconds of machine time from a trace we
+  >   supply.*
+  >
+  > **Why no test asserts the duration.** A wall-clock threshold in an automated
+  > suite is a flake that gets tuned until it stops meaning anything, and the
+  > criterion it would guard is about a human's first minute rather than this
+  > machine's load average. The steps are tested and fail loudly; the number is
+  > measured on demand and read by a person. `make stranger` does assert the two
+  > things that *can* fail honestly: every step succeeds, and the steps it walks
+  > are the ones the README documents — it reads the `From a checkout` block out
+  > of the README rather than restating it, and exits non-zero if that block
+  > stops being clone / cd / install.
+  >
+  > ## Divergences from the task as written
+  >
+  > - **The path walked is the checkout, not the wheel.** The task says *"from a
+  >   clean venv, install the wheel 3.6 built"*. Since 3.8 there is no
+  >   `pip install spanweave` until 3.10, so what a stranger actually has is a
+  >   clone — and the README now documents the checkout path first. The wheel
+  >   path is not skipped: `make install-check` installs the wheel into a
+  >   throwaway venv and runs the same quickstart transcript against it, which is
+  >   the letter of the done-when. `make stranger` times the path a human takes.
+  > - **The README was changed, per this task's own instruction.** The blocks did
+  >   not run as written, so the README was wrong: real fixture paths, the
+  >   `inspect` transcript promoted to first, its output shown, four bullets
+  >   explaining how to read it, and `wrote graph.json` added because that line
+  >   goes to stderr and a transcript that hid it would show a reader something
+  >   their terminal will not.
+  > - **`make stranger` added** — to the `Makefile`, `ENVIRONMENT.md` and the
+  >   README's Development block, per 3.1's rule that a command is listed only
+  >   after it has run. It has, four times.
+  > - **Two `install-check` probes added, not one.** The quickstart transcript
+  >   against the wheel, and a check that the wheel filename the README tells a
+  >   stranger to install is the one `uv build` produced — the README's other
+  >   install path, which nothing held. 25 checks → 30.
+  > - **A second defect was found and fixed inside the harnesses, not the
+  >   README:** the shadowing described above. It changes no document; it changes
+  >   what the checks are allowed to assume.
+  > - **`PREDICTIONS.md` and `fixtures/` untouched**, as in every agent commit
+  >   this phase. No fixture was authored — the quickstart points at a committed
+  >   one, which `AGENT.md`'s run loop requires of a Phase 3 task.
+  >
+  > ## Definition of done
+  >
+  > - [x] A check runs the README's quickstart blocks **verbatim** against the
+  >       installed wheel and they succeed — `probe_readme_quickstart`, and their
+  >       output is compared, not only their exit codes.
+  > - [x] The same transcript runs in `make check` against the source tree, so
+  >       the fast gate catches a README that has gone wrong.
+  > - [x] The elapsed time is recorded here: **5.76s best, 7.17s worst over four
+  >       walks**, with what it excludes stated rather than implied.
+  > - [x] Every step says whether a test holds it; the one that has none says so
+  >       and says why.
+  > - [x] `make check` green (1592 passed, 4 skipped); `make install-check` green
+  >       (30 checks, 3 plants held); `make stranger` green.
 
 - [ ] **3.10 Publish `0.9.x` to PyPI.** `[launch]` **HUMAN-RUN. The agent
   prepares and stops.**

@@ -56,6 +56,14 @@ fix one deliberately, don't let them drift.
   regenerate **and commit the diff in the same change**, never to regenerate
   until the failure goes away. It reads no fixture, so corpus growth cannot
   move it.
+- Stranger: `make stranger` — walks the path a stranger walks and **times** it
+  (`TASKS.md` 3.9): clone into a temp directory, fresh venv, the README's own
+  `From a checkout` commands read out of the README, then the first command of
+  its quickstart. It asserts every step succeeds and deliberately asserts
+  **nothing about the duration** — a wall-clock threshold in an automated check
+  is a flake that gets tuned until it means nothing. The clone source is this
+  repo on disk, since the harness has no network, which makes the number an
+  underestimate and it says so. `ARGS="--repeat 3 --quiet"`.
 - Capture: `make capture` — **human-run only**, see below
 
 ## Repo layout (expected)

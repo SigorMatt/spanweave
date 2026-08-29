@@ -2,7 +2,7 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance shape capture clean
+.PHONY: check install-check lint types test gates conformance shape stranger capture clean
 
 check: lint types test gates
 	uv run spanweave --version
@@ -67,6 +67,21 @@ shape:
 # needs; re-run, never edit a trace to add one.
 capture:
 	uv run --extra dev python -m capture.run $(ARGS)
+
+# Walk the path a stranger walks, and time it (TASKS.md 3.9). Clones this repo
+# into a temp directory, builds a fresh venv, runs the README's OWN `From a
+# checkout` commands -- read out of the README, not restated here -- and then
+# the first command of its quickstart. Prints a per-step and total time.
+# It asserts that every step SUCCEEDS; it deliberately asserts nothing about
+# the DURATION. A wall-clock threshold in an automated check is a flake that
+# gets tuned until it means nothing, and the criterion it would guard
+# ("~60 seconds", ROADMAP.md) is about a human's first minute, not this
+# machine's load average. Print the number; let a human read it.
+# The one substitution: the clone source is this repo on disk, since the
+# harness has no network. That makes the number an UNDERESTIMATE and it says so.
+# ARGS passes flags through: make stranger ARGS="--repeat 3 --quiet"
+stranger:
+	uv run python -m tests.stranger_path $(ARGS)
 
 # Prove that what SHIPS works (TASKS.md 3.6). Everything `check` runs happens
 # under `uv run`, with the source tree on the path, so every gate it runs

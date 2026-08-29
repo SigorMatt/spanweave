@@ -10,10 +10,60 @@ no cost, no risk. It tells you what the telemetry observed and how it knows —
 and then gets out of your way. A dialect it does not read yet is a new
 *adapter*, never a change to the graph model (`ADAPTERS.md`).
 
+Point it at a trace. Every path below is a file that ships in this repository,
+so the whole of this section runs as written from a checkout:
+
+```
+$ spanweave inspect fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl
+trace: t1
+schema: 0.1  (NOT FROZEN)
+adapters: openinference 0.1.0
+
+nodes: 4
+  agent: 1
+  llm: 2
+  tool: 1
+edges: 7
+  call_result (explicit): 1
+  data (explicit): 1
+  parent (explicit): 3
+  temporal (derived): 2
+payloads:
+  inputs  present: 4
+  outputs absent: 1
+  outputs present: 3
+diagnostics: 2
+  unmapped_attributes: 2
+```
+
+**That output is the library in one screen**, and it is worth reading before
+writing any code against it:
+
+- **Every edge says how it was established.** `explicit` means the telemetry
+  asserted the relation; `derived` means spanweave computed it from a stated
+  rule. The two `temporal` edges are inferences and are labelled as inferences.
+  Nothing is presented as observed when it was computed.
+- **`absent` is a state, not a blank.** One output payload was never recorded,
+  and that is a different fact from an empty one or a redacted one. The
+  distinction survives into the graph rather than being flattened.
+- **Two attributes could not be mapped, and they are diagnostics, not
+  discards.** "We didn't understand it" is a reportable outcome here. Nothing
+  vanishes quietly.
+- **The schema is not frozen**, and it says so on every run until `1.0.0`.
+
+Then build one and query it:
+
+```
+$ spanweave build fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl -o graph.json
+wrote graph.json
+```
+
 ```python
 import spanweave
 
-graph = spanweave.build("trace.jsonl")
+# Any OpenInference or OTel GenAI trace. This one ships with the repository.
+trace = "fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl"
+graph = spanweave.build(trace)
 
 for node in graph.nodes(kind="tool"):
     # `name` is the one field two dialects may spell differently, and the
@@ -22,11 +72,12 @@ for node in graph.nodes(kind="tool"):
 
 # Traverse only the edges you trust:
 causal = graph.subgraph(edge_kinds={"parent", "call_result"})
+print(len(list(causal.edges())), "edges you can defend")
 ```
 
 ```
-$ spanweave build trace.jsonl -o graph.json
-$ spanweave inspect trace.jsonl
+tool.lookup present present
+4 edges you can defend
 ```
 
 ## Install
@@ -57,9 +108,10 @@ install-check` is the gate that proves the built wheel works from outside this
 repo.
 
 The conformance corpus in `fixtures/` is deliberately **not** in the wheel — it
-is development data, not library code. To run the examples above against a real
-trace without writing one, use a checkout or the sdist, both of which carry it:
-`fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl`.
+is development data, not library code. The paths in the section above therefore
+resolve from a checkout or an unpacked sdist, which is where a first look
+belongs anyway. Installed from a wheel alone, `spanweave` reads your own traces
+and ships no sample of ours.
 
 ## Why this exists
 
@@ -192,6 +244,7 @@ make check          # the gate: lint, types, tests, the invariant gates, the CLI
 make conformance    # the corpus: every scenario, against its canonical graph
 make install-check  # build the wheel, install it, run it from OUTSIDE this repo
 make shape          # regenerate tests/serialized_shape.json (see above)
+make stranger       # walk and time the install path above, from a clean venv
 ```
 
 `make capture` is human-run only and makes a real model call — see

@@ -602,6 +602,85 @@ def probe_cli(
     )
 
 
+def probe_readme_quickstart(
+    venv: pathlib.Path,
+    workdir: pathlib.Path,
+    source: pathlib.Path,
+    report: Report,
+    env: dict[str, str] | None,
+) -> None:
+    """The stranger path (`TASKS.md` 3.9): the README's own blocks, verbatim.
+
+    `tests/test_readme_quickstart.py` runs the same transcript inside
+    `make check`, against the source tree. This runs it against **what ships**,
+    from a directory outside the repository, which is the only version of the
+    run that answers the exit criterion.
+
+    The difference is not ceremony. 3.9 found that both blocks read
+    `trace.jsonl` -- a file nobody has -- so the README's opening example
+    raised `FileNotFoundError` on the first line a reader would paste. That
+    defect was invisible to every gate this project had, because nothing ran
+    the README.
+
+    `fixtures/` is symlinked in because the quickstart's paths are
+    repo-relative and the corpus is deliberately not in the wheel. That is the
+    stranger's real situation: they have a checkout *and* an install. The
+    symlink carries data, never code -- the isolation assertions above still
+    hold, and `spanweave/` is emphatically not linked, so an accidental import
+    of the working tree would still be caught.
+    """
+    from tests.readme_quickstart import normalize, python_blocks, shell_steps
+
+    steps, blocks = shell_steps(), python_blocks()
+    if not report.check(
+        "readme: the quickstart parses into runnable steps",
+        len(steps) >= 2 and len(blocks) >= 1,
+        f"{len(steps)} shell step(s), {len(blocks)} python block(s)",
+    ):
+        return
+
+    fixtures = workdir / "fixtures"
+    if not fixtures.exists():
+        fixtures.symlink_to(source / "fixtures")
+
+    spanweave = _executable(venv, "spanweave")
+    for step in steps:
+        if step.argv[0] != "spanweave":
+            report.skipped(
+                f"readme: {step.command}",
+                "this harness only knows the `spanweave` console script",
+            )
+            continue
+        # Combined streams, in order, because a shell transcript in a README
+        # shows what a terminal shows.
+        result = subprocess.run(
+            [str(spanweave), *step.argv[1:]],
+            cwd=str(workdir),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        shown = _decode(result.stdout)
+        report.check(
+            f"readme: $ {step.command}",
+            result.returncode == 0 and normalize(shown) == normalize(step.expected),
+            f"exit {result.returncode}\n--- README ---\n{normalize(step.expected)}"
+            f"\n--- actual ---\n{normalize(shown)}",
+        )
+
+    python = _venv_bin(venv) / "python"
+    for index, block in enumerate(blocks):
+        result = _run([python, "-c", block.source], cwd=workdir, env=env)
+        printed = _decode(result.stdout)
+        report.check(
+            f"readme: the quickstart python block {index}",
+            result.returncode == 0 and normalize(printed) == normalize(block.expected),
+            f"exit {result.returncode}\n--- README ---\n{normalize(block.expected)}"
+            f"\n--- actual ---\n{normalize(printed)}\n{_decode(result.stderr)}",
+        )
+
+
 # --------------------------------------------------------------------------
 # The check itself
 # --------------------------------------------------------------------------
@@ -617,6 +696,12 @@ def run_check(
     report = Report()
     wheel, sdist = build_distribution(source, out_dir)
     print(f"  built {sdist.name} and {wheel.name}")
+    report.check(
+        "readme: the wheel filename the README names is the one uv build makes",
+        f"dist/{wheel.name}" in (source / "README.md").read_text(encoding="utf-8"),
+        f"built {wheel.name}; the README's Install section does not name it, so "
+        f"the documented `pip install dist/...` resolves to nothing",
+    )
     audit_sdist(sdist, wheel, source, report)
     audit_wheel(wheel, source, report)
 
@@ -631,6 +716,7 @@ def run_check(
         if install_wheel(wheel, venv, report):
             probe_runtime(venv, workdir, source, report, env)
             probe_cli(venv, workdir, report, env)
+            probe_readme_quickstart(venv, workdir, source, report, env)
     return report
 
 
