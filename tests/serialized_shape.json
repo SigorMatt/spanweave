@@ -1,0 +1,225 @@
+{
+ "_": "The SHAPE of a serialized graph -- field names, types, nesting. Never its contents. Regenerate with `make shape` and commit the diff in the same change (tests/schema_shape.py, TASKS.md 3.7).",
+ "declared_elsewhere": [
+  "$.diagnostics[].source"
+ ],
+ "diagnostic_source": {
+  "everything else": "the offending fragment, as the type it arrived as",
+  "malformed_record": "str",
+  "missing_timestamp": "null",
+  "ordering_cycle": "list[str]",
+  "payload_parse_failed": "null",
+  "unmapped_attributes": "list[str]",
+  "unpaired_call": "{\"call_id\": str, \"operation\": str \\| null}",
+  "unpaired_result": "{\"call_id\": str, \"operation\": str \\| null}"
+ },
+ "document": {
+  "$": "object",
+  "$.annotations": "array",
+  "$.annotations[]": "object",
+  "$.annotations[].key": "leaf",
+  "$.annotations[].namespace": "leaf",
+  "$.annotations[].node_id": "leaf",
+  "$.annotations[].value": "passthrough",
+  "$.diagnostics": "array",
+  "$.diagnostics[]": "object",
+  "$.diagnostics[].adapter": "leaf",
+  "$.diagnostics[].code": "leaf",
+  "$.diagnostics[].level": "leaf",
+  "$.diagnostics[].message": "leaf",
+  "$.diagnostics[].node_id": "leaf",
+  "$.diagnostics[].source": "per-code (see diagnostic_source)",
+  "$.edges": "array",
+  "$.edges[]": "object",
+  "$.edges[].adapter": "leaf",
+  "$.edges[].basis": "leaf",
+  "$.edges[].dst": "leaf",
+  "$.edges[].kind": "leaf",
+  "$.edges[].src": "leaf",
+  "$.edges[].warrant": "leaf",
+  "$.meta": "object",
+  "$.meta.adapters": "array",
+  "$.meta.adapters[]": "object",
+  "$.meta.adapters[].declared_confidence": "leaf",
+  "$.meta.adapters[].id": "leaf",
+  "$.meta.adapters[].version": "leaf",
+  "$.meta.diagnostic_count": "leaf",
+  "$.meta.edge_count": "leaf",
+  "$.meta.node_count": "leaf",
+  "$.meta.source_digest": "leaf",
+  "$.meta.spanweave_version": "leaf",
+  "$.nodes": "array",
+  "$.nodes[]": "object",
+  "$.nodes[].attributes": "passthrough",
+  "$.nodes[].ended_at": "leaf",
+  "$.nodes[].id": "leaf",
+  "$.nodes[].inputs": "object",
+  "$.nodes[].inputs.mime": "leaf",
+  "$.nodes[].inputs.raw": "passthrough",
+  "$.nodes[].inputs.state": "leaf",
+  "$.nodes[].inputs.value": "passthrough",
+  "$.nodes[].kind": "leaf",
+  "$.nodes[].name": "leaf",
+  "$.nodes[].operation": "leaf",
+  "$.nodes[].outputs": "object",
+  "$.nodes[].outputs.mime": "leaf",
+  "$.nodes[].outputs.raw": "passthrough",
+  "$.nodes[].outputs.state": "leaf",
+  "$.nodes[].outputs.value": "passthrough",
+  "$.nodes[].provenance": "object",
+  "$.nodes[].provenance.adapter_id": "leaf",
+  "$.nodes[].provenance.adapter_version": "leaf",
+  "$.nodes[].provenance.dialect_note": "leaf",
+  "$.nodes[].raw": "object",
+  "$.nodes[].raw.source": "passthrough",
+  "$.nodes[].raw.source_id": "leaf",
+  "$.nodes[].started_at": "leaf",
+  "$.nodes[].status": "leaf",
+  "$.nodes[].status_note": "leaf",
+  "$.nodes[].usage": "object",
+  "$.nodes[].usage.extra": "passthrough",
+  "$.nodes[].usage.input_tokens": "leaf",
+  "$.nodes[].usage.output_tokens": "leaf",
+  "$.nodes[].usage.total_tokens": "leaf",
+  "$.schema_version": "leaf",
+  "$.trace_id": "leaf"
+ },
+ "model": {
+  "AdapterInfo": {
+   "declared_confidence": "float | None",
+   "id": "str",
+   "version": "str"
+  },
+  "Annotation": {
+   "key": "str",
+   "namespace": "str",
+   "node_id": "NodeId",
+   "value": "JsonValue"
+  },
+  "Diagnostic": {
+   "adapter": "str | None",
+   "code": "str",
+   "level": "DiagnosticLevel",
+   "message": "str",
+   "node_id": "NodeId | None",
+   "source": "JsonValue"
+  },
+  "Edge": {
+   "adapter": "str | None",
+   "basis": "str",
+   "dst": "NodeId",
+   "kind": "EdgeKind",
+   "src": "NodeId",
+   "warrant": "Warrant"
+  },
+  "Meta": {
+   "adapters": "tuple[AdapterInfo, ...]",
+   "diagnostic_count": "int",
+   "edge_count": "int",
+   "node_count": "int",
+   "schema_version": "str",
+   "source_digest": "str | None",
+   "spanweave_version": "str"
+  },
+  "Node": {
+   "attributes": "Mapping[str, JsonValue]",
+   "ended_at": "float | None",
+   "id": "NodeId",
+   "inputs": "Payload",
+   "kind": "NodeKind",
+   "name": "str",
+   "operation": "str | None",
+   "outputs": "Payload",
+   "provenance": "Provenance",
+   "raw": "RawRecord",
+   "started_at": "float | None",
+   "status": "Status",
+   "status_note": "str | None",
+   "usage": "Usage | None"
+  },
+  "Payload": {
+   "mime": "str | None",
+   "raw": "str | None",
+   "state": "PayloadState",
+   "value": "JsonValue"
+  },
+  "Provenance": {
+   "adapter_id": "str",
+   "adapter_version": "str",
+   "dialect_note": "str | None"
+  },
+  "RawRecord": {
+   "line_number": "int | None",
+   "source": "JsonValue",
+   "source_id": "str | None"
+  },
+  "Usage": {
+   "extra": "Mapping[str, int]",
+   "input_tokens": "int | None",
+   "output_tokens": "int | None",
+   "total_tokens": "int | None"
+  }
+ },
+ "passthrough": [
+  "$.annotations[].value",
+  "$.nodes[].attributes",
+  "$.nodes[].inputs.raw",
+  "$.nodes[].inputs.value",
+  "$.nodes[].outputs.raw",
+  "$.nodes[].outputs.value",
+  "$.nodes[].raw.source",
+  "$.nodes[].usage.extra"
+ ],
+ "vocabularies": {
+  "DiagnosticLevel": [
+   "info",
+   "warning"
+  ],
+  "EdgeKind": [
+   "parent",
+   "call_result",
+   "data",
+   "link",
+   "temporal"
+  ],
+  "NodeKind": [
+   "agent",
+   "llm",
+   "tool",
+   "retriever",
+   "embedding",
+   "chain",
+   "unknown"
+  ],
+  "PayloadState": [
+   "present",
+   "empty",
+   "absent",
+   "redacted",
+   "truncated"
+  ],
+  "Status": [
+   "ok",
+   "error",
+   "unset"
+  ],
+  "Warrant": [
+   "explicit",
+   "derived"
+  ],
+  "diagnostic_codes": [
+   "duplicate_source_id",
+   "malformed_record",
+   "missing_timestamp",
+   "multi_trace_input",
+   "nonmonotonic_time",
+   "ordering_cycle",
+   "orphan_parent",
+   "payload_parse_failed",
+   "unknown_span_kind",
+   "unmapped_attributes",
+   "unpaired_call",
+   "unpaired_result"
+  ]
+ }
+}

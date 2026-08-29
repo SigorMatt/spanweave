@@ -193,10 +193,36 @@ column the inventory exists for: not *"it is typed permissively"* but *what does
 the library rely on that no document states and no test asserts?*
 
 - `schema_version` — that a consumer can tell two serialized contracts apart by
-  this value. It cannot: `"0.1"` names both the pre- and post-2.10
-  `Diagnostic.source` contracts, and `0.9.x` publishes that. Nothing asserts
-  that a change to what is serialized bumps it, and nothing could until the
-  semantics are decided — which is `TASKS.md` 3.7, a halt.
+  this value. It cannot, and as of `TASKS.md` 3.7 **it is no longer claimed to**:
+  `0.x` is declared a single unfrozen bucket that never tracks changes, and
+  pinning is on the library version (`SPEC.md` §3.9).
+
+  **This row named one change and there were two.** It said `"0.1"` names both
+  the pre- and post-2.10 `Diagnostic.source` contracts. It also names both the
+  pre- and post-`a953a1f` `meta.adapters[]` contracts: that commit renamed
+  `confidence` to `declared_confidence`, a serialized key rename, and
+  `schema_version` did not move. The enumeration is at `TASKS.md` 3.7, built
+  mechanically over every commit since `SCHEMA_VERSION` was assigned rather
+  than read out of the record — which is how the second one was found, the
+  record having named only the first.
+
+  **Why nothing here saw it, which is this file's own subject.** `canonical()`
+  reduces `meta` to `schema_version`, `trace_id` and the three counts, dropping
+  `meta.adapters` whole — so the corpus, both dialects and the cross-dialect
+  equivalence test were **structurally incapable** of noticing. That is the
+  same shape as the eleven fields measured below as asserted by nothing, and
+  `meta.adapters[].id` and `.version` are two of the eleven. It is the fifth
+  instance of the pattern this file exists to find, after the three Phase 2
+  defects and F-E, and the most direct of them: `a953a1f`'s own message says
+  *"cheap now, a version bump after the freeze"*, so the deferral was written
+  down at the time and still went missing.
+
+  What now asserts that a change to what is serialized is *seen* — not that it
+  bumps a version, which under the 3.7 decision nothing does — is
+  `tests/serialized_shape.json`, the committed shape artifact. It pins field
+  names, types and nesting, never contents, and reads no fixture, so corpus
+  growth cannot fire it. Verified against history: it moves at `a953a1f` and
+  at `9e79658`.
 - `trace_id` — that the id is the dialect's own, unchanged. §7 states which
   `trace_id` wins when an input carries several; nothing states that the value
   is transcribed rather than derived, and the boundary is pinned only.

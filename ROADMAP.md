@@ -168,6 +168,24 @@ feedback before making it.
 predictions are resolved, the adversarial finding is absorbed, and real users
 have exercised the schema — not when the calendar says launch.
 
+**And `1` is a fresh start, not the next term in a sequence** (`TASKS.md` 3.7,
+`SPEC.md` §3.9). `0.x` is a single unfrozen bucket that never tracked changes —
+two contract changes shipped under `"0.1"` and it did not move for either — so
+there is no `0.1 → 0.2 → … → 1` progression for `1` to continue. The field
+acquires meaning **at** the freeze and had none before it.
+
+That has a consequence worth stating before it arrives rather than after.
+**The freeze is the first real exercise of the mechanism that replaces the
+version number**: `tests/serialized_shape.json`, the committed shape artifact
+(`make shape`), which is what additive-only will be measured against. Until
+then it has only ever guarded a schema nobody was promised. This is exactly the
+pattern that has produced every contract defect in this project — a contract
+nothing had to agree with until it mattered — and naming it here does not
+remove it. What reduces it is the same thing that reduced it in Phase 2:
+another implementation having to agree, which is why the third dialect is a
+freeze precondition below. Run the tripwire against dialect three's arrival,
+and prefer discovering it is wrong there over discovering it at `1.0.0`.
+
 ### The gate
 
 - **Shape changes: zero.** A new field, `NodeKind`, `EdgeKind`, warrant,
@@ -241,6 +259,11 @@ Also here, because both want a real merged adapter to exist first:
   exercised the schema at `0.9.x`, **and a third dialect is rendered in the
   conformance corpus** — see the gate below. Plus the compatibility policy:
   additive-only thereafter, version bump for anything breaking (`CLAUDE.md` 7).
+  `1` is a **fresh start**: `0.x` never tracked changes, so nothing about it
+  carries forward (`SPEC.md` §3.9). The freeze is also the first time
+  `tests/serialized_shape.json` guards anything anyone was promised — see
+  *Freeze later, on evidence* above for why that is the project's own recurring
+  failure shape rather than a detail of sequencing.
 
 Dialects three through six are the real test of the freeze decision. If a fifth
 adapter still forces a model change, the schema was not ready — and finding that

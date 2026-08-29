@@ -48,6 +48,14 @@ fix one deliberately, don't let them drift.
   repository; this is the only gate that answers one about the distribution.
   Reaches PyPI only as **zone 1** does, for dependencies. It never publishes —
   that is zone 4 and human-run.
+- Shape:   `make shape` — regenerates `tests/serialized_shape.json`, the
+  committed shape of the serialized graph (`TASKS.md` 3.7, Option C). Under
+  Option B `schema_version` never moves during `0.x`, so this artifact, not the
+  version number, is what stops a change to what is serialized shipping
+  unnoticed: `make check` fails when the shape moves, and the fix is to
+  regenerate **and commit the diff in the same change**, never to regenerate
+  until the failure goes away. It reads no fixture, so corpus growth cannot
+  move it.
 - Capture: `make capture` — **human-run only**, see below
 
 ## Repo layout (expected)

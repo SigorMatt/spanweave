@@ -351,7 +351,8 @@ still immutable; `Graph.of(...)` builds one.
 
 ```
 Meta:
-  schema_version:   str        # "1" once frozen; "0.x" until then
+  schema_version:   str        # "0.x" until the freeze, and it never moves
+                               # while it is "0.x"; "1" once frozen (below)
   spanweave_version: str
   adapters:         tuple[AdapterInfo, ...]   # id + version + confidence, sorted
   source_digest:    str | None # sha256 of input bytes, when built from a file
@@ -387,6 +388,47 @@ graph rather than about this field.
 `meta` MUST NOT contain a build timestamp, a hostname, a username, or a file
 path. Those would break byte-identical determinism and leak the operator's
 environment.
+
+#### `schema_version` while unfrozen: `0.x` is one bucket, and it never tracks
+
+**`0.x` is a single unfrozen bucket. It does not track changes to the
+serialized graph, it never has, and it will not before the freeze. A consumer
+must pin on the *library* version, not on this field.**
+
+That is a decision (`TASKS.md` 3.7), not a description of neglect, and it is
+stated here because the alternative was to imply a precision the value never
+had. `SCHEMA_VERSION` was `"0.1"` before **two** changes to what is serialized
+and `"0.1"` after both of them:
+
+| Change | What moved |
+|---|---|
+| `a953a1f` | `meta.adapters[].confidence` renamed to `declared_confidence` |
+| `9e79658` | `diagnostics[].source` on the unpaired codes: a bare string became `{"call_id", "operation"}` (§3.7) |
+
+Bumping to `"0.2"` now would buy a distinction **no one can observe** — nothing
+has ever been published from this repository, so no consumer has ever read a
+`"0.1"` graph — while implying that the sequence `0.1 → 0.2` tracks contract
+changes, which for the `0.1` era is not true. Declaring the bucket says the
+same thing without the implication.
+
+**What to pin on instead.** `meta.spanweave_version` is in every graph
+document, so the library version is recoverable from the file itself with no
+out-of-band knowledge. That is the field that moves when the serialized graph
+moves, and it is what a consumer should compare.
+
+**What still stops a change shipping unnoticed.** Not this field — under this
+decision it cannot. `tests/test_schema_shape.py` does: the shape of the
+serialized document (field names, types, nesting — never contents) is
+committed to `tests/serialized_shape.json`, and moving it fails the build
+until the artifact is regenerated in the same change, which puts the move in
+the diff. It is deliberately blind to what a trace contains, so growing the
+conformance corpus cannot fire it.
+
+**At the freeze, `"1"` is a fresh start.** It is not the next term in a
+sequence that ran through `0.x`, because no such sequence ran. The field
+acquires meaning *at* the freeze and had none before it, and the
+additive-only compatibility policy (`CLAUDE.md` 7) is the first thing that
+ever gives it teeth (`ROADMAP.md`, Phase 4).
 
 ### 3.10 Errors and error codes
 

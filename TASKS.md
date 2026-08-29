@@ -4093,12 +4093,26 @@ from a bare id string to `{"call_id", "operation"}`, classified **SHAPE** at
 contract half is done and needs nothing in Phase 3.
 
 What needs accounting for is the **version**. `SCHEMA_VERSION` was `"0.1"` before
-the change and is `"0.1"` after it. A consumer pinning on `schema_version` across
-those two releases sees one value describing two different serialized contracts.
-0.9.x publishes that to strangers. The decision — bump to `"0.2"`, or state
-explicitly that `0.x` is a single unfrozen bucket that never bumps and that
-pinning must therefore be on the *library* version — is `AGENT.md`'s
-*"any change to `schema_version` semantics"* halt point, and it is **3.7**.
+the change and is `"0.1"` after it. **DECIDED at 3.7: Option B plus C.** `0.x` is
+a single unfrozen bucket that never tracks changes and pinning is on the library
+version (`SPEC.md` §3.9); the tripwire that stops a shape change shipping
+unnoticed is `tests/serialized_shape.json` (`make shape`).
+
+**And this blocker undercounted.** It says "the change", singular. 3.7 enumerated
+the window mechanically — every commit since `SCHEMA_VERSION` was assigned, which
+is the whole life of the package — and found **two** contract changes under one
+value, not one. The second is `a953a1f`, which renamed
+`meta.adapters[].confidence` to `declared_confidence`. Nothing in the project
+could see it: `canonical()` drops `meta.adapters` whole, so the corpus, both
+dialects and the equivalence test were structurally incapable of noticing, and
+its own commit message defers the bump — *"cheap now, a version bump after the
+freeze"* — which then never happened. The fifth instance of the pattern, after
+the three Phase 2 defects and `CONTRACTS.md`'s F-E, and the most direct: the
+deferral was recorded at the time and still went missing.
+
+The halt this was an instance of — `AGENT.md`'s *"any change to `schema_version`
+semantics"* — is **standing and undischarged**. What is discharged is 3.7's
+instance of it.
 
 It also constrains **3.3**: the remedy exists so a consumer can name an
 unfulfilled call's tool in one line, identically in every dialect. If either
@@ -4210,6 +4224,13 @@ Phase 4), and that gate binds Phase 4, not this phase's launch.
     already a standing halt as *"any change to `schema_version` semantics"*, named
     at its task so it is not missed); each consumer's findings record, because
     **a human marks P1–P4** in a file the agent may not edit.
+    > **Corrected at 3.7.** This entry, and the halt text it produced in
+    > `AGENT.md`, described the `schema_version` problem as *one* change —
+    > `Diagnostic.source`. There were **two**: `a953a1f` also renamed
+    > `meta.adapters[].confidence` to `declared_confidence` under the same
+    > `"0.1"`. Recorded here rather than only at 3.7 because this is the task
+    > that wrote the halt, and a halt that misstates its own subject is how the
+    > second change stayed unnamed for a whole phase.
   - **New must-nots:** freeze the schema or change `SCHEMA_FROZEN`; add a third
     dialect (still Phase 4, and now also a freeze precondition — see the gate in
     `ROADMAP.md`); resolve or edit `PREDICTIONS.md`; widen the shape/operational
@@ -7193,6 +7214,150 @@ consumer's findings go in the exit record beside these and carry more weight.
   > record's**: every document that discusses this names `Diagnostic.source`
   > alone. Measuring Option A's cost required flipping `SCHEMA_VERSION` and
   > running the suite; the tree was clean before and is clean after.
+
+  > ---
+  >
+  > ## DECIDED by the human, after the artifact above: **B, plus C. Not A.**
+  >
+  > **HALT DISCHARGED.** The standing halt — *any change to `schema_version`
+  > semantics* — remains in force in `AGENT.md`; what is discharged is 3.7's
+  > instance of it.
+  >
+  > **B — `0.x` is a single unfrozen bucket that never tracks changes; pinning
+  > is on the library version.** The human's two reasons, recorded in their
+  > terms: with a population of zero, A buys a distinction nobody can observe;
+  > and A costs 20 `expected/graph.json` edits that collide with a standing
+  > must-not, which will not be authorised to make a version number tidier for
+  > no one. B also states the truth — `0.x` did not track, does not, and will
+  > not — and makes `schema_version` consistent with what the README and
+  > `SPEC.md` already say about the schema being unfrozen, rather than implying
+  > a precision it never had.
+  >
+  > **C — because B alone leaves the mechanism intact.** `"0.1"` did not go
+  > wrong through a bad choice of value; two changes shipped and nothing
+  > noticed. Relabelling the output without building the tripwire is the same
+  > defect with a better excuse.
+  >
+  > ### What landed
+  >
+  > **B.** `SCHEMA_VERSION` stays `"0.1"`. `SPEC.md` §3.9 gains
+  > *"`schema_version` while unfrozen: `0.x` is one bucket, and it never
+  > tracks"*, which states the decision, tables **both** changes that shipped
+  > under `"0.1"`, and names `meta.spanweave_version` as what to pin instead.
+  > The CLI's unfrozen notice and the README say the same thing in the words a
+  > reader meets first — the old text said *"pin your version"* without saying
+  > which one, which is how a reader ends up pinning the field that never moves.
+  > `tests/test_version.py` asserts the §3.9 declaration is present, that both
+  > reader-facing surfaces name `meta.spanweave_version`, and — the one that
+  > matters — that the field B sends a consumer to **is actually in the
+  > document**, so the instruction is followable from the graph file alone.
+  >
+  > **C.** `tests/schema_shape.py` (the instrument), `tests/serialized_shape.json`
+  > (the committed artifact), `tests/test_schema_shape.py` (the tripwire and its
+  > plants), and `make shape` to regenerate. The artifact has five sections:
+  > the serialized key tree, the declared model fields, the closed vocabularies,
+  > the passthrough boundary, and `SPEC.md` §3.7's `source`-per-code table.
+  > Moving any of them fails `make check` until the artifact is regenerated in
+  > the same change — which is the point: under B the version number will not
+  > announce a change, so the **diff** does.
+  >
+  > ### C's scope, as decided: shape, never contents
+  >
+  > **Nothing in the instrument reads the corpus.** Not one fixture, not one
+  > trace, not one graph built from a file. That is how the decided boundary is
+  > held — not by filtering corpus noise out afterwards, which is what the
+  > enumeration probe did and why it fired 7 times to catch 2, but by making
+  > fixtures unreachable. Every section is derived from the library's own code
+  > and documents.
+  >
+  > Proved, as instructed, by plants rather than by prose — `tests/test_schema_shape.py`:
+  >
+  > | Plant | Outcome |
+  > |---|---|
+  > | add a real new scenario to `fixtures/conformance/`, then remove it | **silent** |
+  > | record every file the instrument opens | **none under `fixtures/`** |
+  > | rename `meta.adapters[].confidence` back (replay of `a953a1f`) | **fires** |
+  > | change `Payload.mime`'s declared type | **fires** |
+  > | add a serialized key to `edges[]` | **fires** |
+  >
+  > The second row is the one that makes the claim *cannot* rather than *did
+  > not*: one plant proves one fixture is harmless; that proves every fixture
+  > is, including ones nobody has written yet.
+  >
+  > ### Verified against history, which is the only test that counts
+  >
+  > A tripwire is worth what it would have caught. Today's instrument was run
+  > against the archived trees on both sides of each change that shipped
+  > unnoticed:
+  >
+  > | Commit | What the instrument reports |
+  > |---|---|
+  > | `a953a1f` | `document`: `$.meta.adapters[].confidence` → `$.meta.adapters[].declared_confidence`; `model`: `AdapterInfo.confidence` → `declared_confidence` — **fires, in two sections** |
+  > | `9e79658` | `diagnostic_source`: `{}` → the five declared rows — **fires** |
+  >
+  > `9e79658` fires through §3.7's table rather than through the key tree, and
+  > that dependency is named in the instrument's own docstring rather than
+  > hidden: `source` is `JsonValue`, so no annotation can see it move, and it is
+  > `tests/test_codes.py` that forces §3.7 to move when the library does. Two
+  > instruments in series. If `test_codes.py` were deleted, this one would go
+  > half-blind — recorded here because that is the kind of coupling this project
+  > has been bitten by.
+  >
+  > ### `a953a1f`, recorded prominently — the fifth instance
+  >
+  > It renamed `meta.adapters[].confidence` to `declared_confidence`: a
+  > serialized key rename, shipped under `"0.1"`, with `schema_version`
+  > unmoved. It is the most direct instance of this project's recurring pattern
+  > — after the three Phase 2 contract defects and `CONTRACTS.md`'s F-E —
+  > because the deferral was **written down at the time and still went
+  > missing**: the commit message says *"cheap now, a version bump after the
+  > freeze"*, and the bump never came.
+  >
+  > Why nothing caught it: `canonical()` reduces `meta` to `schema_version`,
+  > `trace_id` and the three counts, dropping `meta.adapters` whole. The
+  > corpus, both dialects and the cross-dialect equivalence test were
+  > **structurally incapable** of noticing — the same shape as the eleven
+  > serialized fields `CONTRACTS.md` measures as asserted by nothing, two of
+  > which are `meta.adapters[].id` and `.version`.
+  >
+  > **Every document that named `Diagnostic.source` as the only contract change
+  > is corrected**, in place, with what it said and why it was wrong:
+  > `AGENT.md`'s halt entry, `CONTRACTS.md`'s `schema_version` *Relies on* row,
+  > `TASKS.md` 3.1's halt list, and Phase 3's blocker 2 above.
+  >
+  > ### At the freeze
+  >
+  > `"1"` is a **fresh start**, and `0.x`'s never having tracked is the reason:
+  > there is no `0.1 → 0.2 → … → 1` progression for it to continue, so the
+  > field acquires meaning at the freeze and had none before it (`SPEC.md`
+  > §3.9). `ROADMAP.md` now also records that **the freeze is C's first real
+  > exercise** — until then the tripwire has only ever guarded a schema nobody
+  > was promised, which is precisely the Phase 2 pattern of a contract nothing
+  > had to agree with until it mattered, and that is when this project's
+  > contracts have failed. The mitigation named there is the one that worked
+  > before: run it against dialect three's arrival, and prefer finding it wrong
+  > there over finding it wrong at `1.0.0`.
+  >
+  > ### Divergences from the plan
+  >
+  > - **The task described one decision; it produced two changes and a new test
+  >   instrument.** 3.7 as written was "bump the version, then decide". C is
+  >   additional scope, authorised explicitly by the human in the same message
+  >   as the decision.
+  > - **No `spanweave/` behavior changed.** The only edit under the package is
+  >   the CLI's unfrozen notice text. `SCHEMA_VERSION` and `SCHEMA_FROZEN` are
+  >   untouched, the serialized graph is byte-identical, and the shape artifact
+  >   committed here is therefore the shape `0.9.0` ships.
+  > - **The tripwire lives in `tests/`, not in `spanweave/`.** It is a
+  >   development gate, not library behavior, and putting it in the package
+  >   would ship a fixture-reading test surface to consumers. `pyproject.toml`
+  >   already includes `/tests` in the sdist, so `make install-check` stayed
+  >   green with no packaging change.
+  > - **`make shape` added** to the `Makefile` and to `ENVIRONMENT.md`'s command
+  >   list, per 3.1's rule that a command is listed only after it has run.
+  > - **`PREDICTIONS.md` and `fixtures/` untouched**, as in every agent commit
+  >   this phase. The fixture plant creates and removes a scenario inside one
+  >   test and asserts the corpus is unchanged afterwards.
 
 - [ ] **3.8 The docs truth pass, before anything is published.** `[launch]`
   0.9.x is the first time these files are read by someone who cannot check them

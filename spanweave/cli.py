@@ -28,9 +28,15 @@ from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 EXIT_OK = 0
 EXIT_FAILED = 1
 
+# While unfrozen, `schema_version` is one bucket for the whole of 0.x and does
+# NOT track changes to the serialized graph (`SPEC.md` §3.9). Saying "pin your
+# version" without saying WHICH one is how a reader ends up pinning the field
+# that never moves, so the notice names the one that does.
 _SCHEMA_NOTICE = (
     f"Graph schema version {SCHEMA_VERSION} is NOT FROZEN: it may change in any "
-    "release before 1.0.0. Pin your version."
+    "release before 1.0.0, and 0.x is a single bucket that does not track those "
+    "changes. Pin on the spanweave version (meta.spanweave_version), not on "
+    "schema_version."
     if not SCHEMA_FROZEN
     else f"Graph schema version {SCHEMA_VERSION}."
 )

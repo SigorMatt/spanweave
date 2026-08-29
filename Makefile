@@ -2,7 +2,7 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance capture clean
+.PHONY: check install-check lint types test gates conformance shape capture clean
 
 check: lint types test gates
 	uv run spanweave --version
@@ -32,6 +32,16 @@ gates:
 # library's central claim in executable form.
 conformance:
 	uv run pytest tests/test_conformance.py -v
+
+# Regenerate the committed serialized-shape artifact (TASKS.md 3.7, Option C).
+# `SCHEMA_VERSION` stays "0.1" for the whole of 0.x (Option B), so the version
+# number is NOT what stops a change to the serialized graph shipping unnoticed
+# -- this artifact is. `make check` fails when the shape moves; regenerate here
+# and commit the diff IN THE SAME CHANGE, so the move is reviewed rather than
+# discovered. Never regenerate to make a failure go away: the diff is the
+# finding. Nothing in it reads the corpus, so adding a fixture cannot move it.
+shape:
+	uv run python -m tests.schema_shape
 
 # Human-run only (TASKS.md 1.9, and again at 2.6). Captures a trace from real
 # instrumentation: needs framework dependencies and a model API key in YOUR

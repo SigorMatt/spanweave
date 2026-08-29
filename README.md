@@ -104,8 +104,19 @@ exists to *falsify* this model rather than confirm it, is Phase 2.
 
 It stays unfrozen through the `0.9.x` release: publishing is reversible and
 freezing is not, so the launch happens first and the freeze happens on evidence
-(`ROADMAP.md`). Until `1.0.0`, treat the schema as subject to change and pin
-your version.
+(`ROADMAP.md`). Until `1.0.0`, treat the schema as subject to change.
+
+**Pin on the spanweave version, not on `schema_version`.** While unfrozen,
+`schema_version` is a single bucket for the whole of `0.x` and does **not**
+track changes to the serialized graph — it has not moved across two of them
+already, and it will not move before the freeze (`SPEC.md` §3.9). The field
+that does move is the library version, and `meta.spanweave_version` carries it
+in every graph document, so you can read it from the file itself.
+
+What stops a change to the serialized graph shipping unnoticed is not that
+field but a committed shape artifact (`tests/serialized_shape.json`): the
+document's field names, types and nesting are pinned, and moving any of them
+fails the build until the change is regenerated into the diff.
 
 ## Development
 
