@@ -8,7 +8,7 @@ library must report a version from a source checkout as well as from a wheel.
 ``tests/test_version.py`` keeps it in step with ``pyproject.toml``.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.9.0"
 
 # The graph schema's own version, independent of the library's. It is "0.x"
 # until the Phase 4 freeze and "1" after it (SPEC.md 3.9). While it is

@@ -6936,7 +6936,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   CI. `ENVIRONMENT.md`'s command list gained the target only after it ran
   (3.1's rule).
 
-- [ ] **3.7 Version to `0.9.0`, and decide what `schema_version` means while
+- [x] **3.7 Version to `0.9.0`, and decide what `schema_version` means while
   unfrozen.** `[launch]`
   Two things, and the second is the reason this is a halt.
 
@@ -6958,6 +6958,241 @@ consumer's findings go in the exit record beside these and carry more weight.
   *Artifact for the decision:* the list of serialized changes made since `"0.1"`
   was assigned, and, for each option, what a consumer pinning on
   `schema_version` at 0.9.x could and could not conclude.
+
+  > **Done: the version. Not done, and not the agent's: the semantics.**
+  > `__version__` and `pyproject.toml` are `0.9.0`, `SCHEMA_FROZEN` is `False`,
+  > `SCHEMA_VERSION` is untouched at `"0.1"`, `spanweave --version` says
+  > `spanweave 0.9.0 (graph schema 0.1; UNFROZEN)`, and `make check` is green.
+  > Nothing else under `spanweave/` moved; no fixture was authored or edited.
+  > `dist/` still holds the `0.1.0` artifacts 3.6 built — **3.10 must rebuild**.
+  >
+  > **The headline: it is not one change, it is two, and the second is a key
+  > rename nobody has been discussing.** `AGENT.md`, this task, Phase 3's
+  > blocker 2 and `CONTRACTS.md`'s `schema_version` *Relies on* row all name
+  > `Diagnostic.source` and only `Diagnostic.source`. That is not the list.
+  >
+  > ## The enumeration, and how it was made
+  >
+  > `SCHEMA_VERSION = "0.1"` was assigned at **d8e2c37**, the first commit to
+  > contain `spanweave/`, so the window is the whole life of the package — 65
+  > commits. Two mechanical probes, both re-runnable, rather than a reading of
+  > the record:
+  >
+  > - **Shape.** At each commit, build every trace in *that commit's own*
+  >   `fixtures/` and record the union of `path -> JSON type`, plus leaf
+  >   *values* for the closed vocabularies (`kind`, `state`, `status`,
+  >   `warrant`, `basis`, `code`, `level`). Diff consecutive commits. Paths
+  >   below `raw.source.*`, `inputs.value.*`, `outputs.value.*`, `attributes.*`
+  >   and `usage.extra.*` are verbatim trace passthrough — their sub-keys are
+  >   corpus content, not schema — so the container's type is kept and its
+  >   descendants are not.
+  > - **Bytes.** Build a **fixed** input set with each commit's library, so any
+  >   difference is the library's and not the corpus's. Three runs: the 14
+  >   traces byte-identical since d8e2c37; all 21 HEAD `openinference`
+  >   renderings; and all 17 HEAD `otel_genai` renderings over `b746b09..HEAD`,
+  >   which closes the second dialect from the moment its adapter existed.
+  >
+  > **Four commits changed the serialized graph for identical input bytes.**
+  > Two are contract changes; two are behaviour changes with no key or type
+  > movement.
+  >
+  > | Commit | What moved | Class |
+  > |---|---|---|
+  > | `79f7dcd` | call-result pairing corrected — which `call_result` edges exist, and the set `unmapped_attributes` reports | behaviour |
+  > | `a953a1f` | `meta.adapters[].confidence` → `meta.adapters[].declared_confidence` | **contract — key rename** |
+  > | `58ff0c3` | `data` edges emitted for the first time; `edges[].kind` shows `data`, `edges[].basis` a new string, `meta.edge_count` rises | behaviour, with a vocabulary edge |
+  > | `9e79658` | `diagnostics[].source` on `unpaired_call` / `unpaired_result`: `str` → `{"call_id", "operation"}` | **contract — type change** |
+  >
+  > The negatives bound the list, and matter as much as the positives:
+  > `serialize.py` changed **exactly once** in 65 commits and that once is
+  > `a953a1f`; `model.py` changed exactly once, same commit, same field;
+  > `diagnostics.py` and `annotate.py` are **unchanged since d8e2c37**, so no
+  > diagnostic code was added, renamed or removed and the annotation
+  > serialization never moved; `ROOT_KEYS` and the canonical encoding (sorted
+  > keys, compact separators, non-ASCII kept, trailing newline) never changed;
+  > and `NodeKind` / `EdgeKind` / `PayloadState` / `Warrant` / `Status` /
+  > `DiagnosticLevel` membership never changed. The `status`, `status_note` and
+  > `inputs.value` movements the shape probe reports at `33318e2`, `b746b09`
+  > and `97e5a6b` are the corpus reaching values that were always legal, not
+  > the schema moving.
+  >
+  > **Why the rename stayed invisible.** `canonical()` reduces `meta` to
+  > `schema_version`, `trace_id` and the three counts — `meta.adapters` is
+  > dropped whole. So the corpus, the cross-dialect equivalence claim and all
+  > 20 `expected/graph.json` files could not see it. One test could
+  > (`tests/test_cli.py:78`, which asserts the serialized key), and it was
+  > edited in the same commit; `CONTRACTS.md` already measures
+  > `meta.adapters[].id` and `.version` as two of the eleven serialized fields
+  > **nothing** asserts. `a953a1f`'s own message says of the rename: *"Cheap
+  > now, a version bump after the freeze."* The deferral was real and
+  > deliberate. The field that was to carry it did not move, and the deferral
+  > was not written anywhere the `schema_version` question would find it.
+  >
+  > ## What each option costs a consumer who pins
+  >
+  > **First, the fact that reshapes the question — verified, not assumed:
+  > there is no consumer who wrote against `0.1` in the past.** `__version__`
+  > has been `0.1.0` since the first commit and has never been anything else;
+  > the three tags (`phase-1-exit`, `phase-2-exit`, `phase-2-followup`) are
+  > internal phase markers, not releases; no document has ever carried an
+  > install line (3.8 is the task that adds one); 3.10 is unrun. Nothing has
+  > ever left this repo. **The retrospective cost of both options is zero, and
+  > equally so** — both contract changes above were made against a population
+  > of zero. The decision is therefore entirely forward-looking, and 3.10 is
+  > its deadline: publishing is what converts a private inconsistency into an
+  > observed one.
+  >
+  > **What a consumer can detect at all** (measured, not inferred):
+  > every document carries `meta.spanweave_version` — `0.1.0` before this task,
+  > `0.9.0` after — so the library version is always recoverable from the graph
+  > file with no out-of-band knowledge. `spanweave.validate()` is public API
+  > and compares the document's `schema_version` against the **reading build's**
+  > constant, returning `("schema_version is '0.0-old', and this build writes
+  > '0.1'; the schema is not frozen until 1.0, so graphs from other versions
+  > may differ",)` when they differ and `()` when they match. It has no other
+  > source of truth: it warns exactly when the values differ, never otherwise.
+  >
+  > **Option A — bump to `"0.2"` now.** A consumer pinning `"0.2"` from 0.9.0
+  > gets a value that is true *as of today*: it separates today's contract from
+  > the pre-`a953a1f` and pre-`9e79658` ones. What it does not buy, unless
+  > something else is added, is that the *next* change bumps it — nothing in
+  > the tree asserts that, which is what `CONTRACTS.md`'s `schema_version` row
+  > already says: *"Nothing asserts that a change to what is serialized bumps
+  > it, and nothing could until the semantics are decided."* A bump with no
+  > mechanism reproduces the identical defect at the next serialized change,
+  > and Phase 4 has at least two queued (`Edge.basis`, the `erase`-both-sides
+  > proposal) plus dialect three. Two 0.x documents are distinguishable only if
+  > the discipline was actually followed, which is the thing nothing enforces.
+  >
+  > *Mechanical cost, measured — the constant was flipped, the suite run, and
+  > the tree reverted clean:* **36 failed, 1517 passed, 4 skipped**, and all 36
+  > failures are the *same* test,
+  > `test_conformance.py::test_the_rendering_produces_its_scenario_s_canonical_graph`,
+  > parameterised over the 36 renderings. Cause: `canonical()` puts
+  > `schema_version` in its `meta`, so all 20 `expected/graph.json` files pin
+  > `"0.1"`. Nothing else fails — **cross-dialect equivalence passes unchanged**
+  > (68 passed), because one build produces both renderings and they always
+  > agree. So A costs exactly one line in each of 20 committed expectation
+  > files, and **that collides with a standing must-not**: `AGENT.md` forbids
+  > *"weaken `canonical()`, edit an `expected/graph.json`"*. The prohibition
+  > was written against relaxing an expectation to make code pass, which this
+  > is not, but it carries no exception. **A cannot be executed under the
+  > current run scope** without the human authorising those 20 edits, or a
+  > separate decision that `schema_version` does not belong in `canonical()` —
+  > which is worth its own look on its own evidence: the field sits inside the
+  > cross-dialect comparison where it **can never differ**, contributing
+  > nothing to equivalence and pinning 20 files as its only effect. That is a
+  > `FIXTURES.md` §4 question and a precondition to A, not an option beside it.
+  >
+  > **Option B — `0.x` is one unfrozen bucket; pin on the library version.** The
+  > consumer is told, in `SPEC.md` §3.9 and in the notice they already see, that
+  > `schema_version` does not discriminate while unfrozen and that
+  > `meta.spanweave_version` is the field to pin — an instruction that is
+  > **executable today**, since that field is in every document. The cost:
+  > between 0.9.0 and the freeze no serialized change is visible in
+  > `schema_version`, by design and by declaration, and `validate()` is silent
+  > across the whole 0.x era because the values never differ. A consumer who
+  > ignores the notice and pins anyway gets a value that never changes and is
+  > never wrong about anything — the failure mode B accepts **openly**, where
+  > A's is accepted quietly. B does not make `"0.1"` honest about the two
+  > changes above; it makes it *harmless*, by withdrawing the claim the value
+  > was making. The changes still have to be written down where a consumer can
+  > read them, which is what this record is, and B leans on it much harder than
+  > A does. Mechanical cost: zero test failures, one `SPEC.md` §3.9 paragraph,
+  > no fixture moves.
+  >
+  > ## What each commits us to at the freeze
+  >
+  > `SPEC.md` §3.9 already says the value is `"1"` once frozen. Since launch-day
+  > consumer cost is zero either way, **what `"1"` means is the real
+  > difference.**
+  >
+  > - **Under A, `"1"` is continuous with `0.x`.** The sequence reads
+  >   `0.1 → 0.2 → … → 1` and a consumer is entitled to read the steps as the
+  >   same kind of step — each announcing a change to what is serialized. That
+  >   entitlement is a claim about the past, and for the `0.1` era the record
+  >   cannot support it: `"0.1"` covered two contract changes, one of them a key
+  >   rename. So A commits us either to saying that out loud — this record,
+  >   cited from `SPEC.md` — or to a sequence whose first term is silently
+  >   untrue. It also commits us to the bump discipline for every serialized
+  >   change between here and the freeze, and, if the discipline is to mean
+  >   anything, to a mechanism enforcing it: two of two changes so far were made
+  >   without one.
+  > - **Under B, `"1"` is a fresh start.** The field acquires meaning *at* the
+  >   freeze and had none before; `0.x` values are declared non-discriminating,
+  >   so no consumer can be misled by them and nothing about the `0.1` era needs
+  >   defending. The commitment is the opposite one: from the freeze onward the
+  >   field means something it has never meant, and the compatibility policy
+  >   (`CLAUDE.md` 7, additive-only after the freeze) is the first thing that
+  >   ever gives it teeth. The freeze becomes the mechanism's **first**
+  >   exercise, on the version where being wrong is expensive — which is the
+  >   pattern Phase 2 found three times: a contract nothing had to agree with
+  >   until it mattered.
+  >
+  > Side by side: **A pays now for a discipline it does not yet have; B pays at
+  > the freeze for a discipline it has not yet needed.** A's risk is that the
+  > bump becomes a ritual nobody enforces and `"0.5"` describes three contracts.
+  > B's risk is that `"1"` is the first real use of the field.
+  >
+  > ## Is there a third option
+  >
+  > **Yes — one, on a different axis. And one non-option that looks like a
+  > third, named so it is not mistaken for one.**
+  >
+  > **Option C — decide the *rule* and build the tripwire, then set the value
+  > the rule implies.** A and B both answer *"what should the value be?"*.
+  > Neither answers *"what makes the value true tomorrow?"*, and the
+  > enumeration is the argument that the second question is load-bearing:
+  > `"0.1"` did not become wrong because someone chose a bad value, it became
+  > wrong because **two changes shipped and nothing noticed**. A restates the
+  > promise without an enforcer; B withdraws the promise; both leave that
+  > intact. C adopts the rule — *any change to what `to_document` writes bumps
+  > `SCHEMA_VERSION` in the same change* — adds a test that fails when the rule
+  > is broken, and then sets the value the rule implies. The mechanism is
+  > buildable from what exists and is cheap: commit a digest of the serialized
+  > **shape** over the corpus — the exact instrument that produced the
+  > enumeration above — and fail the suite when the shape moves while
+  > `SCHEMA_VERSION` does not.
+  >
+  > C is compatible with either value: paired with A it makes the sequence mean
+  > what it says; paired with B it becomes a Phase 4 precondition, so the freeze
+  > is not the mechanism's first exercise. **It is not the agent's call either**
+  > — it adds a test constraining every future change, and it presupposes the
+  > semantics question this task hands over.
+  >
+  > *C's cost, measured on the same run rather than asserted:* the structural
+  > probe fired on **7** commits to catch the **2** contract changes — two more
+  > were real behaviour changes worth a consumer's attention (`79f7dcd`,
+  > `58ff0c3`), and **three** (`33318e2`, `b746b09`, `97e5a6b`) were pure corpus
+  > growth reaching values that were always legal. So C needs a decided boundary
+  > for what counts as "the serialized shape"; my probe excludes verbatim
+  > passthrough, and that exclusion is a judgement, not a fact. Get it wrong and
+  > the tripwire is either blind or noisy — and one that fires on every corpus
+  > addition is switched off within a month.
+  >
+  > **The non-option: `schema_version` tracks `__version__`** (set it to
+  > `"0.9.0"`). It reads as a third answer and is not one. It always
+  > discriminates and needs no discipline, but it makes `validate()` warn on
+  > every cross-release document whether or not anything serialized changed —
+  > training readers to ignore the field's one signal — and it collapses the two
+  > version namespaces at exactly the point `SPEC.md` §3.9 relies on their being
+  > separate. Recorded so the shape is visible and its failure is on the record,
+  > not so it is chosen.
+  >
+  > ## What is undecided, and when it stops being reversible
+  >
+  > `SCHEMA_VERSION` is `"0.1"` in the commit carrying this record. **Shipping
+  > as-is is itself Option B, taken by default rather than by decision** — and
+  > the default hardens at **3.10**, because a name-plus-version on PyPI cannot
+  > be reused and publishing is what turns a private inconsistency into an
+  > observed one. The deadline for this decision is 3.10, not 3.11.
+  >
+  > **Divergence from the plan.** The task asks for *"the list of serialized
+  > changes made since `"0.1"` was assigned"*. It was built mechanically rather
+  > than read out of the record, and the mechanical list is **longer than the
+  > record's**: every document that discusses this names `Diagnostic.source`
+  > alone. Measuring Option A's cost required flipping `SCHEMA_VERSION` and
+  > running the suite; the tree was clean before and is clean after.
 
 - [ ] **3.8 The docs truth pass, before anything is published.** `[launch]`
   0.9.x is the first time these files are read by someone who cannot check them
