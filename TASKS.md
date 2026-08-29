@@ -7756,6 +7756,309 @@ consumer's findings go in the exit record beside these and carry more weight.
   output against the wheel, the exact command, and what is in the sdist that is
   not in the wheel.
 
+  > **PREPARED AND STOPPED. The box above stays `[ ]` on purpose** — it is
+  > unchecked because the publish has not happened, and 3.8 keyed the
+  > `pip install spanweave` guard to it, so ticking it is the same act as
+  > declaring that command resolves. **A human ticks it, in the commit that
+  > publishes.** Everything else this task asks for is done.
+  >
+  > `make check` green (1593 passed, 4 skipped). `make install-check` green
+  > (30 checks, 3 plants held). Nothing under `spanweave/` or `fixtures/`
+  > moved; `PREDICTIONS.md` untouched. **No `uv publish`, no `twine upload`,
+  > no TestPyPI, no `--dry-run`, no token requested.**
+  >
+  > ## The artifacts
+  >
+  > ```
+  > dist/spanweave-0.9.0-py3-none-any.whl     64234 bytes
+  >   sha256 2ed231f5fff628d6c661c5e047e7ca1cc975be6f7a22d9f1112b640eabd5c9a6
+  > dist/spanweave-0.9.0.tar.gz            ~614–615 KB
+  >   sha256 NOT PINNABLE HERE — see below, and this is a finding, not an omission
+  > ```
+  >
+  > **The wheel's hash is pinnable and the sdist's is not, and finding out why
+  > was worth the detour.** The wheel contains only `spanweave/`, so it is a
+  > function of the library alone: it survived every edit made while writing
+  > this record, unchanged, which is the evidence for the claim rather than the
+  > reason for it. The sdist contains the whole repository — including this
+  > file. Writing the sdist's hash into `TASKS.md` **changes the sdist**, and
+  > the first draft of this record duly recorded a hash that its own commit
+  > invalidated (`d2f445d8…` → `79a4de73…`, wheel unchanged at `2ed231f5…`).
+  >
+  > A self-invalidating claim in a document is precisely what 3.8 spent itself
+  > on, so it is not papered over: **the sdist hash can only be taken after the
+  > final commit, by the person publishing.** Step 2 of the runbook says that
+  > rather than asking anyone to match a number that cannot be right.
+  >
+  > **They are 0.9.0 by their own metadata, not by their filenames.** The
+  > wheel's `METADATA` says `Version: 0.9.0` and the sdist's `PKG-INFO` says the
+  > same; a filename is a label a build can get wrong, and 3.7's whole finding
+  > was about a value nothing had to agree with. Also read out of the wheel and
+  > worth having on the record: `Requires-Python: >=3.11`; **four
+  > `Requires-Dist` lines, every one of them guarded by `extra ==`**, so core's
+  > zero-runtime-dependency claim holds in the published metadata and not just
+  > in `pyproject.toml`; `Description-Content-Type: text/markdown`; the long
+  > description is `README.md` **byte for byte** (11843 = 11843); and
+  > `[console_scripts] spanweave = spanweave.cli:main`.
+  >
+  > **`dist/` held `0.1.0` at 3.7 and does not now.** It was emptied and
+  > rebuilt.
+  >
+  > ## The build is byte-reproducible, which is why "install-check ran against
+  > THESE artifacts" is a fact rather than a hope
+  >
+  > Asked for identity, not for assurance, so it was established two independent
+  > ways:
+  >
+  > 1. **`make install-check` builds the artifacts it audits.**
+  >    `build_distribution()` deletes every `spanweave-*.whl` and
+  >    `spanweave-*.tar.gz` in the output directory, runs `uv build`, and fails
+  >    if it does not then find exactly one of each. `--out-dir` defaults to
+  >    `./dist`. So a stale pair cannot survive a run, and the pair present
+  >    afterwards is the pair audited.
+  > 2. **Independent rebuilds are byte-identical.** `uv build` was run twice by
+  >    hand into a cleaned `dist/`, then `make install-check` rebuilt a third
+  >    time, then a planted-failure run rebuilt a fourth. **All four produce the
+  >    same two sha256 sums**, recorded above. So identity does not rest on
+  >    trusting the ordering of my own commands — the bytes are the bytes.
+  >
+  > **That reproducibility is itself a publish-relevant finding.** A human who
+  > re-runs `uv build` before publishing gets exactly the artifacts verified
+  > here, so `make install-check`'s green transfers to what they upload. If a
+  > future toolchain change breaks that, the two hashes above stop matching and
+  > the transfer has to be re-established rather than assumed.
+  >
+  > ## Nothing git does not track is in either artifact — how that was confirmed
+  >
+  > 3.6's consequence for this task: hatchling does **not** read
+  > `.git/info/exclude`, an untracked file under an included directory ships,
+  > and `install-check` fails while one exists. Confirmed four ways rather than
+  > asserted:
+  >
+  > **1. The working tree is clean.** `git status --porcelain` is empty; the
+  > only ignored entries under the included directories are `__pycache__/` and
+  > `capture/_scratch/`.
+  >
+  > **2. Every member of both artifacts was enumerated and differenced against
+  > `git ls-files`.** Not a spot check — the whole set:
+  >
+  > | | members | tracked by git | generated | **untracked** |
+  > |---|---|---|---|---|
+  > | sdist | 246 | 245 | 1 (`PKG-INFO`) | **0** |
+  > | wheel | 23 | 18 | 5 (`.dist-info/`) | **0** |
+  >
+  > **3. The four files `.git/info/exclude` hides were checked by name.**
+  > `phase.py`, `verify_gates.sh`, `review_corpus.py` and `corpus_review.log`
+  > are all **on disk right now** and in **neither** artifact. They are also
+  > excluded structurally, which is the stronger reason and worth stating: they
+  > sit at the repository root, and `[tool.hatch.build.targets.sdist].include`
+  > admits only `/*.md`, `/LICENSE`, `/Makefile`, `/pyproject.toml` and
+  > `/uv.lock` from the root — no `*.py`, no `*.sh`, no `*.log`. So the 3.6
+  > incident cannot recur *through the root*. The live risk is a **new untracked
+  > file under `tests/`, `fixtures/`, `examples/`, `capture/` or `.github/`**,
+  > which the include list does admit.
+  >
+  > **4. That live risk was planted, and the gate fired.** A file
+  > `tests/_planted_untracked.py` was created, `install-check` run, and
+  > `sdist: ships nothing git does not track` **FAILED**. The file was removed
+  > and the check went green again (30 checks). One check failed, and it was the
+  > right one — a check that merely goes red proves less than a check that goes
+  > red *in the place it was aimed*.
+  >
+  > ## What is in the sdist that is not in the wheel
+  >
+  > 228 files, and the shape matters more than the count:
+  >
+  > | | files | why it is in the sdist |
+  > |---|---|---|
+  > | `fixtures/` | 153 | the corpus, so a stranger can re-run the central claim |
+  > | `tests/` | 38 | including `install_check.py`, `schema_shape.py`, `serialized_shape.json` |
+  > | root `*.md` + `LICENSE`/`Makefile`/`pyproject.toml`/`uv.lock` | 22 | the whole doc set: `SPEC.md`, `DECISIONS`-equivalents, `CONTRACTS.md`, `PREDICTIONS.md` |
+  > | `examples/` | 8 | the three consumers |
+  > | `capture/` | 6 | the harness, which is human-run and network-capable |
+  > | `.github/` | 1 | CI |
+  >
+  > The wheel is 18 files, **all under `spanweave/`**, plus 5 generated
+  > `.dist-info/` members. That asymmetry is deliberate (`pyproject.toml`) and
+  > it has one consequence a publisher should decide on knowingly rather than
+  > discover:
+  >
+  > **Publishing the sdist publishes `fixtures/captured/` — three real captured
+  > traces — permanently and publicly.** They were human-reviewed and redacted
+  > before commit and each carries a provenance file recording what was redacted
+  > and by whom (`FIXTURES.md` §6), so nothing here suggests they are unsafe.
+  > But *committing to a private repository* and *uploading to a public index*
+  > are different acts, the second cannot be undone, and this is the point at
+  > which the second happens. **Re-read the three provenance files before step
+  > 6.**
+  >
+  > ## The publish runbook — exact commands, unrun
+  >
+  > Everything through step 4 is reversible. **The last fully reversible point
+  > is immediately before step 5.**
+  >
+  > **0. Is the name free?** `spanweave` on PyPI, and on TestPyPI if step 5 is
+  > used. If it is taken, nothing below matters. This is a browser check; there
+  > is no way to make it from here, and the agent must not try.
+  >
+  > **1. Publish from a clean tree, on `main`, with the release commit in.**
+  > `git status --porcelain` empty. An untracked file under an included
+  > directory ships (above), so this is not hygiene — it is correctness.
+  >
+  > **2. Rebuild and re-verify, in that order.**
+  > ```
+  > rm -f dist/spanweave-*.whl dist/spanweave-*.tar.gz
+  > uv build --out-dir dist
+  > make install-check
+  > ```
+  > `install-check` rebuilds anyway; the explicit `uv build` is so you see the
+  > version and filenames with your own eyes first.
+  >
+  > **Check between, and mind which hash is which.** The **wheel** must be
+  > `sha256 2ed231f5…` — it depends only on `spanweave/`, and a difference means
+  > the library changed since this record, which is a stop-and-find-out. The
+  > **sdist** hash is *expected* to differ: it contains the whole repository,
+  > including this file, so every commit moves it. Take it yourself after your
+  > final commit —
+  > `sha256sum dist/spanweave-0.9.0.tar.gz` — and carry **that** number into
+  > steps 5 and 6, so the bytes you verify are the bytes you upload.
+  >
+  > **3. Validate the metadata PyPI will render.** `uvx twine check dist/*`.
+  > **Not run here**, and named as a gap rather than skipped: it needs `twine`,
+  > which this repository does not depend on, and pulling a tool in to run a
+  > check the publisher will run anyway is not worth the dependency. What *was*
+  > verified locally is what `twine check` mostly looks at:
+  > `Description-Content-Type: text/markdown` is present and the long
+  > description is `README.md` byte for byte.
+  >
+  > **4. Read the README as a stranger will see it on PyPI.** The rendered page
+  > is `README.md`, and since 3.9 its quickstart opens with
+  > `spanweave inspect fixtures/…`, whose paths resolve **from a checkout or an
+  > unpacked sdist and not from a wheel install**. The Install section says so.
+  > Decide you are happy with that ordering *before* it is public, because the
+  > page is the first thing every stranger sees.
+  >
+  > > ——— everything above is reversible; everything below is not ———
+  >
+  > **5. TestPyPI first — recommended, and already irreversible there.**
+  > ```
+  > uv publish --publish-url https://test.pypi.org/legacy/ \
+  >     dist/spanweave-0.9.0.tar.gz dist/spanweave-0.9.0-py3-none-any.whl
+  > ```
+  > **Name the files; do not use `uv publish`'s default `dist/*` glob.** The
+  > default uploads whatever is in the directory, which makes the release a
+  > function of what was lying there — the identical failure shape as 3.6's
+  > sdist defect, one layer out.
+  >
+  > `spanweave 0.9.0` on TestPyPI is **spent** after this. TestPyPI is
+  > periodically pruned but that is not a guarantee, so treat it as one
+  > rehearsal, not a scratchpad. Then install from it into a clean venv:
+  > ```
+  > python3 -m venv /tmp/tp && /tmp/tp/bin/pip install \
+  >     --index-url https://test.pypi.org/simple/ spanweave
+  > /tmp/tp/bin/spanweave --version    # expect: spanweave 0.9.0 (graph schema 0.1; UNFROZEN)
+  > ```
+  >
+  > **6. PyPI. This is the irreversible step.**
+  > ```
+  > uv publish dist/spanweave-0.9.0.tar.gz dist/spanweave-0.9.0-py3-none-any.whl
+  > ```
+  > Credential via `UV_PUBLISH_TOKEN` or a keyring; **no token in the repo, the
+  > Makefile, CI, or a task record — including a revoked one, which still
+  > teaches the shape** (`ENVIRONMENT.md`). After this, `spanweave 0.9.0` on
+  > PyPI cannot be reused. A release can be yanked or deleted; **the version
+  > number can never be re-uploaded with different bytes.** A partially
+  > completed upload also consumes it. If 0.9.0 is wrong, the fix is 0.9.1, not
+  > a re-push.
+  >
+  > **7. Verify from the index, from a directory that is not this repo.**
+  > ```
+  > python3 -m venv /tmp/pp && /tmp/pp/bin/pip install spanweave
+  > /tmp/pp/bin/spanweave --version
+  > /tmp/pp/bin/spanweave adapters      # expect: openinference and otel_genai
+  > ```
+  >
+  > **8. Only now, tick the box and correct the documents — one commit.** Tick
+  > `3.10` in this file, and update `README.md`'s Install section: remove *"not
+  > on PyPI yet"* and add the `pip install spanweave` fence. **The suite forces
+  > both halves and will not let you do one without the other**
+  > (`tests/test_doc_truth.py`, below). `make check` must be green in that same
+  > commit.
+  >
+  > ## What a stranger gets that nothing here has tested
+  >
+  > 3.9 walked the path from a **clone**. After step 6 the path is
+  > `pip install spanweave` **from an index**, and no harness in this repository
+  > can exercise it — zone 2 is "no network, ever" and the test suite is inside
+  > it. Named rather than closed:
+  >
+  > | Untested | Why it cannot be tested here | Check after publishing |
+  > |---|---|---|
+  > | Resolution of the name `spanweave` from PyPI | needs the index | step 7 |
+  > | The rendered PyPI project page | PyPI renders it, not us | read it; especially that the quickstart's `fixtures/` paths are explained |
+  > | The wheel on **3.11 and 3.13** | `install-check` installs into one venv, on whichever interpreter `uv` picks | CI runs the matrix on the **source**, never on the wheel. The wheel is `py3-none-any` and stdlib-only, so this is low risk and it is **not zero** |
+  > | The console script on **macOS or Windows** | Linux only here; entry-point launchers are generated per platform | ask one person on each |
+  > | Upload attestations / trusted publishing | credentialed | whatever the publisher chooses |
+  > | That the sdist **rebuilds** into a working wheel on someone else's machine | `uv build` here builds the wheel from the sdist, so it is half-covered | `pip install spanweave --no-binary :all:` |
+  >
+  > **The most likely thing to be wrong is the fourth column of row two**, not
+  > any of the code: a stranger arriving from PyPI has a wheel and no
+  > `fixtures/`, and the quickstart's first command names a path they do not
+  > have. The Install section explains it. Whether that explanation lands is a
+  > human reading, which is why it is step 4 and step 7 rather than a test.
+  >
+  > ## Divergences from the plan
+  >
+  > - **The box is not ticked, and that is the correct output of this task.**
+  >   Every other 3.x record ends with a tick. This one cannot: 3.8 made the
+  >   checkbox the repository's only record of whether `pip install spanweave`
+  >   resolves, so ticking it while unpublished would license a false line in
+  >   the README. Said loudly at the top of this record so a resumed session
+  >   does not read an unchecked box as unfinished work.
+  > - **One test was changed, and preparing this task is what found it.** 3.8's
+  >   install guard ran in one direction only: it forbade the index line while
+  >   unpublished, and separately asserted the *"not on PyPI yet"* sentence was
+  >   present — **unconditionally**. So after a successful publish, a human
+  >   doing exactly the right thing would have hit a red suite and had to edit a
+  >   test to describe reality. A gate that must be edited to permit the correct
+  >   change is a gate on its way to being deleted.
+  >   `test_the_readme_says_what_is_true_of_the_index_install_in_both_directions`
+  >   now keys **both** directions to the checkbox: unchecked → the README must
+  >   say the install does not exist; checked → it must not, and must offer the
+  >   index install. Both directions plant-checked. Recorded as a divergence
+  >   because 3.10 as written does not change tests — but leaving it as a
+  >   follow-up note would have been the sixth instance of this project's own
+  >   pattern, in the task whose whole subject is an irreversible step.
+  > - **`ENVIRONMENT.md`'s zone 4 gained a one-line pointer to this runbook.**
+  >   A human publishing months from now will not find it by reading a 460 KB
+  >   checklist; zone 4 is where they will look.
+  > - **`uv publish --dry-run` exists and was not run.** It is still
+  >   `uv publish`, `ENVIRONMENT.md` forbids the command rather than the
+  >   outcome, and reading a flag out of `--help` was the whole of what this
+  >   task needed from it.
+  > - **`uvx twine check` was not run** (step 3), for the reason given there.
+  >   The part of it that could be checked locally, was.
+  >
+  > ## Definition of done
+  >
+  > - [x] `uv build` produces both artifacts; they are `0.9.0` by internal
+  >       metadata, and `dist/` no longer holds 3.6's `0.1.0` pair.
+  > - [x] The wheel's hash is recorded; the sdist's is shown to be unpinnable
+  >       from inside the sdist, with what to do instead.
+  > - [x] `make install-check` passes **against these artifacts** — it built
+  >       them, and four independent builds agree byte for byte, so the identity
+  >       is established rather than assumed.
+  > - [x] Neither artifact contains anything git does not track — enumerated and
+  >       differenced, not sampled; and the gate was **planted and fired**.
+  > - [x] The publish command is recorded **unrun**, with what to check between
+  >       steps and the last reversible point named.
+  > - [x] What is in the sdist and not the wheel is recorded, including the one
+  >       item that needs a human decision before it becomes public.
+  > - [x] The untested stranger path after publishing is named, with what to
+  >       check manually, rather than closed.
+  > - [ ] **The publish itself. HUMAN-RUN. Not done, and not the agent's.**
+  > **HALT — credentialed, outward-facing, irreversible. A human publishes.**
+
 - [ ] **3.11 Phase 3 exit record.** `[launch]`
   The mirror of 2.14, and the direct input to the Phase 4 freeze decision.
   Record:

@@ -137,19 +137,59 @@ def test_no_document_promises_an_install_that_does_not_resolve_yet():
     forbid or defer it, and a test that could not tell those apart would have
     to be switched off.
     """
-    published = publish_has_happened()
     offenders = [
         f"{path.relative_to(ROOT)}: {line.strip()}"
         for path in documents()
         for line in fenced_lines(path.read_text(encoding="utf-8"))
         if INDEX_INSTALL.search(line)
     ]
-    if published:
+    if publish_has_happened():
         return
     assert not offenders, (
         "a document offers an install from a package index, but TASKS.md 3.10 "
         "(the publish) is still unchecked, so the command does not resolve:\n"
         + "\n".join(offenders)
+    )
+
+
+def test_the_readme_says_what_is_true_of_the_index_install_in_both_directions():
+    """The guard runs **both** ways, which it did not when 3.8 wrote it.
+
+    3.8 keyed the prohibition to `TASKS.md` 3.10's checkbox: no index install
+    line until the publish has happened. Preparing 3.10 found the other half
+    missing. The README currently states *"`spanweave` is not on PyPI yet"* --
+    true today, and **false the second the upload succeeds**. Nothing required
+    that sentence to go, so the publish would have left the front door saying
+    the package cannot be installed the way it now can. That is this project's
+    recurring failure with the polarity reversed: a claim written ahead of its
+    condition, rotting at the moment the condition arrives.
+
+    Worse, 3.8's own `test_the_readme_has_an_install_section_naming_the_version`
+    asserted the sentence was *present*, unconditionally -- so a human doing
+    the right thing after publishing would have hit a red suite and had to edit
+    a test to describe reality. A gate that must be edited to allow the correct
+    change is a gate on its way to being deleted.
+
+    So the checkbox now drives both directions, and ticking it is still the
+    same act as making the line true.
+    """
+    install = section(read("README.md"), "\n## Install")
+    published = publish_has_happened()
+    if not published:
+        assert "not on PyPI yet" in install, (
+            "TASKS.md 3.10 is unchecked, so the README must say the index "
+            "install does not exist yet -- an omission a reader routes around "
+            "by guessing the index name"
+        )
+        return
+    assert "not on PyPI yet" not in install, (
+        "TASKS.md 3.10 is checked, so spanweave IS on PyPI and the README's "
+        "Install section still says it is not. Publishing without this edit "
+        "ships a false front door."
+    )
+    assert any(INDEX_INSTALL.search(line) for line in fenced_lines(install)), (
+        "TASKS.md 3.10 is checked, so the README must offer the index install "
+        "a reader will actually use, not only the checkout and wheel paths"
     )
 
 
@@ -185,9 +225,11 @@ def test_the_readme_has_an_install_section_naming_the_version_it_ships():
         f"the documented command fail on a file that does not exist."
     )
     assert "pip install ." in install
-    # And it must keep saying why the index install is absent, so the omission
-    # reads as deliberate rather than as an oversight a stranger works around.
-    assert "not on PyPI yet" in install
+    # Whether the index install exists yet is the *other* test's business, in
+    # both directions. Asserting the "not on PyPI yet" sentence here as well
+    # would make this one go red at the publish, for a document that had just
+    # been corrected -- see
+    # test_the_readme_says_what_is_true_of_the_index_install_in_both_directions.
 
 
 # -- Commands that must exist ----------------------------------------------

@@ -112,6 +112,10 @@ fix one deliberately, don't let them drift.
    equivalent, **including to TestPyPI**, which is an external index with a
    credential like any other.
 
+   **The runbook is `TASKS.md` 3.10** — the exact commands in order, what to
+   check between them, where the last reversible point is, and what a stranger
+   gets that no harness here can exercise. Prepared by an agent, unrun.
+
 `examples/` may not use the network either; they consume committed fixtures so
 that anyone can run them reproducibly.
 
