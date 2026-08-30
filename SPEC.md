@@ -790,6 +790,15 @@ every registered adapter and picks the highest confidence.
 - **Human summary** (`spanweave inspect`): counts by node kind, edge counts by
   kind and warrant, diagnostics grouped by code, payload-availability tallies.
   Informational; not a stable contract.
+- **Failures** (stderr): a command that fails prints one line,
+  `spanweave <command>: <the failure>`. When the file it could not open does
+  **not exist** and its path is one this project's own documents quote — the
+  `fixtures/` corpus, which ships in the source tree and not in the installed
+  package — a second, clearly secondary `hint:` line follows it, naming where
+  those paths resolve from. The first line is byte-for-byte unchanged by the
+  presence of the second, and the exit code is unchanged. Both lines are prose
+  for a human: §3.10's rule holds here as it does everywhere — match on an
+  error `code`, never on a message, and stderr is not a matching surface.
 - Output goes to stdout / files **only**. Core never opens a network connection.
 
 ### Invocation

@@ -112,15 +112,21 @@ fix one deliberately, don't let them drift.
    equivalent, **including to TestPyPI**, which is an external index with a
    credential like any other.
 
-   **The runbook is `TASKS.md` 3.10** — the exact commands in order, what to
-   check between them, where the last reversible point is, and what a stranger
-   gets that no harness here can exercise. Prepared by an agent; **run by a
-   human for `0.9.0`**, which is on PyPI. That record now also carries what the
-   run measured, and two corrections the run forced — in particular, **do not
-   pin either artifact's hash as a target for a later build**: the sdist
-   contains this repository and the wheel's `METADATA` contains `README.md`, so
-   both move on a document change. Take your own hashes after your final commit
-   and record them as facts about what you published.
+   **Every release writes its own runbook, and does not point at the previous
+   one.** `TASKS.md` 3.10 is `0.9.0`'s — prepared by an agent, **run by a human**,
+   and on PyPI. **`TASKS.md` R3 is `0.9.1`'s**, and it is the live one: exact
+   commands in order, what to check between them, where the last reversible
+   point is, and — as a numbered step rather than a follow-up — the cold read
+   that decides whether a further release is needed. The reason each is written
+   fresh is on the record: 3.10's step 2 asserted a wheel hash that its own
+   amendment 1 had to correct, and a runbook that says *see the previous one*
+   inherits whatever was wrong with it.
+
+   The correction worth carrying between them: **do not pin either artifact's
+   hash as a target for a later build.** The sdist contains this repository and
+   the wheel's `METADATA` contains `README.md`, so both move on a document
+   change. Take your own hashes after your final commit and record them as facts
+   about what you published.
 
 `examples/` may not use the network either; they consume committed fixtures so
 that anyone can run them reproducibly.

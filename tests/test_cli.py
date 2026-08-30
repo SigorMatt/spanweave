@@ -155,3 +155,67 @@ def test_validate_on_something_that_is_not_json(tmp_path, capsys):
 def test_adapters_lists_what_is_registered(capsys):
     assert main(["adapters"]) == 0
     assert "openinference" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# The missing-file hint (`0.9.1` candidate C1)
+# --------------------------------------------------------------------------
+#
+# Measured from the PUBLISHED 0.9.0 package, not predicted: a reader who runs
+# `pip install spanweave` and pastes the README's first command gets
+#
+#   spanweave inspect: [Errno 2] No such file or directory: 'fixtures/...'
+#
+# Every word of which is true, and which reads as a broken package to exactly
+# the reader who did what the front page told them to. The corpus is
+# development data and is deliberately not in the wheel, so the fix is the
+# message rather than the packaging.
+#
+# What these two tests hold: the hint fires under the documented corpus prefix
+# and nowhere else, and the line that was already there does not move. The
+# third test -- that the prefix still covers what the documents actually quote
+# -- lives in `tests/test_doc_truth.py`, because it is a claim about documents.
+
+CORPUS_PATH = "fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl"
+
+
+def first_line_for(command, path):
+    """The line C1 keeps byte for byte, spelled out rather than recomputed."""
+    return f"spanweave {command}: [Errno 2] No such file or directory: '{path}'"
+
+
+def test_a_missing_path_under_the_documented_corpus_gets_a_secondary_hint(
+    tmp_path, monkeypatch, capsys
+):
+    # The reader's actual situation: a package, no checkout, a relative path
+    # out of the README. `OSError.filename` is where the path comes from, so
+    # one change covers every subcommand that opens a path a caller named.
+    monkeypatch.chdir(tmp_path)
+    for command in ("build", "inspect", "validate"):
+        assert main([command, CORPUS_PATH]) == 1
+        printed = capsys.readouterr().err
+        lines = printed.splitlines()
+        assert lines[0] == first_line_for(command, CORPUS_PATH), (
+            "C1 keeps the existing line byte for byte -- it is what an OSError "
+            "says, and anything reading stderr keeps working"
+        )
+        assert lines[1].startswith("hint: "), printed
+        # The sentence that keeps the hint from reading as "you installed the
+        # wrong thing", which is the misreading it exists to prevent.
+        assert "reads any trace file you point it at" in printed
+
+
+def test_no_other_missing_path_gets_the_hint_and_the_first_line_never_moves(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    # A typo, a bare filename, and -- the one worth having -- a path that
+    # merely CONTAINS the prefix. The match is on a prefix, not a substring:
+    # somebody else's `fixtures/` under their own tree is not ours.
+    for path in ("no/such/trace.jsonl", "trace.jsonl", "my/fixtures/trace.jsonl"):
+        assert main(["inspect", path]) == 1
+        printed = capsys.readouterr().err
+        assert printed == first_line_for("inspect", path) + "\n", (
+            f"a missing {path!r} is somebody else's problem and gets the plain "
+            f"message; the hint is for a path this project's documents quote"
+        )

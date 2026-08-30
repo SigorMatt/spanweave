@@ -9030,6 +9030,13 @@ entry is a **measured** defect in something already published, with a proposed
 change and its cost, waiting on a human decision about whether it ships and
 when. Adding a box here would hand a resumed session work nobody has agreed to.
 
+**C1 has since been decided and built; C2 has not.** The decision was C1 alone
+(3.11 §8, amendment 2), and the work is *Release `0.9.1`*, below, which is where
+the boxes are. These entries stay as the **evidence and the costing** — that is
+what they are for, and deleting C1's would remove the measurement the release
+rests on. C2 is still exactly what this section describes: proposed, costed,
+**held**, and decided by one named measurement at R3 step 9.
+
 `0.9.0` cannot be re-uploaded. Anything below that ships, ships as `0.9.1`, and
 that is a fresh irreversible slot on the index — so the cost of *each* entry
 includes the cost of spending one, and batching is usually right.
@@ -9043,6 +9050,13 @@ where an attribution is neither. That is why C1 ships alone and **C2 is held**
 (3.11 §8, amendment 2).
 
 ### C1 — `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it
+
+> **BUILT, and shipping as `0.9.1` alone — see *Release `0.9.1`*, R1.** The
+> change below is implemented as proposed: the `OSError` line byte for byte,
+> the secondary `hint:` only under `fixtures/`, the conditional opener. What
+> follows is the measurement and the costing it was decided on, kept unedited;
+> what actually landed, its five tests and its two divergences are at R1. The
+> publish itself is R3 and is unrun.
 
 **The measurement, taken from the published package, not predicted.** This is
 the stranger test 3.10's step 4 could not run because its premise was false;
@@ -9163,6 +9177,13 @@ Two consequences for this entry, neither of which changes the proposed hint:
   section originally set — *do not ship before the cold read* — is **met**.
 
 ### C2 — the `fixtures/` explanation lands, 92 lines downstream of the paste
+
+> **HELD, and not built.** Nothing of this entry is in `0.9.1`: the README's
+> quickstart is untouched, and R3 step 4 says so as an instruction to the
+> publisher rather than as an omission. What decides it is **R3 step 9** — a
+> cold read of the published `0.9.1` page, turning on whether the reader is
+> still stuck *after the hint is on screen*. Record the outcome under *the
+> sequencing*, below.
 
 **The measurement, from the closing cold read at 3.10 step 8 — not predicted,
 and it is the same reading that confirms C1.** Two models with no project
@@ -9311,6 +9332,436 @@ checked and found wrong is worth as much shelf space as one that was checked
 and found right, and a candidate list that records only the survivors invites
 the next reader to raise the same point again.
 
+
+## Release `0.9.1` — C1 alone  *(scheduled; the candidates section above is why)*
+
+**Live: R3 is unchecked and it is a HALT.** The build is prepared, `make check`
+and `make install-check` are green against the `0.9.1` artifacts, and the
+publish is a human's. An agent session arriving here does **not** publish and
+does not need to prepare anything again — read R3, hand it to the human, stop.
+
+**What this release is.** `0.9.1` carries **C1 alone**: the CLI prints a second,
+secondary `hint:` line when a missing file's path is under `fixtures/`. **C2 is
+held** — not rejected — and the reason is at the candidates section and again at
+R3 step 9: C2's mechanism is *more prose, better placed*, which is the
+instrument the closing cold read just watched fail, and shipping both at once
+makes neither attributable. R3's step 9 is the measurement that decides C2, and
+it is a step of the runbook rather than a follow-up note so that it cannot be
+skipped.
+
+**Scope, stated so nothing drifts into it.** Nothing under `spanweave/` changes
+except `cli.py`'s stderr path. No `NodeKind`, `EdgeKind`, warrant, `Payload`
+state or `Diagnostic` code; no `SCHEMA_VERSION` change (see R2); no fixture
+authored or edited; no `PREDICTIONS.md` edit; no third dialect; no freeze. The
+graph `0.9.1` writes is byte-identical to `0.9.0`'s.
+
+- [x] **R1 C1: the missing-file hint.** `[launch]`
+  Keep the existing `OSError` line **byte for byte** and add a second, clearly
+  secondary line, only when the missing path is one this project's own
+  documents quote. The wording is the conditional opener argued for at C1: the
+  assertive version is wrong for a reader who has their own `fixtures/` and
+  mistyped a filename.
+
+  *Done when the hint fires under the documented prefix and nowhere else, the
+  first line and the exit code are unchanged in both cases, `SPEC.md` §7 says
+  what stderr now contains, and `make check` + `make install-check` are green.*
+
+  > **Done, and verified against the wheel rather than the source tree**, which
+  > is the only place the defect exists at all.
+  >
+  > ## What landed
+  >
+  > **`spanweave/cli.py`, and nothing else under `spanweave/`.** A module-level
+  > `_DOCUMENTED_CORPUS_PREFIXES = ("fixtures/",)`, a `_corpus_hint()` helper
+  > keyed on `OSError.filename`, and three lines in the existing `except
+  > OSError` branch. Because the path comes off the exception rather than off
+  > an argument, **one change covers `build`, `inspect` and `validate`** — no
+  > subcommand needs to know it produced one, which is what C1 costed.
+  >
+  > **The measurement, reproduced from the built wheel**, in a directory with
+  > no `fixtures/` and no checkout on the path — the reader's actual situation,
+  > and the closest zone 2 can get to the index:
+  >
+  > ```
+  > $ python3 -m venv c1venv && ./c1venv/bin/pip install --no-index dist/spanweave-0.9.1-py3-none-any.whl
+  > $ cd elsewhere && ../c1venv/bin/spanweave inspect fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl
+  > spanweave inspect: [Errno 2] No such file or directory: 'fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl'
+  > hint: if you pasted this from spanweave's README, note that the fixtures/
+  >       corpus ships in the source tree and not in the installed package.
+  >       Those examples run from a checkout or an unpacked sdist; spanweave
+  >       itself reads any trace file you point it at.
+  > $ echo $?
+  > 1
+  > ```
+  >
+  > The first line is the `0.9.0` line character for character, and the exit
+  > code is still `1`. That is the half of C1 that is a **contract** rather than
+  > a courtesy: anything reading stderr keeps working.
+  >
+  > **`SPEC.md` §7, Outputs.** A *Failures* bullet: one line, `spanweave
+  > <command>: <the failure>`; a second `hint:` line when the file does not
+  > exist and its path is one the documents quote; the first line and the exit
+  > code unchanged by the second; and §3.10's rule restated for it — match on
+  > an error `code`, never on a message, and **stderr is not a matching
+  > surface**. Spec-first, as `CLAUDE.md` requires; the bullet was written
+  > before the branch.
+  >
+  > ## The three tests, and why the third is the one that matters
+  >
+  > | Test | Where | What it holds |
+  > |---|---|---|
+  > | `test_a_missing_path_under_the_documented_corpus_gets_a_secondary_hint` | `tests/test_cli.py` | fires for **all three** subcommands, from a `chdir`-ed temp directory; asserts the first line verbatim and that the hint's closing sentence is present |
+  > | `test_no_other_missing_path_gets_the_hint_and_the_first_line_never_moves` | `tests/test_cli.py` | `no/such/trace.jsonl`, a bare `trace.jsonl`, and — the one worth having — `my/fixtures/trace.jsonl`. **Prefix, not substring:** somebody else's `fixtures/` under their own tree is not ours. stderr must equal the plain line and nothing else |
+  > | `test_the_cli_hint_covers_every_example_path_the_documents_quote` | `tests/test_doc_truth.py` | the anti-staleness one. The population is **derived from the documents**: every path any document hands to `spanweave build\|inspect\|validate` inside a fence, plus every path literal in a `python` fence, that **exists as a file in this tree**. Each must be matched by `cli._corpus_hint`. If the quickstart ever stops using `fixtures/`, this fails and the constant has to move with it |
+  >
+  > **Why the third is derived rather than restated.** A prefix constant is
+  > exactly the kind of thing that goes on being true about a document that has
+  > since changed — this project's recurring defect, and the reason
+  > `tests/test_doc_truth.py` exists at all. A test that said *"the constant is
+  > `fixtures/`"* would pass forever and mean nothing. This one measures the
+  > two against each other.
+  >
+  > Two supporting tests rather than one, because non-vacuity cuts both ways:
+  >
+  > - `test_the_scan_finds_the_command_the_readme_actually_opens_with` — keyed
+  >   to the README's own first `spanweave inspect` step, read through
+  >   `tests/readme_quickstart`. **Deliberately not** *"every path found starts
+  >   with `fixtures/`"*: that restates the constant, and a corpus that moved
+  >   would then fail in two places, teaching whoever moved it to edit the test.
+  > - `test_an_uncovered_quoted_path_is_caught` — **the plant.** A temp document
+  >   quoting `tests/serialized_shape.json`, a file that really is in this
+  >   repository and really is not in the wheel, so the situation is the C1 one
+  >   exactly. The scan finds it and the coverage check rejects it. Planted in a
+  >   document handed to the scanner rather than by editing one this project
+  >   ships.
+  >
+  > ## The two gates, checked rather than assumed
+  >
+  > Both sit close to this string, as C1 said they would.
+  >
+  > - **Neutrality.** No word of `SEMANTIC_VOCABULARY` appears in the hint, in
+  >   the constant's name, or in the helper's. `make gates` green.
+  > - **No dialect outside `adapters/`.** This is the constraint that shapes the
+  >   *message*: `cli.py` is not under `spanweave/adapters/`, and every real
+  >   example path names a dialect, so **a worked example path cannot go in the
+  >   string** and the prefix stops at `fixtures/`. The gate scans comments too,
+  >   so the reason is written in `cli.py` without naming one.
+  >
+  > ## Divergences from the plan
+  >
+  > - **The hint fires on `FileNotFoundError`, not on every `OSError`.** C1 says
+  >   *"only when the missing path is one of ours"*, and a permission error
+  >   under the same prefix is a different situation, for which the hint's
+  >   sentence — *the corpus ships in the source tree and not in the installed
+  >   package* — would be **false**: that reader has the file. One `isinstance`
+  >   check, and it keeps the message true in the case that would otherwise
+  >   quietly lie. `test_no_other_missing_path_gets_the_hint...` does not reach
+  >   it (a temp-directory permission case is not portable), so it is recorded
+  >   here rather than claimed as tested.
+  > - **The hint is four lines, not the three C1 drafted.** Same words, rewrapped
+  >   so no line exceeds the width of the `[Errno 2]` line above it. C1's draft
+  >   ran wider than the message it is subordinate to, which undoes the one
+  >   thing the indentation is doing.
+  > - **Five tests, not three.** The third is one assertion plus two
+  >   non-vacuity checks and a plant. C1 costed *"three tests"*; a derived
+  >   population that nobody proved could be empty is the shape this project
+  >   keeps finding, so the plant is not optional.
+  > - **`-o`/`--output` operands are excluded from the derived population.**
+  >   The README's `-o graph.json` is a path the reader *writes*, not one they
+  >   must already have, and it does not exist in the tree — but it would if
+  >   anyone ran the quickstart in the checkout, which would make the test's
+  >   population depend on the state of the working directory. Excluded by the
+  >   flag rather than by whether the file happens to be there.
+  > - **Neither `fixtures/` nor `PREDICTIONS.md` was touched**, and no
+  >   `expected/graph.json` moved. `tests/serialized_shape.json` is unchanged:
+  >   the serialized graph does not know stderr exists.
+
+- [x] **R2 Version to `0.9.1`.** `[launch]`
+  Library version only. `__version__` and `pyproject.toml` together
+  (`tests/test_version.py` pins them to each other), plus the two places the
+  README names a version.
+
+  *Done when the version is `0.9.1` everywhere `tests/test_version.py` and
+  `tests/test_doc_truth.py` check, `spanweave --version` still says `UNFROZEN`,
+  and `make check` is green.*
+
+  > **Done. `SCHEMA_VERSION` is untouched at `"0.1"`, and that is a reading of
+  > 3.7 rather than an assumption.**
+  >
+  > **`AGENT.md`'s halt on `schema_version` semantics does not fire here.** The
+  > halt is *any change to `schema_version` semantics*. 3.7 decided **B plus
+  > C**: `0.x` is a **single unfrozen bucket that never tracks changes to the
+  > serialized graph**, and pinning is on the library version
+  > (`meta.spanweave_version`, `SPEC.md` §3.9). Under B there is no value of
+  > `SCHEMA_VERSION` that a serialized change could oblige us to move, so a
+  > library release cannot raise the question — and this release does not even
+  > reach it: **nothing serialized changed.** `tests/serialized_shape.json`, the
+  > tripwire C built for exactly this, is unmoved, and the conformance corpus
+  > builds byte-identically. What moved is stderr, which is not graph output.
+  >
+  > Said the other way round, so the halt keeps its teeth: a session that finds
+  > itself wanting to bump `SCHEMA_VERSION`, or to widen the shape artifact's
+  > `PASSTHROUGH` boundary, **is** at the halt. This session wanted neither.
+  >
+  > ## What moved
+  >
+  > | | from | to |
+  > |---|---|---|
+  > | `pyproject.toml` `version` | `0.9.0` | `0.9.1` |
+  > | `spanweave/version.py` `__version__` | `0.9.0` | `0.9.1` |
+  > | `README.md`, *Install* — the wheel filename | `spanweave-0.9.0-…whl` | `spanweave-0.9.1-…whl` |
+  > | `README.md`, *Status* — the version sentence | *"This is `0.9.0` — the first version published…"* | rewritten; see below |
+  > | `SCHEMA_VERSION`, `SCHEMA_FROZEN` | `"0.1"`, `False` | **unchanged** |
+  >
+  > `spanweave --version` reports `spanweave 0.9.1 (graph schema 0.1;
+  > UNFROZEN)`. The unfrozen notice is not cut and is not softened.
+  >
+  > **The Status sentence, because a version bump is exactly when it goes
+  > stale.** *"This is `0.9.0` — the first version published for anyone outside
+  > this repository"* would be false the moment `0.9.1` shipped: `0.9.1` is not
+  > the first. It now says `0.9.1` is the current version, that `0.9.0` was the
+  > first published one, and — the part a reader deciding whether to upgrade
+  > actually wants — that `0.9.1` changes **one** thing, what the CLI prints on
+  > stderr when a file it was asked to open is not there, and that the library,
+  > the graph and the schema are byte-for-byte what `0.9.0` shipped. That is a
+  > claim the shape artifact holds.
+  >
+  > ## Divergences from the plan
+  >
+  > - **Two README edits, not one.** The wheel filename is guarded
+  >   (`test_the_readme_has_an_install_section_naming_the_version_it_ships`); the
+  >   Status sentence is **not**, and it is the one that would have gone stale.
+  >   That asymmetry is 3.10 step 8's fourth edit repeating itself — a version
+  >   number in prose has no alarm on it — and it is recorded rather than
+  >   absorbed. No test was added for it: what would be asserted is *"the Status
+  >   section does not lie about which release is first"*, which is a reading,
+  >   not a computation. Named here so the next bump looks at it.
+  > - **`tests/test_doc_truth.py` carries a literal `spanweave-0.9.0-…whl`** in
+  >   `test_the_forbidden_install_matcher_actually_matches`, and it was left
+  >   alone. It is a string handed to a regex to prove the matcher does **not**
+  >   fire on a local-path install; the version in it is arbitrary and asserting
+  >   the current one there would give the string a meaning it does not have.
+
+- [ ] **R3 Publish `0.9.1` to PyPI.** `[launch]` **HUMAN-RUN. The agent
+  prepared and stopped.**
+  Second irreversible slot on the index. `spanweave 0.9.0` cannot be
+  re-uploaded and neither can `0.9.1` once this runs; a partially completed
+  upload consumes it too. The agent has no token and must not be given one,
+  TestPyPI included (`ENVIRONMENT.md`, zone 4).
+
+  *Done when `0.9.1` is on PyPI, verified from the index from a directory that
+  is not this repository, the box is ticked with the documents corrected in one
+  commit, and **step 9 has run**.*
+  **HALT** — credentialed, outward-facing, irreversible.
+
+  > ## Prepared, and stopped
+  >
+  > `make check` green (**1599 passed, 4 skipped**). `make install-check` green
+  > (**32 checks, 4 plants held**), which built the artifacts it audits:
+  >
+  > ```
+  > dist/spanweave-0.9.1-py3-none-any.whl
+  > dist/spanweave-0.9.1.tar.gz
+  > ```
+  >
+  > **No hash is pinned here, and that is the correction 3.10 paid for.** The
+  > sdist contains this repository — including this file — and the wheel's
+  > `METADATA` embeds `README.md` byte for byte, so **both artifacts move on any
+  > document change, this record included**. A hash written here would be
+  > invalidated by its own commit. Take your own at step 2 and record them at
+  > step 8, where they are facts about a published artifact rather than
+  > predictions about a rebuild. `install-check` pins the property that a hash
+  > was standing in for: `wheel: METADATA's long description is README.md byte
+  > for byte`, with the `readme-decoupled` plant behind it.
+  >
+  > **No `uv publish`, no `twine upload`, no TestPyPI, no `--dry-run`, no token
+  > requested.**
+  >
+  > **`fixtures/captured/` goes public again.** The sdist carries the three
+  > captured traces, as `0.9.0`'s did. They are already public in `0.9.0`'s
+  > sdist, so this release publishes nothing new — but the provenance files are
+  > still the thing to re-read before step 6 if any has changed since
+  > (`FIXTURES.md` §6).
+  >
+  > ## The runbook — exact commands, unrun
+  >
+  > **Written fresh, and deliberately not as *"see 3.10"*.** 3.10's step 2
+  > carried a false wheel-hash claim that its own amendment 1 later corrected,
+  > and a runbook that defers to a previous one inherits whatever was wrong with
+  > it — including the corrections a reader will not know to look for.
+  >
+  > Everything through step 4 is reversible. **The last fully reversible point
+  > is immediately before step 5.**
+  >
+  > **0. Confirm the version is free.** `spanweave` the *name* is ours from
+  > `0.9.0`; what must be unused is the **version**. `pip index versions
+  > spanweave`, or the project's release page. If `0.9.1` is taken — a failed
+  > earlier attempt counts — this becomes `0.9.2` everywhere R2 touched, and
+  > `make check` must be green again before step 1. Browser or network work;
+  > the agent must not attempt it.
+  >
+  > **1. Publish from a clean tree, on `main`, with the release commit in.**
+  > `git status --porcelain` empty. This is correctness, not hygiene: hatchling
+  > does not read `.git/info/exclude`, so an untracked file under an included
+  > directory ships. `install-check`'s `sdist: ships nothing git does not track`
+  > is the gate, and it was planted and fired at 3.10.
+  >
+  > **2. Rebuild, re-verify, then take your hashes — in that order.**
+  > ```
+  > rm -f dist/spanweave-*.whl dist/spanweave-*.tar.gz
+  > uv build --out-dir dist
+  > make install-check
+  > sha256sum dist/spanweave-0.9.1.tar.gz dist/spanweave-0.9.1-py3-none-any.whl
+  > ```
+  > `install-check` rebuilds anyway; the explicit `uv build` is so you see the
+  > version and the filenames with your own eyes first.
+  >
+  > **What to check between, and what NOT to check.** Do **not** compare either
+  > hash against a number written in this repository — there is none, on
+  > purpose. Both artifacts are a function of the whole tree, so they move with
+  > any document edit, and a runbook that tells you to match a pinned hash
+  > teaches you either to halt on an expected difference or to wave a real one
+  > through. What is stable is the wheel's **members**: unzip it and every
+  > module under `spanweave/` must match the tree, with only `dist-info/METADATA`
+  > and `dist-info/RECORD` free to differ from a previous build. `install-check`
+  > asserts the member set already. Carry the two numbers you just took into
+  > steps 5, 6 and 8, so the bytes you verify are the bytes you upload.
+  >
+  > **3. Validate the metadata PyPI will render.** `uvx twine check dist/*`.
+  > **Not run here** and named as a gap rather than skipped: it needs `twine`,
+  > which this repository does not depend on. What was verified locally is most
+  > of what it looks at — `Description-Content-Type: text/markdown` present, and
+  > the long description equal to `README.md` byte for byte
+  > (`tests/install_check.py`).
+  >
+  > **4. Read the rendered page as a stranger will see it.** Two things to
+  > decide you are happy with *before* it is public, both deliberate:
+  >
+  > - **The quickstart still opens on `fixtures/…`.** That is C1's whole
+  >   premise, not an oversight: the closing cold read at 3.10 measured that
+  >   readers understand the Install section, predict the failure, and paste the
+  >   command anyway, so `0.9.1` fixes what happens **after** the paste. If you
+  >   change the page here you have shipped C2 by accident and step 9 can no
+  >   longer attribute anything.
+  > - **The Status section now describes `0.9.1` as a stderr-only follow-up.**
+  >   It is the first thing a returning reader checks.
+  >
+  > > ——— everything above is reversible; everything below is not ———
+  >
+  > **5. TestPyPI first — optional here, and already irreversible there.**
+  > ```
+  > uv publish --publish-url https://test.pypi.org/legacy/ \
+  >     dist/spanweave-0.9.1.tar.gz dist/spanweave-0.9.1-py3-none-any.whl
+  > ```
+  > **Name the files. Do not use `uv publish`'s default `dist/*` glob** — it
+  > uploads whatever is lying in the directory, which makes the release a
+  > function of the working tree's litter. `spanweave 0.9.1` on TestPyPI is
+  > spent after this; treat it as one rehearsal, not a scratchpad. Then install
+  > from it into a clean venv:
+  > ```
+  > python3 -m venv /tmp/tp && /tmp/tp/bin/pip install \
+  >     --index-url https://test.pypi.org/simple/ spanweave
+  > /tmp/tp/bin/spanweave --version   # expect: spanweave 0.9.1 (graph schema 0.1; UNFROZEN)
+  > ```
+  > Weaker for this release than it was for `0.9.0`: what `0.9.1` changes is a
+  > message, and TestPyPI exercises packaging. Step 7 is where the change is
+  > measured.
+  >
+  > **6. PyPI. This is the irreversible step.**
+  > ```
+  > uv publish dist/spanweave-0.9.1.tar.gz dist/spanweave-0.9.1-py3-none-any.whl
+  > ```
+  > Credential via `UV_PUBLISH_TOKEN` or a keyring; **no token in the repo, the
+  > Makefile, CI, or a task record — including a revoked one, which still
+  > teaches the shape** (`ENVIRONMENT.md`). After this, `spanweave 0.9.1` cannot
+  > be re-uploaded with different bytes. A release can be yanked; a version
+  > number cannot be reused. If `0.9.1` is wrong, the fix is `0.9.2`.
+  >
+  > **7. Verify from the index — and measure the thing this release exists for.**
+  > From a directory that is not this repository:
+  > ```
+  > python3 -m venv /tmp/pp && /tmp/pp/bin/pip install spanweave
+  > /tmp/pp/bin/spanweave --version     # expect: spanweave 0.9.1 (graph schema 0.1; UNFROZEN)
+  > /tmp/pp/bin/spanweave adapters      # expect: openinference and otel_genai
+  > cd /tmp && /tmp/pp/bin/spanweave inspect fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl
+  > echo $?
+  > ```
+  > **The last two lines are the release.** Expected: the `0.9.0` message
+  > unchanged, character for character, then four indented `hint:` lines, then
+  > exit `1`. Confirm the **first** line did not move — that is the half other
+  > people's scripts depend on. This is the same command `0.9.0`'s step 7
+  > measured as illegible; run it from `/tmp` or anywhere else with no
+  > `fixtures/` directory, because in a checkout it succeeds and proves nothing.
+  >
+  > **8. Only now, tick R3 and correct the documents — one commit, `make check`
+  > green in it.**
+  > 1. Tick the box above.
+  > 2. Record **your two hashes** and what step 7 printed, here. They are facts
+  >    about published artifacts; that is the only durable form either takes.
+  > 3. Correct anything the publish made false. Known candidates, each of which
+  >    a previous release found the hard way: `README.md`'s **Status** (it names
+  >    the current version and what changed in it), and this file's
+  >    *Post-launch* section, where C1's entry must stop reading as a pending
+  >    candidate. **Re-run `make install-check` after any README edit** — the
+  >    README is in the wheel, which is 3.10 step 8's finding.
+  > 4. Do **not** touch the quickstart. See step 9.
+  >
+  > **9. THE CLOSING COLD READ — and it is a step of this runbook, not a
+  > follow-up.** 3.10's step 8 ended by naming a cold read that its own session
+  > did not run; it was run later, and it produced C1's confirmation and C2. The
+  > successor is written here as a numbered step for that reason: **it is the
+  > only thing that can decide C2, and C2 is being held at cost.**
+  >
+  > **Run it against the published `0.9.1` page.** Fifth use of the practice
+  > (`AGENT.md`, *When the check is a human reading*). Two models with no
+  > project context, ideally not the model that did the work, given the **true**
+  > premise and told **nothing** about what is suspected:
+  >
+  > > *"You just ran `pip install spanweave`. Here is the project page. What do
+  > > you do next?"*
+  >
+  > **It is a two-turn read, and the second turn is the measurement.** A cold
+  > read of the page alone cannot see the hint — the hint only exists once a
+  > command has run. So: when the reader gives a command, reply with **exactly
+  > what that command prints**, both lines, verbatim, with no framing and no
+  > question inside it beyond *"that is what it printed. What do you do now?"*
+  > Do not name the hint, do not ask whether it helped, do not say a second line
+  > was added. A reader who is told there is a hint will find the hint helpful.
+  >
+  > **The question C2 turns on:** *after the hint is on screen, is the reader
+  > still stuck?*
+  >
+  > **The question that does NOT decide it:** *did they paste the failing
+  > command?* Both `0.9.0` readers pasted it **after** reading and correctly
+  > understanding the Install section. A repeat paste is the expected outcome
+  > and says nothing about the hint. Anyone reporting this read must not collapse
+  > the two questions.
+  >
+  > | What the read shows | What it decides |
+  > |---|---|
+  > | Pastes, and after the hint recovers — points at their own trace, or goes for a checkout, without further help | **C2 is unnecessary.** The index slot is unspent, and 3.9's *"library in one screen"* opener is unspent. We learn the fix belongs after the paste |
+  > | Pastes, and after the hint is still stuck — re-reads the page, doubts the install, or asks what to do | **C2 is evidenced**, and evidenced against a page that already carries the cheaper fix. Ship it as `0.9.2` |
+  > | Does not paste the failing command at all | Nothing in `0.9.1` acts before the paste, so this is unexplained. Read again before concluding anything |
+  >
+  > Record the outcome under C2's *sequencing* section, in the words the read
+  > used, with its scope: **what premise, how many readers, which models, and
+  > what the read cannot support.** A negative result is recorded as loudly as a
+  > positive one — a mechanism whose failure never had the opportunity to occur
+  > is not refuted by silence (`AGENT.md`).
+  >
+  > ## What a stranger gets that nothing here can test
+  >
+  > Unchanged from 3.10's table, and not re-argued: the rendered PyPI page, the
+  > wheel on 3.11 and 3.13, the console script on macOS or Windows, upload
+  > attestations, and `--no-binary :all:`. Zone 2 has no index, so none of them
+  > moved. **One row is specific to this release and is what step 7 closes:**
+  > whether the reader who installed from the index and pasted the documented
+  > command now gets something they can act on. It cannot be closed from here —
+  > `install-check` symlinks `fixtures/` into the working directory precisely so
+  > the quickstart succeeds, which means the harness that proves the wheel works
+  > is structurally unable to see this defect. The wheel-install reproduction
+  > recorded at R1 is the nearest available substitute and it is **not** the
+  > index.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

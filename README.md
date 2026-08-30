@@ -98,7 +98,7 @@ From a wheel you build yourself:
 
 ```
 $ uv build
-$ pip install dist/spanweave-0.9.0-py3-none-any.whl
+$ pip install dist/spanweave-0.9.1-py3-none-any.whl
 ```
 
 Any of the three gives you `import spanweave` and the `spanweave` command with
@@ -192,9 +192,11 @@ measurement.
 
 ## Status
 
-Early development. This is `0.9.0` — the first version published for anyone
-outside this repository (`pip install spanweave`), and `0.9` rather than `1.0`
-on purpose: see the schema note below.
+Early development. This is `0.9.1`. `0.9.0` was the first version published
+for anyone outside this repository (`pip install spanweave`), and `0.9` rather
+than `1.0` is on purpose: see the schema note below. `0.9.1` changes one thing
+— what the CLI prints on stderr when a file it was asked to open is not there.
+The library, the graph and the schema are byte-for-byte what `0.9.0` shipped.
 
 **What exists.** Two adapters, `openinference` and `otel_genai`, both registered
 and both run against the whole corpus (`spanweave adapters`). The graph model,

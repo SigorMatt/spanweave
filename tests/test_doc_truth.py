@@ -37,6 +37,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
+import shlex
 
 import spanweave
 from spanweave.adapters import registered
@@ -737,3 +738,134 @@ def test_the_python_floor_the_readme_states_is_the_floor_the_package_declares():
         f"floor is {floor}. An index renders the classifiers; pip obeys the "
         f"floor. They must not disagree."
     )
+
+
+# -- The CLI's hint, held to the paths the documents actually quote ----------
+#
+# `0.9.1` candidate C1. `spanweave` prints a second, secondary line when a
+# missing file's path is one of ours, and "ours" is a prefix constant in
+# `spanweave/cli.py`. A constant is exactly the kind of thing that goes on
+# being true about a document that has since changed -- the failure this whole
+# file exists for -- so the population is DERIVED from the documents here
+# rather than restated, and the hint cannot outlive the README that motivates
+# it.
+#
+# The prefix stops at the directory rather than naming a worked example,
+# because `cli.py` is not under `spanweave/adapters/` and every real example
+# path names a dialect (`tests/gates.py`, `no_dialect_outside_adapters`).
+
+READER_SUBCOMMANDS = frozenset({"build", "inspect", "validate"})
+
+#: Flags whose value is a path the reader WRITES, not one they must already
+#: have. `-o graph.json` is not a missing-input case.
+OUTPUT_FLAGS = frozenset({"-o", "--output"})
+
+
+def documented_example_paths(
+    paths: list[pathlib.Path] | None = None,
+) -> dict[str, set[str]]:
+    """Every existing file a document hands to `spanweave` inside a fence.
+
+    These are precisely the paths a reader pastes. One that exists here and is
+    absent from an install is the C1 situation; one that does not exist at all
+    is a placeholder (`<trace>`) or an output (`graph.json`) and is neither.
+    """
+    found: dict[str, set[str]] = {}
+    scanned = documents() if paths is None else paths
+    for path in scanned:
+        for line in fenced_lines(path.read_text(encoding="utf-8")):
+            command = line[2:] if line.startswith("$ ") else line
+            if not re.search(r"\bspanweave\b", command):
+                continue
+            try:
+                argv = shlex.split(command)
+            except ValueError:
+                continue
+            if "spanweave" not in argv:
+                continue
+            argv = argv[argv.index("spanweave") + 1 :]
+            if not argv or argv[0] not in READER_SUBCOMMANDS:
+                continue
+            skip = False
+            for token in argv[1:]:
+                if skip:
+                    skip = False
+                    continue
+                if token in OUTPUT_FLAGS:
+                    skip = True
+                    continue
+                if token.startswith("-") or not (ROOT / token).is_file():
+                    continue
+                found.setdefault(token, set()).add(path.name)
+    # The Python block is the same paste by another route.
+    for path in scanned:
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S):
+            for literal in re.findall(r"""["']([^"'\n]+)["']""", match.group(1)):
+                if "/" in literal and (ROOT / literal).is_file():
+                    found.setdefault(literal, set()).add(path.name)
+    return found
+
+
+def uncovered(quoted: dict[str, set[str]]) -> dict[str, list[str]]:
+    """The quoted paths the CLI's hint would say nothing about."""
+    from spanweave.cli import _corpus_hint
+
+    return {
+        path: sorted(where)
+        for path, where in quoted.items()
+        if _corpus_hint(FileNotFoundError(2, "No such file or directory", path)) is None
+    }
+
+
+def test_the_cli_hint_covers_every_example_path_the_documents_quote():
+    quoted = documented_example_paths()
+    assert quoted, (
+        "no document hands `spanweave` a path that exists in this tree. Either "
+        "the scan broke or the quickstart stopped showing a runnable command; "
+        "both are findings, and a vacuous guard is neither."
+    )
+    missed = uncovered(quoted)
+    assert not missed, (
+        f"documents hand `spanweave` example paths the CLI's hint does not "
+        f"cover: {missed}. A reader who installed from an index and pasted one "
+        f"of these gets the bare OSError -- the exact `0.9.1` C1 case. Either "
+        f"widen `_DOCUMENTED_CORPUS_PREFIXES` in spanweave/cli.py or stop "
+        f"quoting the path."
+    )
+
+
+def test_the_scan_finds_the_command_the_readme_actually_opens_with():
+    """Non-vacuity, keyed to the document rather than to the prefix.
+
+    Deliberately NOT "every path found starts with `fixtures/`": that would
+    restate the constant this test exists to derive, and a corpus that moved
+    would fail here as well as there, teaching whoever moved it to edit both.
+    """
+    from tests.readme_quickstart import shell_steps
+
+    opening = next(
+        step for step in shell_steps() if step.argv[1:2] and step.argv[1] == "inspect"
+    )
+    assert opening.argv[2] in documented_example_paths(), (
+        f"the README's first `spanweave inspect` names {opening.argv[2]!r} and "
+        f"the scan did not find it, so the coverage check above is measuring "
+        f"something other than the paste it is written about"
+    )
+
+
+def test_an_uncovered_quoted_path_is_caught(tmp_path):
+    """The plant. A guard that has never fired is a guard nobody has read.
+
+    Written against a file that really is in this repository and really is not
+    in the wheel -- so the situation is the C1 one exactly -- in a document the
+    scan is pointed at, rather than by editing one this project ships.
+    """
+    planted = tmp_path / "PLANTED.md"
+    planted.write_text(
+        "```\n$ spanweave inspect tests/serialized_shape.json\n```\n",
+        encoding="utf-8",
+    )
+    quoted = documented_example_paths([planted])
+    assert "tests/serialized_shape.json" in quoted, "the scan missed the plant"
+    assert uncovered(quoted) == {"tests/serialized_shape.json": ["PLANTED.md"]}

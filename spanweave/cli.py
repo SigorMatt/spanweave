@@ -46,6 +46,54 @@ _DESCRIPTION = (
     "semantically neutral graph."
 )
 
+# The corpus this project's own documents quote example paths out of. It ships
+# in the source tree and NOT in the installed package (`README.md`, *Install*),
+# so a reader who installed from an index and pasted a documented command opens
+# a file they do not have. The message that produces is correct and illegible
+# to exactly the reader most likely to see it, which is a reportable outcome
+# rather than a discard (`CLAUDE.md` 2, applied to the CLI's own surface).
+#
+# The prefix stops at the directory on purpose: a worked example path cannot go
+# in the hint, because every real one names a dialect and this module is not
+# under `spanweave/adapters/`. `tests/test_doc_truth.py` derives the documented
+# paths from the documents and fails if this no longer covers them, so the hint
+# cannot outlive the README that motivates it.
+_DOCUMENTED_CORPUS_PREFIXES = ("fixtures/",)
+
+# Secondary by construction: the line above it is unchanged, this one is
+# indented under a lower-case `hint:`, and it opens with a condition rather
+# than an assertion. The assertive version -- "fixtures/ is spanweave's corpus,
+# so you need a checkout" -- is wrong for a reader who has their own fixtures/
+# directory and mistyped a filename, and an error message is a document.
+_CORPUS_HINT = (
+    "hint: if you pasted this from spanweave's README, note that the fixtures/\n"
+    "      corpus ships in the source tree and not in the installed package.\n"
+    "      Those examples run from a checkout or an unpacked sdist; spanweave\n"
+    "      itself reads any trace file you point it at."
+)
+
+
+def _corpus_hint(failure: OSError) -> str | None:
+    """The secondary line, or ``None`` when this is somebody else's missing file.
+
+    Keyed on ``OSError.filename``, so one place covers every subcommand that
+    opens a path a caller named. Restricted to a file that is not *there*: a
+    permission error under the same prefix is a different situation, and the
+    hint would be false for it.
+    """
+    if not isinstance(failure, FileNotFoundError):
+        return None
+    named = failure.filename
+    if not isinstance(named, str):
+        return None
+    if (
+        named.replace("\\", "/")
+        .removeprefix("./")
+        .startswith(_DOCUMENTED_CORPUS_PREFIXES)
+    ):
+        return _CORPUS_HINT
+    return None
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -256,7 +304,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"spanweave {args.command}: {failure}", file=sys.stderr)
         return EXIT_FAILED
     except OSError as failure:
+        # This line is the contract-shaped half and does not move: it is what
+        # an OSError says, and anything reading stderr keeps working.
         print(f"spanweave {args.command}: {failure}", file=sys.stderr)
+        hint = _corpus_hint(failure)
+        if hint is not None:
+            print(hint, file=sys.stderr)
         return EXIT_FAILED
 
 

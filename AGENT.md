@@ -35,10 +35,25 @@ of this run, and the points where you must stop and hand back to a human.
 
 ## Scope of this run (bounded)
 
-Deliver through the **Phase 3 exit** (`TASKS.md` 3.11), then **HALT for human
-review**. Do **not** begin Phase 4 or later, and do **not** freeze the schema —
-the freeze is Phase 4 and is gated on evidence this phase does not produce
+**The live scope is the `0.9.1` release: `TASKS.md` R1–R3, and nothing else.**
+Phase 3 is complete and tagged `phase-3-exit`; `spanweave 0.9.0` is on PyPI.
+`0.9.1` carries **C1 alone** — a second, secondary line on stderr when a
+missing file's path is one this project's own documents quote — and **C2 is
+held**, deliberately, so that the cold read at **R3 step 9** can attribute what
+it finds. Folding C2 in is not a shortcut; it destroys the measurement. R1 and
+R2 are done; **R3 is the halt** — the publish is a human's, and the agent has no
+token.
+
+Do **not** begin Phase 4, and do **not** freeze the schema — the freeze is Phase
+4 and is gated on evidence neither Phase 3 nor this release produces
 (`ROADMAP.md` Phase 4).
+
+**The Phase 3 scope below is discharged and is kept because everything in it
+still binds a release session** — the must-nots especially. Read it as standing
+constraints, not as an assignment.
+
+Deliver through the **Phase 3 exit** (`TASKS.md` 3.11), then **HALT for human
+review**. *(Discharged: the exit record landed at 3.11 and Phase 3 is tagged.)*
 
 > **Phases 1 and 2 are complete, reviewed, and merged.** Their exit halts are
 > discharged; the scope above replaces them. What Phase 2 found is not history
@@ -99,7 +114,7 @@ Specifically, in this run you must **not**:
   the line (`ENVIRONMENT.md`, and it is a standing halt),
 - **publish** to PyPI or TestPyPI, or run any other credentialed or
   outward-facing step. Preparing the distribution is in scope; pushing it is not
-  (3.10, and `ENVIRONMENT.md`'s publish zone),
+  (3.10 for `0.9.0`, **R3 for `0.9.1`**, and `ENVIRONMENT.md`'s publish zone),
 - build streaming, OTLP, tail mode, or a receiver of any kind,
 - **weaken `canonical()`, edit an `expected/graph.json`**, or relax a comparison
   to make anything pass. Nothing in this phase should need to touch either; if
@@ -207,7 +222,9 @@ one layer out, applied to prose and to judgement instead of to code. **A cold
 reader is the cheapest instrument that supplies that independence.** It costs
 one prompt.
 
-Four uses so far, and what each returned:
+Four uses so far, and what each returned. **A fifth is scheduled and unrun**
+— `TASKS.md` R3 step 9, against the published `0.9.1` page, and it is the only
+thing that decides whether C2 ships:
 
 - **2.6.** A blank session given only the captured trace and its graph found a
   **missing declared `data` edge** that 593 tests, six gates and two review
@@ -309,16 +326,22 @@ section with a note saying why each is now false.
 - **Live credentials, real model calls, network access, or anything touching a
   system outside this repo.** Stop and request it.
 - **Phase exit.** Stop and hand back for review; do not start the next phase.
-  Phase 1's exit (1.9) and Phase 2's (2.14) are **discharged**. The live one is
-  the **Phase 3 exit (`TASKS.md` 3.11)** — do not start Phase 4, and do not
-  freeze the schema at it.
+  Phase 1's exit (1.9), Phase 2's (2.14) and **Phase 3's (3.11)** are all
+  **discharged**. The live halt is the **`0.9.1` publish (`TASKS.md` R3)**, and
+  after it Phase 4's entry conditions — none of which a release meets. Do not
+  start Phase 4, and do not freeze the schema.
 
 Four added for Phase 3. Each names the artifact the human needs in order to
 decide; `TASKS.md` carries the full form at the task.
 
-- **The PyPI publish (`TASKS.md` 3.10).** Credentialed, outward-facing, and the
-  closest thing in this project to irreversible: a name-plus-version on PyPI
-  cannot be reused, so a bad `0.9.0` is spent forever. The agent has no token and
+- **The PyPI publish (`TASKS.md` 3.10 for `0.9.0`, and now R3 for `0.9.1`).**
+  Credentialed, outward-facing, and the closest thing in this project to
+  irreversible: a name-plus-version on PyPI cannot be reused, so a bad `0.9.0`
+  is spent forever — **and `0.9.0` is spent, so the entry is live for every
+  version after it.** Each release writes its **own** runbook rather than
+  pointing at the previous one: 3.10's step 2 carried a false wheel-hash claim
+  that its amendment 1 corrected, and a runbook that defers inherits whatever
+  was wrong with the one it defers to. The agent has no token and
   must not be given one — TestPyPI included, which is an outward-facing
   credentialed index too (`ENVIRONMENT.md`, publish zone). Prepare `uv build`'s
   sdist and wheel, get `install-check` green against the wheel, record the exact
