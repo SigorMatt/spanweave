@@ -337,7 +337,6 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_role=call_role,
         call_names=call_names,
         links=_links(record),
-        data_edges=_data_edges(record),
         received_call_ids=_received_results(inputs),
         attributes=normalized,
         unmapped=tuple(unmapped),
@@ -666,22 +665,10 @@ def _links(record: Mapping[str, JsonValue]) -> tuple[SpanLink, ...]:
             SpanLink(
                 span_id=span_id,
                 trace_id=_as_str(link.get("trace_id")),
-                basis="span.link",
                 attributes=attributes if isinstance(attributes, dict) else {},
             )
         )
     return tuple(links)
-
-
-def _data_edges(record: Mapping[str, JsonValue]) -> tuple[()]:
-    """This dialect never names **both** ends of a relation on one span.
-
-    What it does declare -- that this span was given the result of call X --
-    is carried in `received_call_ids` instead, because only the builder can
-    resolve X to the span that produced it.
-    """
-    del record
-    return ()
 
 
 def _as_str(value: JsonValue) -> str | None:

@@ -10060,6 +10060,364 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   >   the `ENVIRONMENT.md` carry are what stand in for a test, and they are
   >   weaker — named, rather than presented as equivalent.
 
+## Open investigations — opened, not decided
+
+An investigation is a question this project has *asked itself* and written the
+evidence for, without taking the decision. **The session that opens one may not
+close it by writing code**; it gathers, proposes, and halts. A human decides,
+and the decision may then direct implementation — which the implementing session
+records against the investigation rather than as a new task, so that the
+evidence and what was done to it stay in one place. Investigations sit here
+rather than in `OPEN_QUESTIONS.md` because that file is for questions the design
+deliberately left open; these are **candidate defects in shipped fields**, which
+resolve by a human deciding rather than by the design maturing.
+
+*(This paragraph read "It is not a task: no box, nothing to implement" until I1
+was decided. That was true of opening an investigation and false of resolving
+one, and the sentence would have told the implementing session it was out of
+scope. Corrected in the same change that falsified it.)*
+
+### I1. Should `Edge.basis` be adapter-supplied at all?  *(RESOLVED — option C, implemented)*
+
+- [x] **I1.a** Cold read run (sixth use of the practice) — **the eleventh
+  instance**, and a new kind. Recorded below.
+- [x] **I1.b** `DeclaredDataEdge` removed; `SpanLink.basis` kept, retyped and
+  re-documented as a builder constant with a reserved override.
+- [x] **I1.c** The documentary disagreement fixed in the same change:
+  `SPEC.md` §3.8, `SPEC.md` §6 rule 5, `ADAPTERS.md` §3.
+- [x] **I1.d** `ROADMAP.md` freeze-gate condition 3 corrected, with why it was
+  wrong; conditions 2 and 3 struck; `Edge.basis` taken off the gate and what
+  the gate loses stated.
+- [x] **I1.e** `make check` green; `make shape` byte-identical; no fixture
+  authored, no `expected/graph.json` edited, `PREDICTIONS.md` untouched.
+
+**Status: RESOLVED. Option C, decided by the human after the cold read.**
+The investigation as opened is below; the decision, what shipped, and what
+diverged are at *Resolution*, at the end of this entry. Opened after the
+`0.9.1` close, on the observation that
+`ROADMAP.md`'s freeze gate for `Edge.basis` names a third dialect and its own
+qualification says a third dialect is not sufficient.
+
+**The question.** `basis` describes how an edge came to be. Four of the six
+values in the corpus are builder constants; two seam fields let an *adapter*
+supply one instead — `SpanLink.basis` and `DeclaredDataEdge.basis`. If an
+adapter cannot meaningfully **choose** a basis, the adapter-supplied half is a
+design error, and removing it before the freeze is cheaper the sooner it
+happens. The precedent invoked is this project's own `invoke_workflow` → `chain`
+decision (2.16): *a mapping whose evidence can never arrive is unfounded, not
+deferred.*
+
+**What was established, from the code and the history.**
+
+- **The two governing documents disagree.** `SPEC.md` §4.3 says *"that
+  distinction is why `basis` exists — `warrant` already says the relation was
+  computed; the basis says from what"*, and §4.2.1 makes it a MUST that the
+  basis *"name the resolution rather than only the field"*. Both are statements
+  about what the **builder** did. `ADAPTERS.md` §3 tells the adapter author the
+  opposite: *"every declared edge needs a `basis` naming the source field"*.
+  `SPEC.md` §6 rule 5 is a third reading — *"an adapter may assert `parent`,
+  `call_result`, `data`, `link` … all traceable to a source field named in
+  `basis`"* — which is false for `parent` and `call_result` today, both being
+  builder constants.
+- **Neither adapter-supplied path has ever been populated by an adapter, in any
+  commit.** `git log -S` plus a `git grep` across `git rev-list --all`: the only
+  `SpanLink.basis` value ever written anywhere in this repository's history is
+  the literal `"span.link"`, which is the field's own default. `DeclaredDataEdge`
+  is constructed in exactly two places ever, both unit tests
+  (`tests/test_build.py:253`, `tests/test_adapters.py:204`), with the invented
+  bases `"framework.produced_by"` and `"declared"`. **The builder's handling is
+  tested; an adapter choosing a value has never run.** Those are different
+  claims and the record now separates them.
+- **The one time the real case arrived, the project routed it away from the
+  adapter-supplied field on purpose.** `58ff0c3` — the cold-reader finding that
+  became `SPEC.md` §4.2.1 — met a genuine instrumentor-declared producer→consumer
+  relation and did **not** emit a `DeclaredDataEdge`. It added
+  `received_call_ids`, with a builder-supplied basis, and its commit message
+  gives the reason: *"an adapter sees one span and cannot name the producer."*
+  Both adapters' `_data_edges` functions now return `()` and say the same thing
+  in their docstrings: *"only the builder can resolve X to the span that
+  produced it."* This is the load-bearing evidence, because it is a **positive
+  observation** rather than a silence — see *the discriminator*, below.
+
+**The discriminator the question demanded** — is this a design error, or a
+corpus that never contained the case? **The two halves answer differently, and
+collapsing them into "the adapter-supplied half" hides that.**
+
+- **`DeclaredDataEdge.basis` — design error, on positive evidence.** A corpus
+  gap looks like *"we never met the case."* Here the case was met, in a captured
+  trace, and the adapter was found to be structurally unable to speak to it. The
+  silence is not absence of evidence; `58ff0c3` is the evidence.
+- **`SpanLink.basis` — a constant misfiled as a variable, which is a weaker and
+  different claim.** This field *is* populated, on every `link` edge the corpus
+  builds. Its defect is not that nothing filled it but that nothing could fill it
+  with anything else: the value names a field of the **OTel span data model**,
+  which is common to both dialects rather than a property of either. So its
+  evidential status is genuinely thinner, and it is the half where "the corpus
+  never contained the case" remains live.
+
+**A finding about the freeze gate itself, offered as a reading and not as a
+measurement.** `ROADMAP.md`'s condition 2 requires *"a dialect whose links come
+from somewhere other than the OTel record-level `links` field."* Every dialect
+named as a Phase 4 candidate (`ROADMAP.md` Phase 4: Langfuse, LangSmith,
+Logfire, Vercel AI SDK, OTLP JSON, OTLP protobuf) appears either to be
+OTel-native — links read from the same record-level field, yielding
+`"span.link"` a third time — or to have no span-link concept at all. If that
+holds, condition 2 is not merely unmet by dialect three; it is **unmeetable by
+the roadmap's own candidate list**, and the gate has a hole no amount of
+adapters closes. **This is a reading of five dialects, not observed output, and
+`FIXTURES.md` §5.1 is explicit that a reading of a dialect is not evidence about
+it.** What would settle it is one captured trace per candidate, checked for
+where its links come from — a human act (`AGENT.md`, captured fixtures).
+
+**What removal would cost** — enumerated, and it is small.
+
+| | |
+|---|---|
+| Types | `SpanLink.basis` (field); `DeclaredDataEdge` (whole class); `NormalizedSpan.data_edges` (field) |
+| Seam | `spanweave/seam.py` only — declared **not a public contract** in its own module docstring |
+| Builder | `_link_edges` reads a new `LINK_BASIS` constant instead of `link.basis`; `_data_edges`' first loop deleted (the `received_call_ids` loop, which does the real work, is untouched) |
+| Adapters | both `_data_edges` stubs and their call sites; two `basis="span.link"` literals; one import and one `__all__` entry in `adapters/base.py` |
+| Tests | one deleted (`test_a_declared_data_edge_is_transcribed_with_the_declared_basis`), one amended (`test_the_seam_types_exist_and_are_frozen`). `tests/test_openinference.py:492` and `tests/test_capture.py:1946` assert the emitted basis **is** `"span.link"` and keep passing unchanged |
+| Docs | `SPEC.md` §6 rule 5 and §3.8; `ADAPTERS.md` §3 (two bullets); `CONTRACTS.md` F-D (two rows); `ROADMAP.md` freeze-gate conditions 2 and 3 |
+
+**Does the serialized graph move? No — and this was checked, not reasoned.** All
+six `basis` values in the whole corpus are enumerated at `CONTRACTS.md` F-D and
+reproduced by `grep` over every `expected/graph.json`; `"span.link"` occurs
+twice, in one scenario, in one dialect. Moving that string from an adapter
+default to a builder constant changes no byte of any expected graph.
+`tests/serialized_shape.json` carries `$.edges[].basis` as a `leaf` and would
+carry it identically afterwards, so `make shape` produces no diff.
+
+**Is it a shape change? The record contradicts itself, and this is handed over
+unresolved rather than settled here.**
+
+- **Under `PREDICTIONS.md`'s test as written, including the 2.10
+  serialized-field amendment: no.** That test asks *"could an existing
+  `graph.json` express the consumer's need"* and classes as shape *"a **new**
+  field … something the model cannot currently express."* Nothing here is a
+  consumer want at all, no consumer is involved, and the 2.10 amendment triggers
+  on a **serialized** field changing type — `Edge.basis` neither changes type
+  nor disappears. It lands closest to the *spec gap* category, inverted: a spec
+  change plus an adapter change, and no model change.
+- **`ROADMAP.md` says the opposite, in terms.** Its freeze-gate condition 3
+  already anticipated this exact outcome and calls it one: *"a seam field three
+  dialects never populate is a candidate for removal — **which is a shape
+  change** and belongs in the freeze decision rather than after it."*
+- **Both cannot be right, and widening the shape/operational distinction to make
+  them agree is forbidden** (`AGENT.md`: *do not widen the distinction; if a
+  want does not fit the test as written, it goes to the human unfitted*). It
+  goes unfitted.
+
+**Three options, with costs. None is picked, and picking is a human's call.**
+
+- **A. Do nothing.** Cost: zero now. The freeze inherits two seam fields that
+  four phases have not populated, one of them provably unpopulatable by the two
+  real adapters, and a `ROADMAP.md` condition that may be unmeetable by any
+  candidate dialect. `seam.py` is not a public contract, so removal stays
+  possible after `1.0` — the cost of waiting is not *irreversibility*, it is
+  that dialect three's author reads `ADAPTERS.md` §3, fills in a `basis`, and
+  the vocabulary becomes real by accident before anyone decided it should be.
+  That is this project's recurring failure mode (`CONTRACTS.md` F-D; the
+  `declared_confidence` rename at `a953a1f`), not a novel risk.
+- **B. Remove the adapter-supplied half before the freeze.** Cost: the table
+  above, plus a `SPEC.md` edit — so a spec conversation, which `CLAUDE.md`
+  invariant 6 makes a halt in its own right. Gains: `basis` acquires one
+  meaning, which is the builder's; `ADAPTERS.md` stops instructing adapter
+  authors to do a thing no adapter has done; `ROADMAP.md`'s conditions 2 and 3
+  are struck rather than left permanently unmet. Risk: it forecloses a dialect
+  nobody has surveyed — and §4.2.1 exists *because* a relation the corpus swore
+  was absent turned out to be present in every multi-turn trace. Removing on the
+  strength of two dialects is the same generalisation `58ff0c3`'s own commit
+  message admits to having made and been wrong about.
+- **C. Split the two, on the ground that the evidence differs.** Remove
+  `DeclaredDataEdge` (never populated; the real case was deliberately routed
+  elsewhere with a written reason) and **keep** `SpanLink.basis`, retyped or
+  re-documented so that it is a builder constant unless a dialect states
+  otherwise. Cost: the larger doc surface of B without its simplicity, and it
+  leaves one row of F-D open. Gain: it is the only option whose action matches
+  the strength of the evidence for each half separately, and it removes the half
+  that a dialect-three author could otherwise fill in by accident.
+
+**If the field stays, the gate still has a hole** — the question required this
+be said. Conditions 2 and 3 of `ROADMAP.md`'s *"What would be sufficient for
+`Edge.basis`"* are the hole. What would fill them, in order of what this project
+can actually do: (i) a captured trace from each Phase 4 candidate, inspected for
+where its links originate — this is the cheap one and it is a human act; (ii) if
+none originates outside the OTel `links` field, then **nothing can fill
+condition 2**, and the honest resolution is to strike it rather than carry an
+unmeetable gate — which is itself a decision, not a measurement; (iii) for
+condition 3, the same, one step weaker: a dialect naming both ends of a data
+relation on one record. The formats that do this (OpenLineage, W3C PROV) are
+**lineage** formats rather than execution telemetry, so adopting one is a
+`SPEC.md` scope question and not an adapter.
+
+**What this investigation cannot support, stated because the question asked for
+it in advance.** The falsifiers were written down before the evidence was
+gathered: (1) the documents defining `basis` as dialect-facing by design;
+(2) any commit ever populating either path; (3) a real dialect stating a link
+reason or naming both ends; (4) removal forcing the builder to re-derive
+something it structurally cannot. **None of the four fired**, and (4) inverted —
+`58ff0c3` is the builder deriving it *by choice*. But the instrument for (3) was
+one model's reading of five dialect specifications, which is precisely the
+evidence class `FIXTURES.md` §5.1 forbids relying on, and **no cold reader was
+run** — the same session that holds the hypothesis also chose what counted as
+refuting it, which is the tenth instance's defect (`TASKS.md` R3 step 9(a)) with
+one layer removed. A cold read against `seam.py`, `ADAPTERS.md` §3 and
+`SPEC.md` §4.2.1 — asked only *"who is supposed to decide this field's value"*,
+never told the suspicion — is the cheap instrument that would supply the
+independence this write-up lacks, and it has not been run.
+
+
+---
+
+#### Resolution — option C, and the eleventh instance
+
+**The cold read that decided it (sixth use of the practice).** Two models with
+no project context were sent `SPEC.md` §3.8 and §4 and `ADAPTERS.md` complete,
+and asked one question: *who decides `basis`?* They **disagreed with each
+other**, which is stronger evidence than either agreeing with the session that
+held the hypothesis.
+
+- **gpt-oss-120b:** *"Explicit edges (parent, call_result, data, link) — the
+  adapter author supplies the basis when emitting the edge"*, closing with
+  *"the two documents are consistent."* Wrong about the code — `parent` and
+  `call_result` have always been builder constants — but a **faithful reading**
+  of `ADAPTERS.md` §3 and `SPEC.md` §6 rule 5.
+- **Qwen3-235B:** the builder decides. It found the contradiction independently
+  — *"adapters do not create edges, so they cannot set basis on edges; that
+  field does not exist at the adapter stage"* — and then reconciled it by
+  **inventing a division of labour the code does not implement**: adapter
+  supplies the raw field, builder constructs the string.
+
+Neither could read the answer off the documents. One concluded the wrong thing;
+the other reached the right conclusion through a mechanism that does not exist.
+
+**Why this is the eleventh instance, and what is new about it.** The previous
+ten were all one shape: **a claim nothing asserted** — a contract no test, gate
+or corpus had to agree with, so it drifted or was false without anything
+noticing (`CONTRACTS.md` F-A through F-E; `declared_confidence` at `a953a1f`;
+`SPEC.md` §3.7's catch-all; the R3 screening gate). **This one is different: two
+documents asserting *different things*, for four phases.** Not an unasserted
+claim but a contradiction — and it survived for the same reason the others did,
+one layer along. The field the two documents disagree about **has never been
+populated by an adapter**, so no code path, no fixture and no test ever had to
+choose between the two readings. A contradiction is only detectable where
+something must act on it.
+
+That is the transferable finding: *this project's instruments detect
+disagreement between a document and the code, and between two implementations.
+They do not detect disagreement between two documents about a field nothing
+exercises.* The cold read is currently the only instrument that does, and it
+worked here precisely because the two readers disagreed rather than because
+either was right.
+
+**The decision: option C — split the two fields, act on each at its evidence's
+strength.**
+
+- **`DeclaredDataEdge`: removed.** The evidence is positive, not absent.
+  `58ff0c3` met the real case and found the adapter structurally unable to speak
+  to it, which is why both `_data_edges` returned `()` with docstrings saying
+  so. The type, `NormalizedSpan.data_edges`, both adapter stubs, the builder's
+  declared-both-ends loop, and the `adapters/base.py` re-export are gone.
+- **`SpanLink.basis`: kept**, as a builder constant with a reserved override.
+  *"The corpus never contained the case"* is still live for this half, and
+  removing it would be the generalisation-from-two-dialects that `58ff0c3`'s own
+  commit message admits to having made and been wrong about.
+
+**The documentary disagreement, fixed in the same change.** `SPEC.md` §3.8 now
+states plainly that the builder supplies `basis`, and why (adapters state
+relations; the builder turns a relation into an edge, so the account of how the
+edge came to be is its account to give). `ADAPTERS.md` §3's *"every declared
+edge needs a `basis` naming the source field"* is replaced by *"you state
+relations; you do not emit edges, and you do not name a `basis`."* `SPEC.md` §6
+rule 5 is rewritten and carries its own correction note: it read *"an adapter
+may assert `parent`, `call_result`, `data`, `link` … all traceable to a source
+field named in `basis`"*, **which was false for `parent` and `call_result` from
+the first release** regardless of anything decided about the adapter-supplied
+half.
+
+**The ruling on the unfitted contradiction, and why the reasoning outlives the
+verdict.** `PREDICTIONS.md`'s test said removal is not a shape change;
+`ROADMAP.md` condition 3 said it is. **`ROADMAP.md` was wrong.** Condition 3 was
+written at 3.11 as a *prediction about what removal would cost*, before anyone
+measured it. The measurement now exists: six corpus `basis` values enumerated,
+`make shape` regenerating `tests/serialized_shape.json` **byte-identical**, no
+`expected/graph.json` moved, `Edge.basis` neither changed type nor disappeared.
+**A prediction about a cost, contradicted by the measurement of that cost,
+loses.** Condition 3 is corrected in place with that reasoning attached, and
+noted there as its own instance of the pattern — a document asserting something
+nobody had computed.
+
+**The freeze gate: `Edge.basis` comes off it.** Stated plainly because the gate
+named this field as the fourth instance's instrument. After this change every
+`basis` the library emits is a builder constant, so the gate's question — *would
+two adapter authors who each chose a value agree?* — **has no subject**. Note
+what kind of resolution that is: the question was made **unaskable**, not
+answered. That is legitimate, and it is not the same as measuring it.
+
+**What the gate loses, and it is real.**
+
+1. **The qualification now rests on one row instead of two.** `ROADMAP.md`'s
+   *"the gate is necessary and, for these three, not sufficient"* argument was
+   carried by two concrete rows — `Edge.basis` and `Usage.extra` — plus the
+   node-field class. With `Edge.basis` gone, **`Usage.extra` is the only
+   surviving concrete instance**. The argument is unchanged and still correct,
+   but an argument resting on one instance is more fragile, and `Usage.extra`
+   should now be treated as load-bearing. Recorded at `CONTRACTS.md` F-D.
+2. **The `link` scenario's justification got weaker, which is a cut risk.**
+   Condition 1 — a `link`-carrying scenario a second dialect can render — was
+   partly justified as the instrument for `Edge.basis`. That reason is gone.
+   What survives is that **`EdgeKind.link` has no cross-dialect coverage at
+   all**: one of five edge kinds, unexercised by the library's central claim.
+   That is a genuine hole, but it is a weaker argument than unblocking a freeze
+   row, and weaker arguments get cut. Named in `ROADMAP.md` condition 1 so that
+   if it is cut, it is cut knowingly.
+3. **Nothing replaces it.** There is no substitute instrument, because the thing
+   it measured no longer exists. The honest statement is that the gate is
+   *narrower* than 3.11 thought, not that it has been repaired.
+
+**Divergences from the plan — five, and the first is a judgement call a human
+may want to reverse.**
+
+1. **`SpanLink.basis` was *retyped*, not only re-documented.** The decision said
+   "keep, re-documented as a builder constant"; option C as written said
+   "retyped **or** re-documented". It is now `str | None = None`, with the
+   builder supplying `LINK_BASIS`. **Reason: documentation alone would have
+   repeated the exact failure mode this investigation exists to fix** — a claim
+   about who owns a field, enforced by nothing, sitting next to code that says
+   otherwise. The retype makes it structural: an adapter now passes nothing, and
+   a dialect that states a reason must say so deliberately. **If docs-only was
+   meant, this is the edit to revert**, and it is isolated to `seam.py`,
+   `build.py` and three tests.
+2. **The no-dialect-in-builder gate caught two of my own comments**, at
+   `build.py:40` and `seam.py:65`, both naming a dialect below the seam while
+   explaining why the basis is builder-owned. Reworded. Recorded because the
+   gate fired on the change whose author was arguing about seam ownership at the
+   time — the invariant held against exactly the person best placed to talk
+   themselves past it.
+3. **A weak test nearly shipped.** `test_this_dialect_declares_no_data_edges_so_none_are_produced`
+   asserted `span.data_edges == ()` on a field that no longer exists. Its first
+   replacement asserted `not hasattr(NormalizedSpan, "data_edges")` — which
+   tests the *absence of an attribute*, not behaviour, and would have passed
+   forever for the wrong reason. Replaced with a behavioural assertion that the
+   adapter records a received call id and names no producer. Recorded because
+   the weak version was written, reviewed by its author, and only caught on a
+   second look.
+4. **Removal net *increased* test coverage of the surviving field.** The only
+   test that had ever exercised "an adapter supplies a basis" used the removed
+   `DeclaredDataEdge` with an invented dialect field. The reserved
+   `SpanLink.basis` override is now pinned by a real test
+   (`test_a_dialect_that_states_a_links_reason_has_it_carried_verbatim`), so the
+   behaviour the field is *kept for* is asserted for the first time.
+5. **The *Open investigations* intro was falsified by this change and corrected
+   in it.** It said an investigation has "no box, nothing to implement" — true
+   of opening one, false of resolving one, and it would have told this session
+   it was out of scope.
+
+**Not done, deliberately:** no fixture authored, no `expected/graph.json`
+touched, no `canonical()` weakened, `PREDICTIONS.md` untouched, schema not
+frozen, Phase 4 not started. `make check` green; `make shape` produces no diff.
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK, OTLP JSON;

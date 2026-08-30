@@ -509,29 +509,42 @@ under-states it:
 | `span.parent_span_id` | `parent` | builder | `SPEC.md` §3.8 (as an example) | `tests/test_build.py` (model) |
 | `tool_call_id` | `call_result` | builder | `SPEC.md` §4.4 | `tests/test_build.py` (model) |
 | `tool_call_id in tool-result message` | `data` | builder | `SPEC.md` §4.2.1 (as a MUST) | `FIXTURES.md` §7 via `tests/test_docs.py` (model) |
-| `span.link` | `link` | **adapter** (`SpanLink.basis` default) | nothing | `tests/test_openinference.py` (model) |
-| — | `data` | **adapter** (`DeclaredDataEdge.basis`) | `ADAPTERS.md` §3 | **never produced** |
+| `span.link` | `link` | **builder** (`LINK_BASIS`) | `SPEC.md` §3.8 | `tests/test_build.py` (model) |
+| — | `data` | ~~adapter (`DeclaredDataEdge.basis`)~~ | **type removed** | **never produced** |
 
-Two corrections to the record:
+**RESOLVED at `TASKS.md` I1.** Every row is now builder-supplied, and the
+resolution was to remove the adapter-supplied surface rather than to measure
+it. What the table recorded before, and what became of it:
 
-1. **No adapter emits a `DeclaredDataEdge` at all.** 2.14 says
-   `DeclaredDataEdge.basis` is invisible "because `otel_genai` produces none".
-   `openinference._data_edges` also returns `()`, and says why in its docstring:
-   OpenInference never names both ends on one span either. So the field is not
-   merely invisible to the cross-dialect claim — it is a required seam field
-   that nothing has ever populated, in either dialect.
-2. **Neither adapter has ever *chosen* a `SpanLink.basis`.** Both take the
-   field's default, `"span.link"`. It is right in both, for the reason 2.14
-   gives — it names an OTel record-level field rather than a dialect attribute —
-   but no adapter author has yet made the decision the field exists to record.
+1. **No adapter ever emitted a `DeclaredDataEdge`.** 2.14 said the field was
+   invisible "because `otel_genai` produces none"; 3.2 found `openinference`
+   produced none either. I1 established the stronger fact from the history:
+   the type was constructed in exactly two places ever, both unit tests, with
+   invented bases. **The type is removed.** The evidence was positive rather
+   than absent — `58ff0c3` met the real declared relation and routed it to
+   `received_call_ids`, because one span is not a vantage point from which the
+   producer is visible.
+2. **Neither adapter had ever *chosen* a `SpanLink.basis`.** Both took the
+   default. **The field is kept**, retyped to `str | None` and defaulting to
+   `None`, with the builder supplying `LINK_BASIS` — so the fact that no
+   dialect states a link's reason is now structural rather than a coincidence
+   of two adapters passing the same literal. It survives as a reserved
+   override, and is pinned by
+   `tests/test_build.py::test_a_dialect_that_states_a_links_reason_has_it_carried_verbatim`.
+   Kept rather than removed because the evidence differs from (1): nothing has
+   populated it, but the case it exists for has also never *arrived*, and two
+   dialects reading the same record-level `links` field cannot distinguish
+   those.
 
-The conclusion is 2.14's, unchanged and stronger: unresolvable today, Phase 4
-with dialect three. What changes is the instrument. Dialect three does not test
-the adapter-supplied basis vocabulary unless it emits an `EdgeKind.link` **and**
-the corpus carries a `link` scenario it can render — which is currently blocked
-by `span_links` pinning `kind: chain` (`expected/coverage.json`, and 2.16's
-pending decision). A third dialect added without that is a third dialect that
-leaves this row exactly where it is.
+**What this row's departure costs the freeze gate**, since it was one of the
+two named instruments for the qualification at `ROADMAP.md` *"The gate is
+necessary and, for these three, not sufficient"*: `Usage.extra` (F-C) is now
+the **only** surviving concrete row of that class. The qualification's argument
+— *an adapter-supplied field is only measured when two adapters that chose a
+value have to agree on it* — is unchanged and still correct, but it now rests
+on one row plus the node-field class rather than two rows plus the class. An
+argument resting on one instance is more fragile, and `Usage.extra` should be
+treated as load-bearing accordingly.
 
 ### F-E. §3.7's `source` catch-all was stated and false — corrected in this session
 
@@ -626,10 +639,15 @@ this phase does not have:
 
 1. **Dialect three, run against the corpus**, which is already a freeze
    precondition (`ROADMAP.md` Phase 4). It is the only thing that can make an
-   adapter-supplied vocabulary — `Edge.basis`, `Usage.extra`'s keys,
-   `Node.operation`'s name-space — measurable rather than asserted by one author.
-2. **A `link`-carrying scenario a second dialect can render** (F-D), without
-   which dialect three leaves `Edge.basis` where it is.
+   adapter-supplied vocabulary — `Usage.extra`'s keys, `Node.operation`'s
+   name-space — measurable rather than asserted by one author. *`Edge.basis`
+   was the third item here and has been removed from the list: there is no
+   longer an adapter-supplied `basis` vocabulary for dialect three to measure
+   (`TASKS.md` I1).*
+2. **A `link`-carrying scenario a second dialect can render** (F-D) — still
+   wanted, but no longer for `Edge.basis`. Its surviving justification is that
+   `EdgeKind.link` has no cross-dialect coverage at all, which is weaker; see
+   `ROADMAP.md` condition 1 for why that weakness is itself worth watching.
 3. **`schema_version`'s semantics** (`TASKS.md` 3.7), which every row above
    ultimately hangs from: whatever contract Phase 4 states, a consumer needs a
    value that tells it which contract it is holding.

@@ -16,7 +16,7 @@ from spanweave.adapters import (
 from spanweave.adapters.base import Adapter, NormalizedSpan
 from spanweave.errors import AdapterSelectionError, UnknownAdapterError
 from spanweave.model import NodeKind, RawRecord
-from spanweave.seam import CallRole, DeclaredDataEdge, SpanLink
+from spanweave.seam import CallRole, SpanLink
 
 
 class StubAdapter:
@@ -201,11 +201,17 @@ def test_a_stub_satisfies_the_adapter_protocol():
 
 def test_the_seam_types_exist_and_are_frozen():
     link = SpanLink(span_id="s9", trace_id="t2")
-    edge = DeclaredDataEdge(src="s1", dst="s2", basis="declared")
     with pytest.raises(dataclasses.FrozenInstanceError):
         link.span_id = "changed"
-    assert edge.basis == "declared"
     assert CallRole.REQUESTER != CallRole.FULFILLER
+
+
+def test_a_span_link_states_no_basis_and_the_builder_names_it():
+    # `basis` describes how an edge came to be, and the builder is what makes
+    # edges. A link carries one only when the dialect states the link's
+    # *reason*; none observed does, so the field is None and the builder
+    # supplies LINK_BASIS (`TASKS.md` I1).
+    assert SpanLink(span_id="s9").basis is None
 
 
 def test_a_span_defaults_to_absent_payloads_and_no_pairing():
@@ -220,4 +226,4 @@ def test_a_span_defaults_to_absent_payloads_and_no_pairing():
     # Never invented: no id in the dialect means no pairing at all.
     assert span.call_ids == ()
     assert span.call_role is None
-    assert span.links == () and span.data_edges == () and span.unmapped == ()
+    assert span.links == () and span.received_call_ids == () and span.unmapped == ()

@@ -223,7 +223,7 @@ one layer out, applied to prose and to judgement instead of to code. **A cold
 reader is the cheapest instrument that supplies that independence.** It costs
 one prompt.
 
-Five uses so far, and what each returned:
+Six uses so far, and what each returned:
 
 - **2.6.** A blank session given only the captured trace and its graph found a
   **missing declared `data` edge** that 593 tests, six gates and two review
@@ -257,6 +257,25 @@ Five uses so far, and what each returned:
   the comparison needs `0.9.0`'s page as the *current* page, which it stopped
   being at the publish. If a read is going to be a before-and-after, **run both
   halves in the same batch**; the window closes when you ship.
+
+- **`TASKS.md` I1, on `Edge.basis`** — the first use aimed at a **document
+  pair** rather than at a document, a graph, or an install. Two models were
+  given `SPEC.md` §3.8 and §4 and `ADAPTERS.md`, and asked only *who decides
+  `basis`?* **They disagreed with each other**, which decided the question more
+  firmly than agreement would have: one read the documents faithfully and
+  concluded the wrong thing, the other reached the right conclusion through a
+  mechanism the code does not implement. Neither could read the answer off the
+  documents, because the documents did not contain one.
+
+  **Why it is worth reading before running one.** The previous ten instances of
+  this project's pattern were all *a claim nothing asserted*. This was **two
+  documents asserting different things for four phases**, undetected because the
+  field they disagreed about had never been populated by an adapter — so nothing
+  ever had to choose between the readings. **The project's instruments catch a
+  document disagreeing with the code, and two implementations disagreeing with
+  each other. Nothing catches two documents disagreeing about a field nothing
+  exercises.** A cold read does, and only because the readers were allowed to
+  disagree.
 
 **Two constraints, each stated with the failure that produced it — because a
 rule without its failure gets softened by the next person who finds it

@@ -224,8 +224,12 @@ def test_a_message_list_of_an_unexpected_shape_yields_no_relation():
     assert span.outputs.state is PayloadState.PRESENT
 
 
-def test_the_dialect_declares_no_both_ends_data_edge():
-    assert span_of({"gen_ai.operation.name": "chat"}).data_edges == ()
+def test_the_dialect_names_no_producer_so_the_seam_carries_only_an_id():
+    # This dialect never names both ends of a relation on one span either.
+    # A received result arrives as an id and the builder resolves it; there is
+    # no shape at the seam for an adapter to name a producer (`TASKS.md` I1).
+    span = span_of({"gen_ai.operation.name": "chat"})
+    assert span.received_call_ids == ()
 
 
 # --------------------------------------------------------------------------

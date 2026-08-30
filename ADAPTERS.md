@@ -176,10 +176,18 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   prevent.
 
 **Explicit relations**
-- `links` — span links, when present.
-- `data_edges` — **only** when the dialect explicitly declares a producer→
-  consumer relation, naming both ends. Comparing values to guess a flow is
-  forbidden (`SPEC.md` §4.2).
+
+**You state relations. You do not emit edges, and you do not name a `basis`.**
+The builder constructs every edge and supplies every `basis`, because `basis`
+describes how an edge came to be and the builder is what brings edges into
+being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
+
+- `links` — span links, when present. Leave `SpanLink.basis` as `None`: your
+  dialect saying a link *exists* is not your dialect saying *why*, and the
+  builder names the relation. Set it **only** if the dialect states the
+  reason — a retry, a continuation, a fan-in — in which case the builder
+  carries your string verbatim. No dialect observed so far does, so expect to
+  leave it alone (`TASKS.md` I1).
 - `received_call_ids` — when the dialect says this span was **given** the
   result of a call (a tool-result message, typically). You cannot name the
   producer from one span, and you should not try: record the id and let the
@@ -189,8 +197,14 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   message in a request. This corpus asserted for a whole phase that
   OpenInference declared nothing of the kind, while every multi-turn trace
   carried it.
-- Every declared edge needs a `basis` naming the source field — and, where the
-  library resolved a declaration from one granularity to another, saying so.
+- **There is no seam field for naming both ends of a data relation yourself,
+  and its removal is the reason this section reads as it does.** A
+  `DeclaredDataEdge` type once offered exactly that, with a `basis` you
+  supplied. In four phases no adapter populated it; when the real declared
+  relation was finally found it was a *message* saying "I received the result
+  of call X", which one span cannot resolve. If your dialect appears to name
+  both ends on one record, that is a finding worth raising rather than a gap
+  to work around — stop and ask (`TASKS.md` I1).
 
 **Losslessness**
 - `unmapped` — the attribute **keys** you saw and did not normalize. Keys only;

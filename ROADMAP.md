@@ -320,7 +320,7 @@ dialects:
 
 | | Why it is unmeasurable today |
 |---|---|
-| **4. `Edge.basis`** (2.14) | a free `str`, compared by `canonical()`, adapter-supplied — and both adapter-supplied bases are invisible to the cross-dialect claim |
+| ~~**4. `Edge.basis`**~~ (2.14) | **RESOLVED at `TASKS.md` I1, and off this gate — by removing the surface, not by measuring it.** `DeclaredDataEdge` is gone and `SpanLink.basis` is documented and typed as a builder constant with a reserved override, so there is no adapter-supplied `basis` vocabulary left for two adapter authors to disagree about. Kept as a struck row rather than deleted, because *how* it left this table is the point: the question was made unaskable, which is a different outcome from being answered, and the row below is now the only surviving instance of the class |
 | **5. `Usage.extra`'s keys** (3.2) | an open key vocabulary, compared by `canonical()`, adapter-supplied and **dialect-derived verbatim** — each adapter takes its own attribute suffix, so `llm.token_count.cache_read` becomes `cache_read` and `gen_ai.usage.cache_read_input_tokens` becomes `cache_read_input_tokens` for the same concept. Two dialects would disagree, and the disagreement is unreachable — but not for the reason this row gave until `TASKS.md` 3.8. It is `{}` on every **conformance** rendering, and **non-empty on two nodes** of `fixtures/captured/openai_tool_call.jsonl` (`{"prompt_details.cache_read": 80}` and `{... : 144}`); captured traces are not compared across dialects, so the field is exercised without ever being contested. Corrected from *"it is `{}` on every node of every fixture in the repository"* — a corpus-wide quantifier nothing recomputed (3.4's **F-1**) |
 
 ### The gate is necessary and, for these three, not sufficient
@@ -340,30 +340,61 @@ have: **an adapter-supplied field is only measured when two adapters that
 chose is structural, the way the builder's four `basis` strings are — real, but
 not evidence about a vocabulary.
 
-**What would be sufficient for `Edge.basis`.** Three conditions, and only the
-first is a corpus act:
+**`Edge.basis` is no longer on this gate.** Resolved at `TASKS.md` I1 by
+removing the adapter-supplied surface: `DeclaredDataEdge` is deleted, and
+`SpanLink.basis` is typed `str | None`, defaulting to `None`, with the builder
+supplying `LINK_BASIS`. Every `basis` the library emits is now a builder
+constant, so the question this gate asked — *would two adapter authors who each
+chose a value agree?* — has no subject. Conditions 2 and 3 below are struck.
+The three paragraphs are kept, struck rather than deleted, because what they got
+wrong is instructive and a deleted condition teaches nobody.
 
-1. **A `link`-carrying scenario that a second dialect can render.**
-   `span_links` is the corpus's only one and is declared unrenderable in
-   `otel_genai` — blocked by the `invoke_workflow` → `chain` decision
-   (`TASKS.md` 2.16), *not* by link support: `fixtures/captured/genai_workflow.jsonl`
-   proves the `otel_genai` adapter reads a real span link and emits an
-   `EdgeKind.link` with `basis` `span.link`. Either that decision is taken, or a
-   `link`-carrying scenario that does not pin `kind: chain` is authored.
-2. **An adapter that has to choose a different `basis`.** Both current adapters
-   take `SpanLink.basis`'s *default*, `"span.link"` (`TASKS.md` 3.2). Two
-   dialects agreeing on a default measures the default, not the vocabulary. The
-   measurement needs a dialect whose links come from somewhere other than the
-   OTel record-level `links` field — which is a property of whatever dialect
-   three turns out to be, and cannot be arranged by choosing one.
-3. **For `DeclaredDataEdge.basis`, an adapter that emits one at all.** 2.14
-   recorded that `otel_genai` produces none; 3.2 found `openinference` produces
-   none either — both reach the same relation through `received_call_ids`, whose
-   `basis` the *builder* supplies. It is a required seam field that nothing has
-   ever populated, in either dialect. If dialect three also names no data
-   relation with both ends on one span, that is itself the finding, and a seam
-   field three dialects never populate is a candidate for removal — which is a
-   **shape** change and belongs in the freeze decision rather than after it.
+1. **A `link`-carrying scenario that a second dialect can render. STILL WANTED,
+   on a different and weaker ground.** `span_links` is the corpus's only one and
+   is declared unrenderable in `otel_genai` — blocked by the `invoke_workflow` →
+   `chain` decision (`TASKS.md` 2.16), *not* by link support:
+   `fixtures/captured/genai_workflow.jsonl` proves the `otel_genai` adapter
+   reads a real span link and emits an `EdgeKind.link` with `basis` `span.link`.
+   Either that decision is taken, or a `link`-carrying scenario that does not
+   pin `kind: chain` is authored.
+
+   **Its justification has changed and the change is a risk.** This was partly
+   wanted as the instrument for `Edge.basis`; that reason is gone. What remains
+   is that `EdgeKind.link` has **no cross-dialect coverage at all** — one of
+   five edge kinds, unexercised by the library's central claim. That is a real
+   hole about an edge kind, but it is a weaker argument than unblocking a freeze
+   row, and a weaker argument is one that gets cut. Named here so that if it is
+   cut, it is cut knowingly.
+2. ~~**An adapter that has to choose a different `basis`.**~~ **STRUCK.** It
+   asked for a dialect whose links come from somewhere other than the
+   record-level `links` field. The I1 investigation found that every dialect
+   named as a Phase 4 candidate appears either to read that same field or to
+   have no link concept — so the condition may have been unmeetable by this
+   roadmap's own candidate list, and a gate condition no candidate can satisfy
+   is a gate that never closes. The resolution taken was to stop requiring the
+   measurement rather than to keep waiting for it.
+3. ~~**For `DeclaredDataEdge.basis`, an adapter that emits one at all.**~~
+   **STRUCK, and it was wrong about the cost.** Its closing clause read: *"a
+   seam field three dialects never populate is a candidate for removal — which
+   is a **shape** change and belongs in the freeze decision rather than after
+   it."*
+
+   **That was a prediction about a cost, written at 3.11, before the cost was
+   measured.** The measurement exists now (I1): all six `basis` values in the
+   corpus enumerated, `make shape` regenerating `tests/serialized_shape.json`
+   **byte-identical**, and no `expected/graph.json` moved. The removal changed
+   no serialized byte. Under `PREDICTIONS.md`'s shape/operational test as
+   written — including the 2.10 serialized-field amendment, which triggers on a
+   serialized field changing type — it is **not** a shape change: `Edge.basis`
+   neither changed type nor disappeared, and `seam.py` declares itself not a
+   public contract in its own module docstring.
+
+   **A prediction about a cost, contradicted by the measurement of that cost,
+   loses.** Ruled at I1. And the error is its own instance of this project's
+   pattern: a document asserting something nobody had computed, which then sat
+   unchallenged because nothing had to agree with it — the same shape as
+   `declared_confidence` at `a953a1f` and as the two documents I1 was opened to
+   reconcile.
 
 **What would be sufficient for `Usage.extra`.** Less, and differently: it is
 blocked by the *corpus*, not by what dialect three is. Both current dialects

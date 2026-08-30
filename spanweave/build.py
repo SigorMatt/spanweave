@@ -37,6 +37,17 @@ from spanweave.version import SCHEMA_VERSION, __version__
 PARENT_BASIS = "span.parent_span_id"
 CALL_BASIS = "tool_call_id"
 
+#: Span links are a record-level field of the underlying span data model,
+#: common to every dialect that carries them rather than a property of any
+#: one -- which is why both adapters reach it identically and neither has
+#: anything of its own to say about it. So the builder names it, like the
+#: other four.
+#:
+#: `SpanLink.basis` overrides this, and exists for a dialect that states *why*
+#: a link exists. None observed does; the override has never been taken
+#: (`TASKS.md` I1).
+LINK_BASIS = "span.link"
+
 #: Names the resolution, not just the field. The instrumentor declares the
 #: relation about a **message** ("this input is the result of call X"); the
 #: builder resolves it to the span that fulfilled X. A consumer auditing this
@@ -420,7 +431,7 @@ def _link_edges(
                     dst=by_span_id.get(link.span_id, link.span_id),
                     kind=EdgeKind.LINK,
                     warrant=Warrant.EXPLICIT,
-                    basis=link.basis,
+                    basis=link.basis or LINK_BASIS,
                     adapter=adapter.id,
                 )
             )
@@ -436,14 +447,11 @@ def _data_edges(
 ) -> list[Edge]:
     """Only ever the ones the instrumentor declared (`SPEC.md` §4.2).
 
-    Two shapes of declaration, and nothing here compares an output to an
-    input in either of them:
-
-    * both ends named on one span -- transcribed as given;
-    * a span stating that it **received** the result of call X, joined to the
-      span that fulfilled X. The relation is declared about a message and
-      resolved to spans by id, which is a real step and is why the basis says
-      so rather than naming a bare field.
+    One shape of declaration, and nothing here compares an output to an input:
+    a span stating that it **received** the result of call X, joined to the
+    span that fulfilled X. The relation is declared about a message and
+    resolved to spans by id, which is a real step and is why the basis says so
+    rather than naming a bare field.
 
     A received result whose producing span is not in this input yields no
     edge: there is nothing to point at. That gap is currently silent, and is
@@ -451,17 +459,6 @@ def _data_edges(
     """
     edges = []
     for span, node_id in zip(spans, ids, strict=True):
-        for declared in span.data_edges:
-            edges.append(
-                Edge(
-                    src=by_span_id.get(declared.src, declared.src),
-                    dst=by_span_id.get(declared.dst, declared.dst),
-                    kind=EdgeKind.DATA,
-                    warrant=Warrant.EXPLICIT,
-                    basis=declared.basis,
-                    adapter=adapter.id,
-                )
-            )
         for call_id in span.received_call_ids:
             for producer in sorted(fulfillers.get(call_id, ())):
                 if producer == node_id:

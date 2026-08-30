@@ -15,12 +15,11 @@ from collections.abc import Iterable, Iterator, Sequence
 from typing import Protocol, runtime_checkable
 
 from spanweave.model import JsonValue
-from spanweave.seam import CallRole, DeclaredDataEdge, NormalizedSpan, SpanLink
+from spanweave.seam import CallRole, NormalizedSpan, SpanLink
 
 __all__ = [
     "Adapter",
     "CallRole",
-    "DeclaredDataEdge",
     "NormalizedSpan",
     "SpanLink",
 ]

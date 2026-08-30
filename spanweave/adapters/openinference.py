@@ -41,7 +41,7 @@ from spanweave.model import (
     Status,
     Usage,
 )
-from spanweave.seam import CallRole, DeclaredDataEdge, NormalizedSpan, SpanLink
+from spanweave.seam import CallRole, NormalizedSpan, SpanLink
 
 ADAPTER_ID = "openinference"
 ADAPTER_VERSION = "0.1.0"
@@ -247,7 +247,6 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_role=call_role,
         call_names=call_names,
         links=_links(record),
-        data_edges=_data_edges(record),
         received_call_ids=_received_results(attributes, consumed),
         attributes=normalized,
         unmapped=tuple(unmapped),
@@ -471,7 +470,6 @@ def _links(record: Mapping[str, JsonValue]) -> tuple[SpanLink, ...]:
             SpanLink(
                 span_id=span_id,
                 trace_id=_as_str(link.get("trace_id")),
-                basis="span.link",
                 attributes=attributes if isinstance(attributes, dict) else {},
             )
         )
@@ -507,16 +505,6 @@ def _received_results(
             consumed.add(key)
             received.append(found)
     return tuple(received)
-
-
-def _data_edges(record: Mapping[str, JsonValue]) -> tuple[DeclaredDataEdge, ...]:
-    """OpenInference never names **both** ends of a relation on one span.
-
-    What it does declare -- that this span was given the result of call X --
-    is carried in `received_call_ids` instead, because only the builder can
-    resolve X to the span that produced it.
-    """
-    return ()
 
 
 def _as_str(value: JsonValue) -> str | None:

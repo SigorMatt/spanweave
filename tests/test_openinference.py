@@ -489,14 +489,24 @@ def test_span_links_are_transcribed_including_cross_trace_ones():
     )
     assert span.links[0].span_id == "s9"
     assert span.links[0].trace_id == "t2"
-    assert span.links[0].basis == "span.link"
+    # OpenInference states that the link exists, never why. The builder names
+    # the relation (`TASKS.md` I1).
+    assert span.links[0].basis is None
 
 
-def test_this_dialect_declares_no_data_edges_so_none_are_produced():
-    # OpenInference states no producer -> consumer relation. Comparing an
-    # output to an input to manufacture one is forbidden (SPEC.md §4.2).
-    for span in ADAPTER.parse(read_trace(FIXTURE)):
-        assert span.data_edges == ()
+def test_a_received_result_is_recorded_without_naming_its_producer():
+    # OpenInference never names both ends of a relation on one span. What it
+    # does declare -- that this span was GIVEN the result of call X -- arrives
+    # as `received_call_ids`, an id and nothing else: the adapter records what
+    # the span said and leaves the join to the builder, which is the only
+    # thing that can see the other end (SPEC.md §4.2.1, `TASKS.md` I1).
+    # Comparing an output to an input to manufacture a flow stays forbidden.
+    received = [
+        span.received_call_ids
+        for span in ADAPTER.parse(read_trace(FIXTURE))
+        if span.received_call_ids
+    ]
+    assert received == [("call_a",)]
 
 
 # --------------------------------------------------------------------------

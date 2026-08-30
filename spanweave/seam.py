@@ -50,28 +50,22 @@ class SpanLink:
 
     span_id: str
     trace_id: str | None = None
-    #: The source field this came from, carried onto the edge.
-    basis: str = "span.link"
+    #: **Normally `None`, and then the builder supplies the basis.** `basis`
+    #: describes how an edge came to be, and the builder is what brings edges
+    #: into being, so the vocabulary is its account to give (`SPEC.md` §4.0).
+    #: This field is the single reserved exception: a dialect that states
+    #: *why* a link exists -- not merely that it does -- may say so here, and
+    #: the builder carries the reason verbatim onto the edge.
+    #:
+    #: **No observed dialect does.** Both adapters leave it `None` and every
+    #: `link` edge in the corpus carries the builder's `LINK_BASIS`. It is
+    #: kept -- where `DeclaredDataEdge` was removed -- because the evidence
+    #: differs: that type was never populated *and* the case it existed for
+    #: had demonstrably arrived and been routed elsewhere, while here the case
+    #: has never arrived at all. Two dialects that both read the same
+    #: record-level `links` field cannot tell those apart (`TASKS.md` I1).
+    basis: str | None = None
     attributes: Mapping[str, JsonValue] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class DeclaredDataEdge:
-    """A producer -> consumer relation the **instrumentor itself** declared.
-
-    Only ever transcribed, never computed. `spanweave` does not compare an
-    output to an input and conclude a flow: that needs a threshold, a
-    normalization rule and an encoding policy, none of them opinion-free
-    (`SPEC.md` §4.2).
-    """
-
-    #: The producing span's id.
-    src: str
-    #: The consuming span's id.
-    dst: str
-    #: The source field that declared it. Required: an edge nobody can audit
-    #: is an edge nobody should trust.
-    basis: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,15 +110,21 @@ class NormalizedSpan:
     #: read by `unpaired_call` / `unpaired_result` and nothing else.
     call_names: Mapping[str, str] = field(default_factory=dict)
     links: tuple[SpanLink, ...] = ()
-    data_edges: tuple[DeclaredDataEdge, ...] = ()
     #: Call ids whose **results this span was given** -- the dialect declaring
     #: that some other span's output became this span's input.
     #:
-    #: Separate from `data_edges` because an adapter cannot name the producer:
-    #: it sees one span, and the span says only "I received the result of call
-    #: X". Resolving X to the span that fulfilled it needs the whole trace, so
-    #: the builder does it -- exactly the division of labour `call_ids` already
+    #: This is how a declared `data` relation reaches the graph, and it is the
+    #: **only** way: an adapter cannot name the producer, because it sees one
+    #: span and the span says only "I received the result of call X".
+    #: Resolving X to the span that fulfilled it needs the whole trace, so the
+    #: builder does it -- exactly the division of labour `call_ids` already
     #: uses for `call_result` (`SPEC.md` §4.2).
+    #:
+    #: A `DeclaredDataEdge` seam type once let an adapter name both ends and
+    #: supply the edge's `basis` itself. No adapter ever populated it; when
+    #: the real case arrived it came in this shape instead, because a span is
+    #: not a vantage point from which the other end is visible. Removed at
+    #: `TASKS.md` I1.
     received_call_ids: tuple[str, ...] = ()
     attributes: Mapping[str, JsonValue] = field(default_factory=dict)
     #: Attribute **keys** the adapter saw and did not normalize. Keys only:

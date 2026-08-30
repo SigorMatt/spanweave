@@ -10,7 +10,7 @@ import dataclasses
 import pytest
 
 from spanweave import diagnostics as codes
-from spanweave.build import build_graph
+from spanweave.build import LINK_BASIS, build_graph
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.model import (
     AdapterInfo,
@@ -22,7 +22,7 @@ from spanweave.model import (
     RawRecord,
     Warrant,
 )
-from spanweave.seam import CallRole, DeclaredDataEdge, NormalizedSpan, SpanLink
+from spanweave.seam import CallRole, NormalizedSpan, SpanLink
 
 ADAPTER = AdapterInfo(id="some_dialect", version="0.1.0", declared_confidence=0.9)
 
@@ -250,22 +250,29 @@ def test_a_cross_trace_link_is_still_transcribed():
     assert graph.node("foreign") is None
 
 
-def test_a_declared_data_edge_is_transcribed_with_the_declared_basis():
+def test_a_link_edge_carries_the_builders_basis_not_the_adapters():
+    # The seam states no reason for the link; the builder names the relation.
+    # Removing `DeclaredDataEdge` left this the only adapter-supplied basis,
+    # and it is a reserved override that no observed dialect takes
+    # (`TASKS.md` I1).
+    graph = build([a_span("s0", links=(SpanLink(span_id="s1"),)), a_span("s1")])
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.LINK)
+    assert edge.warrant is Warrant.EXPLICIT
+    assert edge.basis == LINK_BASIS
+
+
+def test_a_dialect_that_states_a_links_reason_has_it_carried_verbatim():
+    # The override exists so that a dialect saying *why* a link exists is not
+    # silently overwritten by the builder's constant. Nothing populates it
+    # today; this pins the behaviour the field is kept for.
     graph = build(
         [
+            a_span("s0", links=(SpanLink(span_id="s1", basis="retry.of"),)),
             a_span("s1"),
-            a_span(
-                "s2",
-                data_edges=(
-                    DeclaredDataEdge(src="s1", dst="s2", basis="framework.produced_by"),
-                ),
-            ),
         ]
     )
-    assert edges_of(graph, EdgeKind.DATA) == [("s1", "s2")]
-    edge = next(e for e in graph.edges() if e.kind is EdgeKind.DATA)
-    assert edge.warrant is Warrant.EXPLICIT
-    assert edge.basis == "framework.produced_by"
+    edge = next(e for e in graph.edges() if e.kind is EdgeKind.LINK)
+    assert edge.basis == "retry.of"
 
 
 def test_no_data_edge_appears_from_matching_values():

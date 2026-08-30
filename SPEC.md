@@ -309,12 +309,32 @@ Edge:
   kind:    EdgeKind        # §4
   warrant: explicit | derived      # §4.1
   basis:   str             # the exact rule/field that produced it
-  adapter: str | None      # who asserted it, when adapter-supplied
+  adapter: str | None      # which adapter's spans the edge was built from
 ```
 
 `basis` is a short, stable machine-and-human readable string naming the *reason*:
 `"span.parent_span_id"`, `"tool_call_id"`, `"sibling start_time ordering"`.
 It is what lets a consumer audit an edge instead of trusting it.
+
+**The builder supplies it.** Adapters state *relations* — a parent id, a call
+id, a received call id, a link — and the builder is what turns a relation into
+an edge, so the account of how that edge came to be is its account to give. All
+five bases the library emits are builder constants, and a consumer reading
+`basis` is reading one vocabulary rather than one per dialect.
+
+The single reserved exception is a dialect that states *why* a link exists
+rather than merely that it does (`SpanLink.basis`, §6). No observed dialect
+does, and until one is observed every `link` edge carries the builder's
+`"span.link"`. A `DeclaredDataEdge` seam type formerly let an adapter name both
+ends of a `data` relation and supply that edge's `basis` itself; no adapter
+ever populated it, the real case arrived in the shape §4.2.1 describes instead,
+and it was removed (`TASKS.md` I1).
+
+> Note the asymmetry this creates with `adapter`, and that it is deliberate.
+> `adapter` records *whose spans this edge was built from*, which is provenance
+> and belongs to the adapter. `basis` records *what rule made it*, which is
+> mechanism and belongs to the builder. An edge carries both because auditing
+> it needs both, and they are not the same question.
 
 Edges are **unique** on `(src, dst, kind, basis)`. Duplicates are collapsed.
 The same pair MAY be connected by several edges of different kinds; that is
@@ -533,7 +553,8 @@ becomes a new kind, through a spec change.
 > The rule below is binding until it is.
 
 A `data` edge is emitted **only** when the instrumentor itself declares a
-producer→consumer relation (some frameworks do). `spanweave` will not compare an
+producer→consumer relation (some frameworks do), and it reaches the graph by
+one route: §4.2.1's. `spanweave` will not compare an
 output string to an input string and conclude a flow. That comparison needs a
 threshold, a normalization rule, and an encoding policy — none of them
 opinion-free — and shipping one default set of those choices would be closer to
@@ -703,8 +724,8 @@ NormalizedSpan:
   usage:       Usage | None
   call_ids:    tuple[str, ...]    # for call_result pairing (§4.4); may be many
   call_role:   requester | fulfiller | None
-  links:       tuple[SpanLink, ...]
-  data_edges:  tuple[DeclaredDataEdge, ...]   # explicit only (§4.2)
+  links:       tuple[SpanLink, ...]   # SpanLink.basis is None unless the
+                                      # dialect states the link's REASON (§3.8)
   received_call_ids: tuple[str, ...]  # results this span was GIVEN (§4.2.1);
                                       # the builder resolves them to producers
   attributes:  Mapping[str, JsonValue]
@@ -742,9 +763,23 @@ Rules binding on every adapter:
 3. **Never interpret.** No roles, no severity, no scoring, no redaction of
    content the source did not redact.
 4. **Never raise on bad input.** Malformed records produce diagnostics.
-5. **Explicit warrants only.** An adapter may assert `parent`, `call_result`,
-   `data`, `link` — all `explicit`, all traceable to a source field named in
-   `basis`. Adapters MUST NOT emit `temporal` edges; those are the builder's.
+5. **Relations, not edges.** An adapter states the relations its dialect
+   asserts — `parent_id`, `call_ids` + `call_role`, `received_call_ids`,
+   `links` — and the **builder** constructs every edge from them. All four
+   yield `explicit` edges; `temporal` is the builder's alone and an adapter
+   has no way to ask for one.
+
+   An adapter therefore supplies no edge's `basis`, because it emits no edges.
+   The vocabulary is the builder's (§3.8), and the one reserved exception —
+   `SpanLink.basis`, for a dialect that states a link's *reason* — is `None` in
+   every adapter observed so far.
+
+   *This rule previously read "an adapter may assert `parent`, `call_result`,
+   `data`, `link` … all traceable to a source field named in `basis`". That was
+   false for `parent` and `call_result` from the first release: both have always
+   been builder constants. It was corrected at `TASKS.md` I1, alongside the
+   `ADAPTERS.md` §3 sentence that disagreed with §3.8 and §4.3 for four
+   phases.*
 
 ### 6.1 Adapter selection
 
