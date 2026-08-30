@@ -8317,7 +8317,7 @@ consumer's findings go in the exit record beside these and carry more weight.
   > | A clean-venv install from a directory that is not this repo | needs the index | **CLOSED, step 7.** `/tmp/pp`, CPython 3.12, no checkout on the path |
   > | The console script, as installed from the index | needs the index | **CLOSED, step 7, on Linux.** `spanweave --version` and `spanweave adapters` both run from the venv's `bin/`, and `adapters` lists both. This does **not** close the macOS/Windows row below — the launchers are generated per platform |
   > | That the bytes PyPI serves are the bytes verified here | needs the index | **CLOSED, step 7.** The served sdist is byte-identical to the built one, `sha256 ec3eeae2…`, so `install-check`'s green transfers to what strangers download rather than to a hopefully-similar upload |
-  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **BOTH HALVES MEASURED, AND THE ROW DOES NOT CLOSE.** *Mechanical half:* they **do** get stuck, and the error is illegible to exactly the reader who hits it — `0.9.1` candidate **C1** under *Post-launch*, in its own commit because the fix is a change to a shipped error message and wants its wording read first. *Reading half:* the closing cold read ran with a true premise, and the Install section's explanation **lands** — both models read it correctly and predicted the failure — **and both pasted the failing command anyway.** So the row's answer is not "yes" or "no" but *"the explanation lands and the reader is stuck regardless"*, which closes nothing and produces a second candidate, **C2**. Ticking it would record the finding backwards |
+  > | Whether a reader who **actually** installed from the index gets stuck on those paths | the premise cannot be made true until the package exists (step 4's record) | **ANSWERED AT `0.9.1`, AND THE ANSWER IS THE SCOPE.** *(Added after this record: `0.9.1` shipped C1 and R3 step 9 cold-read the fixed page. The one clean reader who reached the error **recovered from the hint unaided**, and **four of six never reached the error at all**. So the row's question has a measurement rather than a candidate hanging off it — at n=6, two models, one gate false positive, and no way to separate the second half from variance. Recorded at C2, *the sequencing*; what stood here at `0.9.0` follows.)* **BOTH HALVES MEASURED, AND THE ROW DID NOT CLOSE.** *Mechanical half:* they **do** get stuck, and the error is illegible to exactly the reader who hits it — `0.9.1` candidate **C1** under *Post-launch*, in its own commit because the fix is a change to a shipped error message and wants its wording read first. *Reading half:* the closing cold read ran with a true premise, and the Install section's explanation **lands** — both models read it correctly and predicted the failure — **and both pasted the failing command anyway.** So the row's answer is not "yes" or "no" but *"the explanation lands and the reader is stuck regardless"*, which closes nothing and produces a second candidate, **C2**. Ticking it would record the finding backwards |
   > | The rendered PyPI project page | PyPI renders it, not us | **open** — read it; especially that the quickstart's `fixtures/` paths are explained |
   > | The wheel on **3.11 and 3.13** | `install-check` installs into one venv, on whichever interpreter `uv` picks | **open.** Step 7 adds **3.12** from the index — a third interpreter, and neither of the two named. CI runs the matrix on the **source**, never on the wheel. The wheel is `py3-none-any` and stdlib-only, so this is low risk and it is **not zero** |
   > | The console script on **macOS or Windows** | Linux only here; entry-point launchers are generated per platform | **open** — ask one person on each |
@@ -8899,6 +8899,26 @@ consumer's findings go in the exit record beside these and carry more weight.
   > 3, the weakest), which would make waiting worthwhile in order to ship
   > whatever *they* find alongside. None exists.
   >
+  > #### Amendment 3 — the procedure ran, and both candidates are decided
+  >
+  > *Added after `0.9.1` published. This section recommended a sequence; the
+  > sequence executed, so what §9 item 6 hands Phase 4 is no longer a decision
+  > procedure.*
+  >
+  > **C1 shipped as `0.9.1`, alone, and is verified from the index** (R3 step 7:
+  > first line unchanged, four hint lines, exit `1`). **C2 is UNNECESSARY and is
+  > not shipping** — R3 step 9's cold read found the hint lands.
+  >
+  > Two things the outcome table above did not anticipate, both at *Post-launch*,
+  > C2, *the sequencing*, and both worth the reader's time more than the verdict:
+  > the run-classifying **gate had a false positive**, so the result is one clean
+  > observation with one weak corroboration rather than two; and **four of six
+  > runs landed in this table's third row** — *"does not paste the failing
+  > command at all"* — which the table called unexplained and which remains so,
+  > because settling it needs `0.9.0`'s page as the current page and the publish
+  > ended that. **The sequencing bought the attribution it was designed to buy,
+  > and the thing it could not buy is the one the read actually turned up.**
+  >
   > ## 9. What Phase 4 inherits
   >
   > Explicitly, so nothing arrives as a discovery:
@@ -8927,6 +8947,10 @@ consumer's findings go in the exit record beside these and carry more weight.
   >    published `0.9.1` page, turning on whether the hint leaves the reader
   >    stuck rather than on whether they paste. Phase 4 inherits a *decision
   >    procedure*, not an open question.
+  >    **Amendment 3: the procedure ran. C1 shipped; C2 is unnecessary and is
+  >    not shipping. Phase 4 inherits neither — it inherits one unsettleable
+  >    observation about readers who never reach the error, which is not a task
+  >    and must not become one by being filed here.**
   > 7. **Nothing from §5.** The eighth instance was the one item this record
   >    originally handed forward as a debt; **amendment 1 closed it here**
   >    instead. The pattern's remedy is now eight for eight, and Phase 4
@@ -9004,6 +9028,12 @@ consumer's findings go in the exit record beside these and carry more weight.
   >       fails **exactly** the check it was aimed at.
   > - [x] **Amendment 2:** the `0.9.1` decision is C1 alone, with C2 held and a
   >       named cold read to decide it — recorded with the argument it reverses.
+  > - [x] **Amendment 3:** that cold read ran, against the published `0.9.1`
+  >       page. C1 shipped and is verified from the index; **C2 is unnecessary
+  >       and is not shipping.** The read's two by-products — a false positive
+  >       in its own screening gate, and four of six readers never reaching the
+  >       error — are recorded at C2, *the sequencing*, at the strength the
+  >       evidence carries and no further.
   > - [x] `make check` green (**1594 passed, 4 skipped**), `make conformance`
   >       green (**419**), `make install-check` green (**32 checks, 4 plants
   >       held**), `make gates` green (**69**).
@@ -9030,12 +9060,14 @@ entry is a **measured** defect in something already published, with a proposed
 change and its cost, waiting on a human decision about whether it ships and
 when. Adding a box here would hand a resumed session work nobody has agreed to.
 
-**C1 has since been decided and built; C2 has not.** The decision was C1 alone
-(3.11 §8, amendment 2), and the work is *Release `0.9.1`*, below, which is where
-the boxes are. These entries stay as the **evidence and the costing** — that is
-what they are for, and deleting C1's would remove the measurement the release
-rests on. C2 is still exactly what this section describes: proposed, costed,
-**held**, and decided by one named measurement at R3 step 9.
+**Both entries are now decided, and neither is pending.** C1 **shipped**, alone,
+as `0.9.1` (3.11 §8 amendment 2 for the decision; *Release `0.9.1`* below for
+the work, where the boxes are). C2 is **not shipping**: R3 step 9 ran against
+the published page and found the hint lands, at a strength that section records
+carefully rather than roundly. These entries stay as the **evidence and the
+costing** — that is what they are for, and deleting either would remove the
+measurement a decision rests on. **Nothing here is waiting on anyone**; the
+next `0.9.x` candidate, if there is one, gets a new entry.
 
 `0.9.0` cannot be re-uploaded. Anything below that ships, ships as `0.9.1`, and
 that is a fresh irreversible slot on the index — so the cost of *each* entry
@@ -9051,12 +9083,20 @@ where an attribution is neither. That is why C1 ships alone and **C2 is held**
 
 ### C1 — `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it
 
-> **BUILT, and shipping as `0.9.1` alone — see *Release `0.9.1`*, R1.** The
-> change below is implemented as proposed: the `OSError` line byte for byte,
-> the secondary `hint:` only under `fixtures/`, the conditional opener. What
-> follows is the measurement and the costing it was decided on, kept unedited;
-> what actually landed, its five tests and its two divergences are at R1. The
-> publish itself is R3 and is unrun.
+> **SHIPPED, alone, as `0.9.1` — see *Release `0.9.1`*, R1 and R3.** Implemented
+> as proposed: the `OSError` line byte for byte, the secondary `hint:` only
+> under `fixtures/`, the conditional opener. **Verified from the index** at R3
+> step 7 — first line unchanged, four hint lines, exit `1` — which is this
+> entry's measurement taken again on the artifact strangers download, and the
+> only form of confirmation that was ever going to count. What follows is the
+> measurement and the costing it was decided on, kept unedited; what landed,
+> its five tests and its divergences are at R1.
+>
+> **One thing the shipped version does not settle**, and it is at C2's *the
+> sequencing* rather than here: four of six readers in the closing cold read
+> never reached this error at all. If that holds, C1 protects a path fewer
+> people take. It does not make the fix wrong — the reader who *does* arrive
+> still arrives — and n=6 cannot support more than the observation.
 
 **The measurement, taken from the published package, not predicted.** This is
 the stranger test 3.10's step 4 could not run because its premise was false;
@@ -9178,12 +9218,14 @@ Two consequences for this entry, neither of which changes the proposed hint:
 
 ### C2 — the `fixtures/` explanation lands, 92 lines downstream of the paste
 
-> **HELD, and not built.** Nothing of this entry is in `0.9.1`: the README's
-> quickstart is untouched, and R3 step 4 says so as an instruction to the
-> publisher rather than as an omission. What decides it is **R3 step 9** — a
-> cold read of the published `0.9.1` page, turning on whether the reader is
-> still stuck *after the hint is on screen*. Record the outcome under *the
-> sequencing*, below.
+> **DECIDED: UNNECESSARY. Not built, not shipped, and no slot spent.** Nothing
+> of this entry is in `0.9.1`: the README's quickstart is untouched. R3 step 9
+> ran against the published page and **the hint lands** — the readers who saw
+> it recovered without further help. The strength is **one clean observation
+> with one weak corroboration**, because the run-classifying gate had a false
+> positive; the measurement, that defect, and a **larger turn-1 observation
+> that cuts the other way** are at *the sequencing*, below. Read all three
+> before re-proposing this.
 
 **The measurement, from the closing cold read at 3.10 step 8 — not predicted,
 and it is the same reading that confirms C1.** Two models with no project
@@ -9283,7 +9325,7 @@ they read and then walk past. If only one ships, it is C1.
   admonitions, so the reader most affected — the one on the PyPI page — sees a
   bare blockquote.
 
-#### The sequencing — C2 is **held**, and a named measurement decides it
+#### The sequencing — C2 was **held**, and the named measurement has now run
 
 **Decided at 3.11 amendment 2, and it is the opposite of that record's first
 draft.** C2 does **not** ship with C1.
@@ -9304,6 +9346,102 @@ on screen.
 which one worked, and C2's mechanism is the instrument that just failed in
 front of us. The slot is cheap; the attribution is not recoverable.
 
+*(Everything above is the reasoning as it stood before the read. It is kept
+because the decision it argued for is the reason the read could say anything
+at all. What the read returned is below.)*
+
+#### The measurement — **run**, and C2 is UNNECESSARY at one clean observation
+
+**R3 step 9, human-run against the published `0.9.1` page. Fifth use of the
+practice** (`AGENT.md`, *When the check is a human reading*). Premise true, two
+models, no project context, told nothing about what was suspected.
+
+**Six runs, two models, temperature 0.7, with a mechanical gate** deciding
+whether a run counted as a bare paste — the thing that has to happen before the
+question C2 turns on can even be asked. **Two runs passed the gate.**
+
+| Run | Turn 1 | Turn 2, after the error and the hint were on screen |
+|---|---|---|
+| **gpt-oss, run 2** | the only **true** bare paste | **recovered without further help** — read the hint, identified the cause, cloned, re-ran |
+| **Qwen, run 3** | passed the gate, but see below | **recovered**, quoting the hint back as the thing that guided it |
+
+**The decision: C2 is unnecessary.** The hint lands. Neither reader was stuck
+after it was on screen, and neither needed a second prompt. The index slot is
+unspent and 3.9's *"library in one screen"* opener is unspent — which is what
+the sequencing was protecting.
+
+**And the strength of that decision is ONE clean measurement with one weak
+corroboration, not two clean ones.** The reason is a defect in the gate, and it
+is recorded rather than smoothed:
+
+> **The gate has a false positive.** Qwen run 3 passed as a bare paste while
+> its turn 1 actually **recommended `spanweave adapters`**. It *mentioned* the
+> `fixtures/` path only while explaining why that command would fail. The gate
+> is a substring check, and **a substring check cannot distinguish "I will run
+> this" from "I am explaining why I won't."** The run's turn 2 is still
+> evidence — a reader who was shown the error recovered from the hint — but it
+> is corroboration, not an independent instance of the thing being measured.
+
+This is the project's own pattern one layer out, and worth naming as that: the
+gate was written by the same hand as the question it screens, so it agreed with
+its author about what a paste looks like. It was caught by **reading the runs**
+rather than by the gate, which is the same reason the cold-read practice exists
+at all.
+
+**What this does not license.** *"C2 is unnecessary"* is a statement about a
+page that already carries C1's hint, at n=2 usable observations. It is not a
+finding that placement never matters, and it does not retire C2's reasoning —
+if a later read shows a reader stuck after the hint, C2 is on the shelf, costed,
+and the argument for it is unchanged. What is decided is that **nothing in this
+measurement asks for it now**, so it does not ship and no slot is spent.
+
+#### The larger finding, and it is in turn 1 rather than turn 2
+
+**Four of the six runs never reached the error at all.** They read the README,
+understood that `fixtures/` is not in the wheel, and **cloned the repository or
+ran `--help` instead of pasting.**
+
+That is this section's own third row — *"does not paste the failing command at
+all"* — which the table called unexplained and told the reader to look again
+before concluding anything. Four of six landed in it. Set against the closing
+read at 3.10, where **both** readers pasted *after* understanding the prose, the
+contrast is the most interesting thing step 9 produced, and it is bigger than
+C2's decision.
+
+**Recorded as an observation with its scope, not as a finding about C1's
+value.** Two things changed between the two reads and only one of them is C1:
+
+1. **The page changed.** R2 rewrote `README.md`'s **Status** section — it now
+   names `0.9.1`, says what it changes, and says the library and graph are
+   unmoved. That is prose, upstream of the paste.
+2. **n = 6 cannot separate a real shift from variance**, at two models and
+   temperature 0.7, against a `0.9.0` read of **two** runs.
+
+**The uncomfortable half, stated because it cuts against the decision above.**
+If readers now avoid the error, then C1 protects a path fewer people take — and
+the thing that moved them is **prose, before the paste**, which is C2's class of
+instrument doing exactly what C2 predicted and what the 3.10 read said prose
+could not do. It was not C2's edit; C2 changes the sentence adjacent to the
+quickstart fence, and nothing there moved. But the mechanism is the same one,
+and honesty costs nothing here: **the same read that says C2 is unnecessary
+contains the only evidence this project has ever had that its mechanism might
+work.**
+
+**It cannot be settled, and the reason is structural rather than a matter of
+effort.** Deciding it needs a cold read against `0.9.0`'s page with the same
+protocol, six runs, same models, same temperature — and `0.9.0`'s page **no
+longer exists as the current page**. PyPI serves `0.9.1`; the old rendering is
+reachable only as a version-pinned artifact, not as the thing a reader arrives
+at, and the premise *"you just ran `pip install spanweave`"* would then be false
+in exactly the way `AGENT.md`'s constraint 2 forbids. **The comparison was
+available for one release cycle and was not taken.** Named here rather than
+scheduled, because scheduling it would be pretending it is still possible.
+
+**What it would take to make this measurable next time**, since the same
+question will arrive at every release that touches the front page: run the cold
+read **before** and **after** the change, in the same session-batch, at the same
+n. That is a protocol note for the next release, not work now.
+
 #### What this candidate is *not*
 
 **Not a closure of the stranger table's last row.** That row asks whether a
@@ -9314,6 +9452,12 @@ ticked. Shipping C1 and C2 does not close it either; only a cold read against
 the **fixed** page would — which is exactly the read the sequencing above
 schedules, and it is a fifth use of the practice, after a publish that has not
 happened.
+
+> **The read has since run, and the row is answered rather than ticked** — at
+> `0.9.1`, against the fixed page, at the strength the sequencing section
+> records. The answer is *no, the one clean reader who reached the error was
+> not stuck after the hint* — and, unexpectedly, *four of six never reached the
+> error*. 3.10's table is updated at that row rather than here.
 
 ### A third observation from the same read, recorded as refuted rather than as a candidate
 
@@ -9542,7 +9686,7 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   >   fire on a local-path install; the version in it is arbitrary and asserting
   >   the current one there would give the string a meaning it does not have.
 
-- [ ] **R3 Publish `0.9.1` to PyPI.** `[launch]` **HUMAN-RUN. The agent
+- [x] **R3 Publish `0.9.1` to PyPI.** `[launch]` **HUMAN-RUN. The agent
   prepared and stopped.**
   Second irreversible slot on the index. `spanweave 0.9.0` cannot be
   re-uploaded and neither can `0.9.1` once this runs; a partially completed
@@ -9554,6 +9698,82 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   commit, and **step 9 has run**.*
   **HALT** — credentialed, outward-facing, irreversible.
 
+  > **PUBLISHED, AND THE BOX IS NOW TICKED.** A human ran the publish and
+  > verified it from the index; step 8 — the tick, the hashes, and the document
+  > corrections — is this record's own last edit, and **step 9 has run**, which
+  > is the condition the done-when adds beyond `0.9.0`'s. Everything below
+  > *Prepared, and stopped* is the preparation record as it stood before the
+  > upload, kept rather than rewritten, except the runbook's **step 7**, which
+  > carries a correction its own first use forced.
+  >
+  > ## What the publish measured — step 7
+  >
+  > | Measured | Result |
+  > |---|---|
+  > | `spanweave 0.9.1` resolves from the index | yes |
+  > | The C1 paste, from a directory with no `fixtures/` | the `0.9.0` first line **unchanged**, then **four** `hint:` lines, then exit `1` |
+  >
+  > **That is the release, measured on the artifact strangers download.** The
+  > first line did not move, which is the half other people's scripts depend on,
+  > and the four hint lines are the half this version exists for.
+  >
+  > **Step 7 also found a defect in itself, and it is recorded at the step**
+  > rather than here so the next publisher meets it where they will act on it:
+  > a fresh venv is not a fresh cache, and the step's first run served a cached
+  > `0.9.0` wheel and reported `Successfully installed spanweave-0.9.0`. It is
+  > fixed in place (`--no-cache-dir` plus an explicit version pin), carried to
+  > `ENVIRONMENT.md` zone 4 because each release writes its runbook fresh, and
+  > the reason it was caught at all — `0.9.0` cannot print a `hint:` line — is
+  > a property of *this* release rather than of the step.
+  >
+  > ## The artifacts
+  >
+  > ```
+  > dist/spanweave-0.9.1.tar.gz
+  >   sha256 8a47a01a59cdb62d393ab4f17e28826f147ed39cb9e30ca53a06505dafc6a875
+  > dist/spanweave-0.9.1-py3-none-any.whl
+  >   sha256 d9a947e82a81b1bfa2cedfe15c017bc29ee62f421422b929a46b5196d5aa63a7
+  > ```
+  >
+  > **What those two numbers are facts about, stated precisely rather than
+  > loosely — the distinction 3.10 paid for twice.** They are the artifacts
+  > `uv build` produced from **`eaa571f`**, the release commit, with the tree
+  > clean; they were measured here and were still in `dist/` unchanged when
+  > step 8 began. They are **not** an observation of the upload: the agent held
+  > no token and did not watch `uv publish` run. If the publisher rebuilt after
+  > any further edit, the published bytes differ from these and **this block is
+  > the thing to correct**, not the runbook.
+  >
+  > **And they stop matching a rebuild the moment this sentence lands.** The
+  > sdist contains this file and the wheel's `METADATA` embeds `README.md`, both
+  > of which step 8 edits. That is expected and is the whole reason the runbook
+  > pins no hash as a target: `0.9.1`'s bytes live on the index, not in a
+  > regenerable build. `pip download spanweave==0.9.1` is the source of truth
+  > for them; `dist/` is not an archive and is emptied by the next build.
+  >
+  > ## Step 9 — run, and C2 is decided
+  >
+  > **C2 is UNNECESSARY**, at one clean observation with one weak corroboration,
+  > and **four of six runs never reached the error at all** — an observation
+  > that cuts the other way and cannot be settled. The full record, the gate's
+  > false positive, and the scope of both are under **C2, *the sequencing***,
+  > where step 9 sends them. Not summarised further here: a two-line version of
+  > that result is the version that gets quoted.
+  >
+  > ## What step 8 changed
+  >
+  > One commit, `make check` and `make install-check` green in it.
+  >
+  > 1. **The box above**, ticked.
+  > 2. **The hashes and step 7's result**, recorded above.
+  > 3. **Step 7 of the runbook**, corrected in place with what stood there.
+  > 4. **`README.md`'s Status** — it said `0.9.0` was what `pip install
+  >    spanweave` gives you, which the publish made false.
+  > 5. **The *Post-launch* section** — C1 no longer reads as a pending
+  >    candidate, and C2 is marked decided rather than held.
+  > 6. **`ENVIRONMENT.md` zone 4, `AGENT.md`, and 3.10's stranger table** — the
+  >    sentences this release made untrue, listed as divergences below.
+  >
   > ## Prepared, and stopped
   >
   > `make check` green (**1599 passed, 4 skipped**). `make install-check` green
@@ -9680,7 +9900,7 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   > **7. Verify from the index — and measure the thing this release exists for.**
   > From a directory that is not this repository:
   > ```
-  > python3 -m venv /tmp/pp && /tmp/pp/bin/pip install spanweave
+  > python3 -m venv /tmp/pp && /tmp/pp/bin/pip install --no-cache-dir spanweave==0.9.1
   > /tmp/pp/bin/spanweave --version     # expect: spanweave 0.9.1 (graph schema 0.1; UNFROZEN)
   > /tmp/pp/bin/spanweave adapters      # expect: openinference and otel_genai
   > cd /tmp && /tmp/pp/bin/spanweave inspect fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl
@@ -9692,6 +9912,34 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   > people's scripts depend on. This is the same command `0.9.0`'s step 7
   > measured as illegible; run it from `/tmp` or anywhere else with no
   > `fixtures/` directory, because in a checkout it succeeds and proves nothing.
+  >
+  > > **CORRECTED ON THIS STEP'S FIRST USE, and the wrong version is left named
+  > > rather than silently replaced, because the next publisher is the person it
+  > > would mislead.** What stood here was `pip install spanweave` in a fresh
+  > > venv, with the venv doing the isolating. **A fresh venv is not a fresh
+  > > cache.** On the publisher's own machine — which has installed `spanweave`
+  > > before, because every earlier step and every `install-check` run does —
+  > > pip served the **cached `0.9.0` wheel** and this step verified the
+  > > *previous* release. It printed `Successfully installed spanweave-0.9.0`
+  > > and everything else looked right.
+  > >
+  > > That is the worst available shape for a verification step: it does not
+  > > fail, it silently answers a question about the wrong artifact, and the one
+  > > line that gives it away is the one a publisher reads as boilerplate. The
+  > > fix is `--no-cache-dir` **and** an explicit version pin — either alone
+  > > leaves a hole. `--no-cache-dir` without the pin still trusts the index to
+  > > resolve to what you just uploaded, and a pin without `--no-cache-dir`
+  > > still reads a cached wheel of that version if one exists. Together they
+  > > make the step assert the thing it was written to assert.
+  > >
+  > > **What caught it, and it was luck of the release rather than the step.**
+  > > `0.9.0` cannot print a `hint:` line, so the missing hint was visible in the
+  > > one command this release exists for. A release whose change was **not**
+  > > visible in the terminal — a packaging fix, a metadata correction — would
+  > > have passed this step against the previous version and nobody would have
+  > > known. The correction therefore belongs to every future release, not to
+  > > this one, and it is carried in `ENVIRONMENT.md`'s zone 4 where the next
+  > > publisher will meet it before they write their runbook.
   >
   > **8. Only now, tick R3 and correct the documents — one commit, `make check`
   > green in it.**
@@ -9762,6 +10010,55 @@ graph `0.9.1` writes is byte-identical to `0.9.0`'s.
   > is structurally unable to see this defect. The wheel-install reproduction
   > recorded at R1 is the nearest available substitute and it is **not** the
   > index.
+  >
+  > > **Step 7 closed it, and step 9 went one further.** Step 7 measured the
+  > > mechanical half from the index — first line unchanged, four hint lines,
+  > > exit `1`. Step 9 measured the half no harness reaches: whether the reader
+  > > can *act* on it. The one clean reader recovered unaided. The remaining
+  > > rows are unmoved, and step 7 also **added** one that `0.9.0` did not
+  > > have — see the cache correction at step 7: *whether a verification step
+  > > read the index or a local cache* is not something zone 2 can check either,
+  > > and the flags are now in the command rather than in a reader's memory.
+  >
+  > ## Divergences from the plan
+  >
+  > - **Step 7 was wrong on its first use and is corrected in place.** A fresh
+  >   venv is not a fresh cache; the step verified `0.9.0` and said so in a line
+  >   that reads as boilerplate. Recorded at the step with what stood there, and
+  >   carried to `ENVIRONMENT.md` zone 4, which is the only place a *later*
+  >   runbook will meet it — this file's runbooks are written fresh on purpose,
+  >   so a correction left only here is a correction the next release does not
+  >   get. **This is the same shape as 3.10's amendment 1**, one release later
+  >   and in the same step number, which is worth noticing: step 2 and step 7
+  >   are both *"check the artifact"* steps, and both first shipped a check that
+  >   compared against the wrong thing.
+  > - **Step 8 made two document edits beyond the four it lists.** `AGENT.md`'s
+  >   scope block and halt list, and `ENVIRONMENT.md`'s zone 4. Both said the
+  >   `0.9.1` publish was the live halt, which the publish made false, and a
+  >   session reading `AGENT.md` first — as every session is instructed to —
+  >   would have been told to prepare work that is already done. Recorded rather
+  >   than absorbed, because 3.10 step 8 also took a fourth edit beyond its
+  >   three and that is how the extra one becomes optional next time.
+  > - **The two hashes are recorded with a bound `0.9.0`'s were not given.**
+  >   3.10's step-7 table presents its hashes as facts about the published
+  >   artifacts, having compared the served sdist byte for byte against the
+  >   built one. **No such comparison was made here** — the agent measured the
+  >   artifacts in `dist/` built from the release commit and did not observe the
+  >   upload or download either file. The block above says so. It is a weaker
+  >   claim than `0.9.0`'s and is written as one.
+  > - **Step 9's result is recorded where step 9 sends it, and not summarised
+  >   twice.** R3 carries three lines and a pointer; the measurement, the gate
+  >   defect and the turn-1 observation are at C2, *the sequencing*. A verdict
+  >   repeated in two places drifts, and the short copy is always the one that
+  >   gets quoted.
+  > - **No test was added for anything step 8 or step 9 found**, and this is a
+  >   departure from the rule that a cold read's findings get a test wherever
+  >   one is possible (`AGENT.md`). Both findings are unassertable here: the
+  >   cache defect lives in a command in a document that describes network work
+  >   zone 2 cannot do, and *"four of six readers behaved differently"* is a
+  >   measurement about people, not about the tree. The runbook correction and
+  >   the `ENVIRONMENT.md` carry are what stand in for a test, and they are
+  >   weaker — named, rather than presented as equivalent.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

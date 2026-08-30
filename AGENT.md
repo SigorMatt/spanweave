@@ -35,18 +35,19 @@ of this run, and the points where you must stop and hand back to a human.
 
 ## Scope of this run (bounded)
 
-**The live scope is the `0.9.1` release: `TASKS.md` R1–R3, and nothing else.**
-Phase 3 is complete and tagged `phase-3-exit`; `spanweave 0.9.0` is on PyPI.
-`0.9.1` carries **C1 alone** — a second, secondary line on stderr when a
-missing file's path is one this project's own documents quote — and **C2 is
-held**, deliberately, so that the cold read at **R3 step 9** can attribute what
-it finds. Folding C2 in is not a shortcut; it destroys the measurement. R1 and
-R2 are done; **R3 is the halt** — the publish is a human's, and the agent has no
-token.
+**There is no live scope, and that is the current state rather than an
+oversight.** Phase 3 is complete and tagged `phase-3-exit`. The `0.9.1` release
+is complete: `TASKS.md` R1–R3 are all checked, `spanweave 0.9.1` is on PyPI and
+verified from the index, and its closing cold read has run. **Every box in
+`TASKS.md` is ticked.**
 
-Do **not** begin Phase 4, and do **not** freeze the schema — the freeze is Phase
-4 and is gated on evidence neither Phase 3 nor this release produces
-(`ROADMAP.md` Phase 4).
+**A session arriving here has nothing to pick up.** Do **not** begin Phase 4 —
+it is a third dialect plus a freeze, it is gated on evidence neither Phase 3 nor
+this release produces (`ROADMAP.md` Phase 4), and starting it is a human's
+decision, not the next unchecked box's. Do **not** freeze the schema. Do **not**
+open a `0.9.2`: the two `0.9.1` candidates are both **decided** — C1 shipped,
+C2 is not shipping (`TASKS.md`, *Post-launch*) — and a new candidate needs a
+measurement, not an idea. **Ask.**
 
 **The Phase 3 scope below is discharged and is kept because everything in it
 still binds a release session** — the must-nots especially. Read it as standing
@@ -222,9 +223,7 @@ one layer out, applied to prose and to judgement instead of to code. **A cold
 reader is the cheapest instrument that supplies that independence.** It costs
 one prompt.
 
-Four uses so far, and what each returned. **A fifth is scheduled and unrun**
-— `TASKS.md` R3 step 9, against the published `0.9.1` page, and it is the only
-thing that decides whether C2 ships:
+Five uses so far, and what each returned:
 
 - **2.6.** A blank session given only the captured trace and its graph found a
   **missing declared `data` edge** that 593 tests, six gates and two review
@@ -243,6 +242,21 @@ thing that decides whether C2 ships:
   produced C2, and refuted a third observation. **This is the use worth
   reading before running one:** a clean read and a confused read are the two
   outcomes anyone plans for, and the informative one was neither.
+- **`TASKS.md` R3 step 9, against the published `0.9.1` page** — the first read
+  against a page changed *because of* a cold read, and it decided C2:
+  **unnecessary**, the hint lands. Three things in it are worth carrying, and
+  none of them is the verdict. **(a) The gate had a false positive.** Six runs
+  were screened by a substring check for whether the reader pasted the failing
+  command; it cannot tell *"I will run this"* from *"I am explaining why I
+  won't"*, and it passed a run that recommended something else. The honest count
+  is one clean observation with one weak corroboration — **a screening
+  instrument written by the same hand as the question shares its blind spots
+  too, exactly as this section argues about tests.** **(b) The interesting
+  result was in turn 1**: four of six never reached the error at all, where both
+  `0.9.0` readers had pasted after understanding. **(c) It is unsettleable** —
+  the comparison needs `0.9.0`'s page as the *current* page, which it stopped
+  being at the publish. If a read is going to be a before-and-after, **run both
+  halves in the same batch**; the window closes when you ship.
 
 **Two constraints, each stated with the failure that produced it — because a
 rule without its failure gets softened by the next person who finds it
@@ -326,19 +340,19 @@ section with a note saying why each is now false.
 - **Live credentials, real model calls, network access, or anything touching a
   system outside this repo.** Stop and request it.
 - **Phase exit.** Stop and hand back for review; do not start the next phase.
-  Phase 1's exit (1.9), Phase 2's (2.14) and **Phase 3's (3.11)** are all
-  **discharged**. The live halt is the **`0.9.1` publish (`TASKS.md` R3)**, and
-  after it Phase 4's entry conditions — none of which a release meets. Do not
-  start Phase 4, and do not freeze the schema.
+  Phase 1's exit (1.9), Phase 2's (2.14), **Phase 3's (3.11)** and the **`0.9.1`
+  publish (R3)** are all **discharged**. **There is no live halt, because there
+  is no live work** — which is not permission to find some. The next thing is
+  Phase 4, its entry is a human's call, and a release does not meet its
+  conditions. Do not start it, and do not freeze the schema.
 
 Four added for Phase 3. Each names the artifact the human needs in order to
 decide; `TASKS.md` carries the full form at the task.
 
-- **The PyPI publish (`TASKS.md` 3.10 for `0.9.0`, and now R3 for `0.9.1`).**
+- **The PyPI publish (`TASKS.md` 3.10 for `0.9.0`, R3 for `0.9.1`; both run).**
   Credentialed, outward-facing, and the closest thing in this project to
-  irreversible: a name-plus-version on PyPI cannot be reused, so a bad `0.9.0`
-  is spent forever — **and `0.9.0` is spent, so the entry is live for every
-  version after it.** Each release writes its **own** runbook rather than
+  irreversible: a name-plus-version on PyPI cannot be reused. **`0.9.0` and
+  `0.9.1` are both spent, so the entry is live for every version after them.** Each release writes its **own** runbook rather than
   pointing at the previous one: 3.10's step 2 carried a false wheel-hash claim
   that its amendment 1 corrected, and a runbook that defers inherits whatever
   was wrong with the one it defers to. The agent has no token and

@@ -113,20 +113,29 @@ fix one deliberately, don't let them drift.
    credential like any other.
 
    **Every release writes its own runbook, and does not point at the previous
-   one.** `TASKS.md` 3.10 is `0.9.0`'s — prepared by an agent, **run by a human**,
-   and on PyPI. **`TASKS.md` R3 is `0.9.1`'s**, and it is the live one: exact
-   commands in order, what to check between them, where the last reversible
-   point is, and — as a numbered step rather than a follow-up — the cold read
-   that decides whether a further release is needed. The reason each is written
-   fresh is on the record: 3.10's step 2 asserted a wheel hash that its own
-   amendment 1 had to correct, and a runbook that says *see the previous one*
-   inherits whatever was wrong with it.
+   one.** `TASKS.md` 3.10 is `0.9.0`'s and `TASKS.md` R3 is `0.9.1`'s — both
+   prepared by an agent, both **run by a human**, both on PyPI. The reason each
+   is written fresh is on the record: 3.10's step 2 asserted a wheel hash that
+   its own amendment 1 had to correct, and a runbook that says *see the previous
+   one* inherits whatever was wrong with it.
 
-   The correction worth carrying between them: **do not pin either artifact's
-   hash as a target for a later build.** The sdist contains this repository and
-   the wheel's `METADATA` contains `README.md`, so both move on a document
-   change. Take your own hashes after your final commit and record them as facts
-   about what you published.
+   **Because of that, the corrections a release forces have to be carried HERE,
+   or the next runbook is written without them.** Two so far, both found by a
+   step doing the wrong thing rather than by review:
+
+   - **Do not pin either artifact's hash as a target for a later build.** The
+     sdist contains this repository and the wheel's `METADATA` contains
+     `README.md`, so both move on a document change. Take your own hashes after
+     your final commit and record them as facts about what you published.
+   - **Verify from the index with `--no-cache-dir` AND an explicit version
+     pin** — `pip install --no-cache-dir spanweave==<version>`. A fresh venv is
+     **not** a fresh cache: at `0.9.1` the verification step ran `pip install
+     spanweave` into a clean venv on a machine that had installed the package
+     before, pip served the **cached previous wheel**, and the step silently
+     verified the previous release while printing `Successfully installed
+     spanweave-0.9.0`. Either flag alone leaves a hole. It was caught only
+     because that release's change was visible in the terminal; a packaging or
+     metadata release would have passed against the wrong artifact in silence.
 
 `examples/` may not use the network either; they consume committed fixtures so
 that anyone can run them reproducibly.
