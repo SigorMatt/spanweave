@@ -4025,8 +4025,11 @@ Starting Phase 3 is still a separate decision.
 > **The only unscheduled work is `0.9.1` candidates C1 and C2**, under
 > *Post-launch* near the end of this file. They are deliberately **not**
 > checkboxes: each is a measured defect in something already published, waiting
-> on a human decision. 3.11 §8 recommends shipping both as one release before
-> Phase 4; nobody has agreed to it yet, and publishing is a halt.
+> on a human decision, and publishing is a halt. **They are not a batch.**
+> 3.11 §8 recommends `0.9.1` with **C1 alone**, before Phase 4; **C2 is held**,
+> and what decides it is a cold read against the published `0.9.1` page turning
+> on whether C1's hint leaves the reader stuck. Shipping both together would
+> make that unanswerable.
 >
 > Everything below this block is the phase as it was worked. Nothing in it is
 > live.
@@ -8527,12 +8530,13 @@ consumer's findings go in the exit record beside these and carry more weight.
   > freeze* is standing (`ROADMAP.md`).
   >
   > **State at the exit.** `make check` green (**1594 passed, 4 skipped**),
-  > `make gates` green (69), `make conformance` green (419),
-  > `make install-check` green (30 checks, 3 plants held).
-  > `spanweave 0.9.0` is on PyPI, published by a human at 3.10 and verified from
-  > the index. Nothing under `spanweave/` changed in this task; no fixture was
-  > authored, no `expected/graph.json` touched, `canonical()` not weakened, no
-  > dependency added, `PREDICTIONS.md` untouched.
+  > `make gates` green (**69**), `make conformance` green (**419**),
+  > `make install-check` green (**32 checks, 4 plants held** — 30 and 3 before
+  > amendment 1). `spanweave 0.9.0` is on PyPI, published by a human at 3.10
+  > and verified from the index. **Nothing under `spanweave/` changed**; no
+  > fixture was authored, no `expected/graph.json` touched, `canonical()` not
+  > weakened, no dependency added, `PREDICTIONS.md` untouched. Amendment 1 adds
+  > test code under `tests/` and nothing else.
   >
   > ## 1. Shape changes: **zero**, and here is the bound each consumer recorded
   >
@@ -8670,18 +8674,55 @@ consumer's findings go in the exit record beside these and carry more weight.
   > | 5 | 3.5 | P3's own classification is contradicted by `SPEC.md` §4.1 **in the seed commit that wrote both**. **Found inside `PREDICTIONS.md`, the file written to catch the model being wrong** | recorded as contemporaneous, with `git show` evidence | **yes** — `test_a_derived_data_edge_cannot_be_constructed` |
   > | 6 | 3.7 | `a953a1f` renamed `meta.adapters[].confidence` → `declared_confidence` and deferred the version bump **in its own commit message**; the bump never came. `canonical()` drops `meta.adapters` whole, so the corpus, both dialects and the equivalence test were **structurally incapable** of noticing | `tests/serialized_shape.json` + `make shape` | **yes** — and `test_schema_shape.py` **replays `a953a1f` itself** as the plant |
   > | 7 | 3.4 F-1 → 3.8 | *"`Usage.extra` is `{}` on every node of every fixture in the repository"* — a corpus-wide quantifier nothing recomputed, in `CONTRACTS.md` **and in `ROADMAP.md`'s freeze gate**. False on two captured nodes | both corrected | **yes** — `test_the_documents_no_longer_claim_usage_extra_is_always_empty`, which recomputes the sweep and permits the old sentence only as a *quotation* |
-  > | 8 | 3.10 | *"the wheel is a function of `spanweave/` alone and must still be `2ed231f5…`"* — false: `METADATA` embeds `README.md`, **which the same section says two paragraphs earlier**. It survived because every edit it was ever tested against was to a different file | runbook step 2 rewritten to check the wheel's *members* instead of its hash | **NO — a corrected sentence** |
+  > | 8 | 3.10 | *"the wheel is a function of `spanweave/` alone and must still be `2ed231f5…`"* — false: `METADATA` embeds `README.md`, **which the same section says two paragraphs earlier**. It survived because every edit it was ever tested against was to a different file | runbook step 2 rewritten to check the wheel's *members* instead of its hash — **and, at this amendment, a test** | **yes** — `wheel: METADATA's long description is README.md byte for byte` (`tests/install_check.py`), plant `readme-decoupled` |
   >
-  > **Seven of eight got a test. The eighth did not, and it is the most recent
-  > one.** That is the honest audit result, and the shape of the exception
-  > matters: instance 8's remedy is prose in a runbook a human reads once,
-  > guarding a claim about build artifacts. **A test is available and was not
-  > written** — a check that the wheel's `METADATA` long description equals
-  > `README.md` byte for byte would make *"editing the README moves the wheel"*
-  > mechanical instead of remembered. It is recorded here rather than scheduled,
-  > because `install_check.py` is where it belongs and 3.11 authors no code.
-  > **Phase 4 inherits it as a named debt, not as a discovery waiting to
-  > happen.**
+  > **Eight of eight. The remedy has held every time, and the eighth was the
+  > exception until this amendment closed it.**
+  >
+  > ### Amendment 1 — instance 8 closed here rather than carried to Phase 4
+  >
+  > **What the first draft of this record said, and why it was wrong to leave
+  > it there.** It reported seven of eight, named the available test, and filed
+  > it as *"a named debt, not a discovery waiting to happen"* on the grounds
+  > that 3.11 authors no code. **Reviewed and reversed**, and the reason is
+  > precedent rather than tidiness: *the remedy has held eight times because it
+  > was applied eight times.* An exception, once made, is the thing the ninth
+  > gets compared against — and this one would have been made for the smallest
+  > instance on the list, which is the worst possible precedent to set. Carrying
+  > it was not worth what carrying it would have cost.
+  >
+  > **What was written.** Two checks in `audit_wheel`, where the wheel exists —
+  > `make check` never builds one, so only the gate that does can hold a claim
+  > about it:
+  >
+  > - **`wheel: METADATA's long description is README.md byte for byte`** —
+  >   the fact itself, parsed with stdlib `email` rather than by splitting on a
+  >   blank line. Its failure message says what the fact *means*: while this
+  >   passes, **editing `README.md` changes the wheel**, and a hash taken before
+  >   a documentation edit will not match one taken after.
+  > - **`wheel: METADATA declares the description's content type`** — added
+  >   beside it because the coupling is only worth having if the index renders
+  >   it as markdown, and `Description-Content-Type` was verified by hand at
+  >   3.10 step 3 in place of the `twine check` that was not run.
+  >
+  > **The plant, and why it is the one it is.** `readme-decoupled` redirects
+  > pyproject's `readme` to a decoy and **leaves `README.md` untouched**. That
+  > is the realistic way this rots — not someone deleting the README, but
+  > someone pointing the field elsewhere, at which point 3.10's twice-made claim
+  > quietly becomes true again with nothing to notice that it changed. It is
+  > declared `exactly=True`: it must fail the coupling check **and nothing
+  > else**, so it cannot pass by breaking something adjacent.
+  >
+  > `install-check` is now **32 checks, 4 plants held** (from 30 and 3). One
+  > existing gate went red on the way and was right to:
+  > `test_install_check_plants_a_violation_for_each_direction_it_claims` pins
+  > the plant roster, so a new plant must be declared rather than merely added.
+  >
+  > **What this does not close.** It holds the *coupling*, not the hashes.
+  > Neither 0.9.0 artifact is regenerable from any later tree and neither should
+  > be pinned as a target for a future build (3.10's runbook step 2). This test
+  > makes the reason mechanical; it does not make the hashes stable, and nothing
+  > should.
   >
   > **Two of the eight were found inside documents written to catch the
   > pattern** (4 and 5). That is the most useful thing in this table: the
@@ -8774,40 +8815,89 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > | | What it is | Evidence | Recommendation |
   > |---|---|---|---|
-  > | **C1** | `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it. Add a second, secondary `hint:` line when the missing path is one of ours; keep the existing line byte for byte | A **mechanical measurement** from the published package, plus the closing cold read confirming the reader arrives at it regardless of how well the prose explains it | **SHIP** |
-  > | **C2** | The `fixtures/` explanation lands **92 lines downstream** of the paste. Make the sentence adjacent to the quickstart address the non-checkout reader | The **closing cold read**: both models understood the Install section, predicted the failure, and pasted anyway; one named the placement remedy unprompted | **SHIP, batched with C1 — and second in priority.** Its own record carries the caveat: the measurement that motivates it is evidence against its mechanism, since *more prose, better placed* is the instrument that just failed, differing only in an untested proximity |
+  > | **C1** | `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it. Add a second, secondary `hint:` line when the missing path is one of ours; keep the existing line byte for byte | A **mechanical measurement** from the published package, plus the closing cold read confirming the reader arrives at it regardless of how well the prose explains it | **SHIP, and ship it alone** |
+  > | **C2** | The `fixtures/` explanation lands **92 lines downstream** of the paste. Make the sentence adjacent to the quickstart address the non-checkout reader | The **closing cold read**: both models understood the Install section, predicted the failure, and pasted anyway; one named the placement remedy unprompted | **HOLD — do not ship with C1.** Not a rejection: it is not yet decidable. Its own record carries the caveat that decides the sequencing — the measurement motivating C2 is evidence *against* its mechanism, since *more prose, better placed* is the instrument that just failed, differing only in an untested proximity. See the sequencing below |
   > | *(third observation)* | A reader on 3.10 gets an import error | **Refuted.** `pip` refuses first and names the reason; `requires-python` reaches the wheel's `METADATA`. Now pinned by a test, plant-checked three ways | **Do not ship.** Listed so it is not re-proposed |
   >
-  > ### The decision this task makes rather than inherits: does `0.9.1` ship for these two alone, or wait?
+  > ### The decision this task makes rather than inherits: what ships as `0.9.1`, and in what order
   >
-  > **Recommendation: ship `0.9.1` for C1 + C2 alone, before Phase 4, and batch
-  > them into one release.** The reasoning, with the argument against it stated
-  > first because it is the stronger-sounding one:
+  > **Decision: `0.9.1` ships C1 alone, before Phase 4. C2 is held, and what
+  > decides it is a cold read against the published `0.9.1` page.**
   >
-  > - **Against:** `0.9.1` is a fresh irreversible slot, batching is usually
-  >   right, and Phase 4 will produce a third dialect that certainly wants a
-  >   release. Waiting costs one slot and bundles more value into it.
-  > - **For, and it is decisive:** *the thing being fixed is the first command
-  >   on the page every new reader sees*, and the population hitting it grows
-  >   monotonically for as long as `0.9.0` is the only version on the index.
-  >   Phase 4 is a **third dialect plus a freeze** — the longest-dated work in
-  >   the plan — so "wait for Phase 4" is not a short deferral, and every reader
-  >   in the interval pays the same bad first minute that has now been measured
-  >   twice by two instruments.
-  > - **The two are one release, not two.** C2 edits `README.md`, which
-  >   `METADATA` embeds, so C2 alone spends a slot anyway (3.10's own finding).
-  >   Shipping C1 without C2 spends the identical slot and fixes one end of one
-  >   problem. There is no version of this where batching them costs more than
-  >   splitting them.
-  > - **Neither touches the schema, and that is what makes this cheap.** No
-  >   `NodeKind`, `EdgeKind`, warrant, `Payload` state or `Diagnostic` code; no
-  >   graph output changes; determinism untouched. `0.9.1` is a documentation
-  >   and stderr release. **It does not move the freeze one day earlier**, and
-  >   it must not be described as progress toward it.
+  > #### Amendment 2 — this reverses the first draft, and the caveat is what reversed it
   >
-  > **What would change this recommendation:** a stranger consumer appearing
-  > (freeze-gate row 3, the weakest), which would make waiting worthwhile in
-  > order to ship whatever *they* find alongside. None exists.
+  > The first draft of this section recommended **shipping C1 and C2 batched**,
+  > on the grounds that C2 alone spends an index slot anyway (a README edit
+  > moves the wheel — 3.10's finding, and now `install-check`'s), so batching
+  > could not cost more than splitting. **That argument is sound and it answers
+  > the wrong question.** It optimises the slot. The scarce thing here is not
+  > the slot — it is **the ability to attribute an outcome to a change**, and
+  > shipping both at once destroys it permanently: if the next reader does not
+  > paste the failing command, nothing in the world tells us whether the hint
+  > or the warning did it, and the two are not equally believed.
+  >
+  > They are not equally believed *by this record's own evidence*. C1 catches
+  > the reader where the measurement shows they reliably arrive. C2's mechanism
+  > is the instrument that **just failed in front of us** — both models read
+  > prose about `fixtures/`, understood it, and pasted anyway — differing from
+  > what failed only in proximity, which is exactly the variable nobody
+  > measured. Batching a well-evidenced fix with an unevidenced one and reading
+  > the result as vindication of both is how a project acquires a change it
+  > cannot justify and will not remove.
+  >
+  > #### The sequence
+  >
+  > 1. **Ship `0.9.1` with C1 alone.** The hint on a missing path under
+  >    `fixtures/`, the existing `OSError` line kept byte for byte, the three
+  >    tests C1's entry costs.
+  > 2. **Cold-read the published `0.9.1` page**, same true premise — *"you just
+  >    ran `pip install spanweave`; what do you do next"* — and, per `AGENT.md`,
+  >    **tell the reader nothing about what is suspected.** This is a fifth use
+  >    of the practice and the first against a page changed *because of* a cold
+  >    read.
+  > 3. **Read the result against two questions, in this order.** Does the reader
+  >    still paste the failing command? And — the one that actually decides
+  >    C2 — **after seeing the hint, are they still stuck?**
+  >
+  > | What the read returns | What it settles |
+  > |---|---|
+  > | Still pastes **and** the hint leaves them stuck | **C2 is evidenced**, and by then it is evidenced against a page that already carries the cheaper fix. Ship it |
+  > | Still pastes, and the hint lands — they recover and proceed | **C2 is unnecessary.** The index slot is unspent, the *"library in one screen"* opener 3.9 built is unspent, and we learn that the fix belongs after the paste rather than before it |
+  > | Does not paste the failing command at all | C1 changed behaviour upstream of itself, which nothing predicts. Worth a second read before concluding anything |
+  >
+  > **Note what step 3 rules out**, because it is the failure mode of asking
+  > this question loosely: *"did they paste it"* alone cannot decide C2. Both
+  > readers pasted after understanding the prose, so a repeat paste is the
+  > expected outcome and not a verdict on the hint. The question C2 turns on is
+  > what happens **after** the error is on screen.
+  >
+  > #### What stands from the first draft
+  >
+  > - **`0.9.1` before Phase 4, not after.** The thing being fixed is the first
+  >   command on the page every new reader sees, and the population hitting it
+  >   grows monotonically while `0.9.0` is the only version on the index. Phase 4
+  >   is a third dialect plus a freeze — the longest-dated work in the plan — so
+  >   *"wait for Phase 4"* is not a short deferral.
+  > - **Neither candidate touches the schema.** No `NodeKind`, `EdgeKind`,
+  >   warrant, `Payload` state or `Diagnostic` code; no graph output change;
+  >   determinism untouched. `0.9.1` is a stderr release. **It does not move the
+  >   freeze one day earlier** and must not be described as progress toward it.
+  > - **This is a recommendation for the halt, not a decision the agent may
+  >   execute.** Publishing is human-run, credentialed and irreversible, and it
+  >   stays a halt (`AGENT.md`; 3.10's runbook).
+  >
+  > #### The cost of sequencing, stated rather than waved past
+  >
+  > It spends **two** index slots instead of one if C2 turns out to be needed —
+  > `0.9.1` and then `0.9.2`. That is the real price and it is worth paying:
+  > a slot is cheap and reproducible, and an attribution you did not preserve
+  > cannot be recovered by any later work. It also **delays C2 by one publish
+  > cycle** for readers in the interval, who in that window have the hint, which
+  > is the fix the evidence actually supports.
+  >
+  > **What would change this:** a stranger consumer appearing (freeze-gate row
+  > 3, the weakest), which would make waiting worthwhile in order to ship
+  > whatever *they* find alongside. None exists.
   >
   > ## 9. What Phase 4 inherits
   >
@@ -8832,10 +8922,15 @@ consumer's findings go in the exit record beside these and carry more weight.
   > 5. **Two shape-costed items** that are not gate failures and must not be
   >    filed as either wants or nothing: 3.4 **F-2** (SPEC GAP with a shape cost)
   >    and 3.4 **F-3** (does not fit the test, sent over unfitted).
-  > 6. **C1 and C2**, recommended to ship as one `0.9.1` before Phase 4 (§8),
-  >    with C2's tests written against the fix rather than now.
-  > 7. **One named debt from §5**: the wheel/`README.md` coupling has a
-  >    corrected sentence and no test, and it is the only one of eight that does.
+  > 6. **C1, recommended as `0.9.1` alone and before Phase 4 — and C2 held**
+  >    (§8, amendment 2). What decides C2 is a **fifth cold read**, against the
+  >    published `0.9.1` page, turning on whether the hint leaves the reader
+  >    stuck rather than on whether they paste. Phase 4 inherits a *decision
+  >    procedure*, not an open question.
+  > 7. **Nothing from §5.** The eighth instance was the one item this record
+  >    originally handed forward as a debt; **amendment 1 closed it here**
+  >    instead. The pattern's remedy is now eight for eight, and Phase 4
+  >    inherits no exception to it.
   > 8. **The schema, unfrozen.** `SCHEMA_VERSION = "0.1"`, `SCHEMA_FROZEN =
   >    False`, `0.x` a single bucket that never tracks changes, pinning on the
   >    library version, and `tests/serialized_shape.json` as the tripwire. A
@@ -8870,6 +8965,20 @@ consumer's findings go in the exit record beside these and carry more weight.
   >   ordinals that disagree with it.** They are left as written; §5 explains
   >   why, and the reason is the same one that makes `PREDICTIONS.md`
   >   read-only.
+  > - **This record was amended after approval, in two places, and both
+  >    amendments reverse something it originally said.** They are recorded as
+  >    reversals rather than smoothed into the text: §5's *"seven of eight, and
+  >    Phase 4 inherits the eighth"* became **eight of eight, closed here**, and
+  >    §8's *"ship C1 and C2 batched"* became **C1 alone, C2 held pending a cold
+  >    read**. In both cases the first draft's argument is left visible with
+  >    what beat it, because the reasoning is the transferable part: the first
+  >    was beaten by **precedent** (an exception made for the smallest instance
+  >    is the worst one to set), the second by **attribution** (the slot is
+  >    cheap, the ability to tell which change worked is not).
+  > - **Amendment 1 makes 3.11 a task that authors code**, which the record's
+  >   own first draft gave as the reason not to. Two checks and a plant in
+  >   `tests/install_check.py`, plus a one-line update to the plant-roster gate
+  >   that correctly went red. Nothing under `spanweave/` moved.
   > - **`AGENT.md` was edited, and only in one place.** *When the check is a
   >   human reading* said *"three uses so far"*; there are four, and the fourth
   >   is the one worth reading before running one — a read that was neither
@@ -8890,8 +8999,13 @@ consumer's findings go in the exit record beside these and carry more weight.
   >
   > - [x] The record above exists, with shape changes, findings, predictions,
   >       cuts, candidates, the freeze gate and the exit criteria.
+  > - [x] **Amendment 1:** the eighth instance is closed by a test rather than
+  >       carried — `install-check` is 32 checks and 4 plants, and the new plant
+  >       fails **exactly** the check it was aimed at.
+  > - [x] **Amendment 2:** the `0.9.1` decision is C1 alone, with C2 held and a
+  >       named cold read to decide it — recorded with the argument it reverses.
   > - [x] `make check` green (**1594 passed, 4 skipped**), `make conformance`
-  >       green (**419**), `make install-check` green (**30 checks, 3 plants
+  >       green (**419**), `make install-check` green (**32 checks, 4 plants
   >       held**), `make gates` green (**69**).
   > - [x] `git diff PREDICTIONS.md` is **empty for every agent commit in the
   >       phase** — verified over `21887f7^..HEAD`: exactly three commits touch
@@ -8919,6 +9033,14 @@ when. Adding a box here would hand a resumed session work nobody has agreed to.
 `0.9.0` cannot be re-uploaded. Anything below that ships, ships as `0.9.1`, and
 that is a fresh irreversible slot on the index — so the cost of *each* entry
 includes the cost of spending one, and batching is usually right.
+
+**This list has already found the exception, and it is worth stating here
+rather than only at the entry.** Batching is right when the entries are
+independently believed. When one entry is well-evidenced and another is a
+*proposed* remedy whose mechanism is untested, shipping them together destroys
+the only chance to tell which one worked — and a slot is cheap and repeatable
+where an attribution is neither. That is why C1 ships alone and **C2 is held**
+(3.11 §8, amendment 2).
 
 ### C1 — `spanweave inspect fixtures/…` is correct and illegible to the reader most likely to see it
 
@@ -9013,16 +9135,32 @@ that keeps the hint from reading as *"you installed the wrong thing"*.
   it adds noise for every reader with a typo while saying nothing to the one
   reader whose situation is actually diagnosable.
 
-#### What this candidate is *not* a substitute for
+#### What this candidate is *not* a substitute for — **and the cold read has since run**
 
-Step 8's closing cold read — a blank session given the published page and the
-now-**true** premise *"you just ran `pip install spanweave`; what do you do
-next"* — is still unrun. This entry is a **mechanical** measurement: it proves
-the command fails and that the failure is illegible. It says nothing about
-whether the Install section's explanation lands for a reader who reads it,
-which is a human reading and the question 3.10's stranger table still carries
-open. Running one does not discharge the other, and shipping C1 before the cold
-read would be answering a question with the wrong instrument.
+**As written, this entry is a *mechanical* measurement**: it proves the command
+fails and that the failure is illegible. It said nothing about whether the
+Install section's explanation lands for a reader who reads it — a human
+reading, which was then unrun, and the reason this entry closed on *"shipping
+C1 before the cold read would be answering a question with the wrong
+instrument."*
+
+**The cold read has since run, and it strengthens this entry rather than
+qualifying it.** Both models read the Install section **correctly**, both
+predicted the `fixtures/` failure before typing it, and **both gave the failing
+command as their second move.** The explanation lands and does not prevent the
+paste. So the reader arrives at this error *regardless of how well the prose
+explains it*, which is precisely the case for fixing the error rather than the
+prose. Recorded at 3.10, *The closing cold read*.
+
+Two consequences for this entry, neither of which changes the proposed hint:
+
+- **The *"change the README instead"* alternative below is weaker than it
+  reads.** It was refused for reaching no one holding an older copy of the
+  page; the cold read adds that a README edit would not reliably have stopped
+  the paste either.
+- **C1 ships alone.** `0.9.1` carries this and not C2 (3.11 §8, amendment 2),
+  so that the next cold read can attribute what it finds. The condition this
+  section originally set — *do not ship before the cold read* — is **met**.
 
 ### C2 — the `fixtures/` explanation lands, 92 lines downstream of the paste
 
@@ -9103,7 +9241,7 @@ they read and then walk past. If only one ships, it is C1.
 | **What it costs the page** | The *"library in one screen"* opener 3.9 built and 3.10 step 4 cold-read as clean. Three clauses, no new heading, so the first fenced output still lands above the fold on a normal window — but this is a real cost and 3.9 paid real work for what it is spending |
 | **`SPEC.md`** | nothing. This is a document change, not a behaviour change |
 | **Invariants** | None touched. No `NodeKind`, `EdgeKind`, warrant, `Payload` state or `Diagnostic` code; no network, no dependency; graph output and determinism untouched. **Not a halt** |
-| **The index slot** | **Zero if batched with C1, one if not.** A README edit changes the wheel — `METADATA` embeds the long description, which 3.10 step 8 measured — so shipping C2 alone still spends a `0.9.1`. This is the clearest case in the list for batching |
+| **The index slot** | **One.** A README edit changes the wheel — `METADATA` embeds the long description, measured at 3.10 step 8 and pinned since by `wheel: METADATA's long description is README.md byte for byte` — so C2 spends a release whether or not it travels with C1. **This was first read as an argument for batching the two, and 3.11 amendment 2 reversed it:** it is an argument about the *slot*, and the scarce thing is the ability to attribute an outcome. See *the sequencing*, below |
 
 #### The alternatives, with what each costs
 
@@ -9124,6 +9262,27 @@ they read and then walk past. If only one ships, it is C1.
   admonitions, so the reader most affected — the one on the PyPI page — sees a
   bare blockquote.
 
+#### The sequencing — C2 is **held**, and a named measurement decides it
+
+**Decided at 3.11 amendment 2, and it is the opposite of that record's first
+draft.** C2 does **not** ship with C1.
+
+`0.9.1` carries **C1 alone**. Then the published `0.9.1` page gets a cold read
+with the same true premise, and C2 turns on one question: **after seeing C1's
+hint, is the reader still stuck?** If yes, C2 is evidenced — against a page
+that already carries the cheaper fix. If the hint lands and they recover, C2 is
+**unnecessary**, and both the index slot and 3.9's *"library in one screen"*
+opener are unspent.
+
+*"Did they paste the failing command"* does not decide it. Both readers pasted
+after understanding the prose, so a repeat paste is the expected outcome and
+not a verdict on the hint. The question is what happens **after** the error is
+on screen.
+
+**The reason, in one line:** shipping both at once means we can never learn
+which one worked, and C2's mechanism is the instrument that just failed in
+front of us. The slot is cheap; the attribution is not recoverable.
+
 #### What this candidate is *not*
 
 **Not a closure of the stranger table's last row.** That row asks whether a
@@ -9131,8 +9290,9 @@ reader who actually installed from the index gets stuck. Both halves are now
 measured and the answer is *yes, and the explanation lands anyway* — which is
 why the row stays open with two candidates hanging off it rather than being
 ticked. Shipping C1 and C2 does not close it either; only a cold read against
-the **fixed** page would, and that is a fifth use of the practice, after a
-publish that has not happened.
+the **fixed** page would — which is exactly the read the sequencing above
+schedules, and it is a fifth use of the practice, after a publish that has not
+happened.
 
 ### A third observation from the same read, recorded as refuted rather than as a candidate
 

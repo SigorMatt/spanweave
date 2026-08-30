@@ -131,6 +131,12 @@ def test_install_check_plants_a_violation_for_each_direction_it_claims():
         "missing-module",
         "outside-file",
         "path-leak",
+        # `TASKS.md` 3.11, amendment 1: the wheel embeds `README.md` in
+        # `METADATA`, so editing the README changes the wheel. A record twice
+        # claimed otherwise and sent the next publisher into a stop-and-find-out
+        # over an expected difference. The plant redirects pyproject's `readme`
+        # and must fail that check and nothing else.
+        "readme-decoupled",
     }
     # A plant that expects nothing to fail would "hold" against a check that
     # does nothing at all.

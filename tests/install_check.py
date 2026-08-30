@@ -72,6 +72,7 @@ with a credential — the publish is zone 4, `TASKS.md` 3.10, and human-run.
 from __future__ import annotations
 
 import argparse
+import email
 import json
 import os
 import pathlib
@@ -303,6 +304,16 @@ def audit_wheel(wheel: pathlib.Path, tree: pathlib.Path, report: Report) -> None
             ),
             "",
         )
+        metadata_text = next(
+            (
+                archive.read(name).decode("utf-8")
+                for name in members
+                if name.endswith(".dist-info/METADATA")
+            ),
+            "",
+        )
+
+    _audit_wheel_carries_the_readme(metadata_text, tree, report)
 
     expected = _tree_files(tree)
     missing = sorted(expected - members)
@@ -360,6 +371,58 @@ def audit_wheel(wheel: pathlib.Path, tree: pathlib.Path, report: Report) -> None
 # --------------------------------------------------------------------------
 # 2. Install it into a throwaway venv
 # --------------------------------------------------------------------------
+
+
+def _audit_wheel_carries_the_readme(
+    metadata_text: str, tree: pathlib.Path, report: Report
+) -> None:
+    """The wheel is NOT a function of `spanweave/` alone, and this says so.
+
+    `TASKS.md` 3.10 twice asserted that it is -- *"the wheel is still
+    regenerable and must still be `2ed231f5...` -- it is a function of
+    `spanweave/` alone"* -- and sent the next publisher into a stop-and-find-out
+    over a difference that is expected. The claim is false because
+    `dist-info/METADATA` embeds the long description, which is `README.md` byte
+    for byte, and the same section of the same record says so two paragraphs
+    earlier. It survived because every edit it was ever tested against was to a
+    different file.
+
+    That was the eighth instance of this project's recurring defect and **the
+    only one of the eight remedied by a corrected sentence rather than a test**
+    (`TASKS.md` 3.11 section 5). This is the test, and it closes it: the
+    coupling is now a fact something has to agree with rather than a fact
+    someone has to remember.
+
+    It lives here rather than in `make check` because `make check` never builds
+    a wheel -- the claim is about a built artifact, so only the gate that builds
+    one can hold it.
+    """
+    parsed = email.message_from_string(metadata_text)
+    payload = parsed.get_payload()
+    described = payload if isinstance(payload, str) else ""
+    readme = (tree / "README.md").read_text(encoding="utf-8")
+    report.check(
+        "wheel: METADATA's long description is README.md byte for byte",
+        described == readme,
+        (
+            f"METADATA's description is {len(described)} bytes and README.md is "
+            f"{len(readme)}. Either the wheel no longer embeds the README, or "
+            f"the two have drifted. This check exists because a record twice "
+            f"claimed the wheel depends only on `spanweave/`; while this passes, "
+            f"editing README.md CHANGES THE WHEEL, and a hash taken before a "
+            f"documentation edit will not match one taken after."
+        ),
+    )
+    report.check(
+        "wheel: METADATA declares the description's content type",
+        parsed.get("Description-Content-Type") == "text/markdown",
+        (
+            f"Description-Content-Type is "
+            f"{parsed.get('Description-Content-Type')!r}; an index renders the "
+            f"long description by this header, so a README that ships as "
+            f"plain text renders as one paragraph of markdown source"
+        ),
+    )
 
 
 def _venv_bin(venv: pathlib.Path) -> pathlib.Path:
@@ -782,6 +845,14 @@ PLANTS = (
             }
         ),
     ),
+    Plant(
+        name="readme-decoupled",
+        what="the wheel's long description pointed at a file that is not README.md",
+        must_fail=frozenset(
+            {"wheel: METADATA's long description is README.md byte for byte"}
+        ),
+        exactly=True,
+    ),
 )
 
 
@@ -801,6 +872,27 @@ def _plant_missing_module(source: pathlib.Path) -> str:
     )
     pyproject.write_text(text, encoding="utf-8")
     return f"excluded {victim} from the wheel"
+
+
+def _plant_readme_decoupled(source: pathlib.Path) -> str:
+    """Break the README -> METADATA coupling without touching README.md.
+
+    The realistic way this rots is not someone deleting the README: it is
+    someone pointing `readme` somewhere else, or hardcoding a description, at
+    which point the wheel stops depending on `README.md` and 3.10's twice-made
+    claim quietly becomes true again -- with nothing to notice that it changed.
+    So the plant redirects the field and leaves `README.md` where it is, which
+    is why the coupling check is the *only* one it may fail: the tree is
+    otherwise untouched.
+    """
+    decoy = source / "README_planted.md"
+    decoy.write_text("# planted\n\nNot the README.\n", encoding="utf-8")
+    pyproject = source / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8").replace(
+        'readme = "README.md"', 'readme = "README_planted.md"', 1
+    )
+    pyproject.write_text(text, encoding="utf-8")
+    return "pyproject's `readme` redirected to README_planted.md"
 
 
 def _plant_outside_file(source: pathlib.Path) -> str:
@@ -839,6 +931,7 @@ def run_plant(plant: Plant) -> bool:
             planter = {
                 "missing-module": _plant_missing_module,
                 "outside-file": _plant_outside_file,
+                "readme-decoupled": _plant_readme_decoupled,
             }[plant.name]
             print(f"  planted: {planter(source)}")
 
