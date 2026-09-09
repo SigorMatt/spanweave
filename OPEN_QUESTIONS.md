@@ -1732,3 +1732,353 @@ that in one direction worth having in front of G3:
 *Not taken.* This entry is a `WORKPLAN.md` G1 halt; no code changed with it and
 `ROADMAP.md` is untouched — the text in **(f)** and **(g)** lands only when the
 decision is taken. Record the decision in `WORKPLAN.md` §3.
+
+---
+
+## 14. G3: Is mixed instrumentation a freeze precondition, and on what grounds?
+
+**(a)** `WORKPLAN.md` G3 asks two things. **First:** is the audit's E — one
+trace carrying two dialects' spans (§12) — a precondition of the schema freeze?
+The row supplies an argument that it is: *"the freeze measures whether
+adapter-supplied fields agree across adapters; a single trace exercising two
+adapters at once is the strongest form of that measurement."* **Second:**
+`ROADMAP.md` Phase 4 is coarse by design and sharpens when the Phase 3 exit is
+met — is it met, and what is the sharpened text? Neither is this memo's to
+decide; `ROADMAP.md` is not edited by it.
+
+**(b) The answer in three lines**, with the rest as the working:
+
+- **Yes, E is a freeze precondition — and not for the row's reason.** It is one
+  because **E moves the schema**, under every option §12 leaves live. That
+  ground is far simpler than the evidential one, it does not depend on anyone
+  ever observing a mixed trace, and it is the ground the roadmap should state.
+- **The row's evidential argument does not survive contact with this project's
+  own reasoning.** Under per-record dispatch each record is parsed by exactly
+  **one** adapter, so a mixed trace contests no adapter-supplied field at all.
+  It measures *composition*, not *agreement*, and the two fields it introduces
+  are erased by `canonical()` before the comparison runs.
+- **Phase 3's exit is met.** Sharpen the freeze **conditions** now; hold the
+  PR-level Phase 4 breakdown until the four open memos are decided, because the
+  decisions determine what those PRs contain.
+
+**(c) Is the Phase 3 exit met? Yes — checked in the repo, not assumed.**
+
+`ROADMAP.md` Phase 3's exit is *both consumers work with zero shape changes;
+every prediction marked; `pip install spanweave` works at `0.9.x`; a stranger
+can build a graph from their own trace in ~60 seconds.* `TASKS.md` 3.11 is the
+exit record and it is checked.
+
+| Exit clause | State, from the record |
+|---|---|
+| Both consumers, zero shape changes | **Met.** 3.11 §1: `git diff --stat spanweave/` empty for 3.3 and 3.4 individually, with each consumer's own bound on what that zero means |
+| Every prediction marked | **Met, with a qualification the record states itself:** all five plus O1 marked by a human; **P3 marked UNRESOLVED**, which is a mark and not an answer, and §7 of this file stays live |
+| `pip install spanweave` at `0.9.x` | **Met.** `0.9.0` and `0.9.1`, `2026-08-30`, verified from the index outside the repo (3.10; §13(c) re-measures it) |
+| A stranger in ~60s | **Met, and its one live defect has since closed.** 5.76–7.17s measured over four walks against a ~60s budget. 3.11 §7 recorded that the *index* path failed on its first command; that is C1, which shipped as `0.9.1` and is verified from the index (3.11 §8, amendment 3) |
+
+So `TASKS.md`'s resolution rule — *sharpen a phase to PR level only when the
+prior phase's exit criterion is met* — is satisfied, and Phase 4 may be
+sharpened. **(i)** proposes the part of that sharpening this memo can honestly
+write; **(h)** item 5 says why the rest should wait a little longer.
+
+**(d) The simple reason, and it is not the row's: E changes schema-visible
+things.** The freeze is a promise about the *schema* (`CLAUDE.md` 7), so the
+question that settles a precondition is not *how strong is the evidence* but
+*does this move a serialized field*. For E the answer is yes under every option
+§12 leaves live.
+
+| What E adds | Where it lands | Class under `PREDICTIONS.md`'s binding test |
+|---|---|---|
+| **`unclaimed_record`**, a new diagnostic code (§12(e), under *both* live options) | `spanweave/diagnostics.py` holds **15** codes today and none of them is this one; a code whose `source` shape is stated per code, as `unmapped_attributes` and `malformed_record` are, also moves `tests/serialized_shape.json` | **Shape change.** *"A new field, `NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code, or query primitive"* — named in the definition, verbatim |
+| **`Provenance.adapter_id: str` → `str \| None`** (§12(e) option 1, the recommended one) | `$.nodes[].provenance.adapter_id`, typed `"str"` in the committed shape artifact | **Shape cost** under the 2.10 amendment: a *serialized* field changing type on a public contract. Widening it after the freeze is breaking — a consumer that could never see `null` now can |
+| **`Edge.adapter = None` when the contributors differ** (§12(g)) | `$.edges[].adapter`, already `"str \| None"` | **Not** a shape change. A new *value* on an existing field plus a `SPEC.md` §3.8 sentence. Nothing moves |
+| **`Meta.adapters` with more than one entry; `Provenance` varying per node** | already `tuple[AdapterInfo, ...]`, already per-node | **Not** a shape change. Two fields stop being trivially constant, which is what their docstrings already say they are |
+
+Three things follow, and the third is the one that makes this a precondition
+rather than a preference.
+
+1. **There is no schema-invisible version of E.** §12(e) option 2 — diagnostic
+   only, no node — avoids the `adapter_id` widening and still adds the code.
+   Option 3 is rejected on provenance grounds. So every path through §12 spends
+   shape budget.
+2. **"Hard gate: zero" is not violated by that, and it would be dishonest to
+   imply it is.** That zero is *Phase 3's* measurement over its two
+   confirmatory consumers, and it is discharged (3.11 §1). This series has
+   already added two diagnostic codes since — `duplicate_record` (A3) and
+   `missing_trace_id` (A4) — with nobody's gate broken. Shape changes are not
+   forbidden; they are **cheap now and expensive later**, which is the whole
+   design of decoupling the launch from the freeze (`ROADMAP.md` Phase 3,
+   *Publish without freezing*).
+3. **So the precondition is on the *decision*, not on the *implementation*.**
+   Deciding *against* per-record dispatch resolves it just as well — but it must
+   be decided, because freezing `adapter_id` as `str` prices a later E at a
+   version bump and a migration note instead of at a minor release. A freeze
+   taken while §12 is open is a freeze taken without knowing what it costs.
+
+**(e) The row's own argument, weighed — and it fails on the roadmap's own
+reasoning.** Stated plainly because the row is the reason this batch exists.
+
+Phase 4 already fixes what "agree" means, and it is exact: *"an adapter-supplied
+field is only measured when two adapters that **chose** a value have to agree on
+it."* Test mixing against that sentence:
+
+- **Under per-record dispatch, no adapter-supplied field is contested.** Each
+  record is parsed by exactly one adapter (§12(i)), so every node's fields come
+  from one adapter, exactly as they do in that dialect's pure rendering. The
+  mixed build's `Usage.extra` on s1 and s3 is `otel_genai`'s, alone —
+  the same value, from the same code, as in the pure `otel_genai` rendering. The
+  three unmeasured rows on the freeze list (`Usage.extra`'s keys, the nine
+  strictly-compared node fields, the inventory's unstated rows) are untouched by
+  mixing. It adds no second chooser anywhere.
+- **The fields E itself introduces are invisible to the comparison.**
+  `tests/conformance.py` erases them before comparing: `ERASED_NODE_FIELDS =
+  ("raw", "provenance")` and `ERASED_EDGE_FIELDS = ("adapter",)`. So E3's
+  acceptance test cannot measure `Provenance.adapter_id` or `Edge.adapter` even
+  in principle — by design, and the corpus already says why: *"who parsed it is
+  not a property of the run."*
+- **There *is* one value two adapters must genuinely agree on, and it is not on
+  any gate: the join key of an edge that crosses them.** The prototype's
+  `call_result` s1→s2 has an `otel_genai` requester and an `openinference`
+  fulfiller (§12(g)); the edge exists only because the two adapters extracted
+  the *same string*. Within a pure rendering an id only ever has to match
+  itself, so no existing test contests this. **Per-record dispatch introduces a
+  cross-adapter value dependency the library does not have today** — that is a
+  finding, and it belongs on the freeze list's *necessary-and-not-sufficient*
+  side rather than being sold as the measurement.
+- **And a constructed mixed fixture cannot measure even that**, for the reason
+  Phase 4 already gives about the nine node fields: both renderings of
+  `llm_tool_llm` descend from **one `scenario.md`**, so a hand-authored pair
+  agrees exactly where its author made it agree. Checked: both dialect files
+  spell the call id `call_a`, because one person wrote both. E3's acceptance
+  test therefore proves *composition works on a fixture whose halves were
+  authored to agree* — which is what it should prove, and is not evidence about
+  a vocabulary.
+
+**So "the strongest form of that measurement" is backwards on constructed
+input.** The strongest form is a *captured* mixed trace, where the join key
+agrees or fails to agree because two real instrumentors read the same provider
+id. That is an outside-evidence event — §13's B column — not a new gate.
+
+**Evidential power and urgency point different ways, as the brief asks be said.**
+The row's argument is about **power**: how much would a mixed trace tell us. The
+answer above is *less than the row assumes, and on constructed input almost
+nothing*. §12(c)'s finding is about **urgency**: 57 corpus files, 177 records,
+**0** carrying both markers — constructible, structurally motivated, first-party
+evidence in `capture/backends.py` that the project itself steers around the
+shape, and **not observed**. An unobserved failure mode is a weaker precondition
+than an observed one, so urgency is low too.
+
+**Both therefore point away from the row's conclusion, and the conclusion holds
+anyway** — because (d)'s ground is untouched by either. That is worth saying
+because it changes what the roadmap should *write*: a sentence about evidence
+would be a sentence this memo has just shown to be wrong.
+
+One distinction to keep, so low urgency is not misread: E's urgency **as a bug**
+is high. §12(b) measures a forced build losing 2 of 7 edges and reporting
+`Payload.state = absent` where content was emitted, at exit `0`, from a
+graph that looks complete. Silent wrongness on a constructible input is a strong
+argument for fixing E soon. It is simply not an argument about the *freeze*,
+which turns on whether the contract moves.
+
+**(f) The collision with §13, named and resolved.** If E is a freeze
+precondition and the only mixed trace in existence is one we constructed, the
+precondition is satisfiable **only by our own artifact** — which is exactly what
+§13(f)'s standing rule excludes: *no condition may be satisfied by the
+maintainer, or by an agent working to the maintainer's instruction.*
+
+The contradiction is real for one reading of "E is a precondition" and absent
+for the other. Phase 4 already holds two kinds of precondition and has never
+distinguished them by name:
+
+| Kind | Instances | Who may satisfy it |
+|---|---|---|
+| **Work that must land before the contract locks** | a third dialect rendered in the corpus; the predictions resolved; the Phase 2 finding absorbed | **us, deliberately.** That is the point of them |
+| **Evidence that must arrive from outside** | §13's A column (agreement) and B column (exposure) | **not us, by rule** — the rule is what the word *outside* means |
+
+**E belongs in the first, and §13's rule does not reach it.** "The library
+represents a mixed trace before the schema locks" is a work item, discharged by
+E2–E4 and their fixture. §13's exclusion governs the outside-use gate, where the
+maintainer's own artifact would *be* the measurement; here the artifact is the
+deliverable, and building your own deliverable is not self-dealing.
+
+**The reading that does collide should be rejected on its own merits.** "A mixed
+trace must be **observed** before the freeze" is a gate nobody here can cause —
+§13(h) says so, and E1's three reasons a real stack mixes dialects are all
+properties of *someone else's* deployment. Its only instruments are §13's A1 (an
+outside adapter author) and B3 (a contributed capture), so adopting it would
+count §13's own conditions a second time under a different name, and a gate that
+can be closed once and counted twice is the defect §13(d) raised about
+condition 1's double-count. Reject it; record the absence instead, as §13(h)'s
+second bullet already proposes — *measured and unobserved*, with §12's number.
+
+**(g) The one experiment, and it is cheap.** §12(j) is the smallest thing that
+would settle both questions this memo splits: install both instrumentors into
+one environment, point them at one `TracerProvider`, run one tool-using agent
+turn through `capture/`. It answers *does any record carry both markers* (which
+would overturn §12(e)'s hard error) and *is the file mixed outside the first 50
+records* (which is the decisive argument against §12's option (c)).
+
+Two properties of it belong in front of the maintainer:
+
+- **It is the only experiment on the whole freeze list that needs no second
+  party.** The third-dialect capture (`ROADMAP.md`, *what would be sufficient
+  for the nine strictly-compared node fields*) needs a dialect we do not have;
+  §13's A and B need a person who is not us. This one needs two `pip install`s
+  and one agent turn.
+- **It is a human act and a halt point** (`ENVIRONMENT.md` network zone 4,
+  `AGENT.md`, `FIXTURES.md` §6) — an agent builds the harness and stops. So it
+  is schedulable, and it is the second item on the freeze list with that
+  property, which by 3.11 §9's own reasoning makes it the second most likely to
+  be assumed rather than done.
+
+Recommend scheduling it beside the dialect-three capture. **Not as a gate
+condition** — it must not become one, per **(f)** — but as the measurement that
+would tell E2 whether its central recommendation is right before E2 implements
+it.
+
+**(h) Recommendation.** Five items; the decision is the maintainer's.
+
+1. **Make E a freeze precondition, on schema grounds, in a sentence that
+   mentions no evidence.** The text is in **(i)**.
+2. **State it as a rule rather than as a special case, because E is not
+   alone.** The live memos each either move a serialized field or are a
+   decision to leave one where it is: §10 would change `started_at`'s type,
+   §12 adds a diagnostic code under every option, and the agent-identity memo
+   (H1) proposes a new `identity` field outright. §11 is the exception that
+   proves the rule — builder-owned `basis` strings, no type movement, and I1
+   already measured that class of change at zero serialized bytes. One bullet
+   covering all of them is honest, is shorter than four, and does not require
+   the roadmap to relitigate each.
+3. **Do not add a "mixed trace observed" condition.** **(f)**.
+4. **Record the absence as a measurement**: 57 files, 177 records, 0 with both
+   markers, with the `capture/backends.py` comment as the strongest first-party
+   evidence and the honest note that it is a prediction about the world.
+5. **Sharpen the freeze conditions now; hold `TASKS.md`'s provisional Phase 4
+   at its current resolution.** The exit is met (**(c)**), so sharpening is
+   licensed — but the PR-level breakdown of Phase 4 depends on four open
+   decisions, and specifying PRs whose content the decisions determine is the
+   over-specification `TASKS.md`'s resolution rule and `CLAUDE.md`'s
+   *vertical slice before breadth* both forbid. The freeze **conditions** do
+   not depend on those decisions, which is why they can be sharpened today.
+
+**(i) Proposed `ROADMAP.md` text.** Two edits to Phase 4. `ROADMAP.md` is **not
+edited by this memo**; this is the block to land when the decision is taken. The
+first composes on top of §13(f)'s edit to the same bullet rather than replacing
+it — if §13 is decided differently, only the outside-use clause changes.
+
+> - **The freeze.** `schema_version` `1` and `1.0.0`, once the predictions are
+>   resolved, the Phase 2 adversarial finding is absorbed, **the outside-use
+>   gate below is met**, **a third dialect is rendered in the conformance
+>   corpus**, and **every open model question in `OPEN_QUESTIONS.md` is
+>   decided** — see the three gates below. […rest of the bullet unchanged…]
+
+Then a new subsection after *The gate is necessary and, for these three, not
+sufficient*:
+
+> ### No open model question survives the freeze
+>
+> The freeze is a promise about the **schema**, so what binds it is anything
+> that would move the schema afterwards. Until it is taken, a shape change costs
+> a minor release; after it, the same change costs a version bump and a
+> migration note (`CLAUDE.md` 7). **That asymmetry, and not the strength of the
+> evidence behind any one question, is what makes an open question a
+> precondition.**
+>
+> So: `OPEN_QUESTIONS.md` carries no undecided entry that would move a
+> serialized field at the moment `1` is declared. **Deciding an entry to change
+> nothing is a resolution; leaving it open is not.** The live entries are the
+> four design memos written for the September 2026 audit — timestamp
+> representation, `data` edge echo, per-record dialect dispatch, and agent
+> identity — plus the outside-use gate above, which governs the gate rather than
+> the model.
+>
+> **Mixed instrumentation is a precondition on exactly these grounds and no
+> others.** Every option its memo leaves live adds a `Diagnostic` code, and the
+> recommended one also widens `Provenance.adapter_id` to `str | None` — a
+> serialized field changing type, which `PREDICTIONS.md`'s binding test as
+> amended at 2.10 costs as shape. Deciding *against* per-record dispatch is
+> equally a resolution and equally must happen first: freezing `adapter_id` as
+> `str` prices the change at a migration rather than at a minor release.
+>
+> **What it is not: evidence that adapters agree.** Under per-record dispatch
+> each record is parsed by exactly one adapter, so no adapter-supplied field is
+> contested by mixing, and the two fields dispatch introduces — a node's
+> `provenance` and an edge's `adapter` — are erased by `canonical()` before the
+> comparison runs. A mixed trace tests **composition**, which is worth having
+> and is not the measurement the gates above ask for. The one value two adapters
+> must genuinely agree on is the **join key** of an edge that crosses them, and
+> a constructed mixed fixture cannot measure it for the reason given above about
+> the nine node fields: both renderings descend from one `scenario.md`, so they
+> agree where their author made them agree. Only a **captured** mixed trace
+> measures it — an outside event, counted once, under the gate above.
+>
+> **The shape has never been observed here**: 57 corpus files, 177 records,
+> **0** carrying both dialects' markers. It is constructible, structurally
+> motivated — two instrumentors share one `TracerProvider`, and this repo's own
+> capture harness steers around the shape by hand — and predicted rather than
+> seen. Recorded as a measurement rather than assumed away, and the capture that
+> would settle it is a human act, schedulable alongside the dialect-three
+> capture above.
+
+**(j) G2's three lines in `ROADMAP.md`: they should stay.** §0.6 says
+*"`ROADMAP.md` is untouched until G3"*, so G3 is the batch entitled to judge
+them (`ad77259`, verbatim):
+
+> *Raw OTLP JSON is pulled forward by the September 2026 audit as batches F1–F2,
+> which ask whether the envelope is a container format for the reader rather than
+> a dialect for an adapter (registered in `TASKS.md`, tracked in `WORKPLAN.md`).*
+
+**Keep**, for three reasons and against one temptation.
+
+- **They are within what G2's row permitted, and correctly scoped.** The row
+  allowed a pointer *"only if a bullet already covers the item (OTLP JSON);
+  otherwise nothing"*. Phase 4's first bullet already names raw OTLP JSON, so
+  the sentence annotates an existing item rather than adding one. Nothing else
+  in the file moved.
+- **They are true, and they are the kind of true that decays if unwritten.**
+  F1 asks whether the envelope is a *reader-level container* rather than a
+  dialect — which, if decided that way, changes what Phase 4's own bullet means:
+  raw OTLP JSON would stop being an adapter on the flywheel list and become a
+  reader feature. A roadmap whose bullet is being reinterpreted elsewhere should
+  say so where the bullet is.
+- **§0.6's rule is about entitlement, not about correctness.** "Untouched until
+  G3" sequenced *who may edit*; it did not predict the edit would be wrong.
+  Reverting to keep the file virgin would spend a commit to remove a true
+  sentence, and would leave `ROADMAP.md` the only document that does not know
+  its own item is being worked.
+
+**One defect in them, and it is `WORKPLAN.md`'s to have caught, not G2's.**
+*"tracked in `WORKPLAN.md`"* is a pointer to a file **G4 deletes**. G4's row
+covers the `TASKS.md` statuses and the README row; it does not mention
+`ROADMAP.md`, and it does not mention this file, where every memo in the
+series — five of them now — ends with *"Record the decision in `WORKPLAN.md`
+§3."* Sixteen registry lines in
+`TASKS.md` carry the same phrase and are inside G4's scope by its wording.
+**Recommend G4's scope explicitly gain the `ROADMAP.md` line and the memo
+sign-offs here**, re-pointed at `TASKS.md`. That is a one-line addition to a
+batch that has not run, not an edit to G2's work, and this memo makes none.
+
+**(k) What this memo hands forward.**
+
+1. **E is a freeze precondition on schema grounds**, and the roadmap sentence
+   should not claim it is evidence — **(d)**, **(e)**.
+2. **A new finding for the freeze list, if per-record dispatch is taken:** the
+   join key of an edge crossing two adapters is a cross-adapter value dependency
+   the library does not have today, and no constructed fixture can measure it.
+   It belongs beside `Usage.extra` and the nine node fields as
+   *necessary-and-not-sufficient*, not as a gate — **(e)**.
+3. **The observation gate is rejected and the absence is recorded instead**, so
+   §13's conditions are not counted twice — **(f)**.
+4. **§12(j)'s capture is the only freeze-list experiment needing no second
+   party**, and it is a human act. Schedule it beside the dialect-three
+   capture — **(g)**.
+5. **Phase 3's exit is met; `TASKS.md`'s Phase 4 should stay coarse** until the
+   four memos are decided — **(c)**, **(h)** item 5.
+6. **G4 needs one more line of scope**: `ROADMAP.md`'s pointer and this file's
+   memo sign-offs outlive `WORKPLAN.md` — **(j)**.
+
+**Decision:**
+
+*Not taken.* This entry is a `WORKPLAN.md` G3 halt; no code changed with it and
+`ROADMAP.md` is untouched — the text in **(i)** lands only when the decision is
+taken, and the three lines judged in **(j)** are left exactly as G2 wrote them.
+Record the decision in `WORKPLAN.md` §3.
