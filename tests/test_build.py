@@ -441,6 +441,77 @@ def test_a_zero_length_span_is_not_skew():
     assert codes_of(graph) == []
 
 
+# --------------------------------------------------------------------------
+# A timestamp that cannot be in seconds (batch C1, audit finding 5)
+# --------------------------------------------------------------------------
+#
+# 1e11 seconds after the epoch is the year 5138, so a wall-clock time in
+# seconds never reaches it -- while *now* in milliseconds is ~1.8e12 and in
+# nanoseconds ~1.8e18. A value above the line says something about the UNIT
+# of the field and nothing about the run, so it is reported and the number is
+# left exactly as it arrived (`SPEC.md` §3.1).
+
+
+def suspects(graph):
+    return [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
+
+
+def test_a_nanosecond_timestamp_is_reported_and_left_alone():
+    graph = build([a_span("s0", started_at=1.7e18, ended_at=1.7000000002e18)])
+    found = suspects(graph)
+    assert len(found) == 1
+    assert found[0].level is DiagnosticLevel.WARNING
+    assert found[0].node_id == "s0"
+    # Never rescaled: the whole point is that the library does not convert.
+    assert graph.nodes()[0].started_at == 1.7e18
+    assert graph.nodes()[0].ended_at == 1.7000000002e18
+
+
+def test_one_span_gets_one_diagnostic_however_many_of_its_fields_are_over():
+    # Both endpoints of a span share one field encoding, so two diagnostics
+    # would say one thing twice. The fields are named in `source` instead.
+    graph = build([a_span("s0", started_at=1.7e18, ended_at=1.8e18)])
+    found = suspects(graph)
+    assert len(found) == 1
+    assert found[0].source == {"started_at": 1.7e18, "ended_at": 1.8e18}
+
+
+def test_only_the_field_that_is_over_the_line_is_named():
+    graph = build([a_span("s0", started_at=1000.0, ended_at=1.7e18)])
+    assert suspects(graph)[0].source == {"ended_at": 1.7e18}
+
+
+def test_it_is_one_diagnostic_per_node_not_one_per_graph():
+    # Unlike `missing_trace_id` there is a node to point at, and the case the
+    # answer changes is the mixed one: one exporter in seconds, one in
+    # nanoseconds, in a single input.
+    graph = build(
+        [
+            a_span("s0", started_at=1000.0, ended_at=1005.0),
+            a_span("s1", started_at=1.7e18, ended_at=1.7000000002e18),
+            a_span("s2", started_at=1.8e18, ended_at=1.8000000002e18),
+        ]
+    )
+    assert [d.node_id for d in suspects(graph)] == ["s1", "s2"]
+
+
+def test_the_threshold_is_strictly_greater_so_the_bound_itself_is_not_suspect():
+    assert suspects(build([a_span("s0", started_at=1e11, ended_at=1e11)])) == []
+    assert len(suspects(build([a_span("s0", started_at=1e11 + 1.0)]))) == 1
+
+
+def test_a_duration_is_not_checked_only_the_reported_values_are():
+    # A duration is something the library computed by subtracting, and a
+    # claim about whether one is plausible is a claim about the run. Both
+    # endpoints here are ordinary seconds; the span merely lasts forever.
+    graph = build([a_span("s0", started_at=0.0, ended_at=1e10)])
+    assert suspects(graph) == []
+
+
+def test_a_span_with_no_timestamps_is_not_suspect():
+    assert suspects(build([a_span("s0")])) == []
+
+
 def test_a_span_id_used_twice_with_distinct_source_keys_is_reported():
     spans = [
         NormalizedSpan(

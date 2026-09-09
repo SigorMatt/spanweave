@@ -70,8 +70,14 @@ run("orphan_parent", [oi("s0", "nope", "AGENT", "a", 1.0, 2.0)])
 # and tests/test_ids.py under "Rule 3". Fixed in batch A3.
 
 # 4. Timestamps
-run("ns_int_timestamps", [oi("s0", None, "AGENT", "a", 1700000000000000000, 1700000001000000000), oi("s1", "s0", "TOOL", "t", 1700000000100000000, 1700000000200000000, {"tool.name": "t"})])
-run("string_timestamps", [oi("s0", None, "AGENT", "a", "2026-09-05T10:00:00Z", "2026-09-05T10:00:02Z")])
+# Nanosecond timestamps and string timestamps (audit finding 5, the half that
+# was decidable) are now regression tests, not probes: the conformance
+# scenario `timestamp_units` in both dialects, tests/test_build.py under "A
+# timestamp that cannot be in seconds", and tests/test_adapters.py under "How
+# a timestamp is rendered". A value over 1e11 gets `timestamp_unit_suspect`; a
+# numeric string is read as the number it spells; a string that is not a
+# number is named in `unmapped_attributes` instead of vanishing. Fixed in
+# batch C1. The float64 precision half is probe2's case G and is C2's.
 run("nan_timestamps", None, raw=b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n","start_time":NaN,"end_time":Infinity,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}\n')
 run("end_before_start", [oi("s0", None, "AGENT", "a", 5.0, 1.0)])
 run("equal_starts", [oi("s0", None, "AGENT", "a", 1.0, 3.0), oi("s1", "s0", "TOOL", "t", 1.5, 1.6, {"tool.name": "t"}), oi("s2", "s0", "TOOL", "u", 1.5, 1.7, {"tool.name": "u"})])

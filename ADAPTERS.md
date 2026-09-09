@@ -113,6 +113,21 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 - `operation` — the tool/model/retriever name when the dialect distinguishes it
   from `name`.
 
+**Timestamps** — `started_at` / `ended_at`, unix seconds, **as reported**.
+- Never rescale and never infer a unit, whatever the dialect calls its field.
+  A value too large to be seconds is the builder's business: it emits
+  `timestamp_unit_suspect` and the number is kept untouched (`SPEC.md` §3.1).
+- Read a JSON number, and a **string that is exactly a JSON number literal** —
+  OTLP JSON encodes 64-bit integers as decimal strings. Read nothing else: not
+  a trimmed string, not a leading `+`, not a date. The rule is one sentence,
+  *the string, unquoted, would be a valid JSON number*, because every
+  tolerated spelling beyond it is a small normalization.
+- A value in a rendering you do not read must **not** become a silent `None`.
+  Name the field in `unmapped` as `<record>.<field>`; the builder then adds
+  `missing_timestamp` on its own. Two adapters ship with a `_timestamps()`
+  helper doing exactly this — copy it rather than re-deriving it, and
+  `tests/test_adapters.py` holds the rendering table both must answer alike.
+
 **Payloads** — the part most adapters get wrong.
 - Distinguish all five states (`SPEC.md` §3.3). The distinction between
   **absent** (no attribute emitted) and **empty** (attribute emitted, no
@@ -290,7 +305,11 @@ neither is a payload spelling.
 - [ ] `parse()` pure, lazy, non-raising, order-independent.
 - [ ] All five payload states distinguished; absent ≠ empty.
 - [ ] No inferred pairings, no inferred data edges, no invented ids.
-- [ ] `unmapped` keys recorded; `raw` preserved verbatim.
+- [ ] `unmapped` keys recorded; `raw` preserved verbatim — including a
+      timestamp in a rendering §3.1 does not read, which is `<record>.<field>`
+      and never a silent `None`.
+- [ ] Timestamps read from a JSON number or a JSON-number string, and from
+      nothing else; never rescaled.
 - [ ] Renderings derived from **observed instrumentor output**, not from a
       reading of the dialect's spec.
 - [ ] No `NodeKind` mapped from a convention value **no instrumentor can

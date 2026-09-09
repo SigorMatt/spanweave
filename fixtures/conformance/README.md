@@ -56,6 +56,13 @@ Added since, each for a reason recorded at its task:
 - **`unset_and_error_status`** (2.10). The corpus was 18-of-18 tool spans
   `ok` while no real tool span was. A consumer written against it computed a
   success rate that read zero against real telemetry (finding F6).
+- **`timestamp_units`** (September 2026 audit, batch C1). Nothing in the
+  corpus reported a timestamp in anything but seconds, and nothing reported
+  one the library could not read, so neither `timestamp_unit_suspect` nor a
+  refused rendering was exercised anywhere (audit finding 5). It is also the
+  one scenario whose two renderings deliberately differ in **encoding** —
+  nanosecond integers against the same values as decimal strings — because
+  that is the equality `SPEC.md` §3.1 claims.
 
 ## Two things this README used to get wrong, kept as a warning
 

@@ -73,6 +73,10 @@ DEGENERATE = (
     "cyclic_parents",
     "shuffled_order",
     "tool_call_history_echo",
+    # Added at the September 2026 audit's batch C1, not seeded: timestamps in
+    # a unit that is not seconds, and a timestamp in a rendering the library
+    # does not read (`SPEC.md` §3.1).
+    "timestamp_units",
     # Added at 2.10, not seeded: the corpus was 18-of-18 `status: "ok"` while
     # 20 real tool spans were 19 `unset` and 1 `error` (finding F6).
     "unset_and_error_status",

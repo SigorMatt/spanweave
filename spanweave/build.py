@@ -63,6 +63,15 @@ TEMPORAL_BASIS = "sibling start_time ordering"
 #: one by reading the graph instead of the documentation (`SPEC.md` §4.3).
 TEMPORAL_TIED_BASIS = "sibling start_time ordering (tied, broken by node_id)"
 
+#: The line above which a `started_at`/`ended_at` cannot be unix seconds.
+#: 1e11 seconds after the epoch is the year 5138, so no wall-clock time in
+#: seconds reaches it, while *now* in milliseconds is ~1.8e12 and in
+#: nanoseconds ~1.8e18. A value over the line is evidence about the **unit of
+#: the field** -- a property of the encoding -- and never about the run: the
+#: number is kept exactly as reported and every edge is still built from it
+#: (`SPEC.md` §3.1). Strictly greater, so the bound itself is not suspect.
+TIMESTAMP_UNIT_CEILING = 1e11
+
 #: The kinds a node's position is sorted over. `temporal` is deliberately not
 #: among them: it is derived from the timestamps that already break ties, so
 #: including it would let a computed relation decide the order that a stated
@@ -113,6 +122,7 @@ def build_graph(
     _report_foreign_traces(ordered, ids, trace_id, collected, adapter)
     _report_missing_trace_id(trace_id, collected, adapter)
     _report_nonmonotonic_time(ordered, ids, collected, adapter)
+    _report_timestamp_unit_suspect(ordered, ids, collected, adapter)
 
     edges = _explicit_edges(ordered, ids, by_span_id, collected, adapter)
     if temporal:
@@ -283,6 +293,48 @@ def _report_nonmonotonic_time(
             f"({span.started_at}); both are kept as reported",
             node_id=node_id,
             source=[span.started_at, span.ended_at],
+            adapter=adapter.id,
+        )
+
+
+def _report_timestamp_unit_suspect(
+    spans: Sequence[NormalizedSpan],
+    ids: Sequence[NodeId],
+    collected: DiagnosticCollector,
+    adapter: AdapterInfo,
+) -> None:
+    """A reported time too large to be unix seconds (`SPEC.md` §3.1).
+
+    **One per node**, not one per value: both endpoints of a span share one
+    field encoding, so two reports would say one thing twice, and the fields
+    that are over the line are named in `source` instead. It is per node
+    rather than per graph because there is a node to point at, and because an
+    input carrying seconds from one exporter and nanoseconds from another is
+    exactly what a per-graph statement cannot express.
+
+    Only the **reported** values are checked. A duration is something this
+    module computed by subtracting two numbers, and whether one of those is
+    plausible is a claim about the run rather than about the encoding.
+    """
+    for span, node_id in zip(spans, ids, strict=True):
+        over = {
+            field: value
+            for field, value in (
+                ("started_at", span.started_at),
+                ("ended_at", span.ended_at),
+            )
+            if value is not None and value > TIMESTAMP_UNIT_CEILING
+        }
+        if not over:
+            continue
+        collected.add(
+            codes.TIMESTAMP_UNIT_SUSPECT,
+            f"{', '.join(f'{f} ({v})' for f, v in over.items())} "
+            f"exceeds {TIMESTAMP_UNIT_CEILING}, which unix seconds cannot "
+            f"reach; the field may be in milliseconds or nanoseconds. Every "
+            f"value is kept exactly as reported and nothing is rescaled",
+            node_id=node_id,
+            source=over,
             adapter=adapter.id,
         )
 

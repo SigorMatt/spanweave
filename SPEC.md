@@ -70,6 +70,77 @@ Node:
 
 `name` is reported, not derived. Do not prettify, title-case, or rewrite it.
 
+#### Timestamps
+
+`started_at` and `ended_at` are **unix seconds, as reported**. The library
+never rescales, never converts, and never infers a unit: what the telemetry
+put in the field is what the node carries, and a consumer that needs another
+unit converts it itself. Only two things are decided here — which *renderings*
+of a value the library will read, and when it says the value looks like it is
+not in seconds.
+
+**Renderings.** A timestamp is read from a JSON number, and from a **string
+that is exactly a JSON number literal** — OTLP JSON encodes 64-bit integers as
+decimal strings, so a quoted timestamp is a real rendering of a real exporter
+and not a malformed one. A quoted value is read as the identical value the
+same literal would have produced unquoted: `"1700000000"` and `1700000000` are
+the same timestamp, and the two renderings of one trace produce the same
+graph. Nothing else is a rendering. Concretely, and deliberately narrow:
+
+| Rendering | Read | Why |
+|---|---|---|
+| `1700000000`, `1700000000.5` | yes | a JSON number |
+| `"1700000000"`, `"-1"`, `"1700000000.5"`, `"1e9"` | yes | the string is a JSON number literal, and is read as that literal |
+| `"+1"` | no | JSON numbers carry no leading `+`; accepting one would read something JSON does not write |
+| `" 1700000000"`, `"1700000000 "` | no | whitespace is not part of a number, and trimming is a normalization |
+| `"01"`, `".5"`, `"1."` | no | JSON forbids each of these, so no exporter emits them |
+| `"2026-09-05T10:00:00Z"`, `"NaN"`, `"0x1"`, `""` | no | not a number in any reading |
+| `true` / `false` | no | a boolean is not a time, and Python would read it as `1` / `0` |
+
+The rule is one sentence — *the string, unquoted, would be a valid JSON
+number* — rather than a list of tolerated spellings, because every tolerated
+spelling is a small normalization, and a library that trims whitespace here
+has started deciding what the telemetry meant.
+
+**A value in a rendering the library does not read is never silently
+absent.** The field becomes `None`, the value stays verbatim in `raw.source`
+(§3.5), and the adapter names the record field in `unmapped_attributes` (§3.7)
+— keys only, as that code always is. A node that loses its `started_at` this
+way then also gets `missing_timestamp` from the builder, which is the honest
+pair: *we did not normalize this field*, and *so this node has no start time*.
+
+**Unit suspicion.** A `started_at` or `ended_at` strictly greater than
+**1e11** gets a `timestamp_unit_suspect` diagnostic (§3.7, level `warning`).
+1e11 seconds after the epoch is the year 5138, so no wall-clock time in
+seconds reaches it, while *now* in milliseconds is ~1.8e12 and in nanoseconds
+~1.8e18. The value above the line is therefore evidence about the **unit of
+the field**, which is a property of the encoding, and not a judgement about
+the run — the library still keeps the number exactly as reported and still
+builds every edge from it.
+
+Three things about the rule are chosen rather than obvious, and are fixed
+here so they are not re-decided per adapter:
+
+- **It is checked on the reported values only** — `started_at` and
+  `ended_at`, each against the threshold — and never on a *duration*. A
+  duration is something the library computed by subtracting two numbers, and
+  a claim about whether one is plausible is a claim about the run. Where both
+  endpoints share a unit, which is the case a suspect unit produces, each
+  endpoint already trips the check on its own.
+- **One diagnostic per node**, not one per value and not one per graph. Both
+  endpoints of a span share one field encoding, so two diagnostics for one
+  span would say one thing twice; the diagnostic names every offending field
+  in its `source`. It is per node rather than per graph — unlike
+  `missing_trace_id`, which is per graph — because there *is* a node to point
+  at, and because the case where the answer changes what a consumer does is
+  the mixed one: an input carrying seconds from one exporter and nanoseconds
+  from another is exactly what a per-graph statement cannot express. The cost
+  is that an input entirely in nanoseconds emits one per node, which is the
+  same shape `missing_timestamp` already has, and a consumer that wants one
+  line groups by code.
+- **Strictly greater**, so 1e11 itself is not suspect. The line is a bound on
+  seconds, not a value seconds may not take.
+
 ### 3.2 NodeKind
 
 A **closed** enum. Adding a kind is a spec change (halt point, `AGENT.md`).
@@ -246,6 +317,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
+| `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported |
 | `duplicate_source_id` | two records claimed the same source id |
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record |
@@ -255,7 +327,11 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
 are already preserved verbatim in `RawRecord`, and duplicating payload content
-into diagnostics is an unnecessary exposure surface.
+into diagnostics is an unnecessary exposure surface. Its keys are attribute
+names, and also record fields, written `<record>.<field>`: a field the adapter
+recognizes but cannot read — a `start_time` in a rendering §3.1 does not
+accept — is *not* normalized, and saying so here is what keeps it from
+vanishing between the raw record and a `None`.
 
 #### `source`, per code
 
@@ -274,6 +350,7 @@ the library computed rather than something it was given.
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
+| `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
 The three rows above the catch-all were added at `TASKS.md` 3.2, which measured

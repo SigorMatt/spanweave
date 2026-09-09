@@ -108,6 +108,7 @@ implementation gets wrong.
 | `shuffled_order` | the same trace, lines reordered | byte-identical to its ordered twin |
 | `tool_call_history_echo` | a call id resent as input context by a later turn | **no** `call_result` edge from the echoing span |
 | `unset_and_error_status` | span statuses that are not `ok`, and a `status_message` | `unset` for both spellings, `error` with its note, an `absent` output |
+| `timestamp_units` | timestamps in nanoseconds, and one in a rendering §3.1 does not read | `timestamp_unit_suspect`, values unrescaled, the unread field named in `unmapped_attributes` |
 
 Every new adapter must render **all** of these, including the degenerate ones.
 An adapter that only handles happy paths is not done.

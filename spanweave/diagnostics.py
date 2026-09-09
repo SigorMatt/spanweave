@@ -46,6 +46,13 @@ MISSING_TIMESTAMP = "missing_timestamp"
 # `ended_at` precedes `started_at`. Reported, never repaired.
 NONMONOTONIC_TIME = "nonmonotonic_time"
 
+# A reported `started_at`/`ended_at` above 1e11, which unix seconds cannot
+# reach in any plausible wall-clock time (1e11 seconds after the epoch is the
+# year 5138) while milliseconds and nanoseconds do. It is a statement about
+# the *unit of the field*, not about the run: the value is kept exactly as
+# reported and every edge is still built from it (`SPEC.md` §3.1).
+TIMESTAMP_UNIT_SUSPECT = "timestamp_unit_suspect"
+
 # Two records claimed the same source id, without their node ids colliding.
 # A node id collision is a hard error instead (`SPEC.md` §3.6).
 DUPLICATE_SOURCE_ID = "duplicate_source_id"
@@ -84,6 +91,7 @@ CODES = (
     ORDERING_CYCLE,
     ORPHAN_PARENT,
     PAYLOAD_PARSE_FAILED,
+    TIMESTAMP_UNIT_SUSPECT,
     UNKNOWN_SPAN_KIND,
     UNMAPPED_ATTRIBUTES,
     UNPAIRED_CALL,

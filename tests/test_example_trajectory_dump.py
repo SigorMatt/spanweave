@@ -226,9 +226,11 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #:
 #: `absent` moved 114 -> 122 at batch A3: `duplicate_span_ids` stopped being a
 #: refusal and became a two-node graph in both dialects, and neither of its
-#: tool spans carries a payload.
+#: tool spans carries a payload. 122 -> 134 at batch C1, which added
+#: `timestamp_units`: two renderings of three payload-free spans, each with an
+#: `inputs` and an `outputs`.
 CORPUS_STATES = {
-    "absent": 122,
+    "absent": 134,
     "empty": 4,
     "present": 94,
     "redacted": 2,

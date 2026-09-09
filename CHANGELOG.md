@@ -15,6 +15,46 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- New diagnostic `timestamp_unit_suspect` (level `warning`). A `started_at` or
+  `ended_at` strictly greater than **1e11** cannot be unix seconds -- 1e11
+  seconds after the epoch is the year 5138, while *now* in milliseconds is
+  ~1.8e12 and in nanoseconds ~1.8e18 -- and nothing said so, which is how a
+  nanosecond export reached a consumer looking like a span that ran for
+  fifty-four years. It reports the **unit of the field**, never anything about
+  the run: the number is kept exactly as reported, nothing is rescaled, and
+  every edge is still built from it. **One per node**, not one per value and
+  not one per graph: both endpoints of a span share one encoding, so the
+  diagnostic names each offending field in its `source` instead of firing
+  twice, and it points at a node because an input carrying seconds from one
+  exporter and nanoseconds from another is exactly what a per-graph statement
+  cannot express. Only the reported values are checked and never a duration --
+  a duration is something the library computed, and calling one implausible is
+  a claim about the run. `SPEC.md` §3.1 and §3.7 state it. The serialized code
+  vocabulary gains one entry, which is additive.
+  (audit finding 5, the half that was decidable)
+
+- **Timestamps are read from numeric strings**, in both adapters. OTLP JSON
+  encodes 64-bit integers as decimal strings, so `"1700000000"` is a real
+  exporter's output -- and it produced `None`, a node with no start time, and
+  no temporal edges at all. It is now read as the identical value the same
+  literal would have produced unquoted, so the quoted and unquoted renderings
+  of one trace build one graph. The rule is deliberately one sentence -- *the
+  string, unquoted, would be a valid JSON number* -- rather than a list of
+  tolerated spellings: `"+1"`, `" 1700000000"`, `"01"`, `".5"` and
+  `"2026-09-05T10:00:00Z"` are all refused, because every tolerated spelling
+  is a small normalization and this library performs none. Nothing is
+  converted; the value that arrives is the value the node carries.
+  `SPEC.md` §3.1 states it, with the accept/reject table.
+  (audit finding 5)
+
+- Conformance scenario `timestamp_units`, in both dialects: three spans with
+  nanosecond timestamps, one of them reporting a `start_time` in a rendering
+  the library does not read. It is the one scenario whose two renderings
+  deliberately differ in **encoding** -- nanosecond integers against the same
+  values as decimal strings -- because "a quoted timestamp is the same
+  timestamp" is a cross-dialect claim and belongs where the corpus can fail on
+  it.
+
 - New diagnostic `duplicate_record` (level `info`). At-least-once export and
   collector retries put the same record in a file twice, and the library built
   two nodes for one operation -- an *invented* span, which is worse than a
@@ -55,6 +95,17 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **A timestamp the library cannot read is no longer silently absent.** A
+  `start_time` in a rendering `SPEC.md` §3.1 does not accept -- an ISO-8601
+  string, say -- became a `None` with nothing said, so the value existed in
+  `raw` and nowhere a consumer would look. The adapter now names the record
+  field in `unmapped_attributes` as `<record>.start_time`, which is that
+  code's whole job, and the builder still adds `missing_timestamp`: *we did
+  not normalize this field*, and *so this node has no start time*. A field the
+  record omits, or reports as `null`, is unchanged -- that is an absence, not
+  something the adapter failed to read. `unmapped_attributes` stays keys-only.
+  (audit finding 5)
 
 - **Annotating no longer costs a pass over the whole graph.** `annotate`
   rebuilt the node index and both adjacency maps on every call, so labeling was

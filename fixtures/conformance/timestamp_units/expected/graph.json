@@ -1,0 +1,104 @@
+{
+  "diagnostics": [
+    {
+      "code": "missing_timestamp",
+      "count": 1
+    },
+    {
+      "code": "timestamp_unit_suspect",
+      "count": 3
+    },
+    {
+      "code": "unmapped_attributes",
+      "count": 1
+    }
+  ],
+  "edges": [
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s1",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "span.parent_span_id",
+      "dst": "s2",
+      "kind": "parent",
+      "src": "s0",
+      "warrant": "explicit"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 5,
+    "edge_count": 2,
+    "node_count": 3,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {},
+      "ended_at": 1.700000002e+18,
+      "id": "s0",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "agent",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1.7e+18,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1.7000000002e+18,
+      "id": "s1",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "tool",
+      "operation": "alpha",
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1.7000000001e+18,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1.700000001e+18,
+      "id": "s2",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "tool",
+      "operation": "beta",
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": null,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    }
+  ]
+}

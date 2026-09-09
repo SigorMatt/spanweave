@@ -23,6 +23,7 @@ Two things it deliberately does **not** do:
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from spanweave.diagnostics import (
@@ -207,9 +208,12 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     call_ids, call_role, call_names = _call(attributes, consumed, operation)
     status, status_note = _status(record)
 
+    started_at, ended_at, unreadable_times = _timestamps(record)
+
     unmapped = sorted(
         [str(key) for key in attributes if str(key) not in consumed]
         + [f"<record>.{key}" for key in record if key not in KNOWN_RECORD_KEYS]
+        + unreadable_times
     )
     if unmapped:
         diagnostics.append(
@@ -236,8 +240,8 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         kind=kind,
         name=_as_str(record.get("name")) or "",
         operation=operation,
-        started_at=_as_time(record.get("start_time")),
-        ended_at=_as_time(record.get("end_time")),
+        started_at=started_at,
+        ended_at=ended_at,
         status=status,
         status_note=status_note,
         inputs=inputs,
@@ -526,10 +530,52 @@ def _as_int(value: JsonValue) -> int | None:
     return None
 
 
+#: A JSON number literal, exactly as RFC 8259 writes one. The rule for a
+#: quoted timestamp is *the string, unquoted, would be a valid JSON number*
+#: (`SPEC.md` §3.1) rather than a list of tolerated spellings: OTLP JSON
+#: encodes 64-bit integers as decimal strings, so a quoted timestamp is a
+#: real exporter's output -- but every tolerated spelling beyond that is a
+#: small normalization, and a library that trims whitespace here has started
+#: deciding what the telemetry meant.
+_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
+
+
 def _as_time(value: JsonValue) -> float | None:
-    """Unix seconds, as reported. Never rescaled, never guessed at."""
+    """Unix seconds, as reported. Never rescaled, never guessed at.
+
+    Returns `None` both for a field the record omits and for one in a
+    rendering this adapter does not read; `_timestamps` is what tells the two
+    apart, because only the second is something to report.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str) and _JSON_NUMBER.fullmatch(value):
+        # Read as the identical value the same literal would have produced
+        # unquoted: `"1700000000"` and `1700000000` are one timestamp.
+        return float(value)
     return None
+
+
+def _timestamps(
+    record: Mapping[str, JsonValue],
+) -> tuple[float | None, float | None, list[str]]:
+    """`(started_at, ended_at, the time fields this adapter could not read)`.
+
+    A value in a rendering §3.1 does not accept must never become a silent
+    `None`: it stays verbatim in `raw`, and its field is named among the
+    unmapped ones, which is `unmapped_attributes`' whole job. A field the
+    record omits -- or reports as `null`, which is how both dialects say "no
+    start time" -- is an absence and is not named: there is nothing the
+    adapter failed to read.
+    """
+    times: list[float | None] = []
+    refused: list[str] = []
+    for field in ("start_time", "end_time"):
+        reported = record.get(field)
+        parsed = _as_time(reported)
+        times.append(parsed)
+        if parsed is None and reported is not None:
+            refused.append(f"<record>.{field}")
+    return times[0], times[1], refused

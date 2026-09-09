@@ -8,12 +8,15 @@ import dataclasses
 
 import pytest
 
+from spanweave import diagnostics as codes
 from spanweave.adapters import (
     DETECTION_SAMPLE_SIZE,
     MINIMUM_CONFIDENCE,
     AdapterRegistry,
 )
 from spanweave.adapters.base import Adapter, NormalizedSpan
+from spanweave.adapters.openinference import OpenInferenceAdapter
+from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.errors import AdapterSelectionError, UnknownAdapterError
 from spanweave.model import NodeKind, RawRecord
 from spanweave.seam import CallRole, SpanLink
@@ -227,3 +230,121 @@ def test_a_span_defaults_to_absent_payloads_and_no_pairing():
     assert span.call_ids == ()
     assert span.call_role is None
     assert span.links == () and span.received_call_ids == () and span.unmapped == ()
+
+
+# --------------------------------------------------------------------------
+# How a timestamp is rendered, in every adapter at once (batch C1)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.1 fixes which *renderings* of a timestamp the library reads,
+# and the rule is the library's, not a dialect's: the string, unquoted, would
+# be a valid JSON number. OTLP JSON encodes 64-bit integers as decimal
+# strings, so a quoted timestamp is a real exporter's output rather than a
+# malformed one -- and every other spelling is refused, because tolerating
+# one is a small normalization and the library performs none.
+#
+# The table lives here rather than in either adapter's own test file because
+# the claim is that **both** adapters answer identically. Two copies of it
+# could drift apart and each still pass.
+
+REAL_ADAPTERS = (OpenInferenceAdapter(), OtelGenAiAdapter())
+
+#: `(rendered start_time, the started_at it must produce)`. `None` means the
+#: rendering is refused -- the field is not read, and §3.1's table says why.
+TIMESTAMP_RENDERINGS = (
+    (1700000000, 1700000000.0),
+    (1700000000.5, 1700000000.5),
+    (0, 0.0),
+    (-1, -1.0),
+    ("1700000000", 1700000000.0),  # the OTLP JSON int64 encoding
+    ("1700000000.5", 1700000000.5),
+    ("-1", -1.0),
+    ("0", 0.0),
+    ("1e9", 1e9),
+    ("1E9", 1e9),
+    ("1.5e-3", 1.5e-3),
+    ("+1", None),  # JSON numbers carry no leading `+`
+    (" 1700000000", None),  # trimming whitespace is a normalization
+    ("1700000000 ", None),
+    ("01", None),  # JSON forbids a leading zero
+    (".5", None),
+    ("1.", None),
+    ("0x1", None),
+    ("1_000", None),
+    ("", None),
+    ("NaN", None),
+    ("Infinity", None),
+    ("2026-09-05T10:00:00Z", None),
+    (True, None),  # a boolean is not a time, and Python would read it as 1
+    (None, None),
+    ([1700000000], None),
+)
+
+
+def a_record(adapter, **fields):
+    """One minimal record this adapter recognizes, with `fields` merged in."""
+    marker = (
+        {"openinference.span.kind": "CHAIN"}
+        if adapter.id == "openinference"
+        else {"gen_ai.operation.name": "chat"}
+    )
+    return {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "name": "op",
+        "attributes": marker,
+        **fields,
+    }
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("rendered,expected", TIMESTAMP_RENDERINGS, ids=repr)
+def test_a_timestamp_is_read_from_exactly_the_declared_renderings(
+    adapter, rendered, expected
+):
+    span = next(iter(adapter.parse([a_record(adapter, start_time=rendered)])))
+    assert span.started_at == expected
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_end_time_is_read_the_same_way_as_start_time(adapter):
+    span = next(iter(adapter.parse([a_record(adapter, end_time="1700000002")])))
+    assert span.ended_at == 1700000002.0
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_quoted_timestamp_is_the_same_timestamp_as_an_unquoted_one(adapter):
+    quoted = next(iter(adapter.parse([a_record(adapter, start_time="1700000000")])))
+    plain = next(iter(adapter.parse([a_record(adapter, start_time=1700000000)])))
+    assert quoted.started_at == plain.started_at
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_timestamp_in_a_rendering_we_refuse_is_never_silently_absent(adapter):
+    # Losslessness: the value stays in `raw`, and the field is named as one
+    # this adapter did not normalize (`SPEC.md` §3.1, §3.7). Without this the
+    # value vanished between the record and a `None`.
+    span = next(
+        iter(adapter.parse([a_record(adapter, start_time="2026-09-05T10:00:00Z")]))
+    )
+    assert span.started_at is None
+    assert "<record>.start_time" in span.unmapped
+    assert codes.UNMAPPED_ATTRIBUTES in [d.code for d in span.diagnostics]
+    assert span.raw.source["start_time"] == "2026-09-05T10:00:00Z"
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_timestamp_the_dialect_simply_omits_is_not_an_unmapped_field(adapter):
+    # Nothing was reported, so there is nothing the adapter failed to read.
+    for span in adapter.parse([a_record(adapter)]):
+        assert span.started_at is None and span.ended_at is None
+        assert not [key for key in span.unmapped if key.startswith("<record>.")]
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_null_timestamp_is_absence_not_a_refused_rendering(adapter):
+    # `"start_time": null` is how both dialects say "no start time"; it is
+    # not a value in a spelling we declined to read.
+    for span in adapter.parse([a_record(adapter, start_time=None)]):
+        assert span.started_at is None
+        assert "<record>.start_time" not in span.unmapped

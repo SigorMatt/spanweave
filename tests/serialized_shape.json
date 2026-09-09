@@ -10,6 +10,7 @@
   "missing_trace_id": "null",
   "ordering_cycle": "list[str]",
   "payload_parse_failed": "null",
+  "timestamp_unit_suspect": "{\"started_at\": number, \"ended_at\": number}",
   "unmapped_attributes": "list[str]",
   "unpaired_call": "{\"call_id\": str, \"operation\": str \\| null}",
   "unpaired_result": "{\"call_id\": str, \"operation\": str \\| null}"
@@ -219,6 +220,7 @@
    "ordering_cycle",
    "orphan_parent",
    "payload_parse_failed",
+   "timestamp_unit_suspect",
    "unknown_span_kind",
    "unmapped_attributes",
    "unpaired_call",
