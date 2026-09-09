@@ -161,7 +161,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | done | 12 |
 | A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | done | 12 |
 | A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | done | 10 |
-| A9 | **A4 scope in SPEC.** SPEC §3.7 `missing_trace_id` row states the limit A4's commit body and CHANGELOG state: one diagnostic per graph, fires only when the built graph reports no trace id at all; a record missing an id among records that have one is not diagnosed. Docs only. | todo | 4 |
+| A9 | **A4 scope in SPEC.** SPEC §3.7 `missing_trace_id` row states the limit A4's commit body and CHANGELOG state: one diagnostic per graph, fires only when the built graph reports no trace id at all; a record missing an id among records that have one is not diagnosed. Docs only. | done | 4 |
 
 ### Phase B — performance
 
@@ -492,6 +492,12 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - 2026-09-10, maintainer: A9 registered (docs-only, SPEC §3.7 states A4's scope
   limit), placed after B3 in the run-2 order. This is the unowned finding recorded
   two notes above; it now has an owner.
+- A9 done (`05067da`), docs only. Its doc-truth half was genuinely red (the §3.7
+  row read "one per graph, never one per record" and stopped); its behaviour half
+  passed before the change and was meant to — the fence has been right since A4
+  and `tests/test_build.py` already held both sides. Worth keeping as the pattern
+  for a docs-only batch: pin the behaviour anyway, and say plainly which half was
+  red rather than manufacturing one.
 
 ---
 
