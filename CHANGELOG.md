@@ -15,6 +15,17 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- The reader tolerates two things about how a file was written. A UTF-8 BOM
+  (`EF BB BF`) at the head of the input is skipped before the container format
+  is detected -- `str.strip()` does not remove U+FEFF, so the BOM used to ride
+  into the parser and cost the file its first record. And LF, CRLF and CR-only
+  line endings are each one terminator, so a CR-only file is a trace rather
+  than one very long unreadable line. Neither tolerance touches content: the
+  same bytes anywhere but the head of the stream are part of a record and are
+  passed through verbatim, and the input digest still fingerprints the bytes as
+  given, BOM included. `SPEC.md` §7 states both. (audit finding: minor, BOM
+  loses first record)
+
 - Reading a record, or parsing a payload, nested deeper than the JSON parser
   will recurse no longer raises `RecursionError` out of the library. `json`
   reports that depth as a `RecursionError` rather than a `ValueError`, so it

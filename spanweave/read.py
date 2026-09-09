@@ -14,6 +14,11 @@ Two things this layer must get right:
   parser will recurse*, which ``json`` reports as a ``RecursionError`` rather
   than a ``ValueError`` -- a different exception for the same fact, and one
   that escaped this guard until ``SPEC.md`` §7 said so out loud.
+* **It is tolerant about the wrapping, never about the content.** A UTF-8 BOM
+  at the head of the stream is skipped and LF, CRLF and CR-only line endings
+  are each one terminator (``SPEC.md`` §7) -- both are facts about how a file
+  was written, not about what it says. Neither tolerance reaches a record:
+  those same bytes anywhere else are content and are passed through verbatim.
 * **It is an iterator.** Nothing here requires the whole input as a
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
@@ -73,11 +78,23 @@ class RecordStream:
         chunks = self._hashed(self._chunks)
 
         # Decide the container format from the first non-whitespace byte,
-        # pulling only as far as it takes to see one.
+        # pulling only as far as it takes to see one -- after skipping a
+        # leading BOM, which is an encoding artifact and not a byte of the
+        # first record (§7).
         head = b""
         is_array = False
+        settled = False
         for chunk in chunks:
             head += chunk
+            if not settled:
+                if head.startswith(_BOM):
+                    head = head[len(_BOM) :]
+                elif _BOM.startswith(head):
+                    # Still ambiguous: every byte so far agrees with a BOM.
+                    # A chunk boundary inside those three bytes must not
+                    # decide the question early.
+                    continue
+                settled = True
             verdict = _first_non_space(head)
             if verdict is not None:
                 is_array = verdict == "["
@@ -123,18 +140,32 @@ class RecordStream:
     def _read_lines(self, head: bytes, chunks: Iterator[bytes]) -> Iterator[JsonValue]:
         number = 0
         buffered = head
+        exhausted = False
         while True:
             # Everything already buffered comes out before more is pulled --
             # otherwise the first record would wait on the second chunk, and
             # "lazy" would be a claim rather than a behavior.
-            while b"\n" in buffered:
-                line, buffered = buffered.split(b"\n", 1)
+            while (found := _line_break(buffered)) is not None:
+                start, end = found
+                if (
+                    not exhausted
+                    and end == len(buffered)
+                    and buffered[start:end] == b"\r"
+                ):
+                    # A CR at the very end of what has arrived might yet be
+                    # the first half of a CRLF. Waiting for the next byte is
+                    # what keeps a chunk boundary from inventing a blank line
+                    # and shifting every line number after it.
+                    break
+                line, buffered = buffered[:start], buffered[end:]
                 number += 1
                 yield from self._read_line(number, line)
+            if exhausted:
+                break
             try:
                 buffered += next(chunks)
             except StopIteration:
-                break
+                exhausted = True
         number += 1
         yield from self._read_line(number, buffered)
 
@@ -155,6 +186,28 @@ class RecordStream:
                 f"else for it to survive",
                 source=line,
             )
+
+
+#: The UTF-8 encoding of U+FEFF. Editors and Windows tooling write it at the
+#: head of a file; `str.strip()` does not remove it, so left in place it rides
+#: into the parser and costs the file its FIRST record (`SPEC.md` §7).
+_BOM = b"\xef\xbb\xbf"
+
+
+def _line_break(data: bytes) -> tuple[int, int] | None:
+    """Where the first line terminator starts and ends, or None.
+
+    LF, CRLF and CR alone are each *one* terminator: three conventions for the
+    same fact, and a reader that knows only the first one turns a CR-only file
+    into a single unreadable line.
+    """
+    newline = data.find(b"\n")
+    carriage = data.find(b"\r")
+    if carriage < 0 or (0 <= newline < carriage):
+        return None if newline < 0 else (newline, newline + 1)
+    if data[carriage + 1 : carriage + 2] == b"\n":
+        return (carriage, carriage + 2)
+    return (carriage, carriage + 1)
 
 
 def _first_non_space(data: bytes) -> str | None:

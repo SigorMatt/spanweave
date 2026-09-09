@@ -805,6 +805,14 @@ every registered adapter and picks the highest confidence.
 
 - **JSONL** (one record per line) or a **JSON array** of records. Detected by
   first non-whitespace byte.
+- A **UTF-8 BOM** (`EF BB BF`) at the very start of the input is an encoding
+  artifact, not content: it is skipped before the format is detected, so the
+  first record reads like any other. Only at the start — the same bytes
+  anywhere else are part of a record and are left exactly where they are. The
+  input digest is taken over the bytes *as given*, BOM included.
+- **Line endings** may be LF, CRLF, or CR-only. Each is one line terminator,
+  and line numbers in diagnostics count lines the way the file does under any
+  of the three.
 - Read from a path or from stdin (`-`).
 - **One input = one trace.** If records carry more than one `trace_id`, the
   builder uses the most common one, emits `multi_trace_input`, and keeps the

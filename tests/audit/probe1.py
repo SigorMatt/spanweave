@@ -82,8 +82,9 @@ run("two_traces_first_is_child", [dict(oi("x0", None, "AGENT", "b", 1.0, 2.0), t
 # 6. Degenerate inputs
 run("empty", None, raw=b"")
 run("whitespace", None, raw=b"\n\n   \n")
-run("bom", None, raw=b"\xef\xbb\xbf" + json.dumps(oi("s0", None, "AGENT", "a", 1.0, 2.0)).encode() + b"\n")
-run("crlf", None, raw=(json.dumps(oi("s0", None, "AGENT", "a", 1.0, 2.0)) + "\r\n" + json.dumps(oi("s1", "s0", "TOOL", "t", 1.1, 1.5, {"tool.name": "t"})) + "\r\n").encode())
+# A BOM at the head of the file (audit finding: minor) and CR-only or CRLF line
+# endings are now regression tests, not probes: tests/test_read.py, under
+# "Encoding and line endings". Fixed in batch A2.
 run("no_trace_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "trace_id"}])
 run("missing_span_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "span_id"}, oi("s1", None, "TOOL", "t", 1.0, 2.0, {"tool.name": "t"})])
 run("attributes_not_dict", [dict(oi("s0", None, "AGENT", "a", 1.0, 2.0), attributes=["openinference.span.kind"])])
