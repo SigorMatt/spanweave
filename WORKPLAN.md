@@ -140,7 +140,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | A1 | **RecursionError containment.** Catch `RecursionError` with `ValueError` in `read._read_line`, `read._read_array`, and payload/message JSON parsing in both adapters. Emit `malformed_record` / `payload_parse_failed`. Tests: 100k-deep array as a record line, as a payload attribute, inside `gen_ai.input.messages`. SPEC §7 Inputs: one sentence. CHANGELOG. | done | 15 |
 | A2 | **Reader tolerance.** Strip a UTF-8 BOM at the head of the stream; accept CR-only line endings. Tests. SPEC §7. CHANGELOG. | done | 10 |
-| A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | todo | 25 |
+| A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | done | 25 |
 | A4 | **Missing trace id diagnostic.** `trace_id == ""` currently silent → emit `missing_trace_id` (info). SPEC §3.7. Test. | done | 8 |
 
 ### Phase B — performance
@@ -243,6 +243,19 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   times). Fires when the built graph reports no trace id at all; a single
   record missing an id among records that have one is not diagnosed.
   `tests/serialized_shape.json` moved additively and was regenerated.
+- A3 done (`b44c3a5`), and it **deviated from its row deliberately**: rule 3
+  puts the record's *canonical digest* into id derivation, not
+  `(source_key, ordinal)`. An ordinal is input position, which CLAUDE.md
+  invariant 4 forbids from affecting the result; the digest is
+  order-independent and total, because (a) first collapses records that differ
+  in nothing. "Same record" for (a) = the **parsed** record (canonical digest),
+  first copy kept. No existing node id moved, so the halt condition never fired.
+- **Consequence of A3 the later batches must respect:** `DuplicateNodeIdError`
+  is no longer reachable from any trace file, and the corpus has no refusal
+  scenario left that reaches it. `FIXTURES.md` §4.2 and `tests/test_detection.py`
+  record the vacancy. Also, `canonical()` now maps derived ids to positional
+  labels (`n0`, `n1`) — specified in `FIXTURES.md` §4.1 since Phase 1, first
+  implemented here because nothing had produced a derived id before.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
