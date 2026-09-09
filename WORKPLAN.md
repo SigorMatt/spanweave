@@ -193,7 +193,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| H1 | **Identity memo (HALT).** `operation` is `None` for agent/chain/retriever in both dialects. Options: map `gen_ai.agent.name` into `operation` (dialect-asymmetric); a new `identity` field carrying value + provenance (mirrors `warrant`); leave as is and document. Memo in `OPEN_QUESTIONS.md`. Model change → decision required. | todo | 6 |
+| H1 | **Identity memo (HALT).** `operation` is `None` for agent/chain/retriever in both dialects. Options: map `gen_ai.agent.name` into `operation` (dialect-asymmetric); a new `identity` field carrying value + provenance (mirrors `warrant`); leave as is and document. Memo in `OPEN_QUESTIONS.md`. Model change → decision required. | awaiting decision | 6 |
 
 ---
 
@@ -377,6 +377,25 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - **G4's row is short by three items**, per G3: "tracked in `WORKPLAN.md`" in
   TASKS.md points at a file G4 deletes, and G4's row covers `TASKS.md` + the
   README row but not `ROADMAP.md` or the memo sign-offs.
+- H1 memo written (`c945ef9`, `OPEN_QUESTIONS.md` §15) — **awaiting decision**.
+  Recommends **option C** (leave `operation` `None`; move the non-mapping out
+  of an adapter docstring into `SPEC.md` §3.1), holding option B (a new
+  `identity` field) open as the additive path that can honestly land at 1.1.
+  **The dialect asymmetry is real and measured, and is decisive against option
+  A:** injecting `gen_ai.agent.name` — which `capture/backends.py` already
+  writes for a real capture — diverges **11 of 18** cross-dialect scenarios /
+  12 agent nodes against a baseline of 0, and the only repair
+  (`erase: ["operation"]`) is per-scenario and would stop comparing 22 non-null
+  `operation` values on neighbouring llm/tool nodes. Independently: both
+  adapters already put a *model* name in `operation` on an agent span that
+  carries one, so option A needs a precedence rule and either choice makes the
+  field mean two things. H1 must be **decided**, not implemented, before the
+  freeze; option A binds hardest because it moves an existing field's meaning
+  with no `serialized_shape.json` movement to warn anyone.
+- **H1 surfaced two more unfixed defects:** `SPEC.md` §3.1 promises a
+  "retriever name" no dialect states, and **no instrumentor-emitted agent span
+  exists in this corpus in either dialect** — all three captures write theirs
+  by hand. That absence is also H1's falsifying experiment.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
