@@ -132,8 +132,18 @@ Parsing rules:
 ## 6. Memory and scale
 
 v1 targets traces up to ~10⁵ spans, which comfortably fits in memory as frozen
-dataclasses. The build is a single pass plus a sort; no quadratic edge
-construction (hence the consecutive-siblings-only temporal rule, `SPEC.md` §4.3).
+dataclasses. The build is a single pass plus a sort; no *rule* here constructs
+edges quadratically — hence the consecutive-siblings-only temporal rule,
+`SPEC.md` §4.3.
+
+**That is a claim about the rules, not about the edge count.** `data` edges are
+one per declaration (`SPEC.md` §4.2.1), and a conversational protocol resends
+the whole history, so an `n`-turn agent loop *declares* receipt `n(n-1)/2`
+times and gets that many edges. The builder is O(1) per declaration and the
+input file is already quadratic for the same reason; the growth is the
+telemetry's, and narrowing it here would mean dropping relations the
+instrumentor stated. Per turn, therefore, the edge set is quadratic and says
+so.
 
 **Streaming readiness (cheap insurance, binding now).** Live/tail mode is a
 north-star item, not promised. Two constraints keep it additive:

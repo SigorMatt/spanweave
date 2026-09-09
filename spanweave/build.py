@@ -54,6 +54,23 @@ LINK_BASIS = "span.link"
 #: edge is entitled to know that a resolution happened and what it joined on
 #: (`SPEC.md` §4.2).
 DATA_BASIS = "tool_call_id in tool-result message"
+
+#: A conversational protocol resends the whole history, so the same
+#: tool-result message reappears in the request of every later span. Each
+#: occurrence is a declaration that span makes about its own input, and every
+#: one of them is transcribed -- what the graph adds is which came first
+#: (`SPEC.md` §4.2.1).
+#:
+#: The third string says **only** that an earlier span declared the same
+#: receipt. It deliberately does not say "echo": two spans genuinely consuming
+#: one result produce the identical shape, and a protocol resending history is
+#: a cause the builder cannot see (`CLAUDE.md` 1).
+DATA_TIED_BASIS = (
+    "tool_call_id in tool-result message (earliest tied, broken by node_id)"
+)
+DATA_LATER_BASIS = (
+    "tool_call_id in tool-result message (not the earliest receiving span)"
+)
 TEMPORAL_BASIS = "sibling start_time ordering"
 
 #: When two siblings report the *same* start time, neither started first, and
@@ -542,10 +559,23 @@ def _data_edges(
     A received result whose producing span is not in this input yields no
     edge: there is nothing to point at. That gap is currently silent, and is
     recorded as such in `SPEC.md` §4.2.
+
+    Several spans may declare receipt of the same call, because the protocol
+    resends the history. All of them are kept -- each is a true statement the
+    instrumentor made about that span's own input -- and the `basis` records
+    which declaration came first, so a consumer can ask "which tool output did
+    this turn act on" without the library deciding for it.
     """
+    earliest, tied = _earliest_receivers(spans, ids)
     edges = []
     for span, node_id in zip(spans, ids, strict=True):
         for call_id in span.received_call_ids:
+            if earliest.get(call_id) != node_id:
+                basis = DATA_LATER_BASIS
+            elif call_id in tied:
+                basis = DATA_TIED_BASIS
+            else:
+                basis = DATA_BASIS
             for producer in sorted(fulfillers.get(call_id, ())):
                 if producer == node_id:
                     # A span cannot feed itself. Malformed input rather than a
@@ -557,11 +587,43 @@ def _data_edges(
                         dst=node_id,
                         kind=EdgeKind.DATA,
                         warrant=Warrant.EXPLICIT,
-                        basis=DATA_BASIS,
+                        basis=basis,
                         adapter=adapter.id,
                     )
                 )
     return edges
+
+
+def _earliest_receivers(
+    spans: Sequence[NormalizedSpan], ids: Sequence[NodeId]
+) -> tuple[dict[str, NodeId], set[str]]:
+    """Per call id: which span declared receipt first, and was it a tie.
+
+    The spans declaring receipt of one call are a **set**, so ranking them is
+    order-independent by construction (`CLAUDE.md` 4) -- input line order
+    cannot reach the answer. The rank is `(started_at, node_id)`, the same
+    total order §5.2 uses for node position and §4.3 for sibling temporal
+    edges, with an untimed span sorted last: it is never the earliest unless
+    no receiving span is timed at all, and it already draws
+    `missing_timestamp`.
+
+    A tie is reported separately because breaking it is a **decision**, not an
+    observation, and §4.3 has already ruled that such an edge must say so in
+    its own basis rather than pass as something the telemetry showed.
+    """
+    ranked: dict[str, list[tuple[int | float, NodeId]]] = {}
+    for span, node_id in zip(spans, ids, strict=True):
+        start = span.started_at if span.started_at is not None else float("inf")
+        for call_id in set(span.received_call_ids):
+            ranked.setdefault(call_id, []).append((start, node_id))
+    earliest: dict[str, NodeId] = {}
+    tied: set[str] = set()
+    for call_id, receivers in ranked.items():
+        receivers.sort()
+        earliest[call_id] = receivers[0][1]
+        if len(receivers) > 1 and receivers[0][0] == receivers[1][0]:
+            tied.add(call_id)
+    return earliest, tied
 
 
 def _deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:

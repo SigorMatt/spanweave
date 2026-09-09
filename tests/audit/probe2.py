@@ -37,35 +37,17 @@ def timed(label, fn):
 # regression test, not a probe: tests/test_read.py, under "Duplicate records".
 # Fixed in batch A3.
 
-# B. Agent loop with history echo: N llm->tool turns, each llm input carries every prior tool result.
-# The DIAGNOSTIC half of this case is now a regression test, not a probe:
-# tests/test_openinference.py, under "The keys a decision reads". Batch B3
-# consumed the keys the adapter reads, taking loop 400's `unmapped_attributes`
-# from 13,193,072 bytes to 99,092. The case stays here for its EDGE half (D2),
-# which is a different finding and still open.
-def loop(n):
-    recs = [oi("s0", None, "AGENT", "agent", 1000.0, 1000.0 + n)]
-    t = 1000.0
-    for i in range(n):
-        attrs = {"llm.model_name": "m", "llm.token_count.prompt": 10, "llm.token_count.completion": 2,
-                 f"llm.output_messages.0.message.tool_calls.0.tool_call.id": f"c{i}",
-                 f"llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "t"}
-        attrs["llm.input_messages.0.message.role"] = "user"
-        for j in range(i):  # history echo
-            attrs[f"llm.input_messages.{j+1}.message.role"] = "tool"
-            attrs[f"llm.input_messages.{j+1}.message.tool_call_id"] = f"c{j}"
-        recs.append(oi(f"l{i}", "s0", "LLM", "llm", t + 0.1, t + 0.4, attrs)); 
-        recs.append(oi(f"t{i}", "s0", "TOOL", "tool", t + 0.5, t + 0.9, {"tool.name": "t", "tool_call.id": f"c{i}", "output.value": "{}"}))
-        t += 1.0
-    return recs
-
-for n in (50, 200, 400):
-    p = write(f"loop{n}", loop(n))
-    g = timed(f"history_echo_loop turns={n} file={p.stat().st_size//1024}KB", lambda: spanweave.build(p))
-    if g:
-        ek = {}
-        for e in g.edges(): ek[str(e.kind)] = ek.get(str(e.kind), 0) + 1
-        print(f"nodes={len(g)} edges={ek}")
+# B. Agent loop with history echo is now two regression tests, not a probe.
+# The DIAGNOSTIC half is tests/test_openinference.py, under "The keys a
+# decision reads" (batch B3): loop 400's `unmapped_attributes` went from
+# 13,193,072 bytes to 99,092 once the adapter consumed the keys it reads.
+# The EDGE half is the same file, under `_echo_loop_trace` (batch D2): the
+# n(n-1)/2 `data` edges are the file's own declaration count and every one of
+# them stays, so the test asserts the count AND the basis split rather than a
+# smaller number. Measured at the turn counts this probe used: 50 -> 1,225
+# edges (49 earliest, 1,176 later), 200 -> 19,900 (199 / 19,701), 400 ->
+# 79,800 (399 / 79,401), 0 decided by a tie. The volume is the telemetry's and
+# `SPEC.md` §4.2.1 now says which declaration came first.
 
 # C. Flat wide trace: one root, N tool children, no echo.
 for n in (5000, 20000):

@@ -6,12 +6,19 @@ of these assert a `None`, an `absent`, or a diagnostic.
 
 import json
 import pathlib
+from collections import Counter
 
 import pytest
 
 from spanweave import diagnostics as codes
 from spanweave.adapters.openinference import OpenInferenceAdapter
-from spanweave.model import NodeKind, PayloadState, Status
+from spanweave.build import (
+    DATA_BASIS,
+    DATA_LATER_BASIS,
+    DATA_TIED_BASIS,
+    build_graph,
+)
+from spanweave.model import AdapterInfo, EdgeKind, NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
 
@@ -760,3 +767,80 @@ def test_a_resent_history_does_not_grow_the_diagnostics_quadratically(turns):
     # lexicographic and deterministic -- not turn order).
     last = spans[-1].received_call_ids
     assert sorted(last) == sorted(f"c{i}" for i in range(turns - 1))
+
+
+def _echo_loop_trace(turns):
+    """The whole of `tests/audit/probe2.py` case B: llm/tool turns under a root.
+
+    `_echo_loop` above is the adapter half -- llm spans only, no clock. This
+    one is the shape the audit measured: each turn's tool span fulfils that
+    turn's call, so every echoed receipt in a later turn's input resolves to a
+    producer and becomes a `data` edge.
+    """
+    records = [
+        {
+            "trace_id": "t1",
+            "span_id": "s0",
+            "parent_id": None,
+            "name": "agent",
+            "start_time": 1000.0,
+            "end_time": 1000.0 + turns,
+            "attributes": {"openinference.span.kind": "AGENT"},
+        }
+    ]
+    for turn, record in enumerate(_echo_loop(turns)):
+        start = 1000.0 + turn
+        records.append(
+            {
+                "trace_id": "t1",
+                "parent_id": "s0",
+                "start_time": start + 0.1,
+                "end_time": start + 0.4,
+                **record,
+            }
+        )
+        records.append(
+            {
+                "trace_id": "t1",
+                "span_id": f"t{turn}",
+                "parent_id": "s0",
+                "name": "tool",
+                "start_time": start + 0.5,
+                "end_time": start + 0.9,
+                "attributes": {
+                    "openinference.span.kind": "TOOL",
+                    "tool.name": "t",
+                    "tool_call.id": f"c{turn}",
+                    "output.value": "{}",
+                },
+            }
+        )
+    return records
+
+
+@pytest.mark.parametrize("turns", [8, 50])
+def test_a_resent_history_declares_every_receipt_and_the_graph_ranks_them(turns):
+    # The audit's edge finding (batch D2). The count is the *declaration*
+    # count -- turn i is given the results of calls c0..c(i-1), so the file
+    # states n(n-1)/2 receipts and the graph carries n(n-1)/2 edges. None is
+    # dropped; each says whether it is the first time that result was declared
+    # received (`SPEC.md` §4.2.1).
+    graph = build_graph(
+        list(ADAPTER.parse(_echo_loop_trace(turns))),
+        adapter=AdapterInfo(
+            id=ADAPTER.id, version=ADAPTER.version, declared_confidence=None
+        ),
+    )
+    data = [edge for edge in graph.edges() if edge.kind is EdgeKind.DATA]
+    assert len(data) == turns * (turns - 1) // 2
+    split = Counter(edge.basis for edge in data)
+    # One earliest per call id that anything received: c0..c(n-2). The rest of
+    # the quadratic is the echo, and it is labelled rather than removed.
+    assert split == Counter(
+        {
+            DATA_BASIS: turns - 1,
+            DATA_LATER_BASIS: (turns - 1) * (turns - 2) // 2,
+        }
+    )
+    # Timestamps strictly increase, so no rank here was decided by node id.
+    assert DATA_TIED_BASIS not in split

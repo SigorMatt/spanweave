@@ -791,6 +791,36 @@ says the telemetry asserted it, and the basis says how it was resolved. What is
 **not** licensed is any widening of this: a declaration must still be a
 declaration, and the id must still be the join.
 
+**A declaration repeated is still a declaration.** Conversational protocols
+resend the whole history on every turn, so the same tool-result message
+reappears in the request of every later span. Each occurrence is a declaration
+made by the span that carries it, about its own input, and it is true: the
+result did reach that span. Every one of them is transcribed, and `n` such
+turns produce `n(n-1)/2` `data` edges — the input carries that many
+declarations, and suppressing a relation the telemetry states plainly is the
+failure this section exists to prevent.
+
+What the graph adds is which occurrence came first. For each call id, the
+spans declaring receipt are ranked by `(started_at, node_id)` — the order §5.2
+already defines — and the basis records the rank:
+
+| Situation | `basis` |
+|---|---|
+| earliest span declaring receipt of this call | `tool_call_id in tool-result message` |
+| earliest, decided by `node_id` on a `started_at` tie | `tool_call_id in tool-result message (earliest tied, broken by node_id)` |
+| any later span declaring receipt of the same call | `tool_call_id in tool-result message (not the earliest receiving span)` |
+
+A span with no `started_at` sorts last and is never the earliest unless no
+receiving span is timed. The ranking is a function of a *set* of spans, so
+input order cannot affect it (§5.2).
+
+The third basis says **only** that an earlier span declared the same receipt.
+It does not say the later declaration is an artifact of a protocol resending
+history, because the library cannot see that: two spans genuinely consuming
+one result produce the identical shape. As with §4.3's tie-break, the warrant
+says the relation was stated and the basis says what was determined about it —
+a consumer that does not care matches on `kind` and ignores both.
+
 **A stated gap.** If a span reports receiving the result of call X and no span
 in the input fulfilled X, no edge is emitted and **nothing is reported** — the
 producer is simply absent. That is currently silent; it wants a diagnostic code

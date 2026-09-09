@@ -72,6 +72,15 @@ Added since, each for a reason recorded at its task:
   one scenario whose two renderings deliberately differ in **encoding** —
   nanosecond integers against the same values as decimal strings — because
   that is the equality `SPEC.md` §3.1 claims.
+- **`receipt_redeclared`** (September 2026 audit, batch D2). A conversational
+  protocol resends the whole history, so the same tool result is declared
+  received by every later turn — and no scenario, and no captured trace, had a
+  call id received by more than one span. Every `data` edge in the corpus was a
+  first receipt, so `SPEC.md` §4.2.1's rank — which declaration came first, and
+  the two extra `basis` strings that say so — was exercised by nothing
+  (audit finding 6, `OPEN_QUESTIONS.md` §11). `tool_call_history_echo` is the
+  mirror property: the resent **request**, which must produce no
+  `call_result` edge.
 
 ## Three things this README used to get wrong, kept as a warning
 

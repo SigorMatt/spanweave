@@ -10,7 +10,14 @@ import dataclasses
 import pytest
 
 from spanweave import diagnostics as codes
-from spanweave.build import LINK_BASIS, TIMESTAMP_UNIT_CEILING, build_graph
+from spanweave.build import (
+    DATA_BASIS,
+    DATA_LATER_BASIS,
+    DATA_TIED_BASIS,
+    LINK_BASIS,
+    TIMESTAMP_UNIT_CEILING,
+    build_graph,
+)
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.model import (
     AdapterInfo,
@@ -287,6 +294,134 @@ def test_no_data_edge_appears_from_matching_values():
         ]
     )
     assert edges_of(graph, EdgeKind.DATA) == []
+
+
+# --------------------------------------------------------------------------
+# Which declaration of a receipt came first (batch D2, audit finding 6)
+# --------------------------------------------------------------------------
+#
+# A conversational protocol resends the whole history, so the same tool-result
+# message reappears in the request of every later span and every occurrence is
+# a declaration the builder transcribes (`SPEC.md` §4.2.1). What the graph adds
+# is the rank: for each call id the declaring spans are ordered by
+# `(started_at, node_id)` and the basis says which one this edge is. It never
+# says *why* there is more than one -- two spans genuinely consuming one result
+# produce the identical shape, and the builder cannot see a protocol.
+
+
+def data_bases(graph):
+    return {(e.src, e.dst): e.basis for e in graph.edges() if e.kind is EdgeKind.DATA}
+
+
+def a_receipt_loop(*receivers):
+    """One fulfilled call, and the spans declaring receipt of it in turn."""
+    return [
+        a_span("p", started_at=0.0, call_ids=("call_a",), call_role=CallRole.FULFILLER),
+        *(
+            a_span(span_id, started_at=started_at, received_call_ids=("call_a",))
+            for span_id, started_at in receivers
+        ),
+    ]
+
+
+def test_the_only_span_declaring_a_receipt_keeps_the_plain_basis():
+    # The corpus's four `data` expectations are all this shape, and this is
+    # what keeps them byte-identical across D2 (`OPEN_QUESTIONS.md` §11(d)).
+    graph = build(a_receipt_loop(("r1", 1.0)))
+    assert data_bases(graph) == {("p", "r1"): DATA_BASIS}
+
+
+def test_a_later_declaration_of_the_same_receipt_says_it_is_not_the_earliest():
+    graph = build(a_receipt_loop(("r1", 1.0), ("r2", 2.0), ("r3", 3.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+        ("p", "r3"): DATA_LATER_BASIS,
+    }
+
+
+def test_the_rank_does_not_depend_on_the_order_the_spans_arrived_in():
+    # The declaring spans are a *set*; any function of a set is order-free.
+    spans = a_receipt_loop(("r1", 1.0), ("r2", 2.0), ("r3", 3.0))
+    assert data_bases(build(spans)) == data_bases(build(list(reversed(spans))))
+
+
+def test_an_earliest_decided_by_node_id_says_so_in_its_own_basis():
+    # Two spans reporting the same start time leave the earliest decided by
+    # the library, not observed -- §4.3's ruling, applied to the same choice.
+    graph = build(a_receipt_loop(("r1", 1.0), ("r2", 1.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_TIED_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+    }
+
+
+def test_an_integer_and_a_float_reporting_the_same_instant_are_a_tie():
+    # `started_at` is `int | float | None` since batch C3, and a tie is about
+    # the instant reported, not the literal that reported it.
+    graph = build(a_receipt_loop(("r1", 1), ("r2", 1.0)))
+    assert data_bases(graph)[("p", "r1")] == DATA_TIED_BASIS
+
+
+def test_an_integer_timestamp_still_ranks_against_a_float_one():
+    graph = build(a_receipt_loop(("r1", 2), ("r2", 1.5)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_LATER_BASIS,
+        ("p", "r2"): DATA_BASIS,
+    }
+
+
+def test_an_untimed_span_is_never_the_earliest_while_anything_is_timed():
+    graph = build(a_receipt_loop(("r1", None), ("r2", 9.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_LATER_BASIS,
+        ("p", "r2"): DATA_BASIS,
+    }
+
+
+def test_when_no_receiving_span_is_timed_the_earliest_is_a_tie_break():
+    # Sorting an untimed span as +inf (§5.2's convention) makes every one of
+    # them equal, so the winner is decided by node id and says so.
+    graph = build(a_receipt_loop(("r1", None), ("r2", None)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_TIED_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+    }
+
+
+def test_the_rank_is_per_call_id_not_per_span():
+    # r2 is the second span to be given call_a and the first to be given
+    # call_b. Both are true of it at once.
+    graph = build(
+        [
+            a_span(
+                "p1",
+                started_at=0.0,
+                call_ids=("call_a",),
+                call_role=CallRole.FULFILLER,
+            ),
+            a_span(
+                "p2",
+                started_at=0.0,
+                call_ids=("call_b",),
+                call_role=CallRole.FULFILLER,
+            ),
+            a_span("r1", started_at=1.0, received_call_ids=("call_a",)),
+            a_span("r2", started_at=2.0, received_call_ids=("call_a", "call_b")),
+        ]
+    )
+    assert data_bases(graph) == {
+        ("p1", "r1"): DATA_BASIS,
+        ("p1", "r2"): DATA_LATER_BASIS,
+        ("p2", "r2"): DATA_BASIS,
+    }
+
+
+def test_every_declaration_is_still_an_edge():
+    # The point of the decision (`WORKPLAN.md` §3, D1): nothing is dropped.
+    # Ten spans declaring one receipt are ten declarations and ten edges.
+    graph = build(a_receipt_loop(*((f"r{i}", float(i)) for i in range(1, 11))))
+    assert len(edges_of(graph, EdgeKind.DATA)) == 10
 
 
 # --------------------------------------------------------------------------

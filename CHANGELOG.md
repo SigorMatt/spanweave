@@ -15,6 +15,42 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Two `basis` strings that say which declaration of a receipt came first.**
+  A conversational protocol resends the whole history, so the tool-result
+  message `SPEC.md` §4.2.1 reads as a declaration is re-sent by every later
+  turn -- and an `n`-turn agent loop produced `n(n-1)/2` `data` edges that were
+  indistinguishable from each other. They still do, and every one of them is
+  kept: the count equals the *declaration* count exactly, each declaration is a
+  true statement the instrumentor made about that span's own input, and
+  suppressing a relation the telemetry states plainly is the failure §4.2 exists
+  to prevent. What is new is the rank. For each call id, the spans declaring
+  receipt are ordered by `(started_at, node_id)` -- the total order §5.2 already
+  defines -- and the basis records it:
+  `tool_call_id in tool-result message` for the earliest,
+  `... (earliest tied, broken by node_id)` when a `started_at` tie left the
+  choice to the library, and `... (not the earliest receiving span)` for every
+  later one. A span with no `started_at` sorts last.
+
+  The third string says **only** that an earlier span declared the same
+  receipt. It deliberately does not say "echo": two spans genuinely consuming
+  one result produce the identical shape, and a protocol resending history is a
+  cause this library cannot see. As with §4.3's tie-break, the warrant says the
+  relation was stated and the basis says what was determined about it; a
+  consumer that does not care matches on `kind`.
+
+  **No stored expectation moved.** Every `data` edge in the corpus and in every
+  captured trace was a first receipt -- 24 across 15 captured files, each call
+  id received by exactly one span -- so keeping today's string for the earliest
+  case leaves all four scenarios that carry one byte-identical. The ranking is a
+  function of a *set* of spans, so input order cannot reach it. (audit finding 6,
+  the edge half)
+
+- Conformance scenario `receipt_redeclared`, in both dialects: two tool-calling
+  turns and a closing turn whose request carries **both** results, so the first
+  call's result is declared received a second time. Nothing in the corpus and no
+  captured trace had a call id received by more than one span, which is why the
+  rank above was exercised by nothing.
+
 - New error `graph_not_serializable` / `GraphNotSerializableError`, raised by
   the one encoder every byte this library writes goes through. The reader
   contains what the *parser* will not descend, but the encoder has its own

@@ -87,6 +87,11 @@ DEGENERATE = (
     # order can actually reach an id.
     "derived_ids",
     "derived_ids_shuffled",
+    # Added at the September 2026 audit's batch D2, not seeded: no scenario
+    # and no captured trace had a call id whose result was declared received
+    # by more than one span, so `SPEC.md` §4.2.1's rank -- which declaration
+    # came first -- was exercised by nothing (`OPEN_QUESTIONS.md` §11).
+    "receipt_redeclared",
 )
 
 

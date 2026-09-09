@@ -233,10 +233,16 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: `present` moved 94 -> 118 at batch A5, which added the `derived_ids` pair:
 #: two scenarios x two renderings x three tool spans, each with an `inputs`
 #: and an `outputs` that the dialect fills in.
+#:
+#: Batch D2 added `receipt_redeclared`: two renderings of five spans, so ten
+#: nodes with twenty payload slots. `absent` moved 134 -> 138 (the two tool
+#: spans per rendering report an output and no input) and `present` 118 -> 134
+#: (the three llm spans per rendering report both, and each tool span reports
+#: its result).
 CORPUS_STATES = {
-    "absent": 134,
+    "absent": 138,
     "empty": 4,
-    "present": 118,
+    "present": 134,
     "redacted": 2,
     "truncated": 0,
 }
