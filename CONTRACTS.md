@@ -338,10 +338,16 @@ the library rely on that no document states and no test asserts?*
   what "done" looks like *for two codes*, and its catch-all over the other ten
   was false for three of them until this session corrected and asserted it.
   What is still relied on: that a consumer can branch on `code` to know
-  `source`'s shape. True for the seven rows now stated; the catch-all still
-  covers three codes no fixture emits (`duplicate_source_id`,
-  `multi_trace_input`, `malformed_record`), so for those it is stated and
-  unmeasured.
+  `source`'s shape. True for the nine rows now stated; the catch-all still
+  covers two codes no fixture emits (`duplicate_record`, `multi_trace_input`),
+  so for those it is stated and unmeasured. Both halves of that sentence said
+  something else — "seven rows", and `duplicate_source_id` and
+  `malformed_record` among the unmeasured — until batch A7 of the September
+  2026 audit series: the table gained rows, and A3 gave `duplicate_source_id`
+  a fixture. Nothing asserted either half, so nothing went red; both are
+  derived from `SPEC.md` and the corpus now
+  (`tests/test_codes.py::test_contracts_counts_the_source_rows_the_spec_states`
+  and its neighbour).
 - `diagnostics[].adapter` — that it names the adapter that raised the
   diagnostic. Nothing states it, nothing asserts it, and the value can be
   invented at the boundary with the suite green.

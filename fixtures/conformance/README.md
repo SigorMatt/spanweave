@@ -73,7 +73,7 @@ Added since, each for a reason recorded at its task:
   nanosecond integers against the same values as decimal strings — because
   that is the equality `SPEC.md` §3.1 claims.
 
-## Two things this README used to get wrong, kept as a warning
+## Three things this README used to get wrong, kept as a warning
 
 - **`declared_data_edge` "has no rendering."** It did not, on the stated
   grounds that OpenInference declares no producer→consumer relation. It does,
@@ -81,6 +81,17 @@ Added since, each for a reason recorded at its task:
   for a whole phase. The `coverage.json` was deleted and the scenario rendered.
   A `renderable: false` is an **invitation to check the reason against observed
   output**, never a settled fact (`FIXTURES.md` §4.3).
-- **`duplicate_span_ids` has no expected graph.** That one is still true: it
-  must not build, and its expectation is an `expected/error.json` matched by
-  type *and* code.
+- **`duplicate_span_ids` has no expected graph.** Written as "that one is
+  still true: it must not build". It builds. Batch A3 of the September 2026
+  audit series made two records claiming one span id derive an id each from
+  their own content (`SPEC.md` §3.6 rule 3): both are kept, the reuse is
+  reported as `duplicate_source_id`, and the scenario carries an
+  `expected/graph.json` and an `expected/diagnostics.json` like every other.
+  **No scenario in this corpus carries an `expected/error.json` today** —
+  `FIXTURES.md` §4.2 says why the vacancy is honest rather than a gap.
+  This bullet went on asserting the opposite for the whole of the audit
+  series' first run, under a heading about getting things wrong, which is the
+  warning making its own point: a **"still true" is a claim with a date on
+  it**, and the date is the last time somebody checked.
+  `tests/test_doc_truth.py` now reads this file for the claim rather than
+  trusting the next reader to notice.

@@ -869,3 +869,86 @@ def test_an_uncovered_quoted_path_is_caught(tmp_path):
     quoted = documented_example_paths([planted])
     assert "tests/serialized_shape.json" in quoted, "the scan missed the plant"
     assert uncovered(quoted) == {"tests/serialized_shape.json": ["PLANTED.md"]}
+
+
+# -- The digest formula, as stated against as computed ---------------------
+#
+# `SPEC.md` §3.6 is the one contract where an approximate statement is a
+# defect rather than a rounding: a reimplementation that follows the text has
+# to derive the same node id, byte for byte, or two tools disagree about what
+# a record is called. The text omitted `ensure_ascii=False` -- which the
+# library has always passed -- until the September 2026 audit series (batch
+# A7), so `{"name": "café"}` had two different "correct" ids, one per source.
+#
+# Scoped to `SPEC.md` on purpose: it is the source of truth for the formula,
+# and the only other place the old text survives is the audit review that
+# reported the mismatch, where quoting what the spec used to say is the point.
+
+#: The one canonicalization, spelled the one way. `SPEC.md` §3.6 rule 3 and §7
+#: both state it, and `spanweave/read.py:record_digest` computes it.
+CANONICAL_DIGEST_CALL = (
+    'json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)'
+)
+
+
+def test_the_spec_states_the_canonical_digest_the_library_computes():
+    stated = [
+        span for span in code_spans(read("SPEC.md")) if "json.dumps(record" in span
+    ]
+    assert len(stated) >= 2, (
+        f"SPEC.md states the canonical digest formula {len(stated)} time(s); "
+        f"§3.6 rule 3 and §7 each state it, so fewer than two means one of "
+        f"them stopped saying it -- or wrapped it across a line, where "
+        f"`code_spans` cannot see it and neither can this check"
+    )
+    wrong = [span for span in stated if span != CANONICAL_DIGEST_CALL]
+    assert wrong == [], (
+        f"SPEC.md states the canonical digest as {wrong!r}, and the library "
+        f"computes {CANONICAL_DIGEST_CALL!r}. A reimplementation that followed "
+        f"the text would derive a different node id for any record containing "
+        f"a non-ASCII character (`SPEC.md` §3.6)"
+    )
+
+
+def test_the_library_computes_the_digest_the_spec_states():
+    source = read("spanweave/read.py")
+    assert CANONICAL_DIGEST_CALL in source, (
+        f"`spanweave/read.py` no longer contains the call SPEC.md §3.6 states "
+        f"verbatim ({CANONICAL_DIGEST_CALL!r}). If the canonicalization moved, "
+        f"the spec moves with it in the same change; if only its spelling "
+        f"moved, this constant does. `tests/test_ids.py` checks the two agree "
+        f"on values, which is the claim -- this one keeps the text honest too"
+    )
+
+
+# -- Refusal scenarios, claimed against held -------------------------------
+#
+# `FIXTURES.md` §4.2 and the corpus README each state, in a sentence, that the
+# corpus holds no scenario that must not build. Both said the opposite of that
+# for as long as it took someone to re-read them (batch A3 emptied the set;
+# the corpus README was still describing `duplicate_span_ids` as a refusal a
+# run later). The sentence is cheap to check against the directory, so it is
+# checked in both directions -- a corpus that gains a refusal fixture fails
+# here too, which is the half that keeps this from becoming decoration.
+
+#: The claim, verbatim, in each document that makes it.
+NO_REFUSAL_CLAIMS = {
+    "FIXTURES.md": "**No scenario carries one today.**",
+    "fixtures/conformance/README.md": (
+        "**No scenario in this corpus carries an `expected/error.json` today**"
+    ),
+}
+
+
+def test_the_documents_are_right_about_which_scenarios_must_not_build():
+    refusing = sorted(
+        scenario.name for scenario in scenarios() if scenario.expected_error is not None
+    )
+    for relative, claim in NO_REFUSAL_CLAIMS.items():
+        claimed_empty = claim in read(relative)
+        assert claimed_empty == (refusing == []), (
+            f"{relative} {'says' if claimed_empty else 'no longer says'} the "
+            f"corpus holds no scenario that must not build, and it holds "
+            f"{refusing or 'none'}. Whichever moved, the other follows in the "
+            f"same change (`FIXTURES.md` §4.2)"
+        )

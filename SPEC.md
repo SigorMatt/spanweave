@@ -268,9 +268,26 @@ Node ids are deterministic and stable across runs, machines, and Python versions
    the first 16 hex chars of
    `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key + "\x00" +
    record_digest)`, where `record_digest` is the record's **canonical digest**:
-   the SHA-256 of `json.dumps(record, sort_keys=True, separators=(",", ":"))`
+   the SHA-256 of
+   `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
    over the verbatim source record (§3.5). Both records are kept and
    `duplicate_source_id` (§3.7) reports the reuse.
+
+**The formula is exact, because a reimplementation has to land on the same
+id.** Both hashes are taken over a **string encoded UTF-8** and read as a
+lowercase `hexdigest()`; the outer one is truncated to 16 characters, and the
+record digest enters rule 3's material at its full 64. `trace_id` is the empty
+string where the input states none. `ensure_ascii=False` is not house
+style here, it is part of the contract: with the default, `{"name": "café"}`
+canonicalizes to `{"name":"caf\u00e9"}` instead, whose digest begins
+`9db11f5f` where the library's begins `645fa443`, so every id derived from
+that record differs. An id is a name for a record, and the name would depend
+on which of two equally reasonable encodings each implementation happened to
+pick. Rules 2 and 3 stated the digest without that argument until the
+September 2026 audit series (batch A7); the library has passed it since the
+digest existed (batch A3), so it was the spec that was wrong.
+`tests/test_ids.py` derives an id from this text and compares it against the
+library's, and pins two `sw_` literals so neither side can drift quietly.
 
 **Python's built-in `hash()` is forbidden anywhere in identity or ordering** — it
 is salted per-process and would break determinism (`CLAUDE.md` 4).
@@ -981,7 +998,8 @@ every registered adapter and picks the highest confidence.
     nothing. A bytes-level rule would also have nothing to say about the JSON
     array form, where a record has no bytes of its own. Records are compared
     by their **canonical digest** (§3.6): the SHA-256 of
-    `json.dumps(record, sort_keys=True, separators=(",", ":"))`.
+    `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
+    encoded UTF-8. §3.6 states the arguments exactly and why.
   - **Which copy is kept is stated so that it is a rule rather than an
     accident**, but it is not observable: the copies are equal as parsed
     records, so the only thing that distinguishes them is

@@ -177,6 +177,39 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The spec stated the canonical digest without `ensure_ascii=False`**, and
+  the library has passed it since the digest existed. `SPEC.md` §3.6 is the
+  one place in this project where a paraphrase is a defect rather than a
+  rounding: it exists so that something other than this library can derive the
+  same node id. Followed as written, it could not -- under the default,
+  `{"name": "café"}` canonicalizes to `{"name":"caf\u00e9"}`, whose digest
+  begins `9db11f5f` where the library's begins `645fa443`, so every id derived
+  from any record containing a non-ASCII character disagreed. §3.6 and §7 now
+  state the call the library makes, together with the two things a
+  reimplementation otherwise had to guess: both hashes are taken over a string
+  encoded UTF-8, and `trace_id` is the empty string where the input states
+  none. **No behavior changed** -- the code was right and the document was
+  wrong. It was also unpinned on both sides, because `canonical()` relabels
+  derived ids to `n0`/`n1` and no expectation anywhere held a real `sw_`
+  string: `tests/test_ids.py` now derives an id from a reimplementation of the
+  spec text, compares it against the library's on exactly the record that
+  exposed the gap, and pins two `sw_` literals.
+  (review concern 3)
+
+- **Three documents were describing a library that had changed underneath
+  them.** `fixtures/conformance/README.md` still called `duplicate_span_ids` a
+  scenario that "must not build", under a heading about things the README used
+  to get wrong, a whole run after it started building. `CONTRACTS.md` counted
+  "seven rows" in §3.7's `source` table, which states nine, and listed
+  `duplicate_source_id` among the codes no fixture emits, which one has since
+  it stopped refusing. `OPEN_QUESTIONS.md` §12(f) still reported the
+  positional fallback id as "real today". Each is corrected in place, with
+  what it used to say kept -- a claim that goes stale silently is worth more
+  as a warning than as a deletion. The two countable ones are derived from
+  `SPEC.md` and the corpus by tests now, in both directions, so a table that
+  grows a row or a corpus that gains a refusal fixture fails rather than
+  drifting. (review concern 5)
+
 - **`spanweave inspect` and `spanweave validate` no longer die on a file
   `spanweave build` reads without complaint.** Each opens the file with its own
   `json.loads` -- `inspect` to decide whether it was handed a built graph or a

@@ -1081,6 +1081,15 @@ missing an adapter"*, which is a thing this library should be able to say.
   `sw_f3adffe8…`/`sw_cde39f99…`/…, forced `otel_genai` gives `sw_ece4112c…`/…,
   and mixed gives a third set again. All three are deterministic; none is
   comparable to another.
+  > **Half of this is retired — batch A5 (`b6c5ea9`), 2026-09-10.** The
+  > fallback `source_key` is the record's **canonical digest**, not its index,
+  > so partitioning no longer renumbers anything and `ADAPTERS.md` §3 now says
+  > the opposite of the sentence quoted above. The **first** reason stands
+  > unchanged: `adapter_id` is in rule 2's material, so a record parsed by the
+  > other adapter still gets a different id, and the measured id sets above
+  > were taken under the old key and are not the ids the library derives
+  > today. Kept rather than rewritten because it is what the probe measured;
+  > what it measured is no longer what happens.
 - **Rule 3 — A3 (`b44c3a5`), a shared `source_key` puts the record's canonical
   digest into the material.** Dispatch makes this rule reachable through a new
   door: two adapters can each hand `assign()` a record whose `source_key` is
@@ -1089,9 +1098,24 @@ missing an adapter"*, which is a thing this library should be able to say.
   cause A3 did not have in mind, and **silently**: the `duplicate_source_id`
   report is keyed on `span_id`, not on `source_key`, so nothing says the two
   ids were disambiguated. E3 should decide whether that deserves a report.
+  > **The door named here is closed — batch A5 (`b6c5ea9`).** No adapter hands
+  > `assign()` a `source_key` of `"1"` any more: where a record states no span
+  > id the key is the record's canonical digest, so two adapters collide only
+  > on two records that are the same record. Rule 3 stays reachable through
+  > the door A3 built it for — a dialect that reused a span id — and the
+  > question of whether a `source_key` collision deserves its own report is
+  > still E3's, on the narrower ground.
 
 > **A defect this probe found that is not in the audit, is not caused by
-> dispatch, and is real today.** A record with **no** `span_id` gets an id
+> dispatch, and was real when this was written — fixed by batch A5
+> (`b6c5ea9`), 2026-09-10, exactly as the last four sentences propose.** The
+> fallback `source_key` is the record's canonical digest now (`SPEC.md` §3.6
+> rule 2), the corpus gained `derived_ids` and `derived_ids_shuffled` — a
+> span-id-less scenario and its reordered twin — and the shuffle tests assert
+> the
+> id-to-record **binding** rather than byte-identity, which is the assertion
+> this defect hid behind. Read the rest as the finding, not as the state of
+> the library. A record with **no** `span_id` gets an id
 > derived from its position in the file, so shuffling the input changes the
 > graph. Measured on a forced single-adapter build, no mixing involved: the
 > document (modulo `source_digest`) and the per-record id assignment both

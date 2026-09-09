@@ -5,6 +5,8 @@ machine, in any process, forever -- and that when it cannot, it says so
 instead of overwriting something.
 """
 
+import hashlib
+import json
 import subprocess
 import sys
 
@@ -13,6 +15,7 @@ import pytest
 from spanweave.errors import DuplicateNodeIdError
 from spanweave.ids import DERIVED_PREFIX, assign, derive
 from spanweave.model import NodeKind, RawRecord
+from spanweave.read import record_digest
 from spanweave.seam import NormalizedSpan
 
 
@@ -196,3 +199,87 @@ def test_nothing_is_reported_when_ids_are_unique():
 
 def test_an_empty_input_assigns_nothing():
     assert assign([], "some_dialect", "t1").ids == ()
+
+
+# --------------------------------------------------------------------------
+# The formula is the spec's formula (September 2026 audit, batch A7)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.6 exists so that something other than this library can derive
+# the same id. That claim is only worth as much as the text is exact, and the
+# text omitted `ensure_ascii=False` until this batch -- so a reader who
+# implemented it faithfully got a different id for every record carrying a
+# non-ASCII character, with nothing here to notice. These tests reimplement
+# the rules from the text, compare against the library on a record chosen to
+# expose exactly that gap, and pin two literal ids so the formula cannot drift
+# on either side without a failure that says so.
+
+
+def spec_faithful_derive(adapter_id, trace_id, source_key, record=None):
+    """`SPEC.md` §3.6 rules 2 and 3, written from the text and nothing else.
+
+    Deliberately duplicated rather than imported: an implementation that calls
+    `spanweave.ids.derive` agrees with it by construction and tests nothing.
+    """
+    material = "\x00".join((adapter_id, trace_id or "", source_key))
+    if record is not None:
+        canonical = json.dumps(
+            record, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        material = "\x00".join((material, digest))
+    return "sw_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
+#: A record whose canonicalization differs between `ensure_ascii=False` and
+#: the default: `{"name":"café"}` against `{"name":"café"}`.
+NON_ASCII_RECORD = {"span_id": "s1", "name": "café"}
+
+
+def test_the_spec_formula_derives_the_id_the_library_derives():
+    assert derive("openinference", "t1", "1") == spec_faithful_derive(
+        "openinference", "t1", "1"
+    )
+
+
+def test_the_spec_formula_agrees_on_a_record_that_is_not_ascii():
+    # The case the spec's own text got wrong. Rule 3, because that is the
+    # rule whose material contains the record's canonical digest.
+    spans = [
+        a_record_span("s1", "s1", NON_ASCII_RECORD),
+        a_record_span("s1", "s1", {"span_id": "s1", "name": "b"}, line=2),
+    ]
+    assert assign(spans, "openinference", "t1").ids[0] == spec_faithful_derive(
+        "openinference", "t1", "s1", NON_ASCII_RECORD
+    )
+
+
+def test_escaping_the_non_ascii_character_would_derive_a_different_id():
+    # Why the word matters: this is the id the spec's text used to specify,
+    # and it is not the id the library derives. Without this the two spellings
+    # look interchangeable, which is how they came apart in the first place.
+    escaped = json.dumps(NON_ASCII_RECORD, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(escaped.encode("utf-8")).hexdigest()
+    material = "\x00".join(("openinference", "t1", "s1", digest))
+    other = "sw_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+    assert other != spec_faithful_derive("openinference", "t1", "s1", NON_ASCII_RECORD)
+
+
+@pytest.mark.parametrize(
+    ("expected", "source_key", "record"),
+    [
+        # Rule 2: the material is adapter, trace id, source key.
+        ("sw_f3adffe8eba5ff98", "1", None),
+        # Rule 3: the record's canonical digest joins the material.
+        ("sw_202f2da54f3fb2c4", "s1", NON_ASCII_RECORD),
+    ],
+)
+def test_a_derived_id_is_pinned_to_a_literal(expected, source_key, record):
+    """The anchor. `canonical()` relabels derived ids to `n0`/`n1`, so no
+    conformance expectation holds a real `sw_` string -- the whole corpus can
+    stay green while the formula moves underneath it. These two literals are
+    the only thing in the suite that cannot.
+    """
+    digest = None if record is None else record_digest(record)
+    assert derive("openinference", "t1", source_key, digest) == expected
+    assert spec_faithful_derive("openinference", "t1", source_key, record) == expected
