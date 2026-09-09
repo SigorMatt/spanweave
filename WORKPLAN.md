@@ -158,7 +158,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | done | 25 |
 | A4 | **Missing trace id diagnostic.** `trace_id == ""` currently silent → emit `missing_trace_id` (info). SPEC §3.7. Test. | done | 8 |
 | A5 | **Content-derived fallback ids.** Review blocker 1 / §12(f): a record with no `span_id` gets `source_key = str(index)` in both adapters, so shuffling the input rebinds ids (`sw_cde39f998fc177dc` names `beta` forward and `alpha` reversed). Fallback `source_key` becomes the record's canonical digest (A3's rule applied one level up); SPEC §3.6 rule 2 wording; both adapters identical under diff. New degenerate conformance scenario `derived_ids` with span-id-less records **and a shuffled rendering**, expected graphs equal. Shuffle tests extended beyond `WORKED_RECORDS`. Moves 0 stored expectations. Must land before E2. | done | 20 |
-| A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | todo | 12 |
+| A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | done | 12 |
 | A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | todo | 12 |
 | A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | todo | 10 |
 
@@ -183,23 +183,23 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"\|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | done | 6 |
-| D2 | Implement §11(d): three `basis` strings per the table, earliest by `(started_at, node_id)`; every edge kept; DESIGN.md §6 qualifier; SPEC §4.2 draft text from §11 landed; the 4 corpus expectations that carry receipts must not change (verify). probe2 loop case stays as a test of edge count and basis split. | awaiting D1 | 20 |
+| D2 | Implement §11(d): three `basis` strings per the table, earliest by `(started_at, node_id)`; every edge kept; DESIGN.md §6 qualifier; SPEC §4.2 draft text from §11 landed; the 4 corpus expectations that carry receipts must not change (verify). probe2 loop case stays as a test of edge count and basis split. | todo | 20 |
 
 ### Phase E — mixed instrumentation in one trace (the critical one)
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | done | 8 |
-| E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | awaiting E1 | 20 |
-| E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | awaiting E2 | 25 |
-| E4 | `--adapter auto\|<id>` (no `mixed`); `spanweave inspect` shows per-adapter node counts; README, ADAPTERS.md (the one-sentence per-record contract from §12(d)), SPEC §6.1 final text from §12, DESIGN.md §3 subsection from §12(k), CHANGELOG. | awaiting E3 | 12 |
+| E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | todo | 20 |
+| E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | todo | 25 |
+| E4 | `--adapter auto\|<id>` (no `mixed`); `spanweave inspect` shows per-adapter node counts; README, ADAPTERS.md (the one-sentence per-record contract from §12(d)), SPEC §6.1 final text from §12, DESIGN.md §3 subsection from §12(k), CHANGELOG. | todo | 12 |
 
 ### Phase F — OTLP JSON container (ROADMAP Phase 4 item, pulled forward)
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. **F1 may proceed directly into F2 in the same run** if its design needs no model or schema change and no new default; if it needs any, it halts as `awaiting decision` and F2 waits for run 3. | awaiting C2 | 8 |
-| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. Timestamps land as `int` per C3; `startTimeUnixNano` strings arrive intact. | awaiting F1 | 25 |
+| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. **F1 may proceed directly into F2 in the same run** if its design needs no model or schema change and no new default; if it needs any, it halts as `awaiting decision` and F2 waits for run 3. | todo | 8 |
+| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. Timestamps land as `int` per C3; `startTimeUnixNano` strings arrive intact. | todo | 25 |
 
 ### Phase G — roadmap and governance
 
@@ -450,6 +450,21 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   because SPEC §5.2 sorts edges over graph ids and a derived id differs per
   adapter by design — E3 would have hit this. `OPEN_QUESTIONS.md` §12(f)'s "real
   today" note is now stale; A7 owns stale doc truth.
+- A6 done (`477fe9b`). The write half was real, not just the CLI: a payload at
+  depth 9994 parses and builds, then `serialize.dumps` raises — the encoder meets
+  the value about four levels deeper than the parser does. Contained with a new
+  error code `graph_not_serializable` / `GraphNotSerializableError` (SPEC §3.10 +
+  export). **This is an additive public-API change**, judged not a halt because no
+  data-model field, serialized default, or diagnostic default moved; flagging it
+  here so review sees it named. Also: `annotate.check_serializable` did not catch
+  `RecursionError`, and on CPython 3.12 the JSON C recursion budget is independent
+  of Python stack depth, so the adapters' non-string `json.dumps` is unreachable
+  via the reader and is guarded defensively only.
+- 2026-09-10, maintainer: a dependency marker (`awaiting <batch>`) whose named
+  batch is `done` means `todo`; only the literal `awaiting decision` stops a
+  batch. D2, E2, E3, E4, F1, F2 set to `todo` on that instruction. E3, E4 and F2
+  were set with their predecessor (E2, E3, F1) still open — §2's run-2 order, not
+  the status column, is what holds those three dependencies now.
 
 ---
 
