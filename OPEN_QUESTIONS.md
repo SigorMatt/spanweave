@@ -2082,3 +2082,328 @@ batch that has not run, not an edit to G2's work, and this memo makes none.
 `ROADMAP.md` is untouched — the text in **(i)** lands only when the decision is
 taken, and the three lines judged in **(j)** are left exactly as G2 wrote them.
 Record the decision in `WORKPLAN.md` §3.
+
+---
+
+## 15. H1: Should a node carry the name of the agent, chain or retriever it ran?
+
+**(a)** `Node.operation` is `None` on every `agent`, `chain` and `retriever`
+node the corpus produces, in both dialects. OTel GenAI states an agent's name
+in a normative attribute, `gen_ai.agent.name`, and the `otel_genai` adapter
+deliberately does not read it. Three options were tabled: map it into
+`operation`; add a new `identity` field carrying a value plus the provenance of
+that value, mirroring `Edge.warrant`; or leave it and say so in the spec. Any of
+the first two is a model change, so this is a halt point (`AGENT.md`).
+
+**(b) The actual state, per kind and per dialect, verified against fixtures.**
+
+| Kind | Dialect | What names the thing | Where it is today |
+|---|---|---|---|
+| `agent` | openinference | the span `name` only — no attribute | `nodes[].name`, `raw.source.name` |
+| `agent` | otel_genai | `gen_ai.agent.name`, **and** the span `name`, which is the operation and the agent name joined | `raw.source.attributes`, plus one `unmapped_attributes` key, plus `nodes[].name` |
+| `chain` | openinference | the span `name` only | `nodes[].name`, `raw.source.name` |
+| `chain` | otel_genai | *nothing* — the dialect has no `chain` | n/a: `invoke_workflow` is deliberately unmapped, so no GenAI span becomes a `chain` |
+| `retriever` | openinference | the span `name` only | `nodes[].name`, `raw.source.name` |
+| `retriever` | otel_genai | *nothing* — the convention names the operation (`retrieval`), not the retriever | n/a |
+
+The two captured traces are the evidence, and they were produced from one
+harness against one model, so they are directly comparable.
+`fixtures/captured/openai_tool_call.jsonl`, first record:
+
+```
+"name": "agent.run",
+"attributes": {"openinference.span.kind": "AGENT", "input.value": …, "input.mime_type": …}
+```
+
+`fixtures/captured/genai_tool_call.jsonl`, first record:
+
+```
+"name": "invoke_agent agent.run",
+"attributes": {"gen_ai.operation.name": "invoke_agent",
+               "gen_ai.agent.name": "agent.run",
+               "gen_ai.input.messages": …}
+```
+
+Built (`uv run spanweave build fixtures/captured/genai_tool_call.jsonl`), the
+GenAI agent node is `operation: null`, `attributes: {}`, and the name is not
+lost — it is in **two** places a consumer can reach:
+
+```
+nodes[0].raw.source.attributes["gen_ai.agent.name"] == "agent.run"
+diagnostics[] {"code": "unmapped_attributes", "level": "info",
+               "node_id": "81bcfdbbf4b66e32", "source": ["gen_ai.agent.name"]}
+```
+
+So losslessness holds twice over: the **value** verbatim in `raw.source` — which
+`CONTRACTS.md` asserts round-trips byte-for-byte and which is serialized on
+every node unconditionally — and the **fact that we declined to normalize it**
+as an `info` diagnostic naming the key. `raw.source` is the answer to "where can
+a consumer find it now"; the diagnostic is the answer to "how would a consumer
+know to look".
+
+Two precisions the row's one-line statement omits, both found by probing rather
+than by reading:
+
+- **`operation` is not structurally `None` on an agent node.** Neither
+  adapter's `_operation` has an agent branch; both fall through to the model
+  name (`spanweave/adapters/otel_genai.py:514`,
+  `spanweave/adapters/openinference.py:385`). Fed an agent span carrying
+  `gen_ai.request.model` / `llm.model_name`, **both dialects today put the
+  model name in `operation`** — measured, `operation: "m1"` in each. The `None`
+  in the corpus is a property of the fixtures, not of the code. This matters in
+  **(g)**.
+- **"retriever name" is unrealizable in both dialects.** `SPEC.md` §3.1
+  documents `operation` as `# tool name / model name / retriever name`, and
+  no dialect this library reads states a retriever's name anywhere. The one
+  `retriever` node in the corpus has `operation: null`; an OpenInference
+  RETRIEVER span carrying `embedding.model_name` would get the *model*. The
+  third of the three names in the spec's own definition has never been
+  produced. That is a documentation defect this memo surfaces and does not fix.
+
+**(c) What a consumer cannot ask today.** It can already ask "what is this agent
+called" — the value is on the node — but it cannot ask it **the same way twice**.
+In OpenInference the answer is `node.name`; in OTel GenAI it is
+`node.raw.source.attributes["gen_ai.agent.name"]`, and `node.name` there is
+`"invoke_agent agent.run"`, a composite that needs a dialect-specific split.
+Reaching either means a consumer branching on the dialect, which is precisely
+the work the library exists to absorb (`SPEC.md` §3.7 makes exactly this
+argument for putting a tool name on `unpaired_call`: "recovering the name meant
+walking the requesting node's output payload, in a dialect-specific shape,
+inside a consumer that must not know a dialect").
+
+**But the inconvenience is smaller than that precedent's**, and the difference
+decides the ranking. There, the value existed **nowhere on the graph** — an
+unfulfilled call has no node. Here it is on the node, in a field
+`CONTRACTS.md` pins as byte-exact, and the diagnostic already points at the key.
+So the honest statement is: *a consumer can answer it today, less conveniently
+and with one dialect branch*, and what an identity field buys is uniformity, not
+capability. Set against that, `nodes[].name` — the field that carries the
+identity in the one dialect that has nowhere else to put it — is declared
+dialect-varying and erased in **18 of 22** scenarios, and `CONTRACTS.md` records
+that `name` "has **never** been compared across dialects, in any scenario, at
+any point in this project". A consumer relying on `name` is relying on something
+the corpus does not test.
+
+**(d) The neutrality test, both sides.**
+
+*It is neutral.* The attribute is literally named `gen_ai.agent.name`. Copying
+its value into a field means transcribing a string the telemetry wrote into a
+slot, keyed off nothing but the attribute's own key — the same act as reading
+`gen_ai.tool.name` into `operation`, which nobody calls interpretation.
+`ADAPTERS.md` §1's rule is *transcribe, don't interpret*, and "the instrumentor
+said this span's agent is called `agent.run`" is a report, not a judgement. It
+assigns no role, no severity, no risk and no quality: `CLAUDE.md` 1's list is
+about **evaluating** telemetry, and a name evaluates nothing.
+
+*It is interpretation.* Not on the GenAI side — on the other one. The moment
+identity is a field, the pressure is to fill it for OpenInference too, and there
+the only candidate is the span `name`. Deciding that `"agent.run"` in a span
+name *is* the agent's identity is a reading of a free-text field; so is
+splitting `"invoke_agent agent.run"` on a space. Both are the class of inference
+`AGENT.md` calls a halt point. A field that only one dialect can honestly fill
+is a standing invitation to fill it dishonestly in the other, and the invitation
+is the risk — not the first commit.
+
+**Verdict: the fact is neutral, the field is not automatically so.** Neutrality
+does not settle H1 in either direction; it only rules out *deriving* an identity
+where a dialect states none. Both live options survive it. What kills option A
+is **(e)** and **(f)**, neither of which is about neutrality.
+
+**(e) Does an agent name fit `operation`? The precedent is real but narrower
+than it looks.** `SPEC.md` §3.1: `operation: str | None # tool name / model
+name / retriever name`. §3.7 leans harder, calling `operation` "the identity of
+an operation" — read that way, `invoke_agent` invokes an agent, the agent is the
+callee, and its name is the callee's name exactly as `gen_ai.tool.name` is on
+`execute_tool`. That reading is coherent and I do not think it is smuggling.
+
+The problem is that it is not the only thing already in the field. Per **(b)**,
+an agent span carrying a model attribute puts the **model** in `operation`
+today, in both dialects. Option A therefore needs a precedence rule, and both
+choices are bad: agent-name-wins silently drops a value the two dialects
+currently agree on, and model-wins silently drops the agent name whenever the
+span also names a model. Either way `operation` on an `agent` node stops having
+one meaning — a consumer reading `"m1"` cannot tell whether it holds a model or
+an agent without going back to `raw`. That is a worse contract than `null`, and
+it is a defect of option A **on a single dialect**, before any cross-dialect
+question is asked.
+
+**(f) The dialect asymmetry. It is real, it is measured, and it is decisive for
+option A.** Simulated by injecting `gen_ai.agent.name: "agent.run"` into every
+`invoke_agent` / `create_agent` span of every `otel_genai` rendering — which is
+what `capture/backends.py` already writes for a real capture — then applying
+option A and running the corpus's own `canonical()` with each scenario's
+declared erasures and payload declarations:
+
+| | scenarios |
+|---|---|
+| rendered in both dialects, adapter-backed | 18 |
+| **diverge under option A** | **11** |
+| diverge today (baseline) | 0 |
+
+The eleven: `clock_skew`, `llm_tool_llm`, `missing_payloads`, `nested_agents`,
+`parallel_tool_calls`, `parallel_tools`, `shuffled_order`, `timestamp_units`,
+`unknown_kind`, `unpaired_tool_call`, `unset_and_error_status` — 12 agent nodes,
+`nested_agents` carrying two. In each, `operation` reads `"agent.run"` in
+`otel_genai` and `null` in `openinference` for the same logical span. That is
+the cross-dialect equivalence claim (`FIXTURES.md` §4, `CLAUDE.md` *conformance
+is the executable spec*) failing on the library's most-rendered node kind.
+
+Three things sharpen it:
+
+- **The corpus would not catch it today.** Zero conformance renderings carry
+  `gen_ai.agent.name` (`grep -rl` over `fixtures/conformance/*/dialects/` = 0
+  files), so option A moves **0 stored expectations** and `make check` stays
+  green. The divergence arrives with the first fixture that renders the
+  attribute honestly — and `FIXTURES.md` §6 says a captured trace outranks a
+  hand-authored one, so that fixture is a matter of when.
+- **The only repair available is the one the corpus forbids.** A scenario would
+  have to declare `erase: ["operation"]`. Whole-field erasure in
+  `tests/conformance.py:_node` applies to **every node of the scenario**, not to
+  the agent node, so those eleven declarations would also stop comparing **22
+  non-null `operation` values** on the llm and tool nodes beside them —
+  `demo-model`, `lookup`, `alpha`, `beta`, `gamma`, `lookup_flight`. `operation`
+  is, per `CONTRACTS.md`, agreed across dialects in 15 of 16 compared scenarios,
+  "the strongest evidence any unstated field here has". Option A spends that to
+  buy a value already present in `raw`. `tests/conformance.py`'s own docstring:
+  *"Never weaken this to make a test pass."*
+- **`chain` and `retriever` have no cross-dialect exposure at all**, so they are
+  not part of this. All 4 `chain` nodes and the 1 `retriever` node live in
+  `cyclic_parents`, `retriever_and_embedding` and `span_links`, which
+  `otel_genai` declares unrenderable. H1 is an `agent` question wearing three
+  names.
+
+**Option B is not exposed to this the same way, and that is its one real
+advantage.** `identity` would also be `"agent.run"` against `null` in the same
+eleven — but an `erase: ["identity"]` declaration would cost **zero** collateral
+assertions, because no other node kind would ever populate it. Option A puts the
+asymmetry inside a field that carries symmetric, well-tested content; option B
+quarantines it in a field that carries nothing else. Same divergence, very
+different blast radius.
+
+**(g) What each option costs, counted.**
+
+| | A: into `operation` | B: new `identity` | C: leave, document |
+|---|---|---|---|
+| `spanweave/model.py` | — | `Node` + 1 field, + 1 frozen dataclass | — |
+| `spanweave/seam.py` | — | `NormalizedSpan` + 1 field | — |
+| `spanweave/build.py` | — | 1 pass-through line (beside `:196`) | — |
+| `spanweave/serialize.py` | — | `_node` + 1 key | — |
+| adapters | 1 (`otel_genai._operation`, ~5 lines + precedence rule) | 2 (one populates, one documents why it never can) | 0 |
+| `tests/serialized_shape.json` | unchanged | +1 row as a leaf, +3 as `{value, source}` | unchanged |
+| stored `expected/graph.json` | **0 today**, 11 scenarios / 12 nodes on the first honest fixture | **all 22 files, all 54 node entries** gain the key | 0 |
+| `canonical()` | unchanged in code; 11 scenarios need an erasure that costs 22 other assertions | unchanged in code; erasures cost nothing else | unchanged |
+| `FIXTURES.md` §4 Compared bullet | unchanged | must name `identity` — enforced by `test_the_compared_list_names_every_field_that_is_compared` | unchanged |
+| `CONTRACTS.md` | one row's meaning changes | +1 inventory row, +1 "what is unstated" row | one row's meaning restated |
+| `SPEC.md` | §3.1 definition widened, §3.7 re-read | §3.1 + a new subsection | §3.1, one paragraph |
+
+Option C is not free of documents, only of code. Today the non-mapping is
+recorded in an adapter **docstring** (`otel_genai.py:519`) and in two fixture
+notes (`nested_agents/scenario.md`, `nested_agents/otel_genai.notes.md`) — and
+nowhere in `SPEC.md`, which `CLAUDE.md` names the source of truth for behaviour.
+C's whole content is moving that sentence to where it binds.
+
+**(h) The freeze. H1 must be decided before it; only one option must also be
+implemented before it.** §14(h) item 2 already names this memo — *"the
+agent-identity memo (H1) proposes a new `identity` field outright"* — and folds
+it into the rule that no undecided entry may survive the freeze. That rule is
+right about H1, but its stated **reason** does not reach every option, and the
+distinction should be recorded rather than smoothed over:
+
+- **Option A binds, hardest.** It changes what an existing, frozen,
+  cross-dialect-compared field *means*, with no movement in
+  `tests/serialized_shape.json` to warn anyone — the shape is identical and the
+  value domain is not. After the freeze that is the worst class of change to
+  discover: `CLAUDE.md` 7 permits additions and prices breaks at a version bump,
+  and a field that quietly starts holding a different kind of string is neither,
+  which is to say it is unpriceable. Foreclosing option A is the single strongest
+  reason H1 cannot be left open.
+- **Option B binds by §14's rule but not by §14's reason.** `CLAUDE.md` 7:
+  after the freeze, *"changes are additive-only"* — and a new optional field is
+  the additive case, not the breaking one. Unlike E, which widens
+  `Provenance.adapter_id` from `str` to `str | None` and so must precede the
+  freeze on pain of a migration note, `Node.identity` could honestly be added at
+  `1.1`. What it could not do post-freeze is arrive quietly: it changes what
+  `canonical()` compares and what every consumer written against `1` sees.
+- **Option C is a resolution.** §14(i)'s own text — *"Deciding an entry to
+  change nothing is a resolution; leaving it open is not"* — makes C a complete
+  discharge of the precondition at zero schema bytes.
+
+So the sentence for the roadmap is *H1 decided*, not *H1 implemented*.
+
+**(i) Recommendation: option C, with option B held open as the additive path.**
+Leave `operation` `None` for `agent`, `chain` and `retriever`; write the
+non-mapping into `SPEC.md` §3.1 as a stated rule rather than an adapter
+docstring; state in the same paragraph that the identity is carried verbatim in
+`raw.source` and announced by `unmapped_attributes`. Reject option A outright,
+on **(e)** and **(f)** — it is the only option that can make an existing field
+mean two things and cost 22 tested cross-dialect assertions to repair.
+
+The case for C over B is not that B is wrong. It is that B pays a permanent
+schema field, 54 stored node entries and a line in a test-enforced contract list
+for a value that is **one dialect's, on one node kind, already on the node**, and
+that the payment can be made later without penalty because it is additive. The
+case for B — one uniform question a consumer can ask — is real and stays real;
+what is missing is any evidence that a *second* dialect would fill the field,
+and a normalized field that exactly one dialect populates is a rename of that
+dialect's attribute, not a normalization.
+
+Two things belong with the decision either way. First, the `retriever name`
+defect in **(b)** — `SPEC.md` §3.1 promises a name no dialect states. Second,
+the precedence hole in **(b)**: an agent span that names a model already gets it
+in `operation` in both dialects, which is symmetric and therefore not a bug
+today, but is the thing option A would collide with.
+
+**(j) The smallest experiment that would falsify this.** The recommendation
+rests on one factual claim: *OpenInference states no agent identity as an
+attribute, so an `identity` field would be single-dialect*. The claim is
+supported by every artefact in this repo — `openinference.py` defines no such
+key, and `openai_tool_call.jsonl`'s AGENT span carries only
+`openinference.span.kind`, `input.value`, `input.mime_type` — and **not one of
+those artefacts is instrumentor evidence.** `capture/backends.py:311` and
+`:357` emit both agent spans by hand ("executing a tool is not an SDK call and
+there is nothing for an instrumentor to wrap"), and
+`genai_tool_call.provenance.md` says the `invoke_agent` span's attributes "remain
+a judgement call". **The corpus contains no instrumentor-emitted agent span, in
+either dialect, at all.** H1 is a question about a span kind we have never
+observed in the wild.
+
+So: **install an OpenInference instrumentation package for an agent framework
+(one that wraps agent runs, not just the model client), run one tool-using agent
+turn through `capture/`, and read the AGENT span's attribute keys.** If it emits
+an agent-name attribute, the asymmetry dissolves, `identity` becomes a
+cross-dialect-comparable field with real teeth, and option B — not C — is the
+answer. If it does not, C's premise is confirmed by the only instrument that can
+confirm it.
+
+It costs one `pip install` and one agent turn, it is a human act and a halt
+point (`ENVIRONMENT.md` network zone 4, `FIXTURES.md` §6), and it is the same
+shape as the capture §12(j)/§14(g) already wants scheduled — the harness can
+emit both dialects in one session, so H1's experiment rides along at close to
+zero marginal cost. Recommend scheduling it there. It is **not** a gate:
+§14(f)'s reasoning applies unchanged, and C is decidable today without it.
+
+**(k) What this memo hands forward.**
+
+1. **Reject option A** — it makes `operation` mean two things on one node kind
+   (**e**), and its only corpus repair erases 22 tested cross-dialect
+   assertions to protect 12 nodes (**f**).
+2. **The asymmetry is real and measured**: 11 of 18 cross-dialect scenarios
+   diverge, 0 today, and the corpus cannot see it because no conformance
+   rendering carries the attribute yet (**f**).
+3. **H1 must be decided before the freeze; C discharges it at zero cost.**
+   §14's rule is right about H1 and its reason over-reaches for option B, which
+   is additive and could land at `1.1` (**h**).
+4. **Two defects found in passing, unfixed**: `SPEC.md` §3.1 promises a
+   "retriever name" no dialect states, and an agent span naming a model already
+   puts the model in `operation` in both dialects (**b**).
+5. **No instrumentor-emitted agent span exists in this corpus, in either
+   dialect** — every agent span in all three captures is written by
+   `capture/backends.py`. Whatever is decided, that absence should be recorded
+   beside §14(h) item 4's other measured absence (**j**).
+
+**Decision:**
+
+*Not taken.* This entry is a `WORKPLAN.md` H1 halt; no code changed with it, and
+`SPEC.md`, `DESIGN.md` and `spanweave/` are untouched — the `SPEC.md` §3.1
+paragraph described in **(i)** lands only when the decision is taken. Record the
+decision in `WORKPLAN.md` §3.
