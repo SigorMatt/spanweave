@@ -835,3 +835,540 @@ fixture material either way.
 *Not taken.* This entry is a `WORKPLAN.md` D1 halt; no code changed with it,
 and `tests/audit/probe2.py` case B stays in the probe until D2 converts it.
 Record the decision in `WORKPLAN.md` §3.
+
+---
+
+## 12. E1: Should dialect dispatch be per file, or per record?
+
+**(a)** `spanweave build` picks **one** adapter for the whole input (`SPEC.md`
+§6.1): `detect()` runs on the first 50 records, the highest score wins, and
+every record is then parsed by that adapter. A trace whose records come from
+two instrumentors has no correct answer under that rule. Should classification
+move to the record — each adapter parsing only the records it claims — and if
+so, what becomes of a record no adapter claims, and of one two adapters claim?
+
+**(b) The failure, demonstrated.** A mixed trace was built from this repo's own
+material: `llm_tool_llm`'s OpenInference rendering supplies the `agent` (s0)
+and `tool` (s2) spans, its OTel GenAI rendering supplies the two `chat` spans
+(s1, s3). Nothing was hand-written; the four records are verbatim from
+`fixtures/conformance/llm_tool_llm/dialects/`. This is the shape `WORKPLAN.md`
+E3 names, and it is the shape a framework instrumentor plus an SDK
+instrumentor produce (see **(c)**).
+
+Under **auto** detection, today's library refuses:
+
+> `spanweave build: this input is ambiguous: openinference, otel_genai are`
+> `equally confident (0.90). Confidence declared by each adapter:`
+> `openinference 0.90, otel_genai 0.90. Name one explicitly with --adapter;`
+> `guessing between them would produce a plausible graph from possibly the`
+> `wrong dialect.`
+
+That refusal is correct and it is the *good* outcome. The bad outcome is the
+escape hatch the message recommends. Both forced builds **succeed**, exit 0,
+and write a graph:
+
+| | canonical `llm_tool_llm` | `--adapter openinference` | `--adapter otel_genai` |
+|---|---|---|---|
+| nodes | 4 | 4 | 4 |
+| node kinds correct | 4 | 2 (s1, s3 → `unknown`) | 2 (s0, s2 → `unknown`) |
+| edges | 7 | 5 | 5 |
+| `parent` | 3 | 3 | 3 |
+| `temporal` | 2 | 2 | 2 |
+| `call_result` | **1** (s1→s2) | **0** | **0** |
+| `data` | **1** (s2→s3) | **0** | **0** |
+| `usage` present | s1, s3 | none | s1, s3 |
+| payloads `present` | 7 of 8 | 3 of 8 | 4 of 8 |
+
+**The audit's claim is right and undercounts.** "Loses the `call_result`
+pairing" is true — the s1→s2 edge is gone under both forced adapters — but the
+`data` edge s2→s3 goes with it, for the same reason: `call_result` needs the
+requester id from s1 (`gen_ai.output.messages`) *and* the fulfiller id from s2
+(`tool_call.id`), and `data` needs s3's `tool_call_response` part *and* s2 as
+the resolved producer. Every relation that **joins the two dialects** is lost;
+every relation that lives inside one record (`parent`) survives. Two of seven
+edges, and both of the `explicit` ones the library exists to recover.
+
+**The sharper harm is not the missing edges — it is `Payload.state`.** Under
+`--adapter otel_genai` the `agent` span reports `inputs.state = absent`. The
+record emitted `input.value`. `SPEC.md` §3.3 and `DESIGN.md` §5 make `absent`
+mean *we were not told*, and call collapsing it the most common way a telemetry
+tool becomes quietly dishonest. Here the library states it about a span it
+**was** told about, in a dialect it can read, that is registered and installed.
+Nothing else in this codebase produces a false `absent`.
+
+**The library does not lie about the rest of it,** and that is worth recording
+because it bounds the severity. Each forced build emits `unknown_span_kind`
+twice, names every foreign attribute in `unmapped_attributes`, keeps every
+record verbatim in `raw`, and reports the broken join honestly from its own
+side: `unpaired_result` ("call 'call_a' was fulfilled but no span in this input
+requests it") under `openinference`, `unpaired_call` ("requested and no span in
+this input fulfils it") under `otel_genai`. Invariant 2 holds. What fails is
+§6.1's own standard — *an ambiguous input never silently produces a plausible
+graph from the wrong adapter* — because a consumer reading `nodes` and `edges`
+and not `diagnostics` sees a complete-looking four-node agent trace with two
+`unknown` spans and no tool call.
+
+**Per-record dispatch recovers all of it.** A prototype that classifies each
+record by the adapters' existing markers, parses each subset with its own
+adapter, and hands the merged spans to today's unmodified `build_graph`
+produces:
+
+```
+classification: {'openinference': ['s0', 's2'], 'otel_genai': ['s1', 's3']}
+unclaimed: []   doubly-claimed: []
+  edge call_result explicit s1 -> s2 | tool_call_id
+  edge data        explicit s2 -> s3 | tool_call_id in tool-result message
+  edge parent      explicit s0 -> s1 | span.parent_span_id
+  edge parent      explicit s0 -> s2 | span.parent_span_id
+  edge parent      explicit s0 -> s3 | span.parent_span_id
+  edge temporal    derived  s1 -> s2 | sibling start_time ordering
+  edge temporal    derived  s2 -> s3 | sibling start_time ordering
+  diagnostics: unmapped_attributes ×2
+MIXED canonical == llm_tool_llm expected (modulo declared payloads): True
+```
+
+Seven edges, both joins, two diagnostics — the canonical graph, exactly. All
+**24** permutations of the four input records produce one identical document
+(modulo `source_digest`, which fingerprints the bytes and is meant to move).
+The builder was not modified for this: it already accepts a span list from any
+source.
+
+**(c) Is a mixed trace real? Constructible, structurally motivated, anticipated
+in this repo's own harness — and not observed.** Said plainly, because G3 will
+ask whether E is a freeze precondition and the answer turns on this.
+
+What the corpus shows, scanned end to end (57 `*.jsonl` files, 177 records):
+
+- **0 files** carry both markers. 37 are `openinference`-only, 20 are
+  `otel_genai`-only.
+- **0 records** carry both markers. **0 records** carry neither.
+
+So the shape has never been captured here. What makes it more than a thought
+experiment is three things:
+
+1. **Both instrumentors write into one OTel SDK.** The two captured provenance
+   files record `opentelemetry-sdk 1.44.0` under both backends. Installing
+   `openinference-instrumentation-langchain` (framework spans: `AGENT`,
+   `CHAIN`, `TOOL`) beside `opentelemetry-instrumentation-genai-openai` (SDK
+   spans: `chat`) puts both dialects on one tracer provider and into one
+   export. Nothing coordinates them, and `opentelemetry-instrument` loads every
+   installed instrumentation entry point by design.
+2. **The reason to install both is the reason the mixing hurts.** The GenAI SDK
+   instrumentor cannot see an agent or a tool execution — those are not SDK
+   calls. The framework instrumentor is what emits them. A stack that wants
+   both layers instrumented is a stack that gets both dialects.
+3. **This repo already had to steer around it.** `capture/backends.py`, on the
+   spans the harness emits itself:
+
+   > *Which means they have to speak the SAME dialect as the instrumentor that
+   > produced the rest of the file. Emitting OpenInference keys beside GenAI
+   > ones would produce a mixed-dialect trace that no adapter honestly reads:
+   > detection would see both, one adapter would win, and whichever lost would
+   > take its spans' meaning with it.*
+
+   That comment predates the audit and describes finding #1 exactly. The
+   harness avoids the shape **by hand**, because the harness controls both
+   halves. A real deployment controls neither.
+
+The honest verdict: *not observed, and cheap to observe* — see **(j)**. Point 3
+is the strongest evidence available short of a capture, and it is first-party
+and unprompted, but it is a prediction made by this project about the world,
+which is not the same as the world.
+
+**(d) Per-record classification, and whether the adapter API must change.**
+
+**The markers already exist and are disjoint.** `openinference.` and `gen_ai.`
+are the two `MARKER_PREFIX` constants; each adapter's `detect()` is already a
+per-record scan that returns `0.9` if **any** record in its sample carries its
+prefix in `attributes`, and `0.0` otherwise. That makes `detect([record])` a
+per-record classifier with no new method: *this adapter claims this record* iff
+`detect([record]) >= MINIMUM_CONFIDENCE`. Checked against a direct marker scan
+over all **177** corpus records: **0 disagreements**.
+
+- **Total.** Every branch of both `detect()` bodies is an `isinstance` guard
+  with a `0.0` fall-through, and there is deliberately no blanket `except`
+  (a raising adapter still reaches `adapter_detect_failed`, which names it).
+  So every record gets a verdict from every adapter.
+- **Order-independent.** `detect([record])` sees one record and no context, so
+  a record's classification cannot depend on where it sat. The 24-permutation
+  result in **(b)** is the end-to-end confirmation.
+- **Registration-order-independent.** `AdapterRegistry.registered()` already
+  sorts by id, and the recommendation below never lets registration order break
+  a tie (it refuses instead).
+
+**No new adapter API is needed. One sentence of `ADAPTERS.md` contract is**
+— so the row's hope holds for code and not quite for documents. `ADAPTERS.md`
+§2 says `detect()` is "called with up to the first 50 records" and that it must
+key on distinctive marker keys. Nothing there promises that a one-record sample
+is meaningful, and an adapter could legally score `0.9` only when it sees three
+matching records. Both shipped adapters are record-decomposable; the contract
+does not require it. E2 should add one paragraph making the requirement
+explicit — *`detect()` must be decomposable over records: a sample scores at or
+above `MINIMUM_CONFIDENCE` iff at least one record in it does alone* — plus a
+checklist line. That is a contract addition, not an API addition: no adapter
+gains a method, and neither shipped adapter changes by a character.
+
+**(e) The two edge cases, which are the whole decision.**
+
+**A record two adapters claim → hard error. Agreed, and for §6.1's own
+reason.** Producing both parses publishes two nodes for one operation, which
+`SPEC.md` §7 already rules out in the duplicate-record case (*"an invented span
+is worse than a missing one, because nothing downstream can tell"*). Producing
+one is a guess between two dialects that disagree about the span's kind, its
+payloads and its call ids — the exact plausible-but-wrong graph §6.1 exists to
+prevent, now at record granularity. Downgrading it to an `unknown` node is
+worse than refusing, because the graph then looks complete while one span's
+relations are silently gone: finding #1 in miniature. And the refusal is
+recoverable — `--adapter <id>` bypasses classification entirely, which is the
+same escape hatch §6.1 already documents.
+
+*Recommend reusing the existing `adapter_ambiguous` code* rather than minting
+one. The class of failure, the remedy and the message are the same; only the
+scope narrows from "this input" to "record N". Reusing it also avoids leaving
+a code reachable from nothing, which is the bookkeeping A3 had to do for
+`DuplicateNodeIdError`. The message must name the record's line number, its
+span id if it has one, and both claimants.
+
+**A record no adapter claims → an `unknown` node *and* a diagnostic.** Never a
+discard (invariant 2), and never handed to a designated adapter, which would
+put a dialect's name in a node's `Provenance` on the strength of that dialect
+having said nothing about it.
+
+This case is not hypothetical: it is what **every** record looks like today
+under `--adapter <the other one>`, and today it produces an `unknown` node with
+`unknown_span_kind`. Keeping that shape is what makes mixed dispatch a strict
+improvement rather than a different set of losses — mixed and forced builds of
+one file should differ in *provenance*, never in `node_count`.
+
+It costs a model decision, and this memo cannot take it: `Provenance.adapter_id`
+is `str`, and the honest value here is "none". Three ways out, in preference
+order:
+
+1. **`Provenance.adapter_id: str | None`** — correct, and a model change, so a
+   second halt inside this one. The schema is unfrozen (`0.9.x`, freeze at
+   Phase 4), which is exactly the window in which this is cheapest.
+2. **Diagnostic only, no node** — no model change. `malformed_record` is the
+   precedent (a diagnostic and no node), and invariant 2's wording (*"an
+   `unknown` node **and/or** a Diagnostic"*) permits it. The cost is the
+   asymmetry above: the same file builds a different `node_count` under
+   `--adapter` than under auto, and a consumer iterating `nodes` never sees the
+   record at all.
+3. **Attribute it to a designated adapter** — rejected. It fabricates
+   provenance, and provenance is the one field whose whole job is to say who
+   read this.
+
+Either way a new `unclaimed_record` diagnostic (warning) carries the record and
+says no registered adapter recognized it. It is the honest report of *"you are
+missing an adapter"*, which is a thing this library should be able to say.
+
+**(f) What per-record dispatch does to ids — and E3's acceptance test.**
+
+`ids.derive(adapter_id, trace_id, source_key[, record])`. Three rules
+(`SPEC.md` §3.6), and dispatch touches each differently:
+
+- **Rule 1 — a trace-unique `span_id` is the id.** Dispatch-independent: the
+  id is the dialect's own string and no adapter id enters it. **This is every
+  record in the corpus**: 177 of 177 carry a usable `span_id`. So for every
+  fixture and every capture that exists today, mixed dispatch moves **no id at
+  all**. Verified: the mixed build's nodes are `s0`–`s3`, the same ids the
+  pure builds give.
+- **Rule 2 — no `span_id` → `derive(adapter_id, trace_id, source_key)`.** Ids
+  **move**, for two independent reasons. `adapter_id` changes for the records
+  the other adapter now parses; and `source_key` falls back to the 1-based
+  record index (`ADAPTERS.md` §3), which is an index **within the sequence
+  handed to that `parse()` call**, so partitioning renumbers it. Measured on a
+  span-id-stripped mixed file: forced `openinference` gives
+  `sw_f3adffe8…`/`sw_cde39f99…`/…, forced `otel_genai` gives `sw_ece4112c…`/…,
+  and mixed gives a third set again. All three are deterministic; none is
+  comparable to another.
+- **Rule 3 — A3 (`b44c3a5`), a shared `source_key` puts the record's canonical
+  digest into the material.** Dispatch makes this rule reachable through a new
+  door: two adapters can each hand `assign()` a record whose `source_key` is
+  `"1"`. Rule 3 fires, the digest separates them, both are kept, no collision —
+  it works, and it is order-independent by construction. But it now fires for a
+  cause A3 did not have in mind, and **silently**: the `duplicate_source_id`
+  report is keyed on `span_id`, not on `source_key`, so nothing says the two
+  ids were disambiguated. E3 should decide whether that deserves a report.
+
+> **A defect this probe found that is not in the audit, is not caused by
+> dispatch, and is real today.** A record with **no** `span_id` gets an id
+> derived from its position in the file, so shuffling the input changes the
+> graph. Measured on a forced single-adapter build, no mixing involved: the
+> document (modulo `source_digest`) and the per-record id assignment both
+> differ between a file and its reverse. That contradicts `CLAUDE.md`
+> invariant 4 and `SPEC.md` §5.2. It is invisible to the suite because the
+> `shuffled_order` scenario — like all 177 corpus records — carries span ids,
+> so no test has ever exercised the derived-id path under a shuffle. The fix
+> is A3's own reasoning applied one level up: **the fallback `source_key`
+> should be the record's canonical digest, not its index** — content, never
+> position. That would move **0** stored expectations, because no fixture has
+> a record without a span id. It also makes rule 2 dispatch-independent, which
+> retires the second bullet above. Not E1's to decide; it wants its own batch,
+> and E3 will collide with it if it is left.
+
+**E3's acceptance test as written is achievable, and it is already insulated
+twice.** `tests/conformance.py:canonical()` erases `provenance` from every node
+(`ERASED_NODE_FIELDS = ("raw", "provenance")`), erases `adapter` from every
+edge (`ERASED_EDGE_FIELDS = ("adapter",)`), and reduces `meta` to
+`schema_version`, `trace_id` and the three counts — `meta.adapters` is not
+compared. A derived id is compared **by position** (`_positional_labels`, A3).
+So per-node provenance differing is not merely tolerable, it is invisible to
+the comparison by design, and the corpus already documents why: *"who parsed it
+is not a property of the run."*
+
+One thing E3 must not assume, because it is the part that would fail: a mixed
+rendering's **payload values** are a mix. `llm_tool_llm` declares
+`s0.inputs` (`mime`, `value`), `s1.inputs`, `s1.outputs`, `s3.inputs`,
+`s3.outputs` (`value`) dialect-varying in `expected/comparison.json`, and a
+mixed rendering takes s0's from OpenInference and s1/s3's from OTel GenAI.
+Compared **with** those declarations applied, the mixed graph is identical to
+`llm_tool_llm`'s canonical graph — that is the `True` in **(b)**. Compared
+without them it differs on exactly those five payload fields and nothing else.
+So E3's scenario needs its own `expected/comparison.json` carrying the same
+declarations (and, if it is rendered as a scenario rather than asserted against
+`llm_tool_llm` directly, its own `expected/payloads/` entry). It must **not**
+be added to `tests/conformance.py:DIALECTS` — that tuple obliges every scenario
+to render every entry, and "mixed" is not a dialect.
+
+**(g) What `Meta.adapters` and `Provenance.adapter` mean afterwards.**
+
+- **`Meta.adapters`** already is a `tuple[AdapterInfo, ...]` sorted by
+  `(id, version)`, and `SPEC.md` §3.9 already describes it as plural. Its
+  meaning goes from *the adapter that read this input* to **every adapter that
+  produced at least one node**. A single-dialect file still yields exactly one
+  entry, unchanged.
+- **`AdapterInfo.declared_confidence`** should be each contributing adapter's
+  `detect()` over **the records it claimed** (first 50 of them). That keeps the
+  field's meaning exactly as `SPEC.md` §3.9 states it — the adapter's own claim
+  about the input it was given — and, because an adapter that claims every
+  record gets the same first-50 sample it gets today, **no existing graph's
+  number moves**.
+- **`Provenance.adapter_id` / `adapter_version`** stop being graph-wide facts
+  and become what the field's docstring already says: *which adapter produced
+  this node*. No definition changes; it stops being trivially constant.
+- **`Edge.adapter` is the one the row does not mention and E3 must answer.**
+  `SPEC.md` §3.8 defines it as *"which adapter's spans the edge was built
+  from"*, and under mixing an edge can join two adapters' spans: the prototype's
+  `call_result` s1→s2 has an `otel_genai` requester and an `openinference`
+  fulfiller. Three candidates — the adapter of the span that **stated** the
+  relation (well-defined for `parent`: the child; and for `data`: the
+  receiver — but arbitrary for `call_result`, which is a join of two
+  statements); `None` when the contributors differ (honest, and `None` is
+  already the value on every `temporal` edge, so no consumer can be relying on
+  it being set); or a set, which is a schema change. **Recommend `None` when
+  the contributors differ**, with §3.8 saying so: it reuses an existing legal
+  value, it is the same answer the field already gives for an edge no adapter
+  asserted, and it never names one dialect for a relation two dialects made.
+
+**(h) Does the seam hold? Yes, under all three options, and here is the gate.**
+
+`tests/gates.py:no_dialect_outside_adapters` (violation label
+`no-dialect-in-builder`) scans every file under `spanweave/` **except**
+`spanweave/adapters/` for the strings in `DIALECT_IDS`, lexically, comments
+included; `tests/test_gates.py::test_package_names_no_dialect_outside_adapters`
+asserts it over the shipped package. Its companion,
+`no_adapter_imports_below_the_top` (`no-adapter-imports`), permits
+`spanweave/api.py` and `spanweave/cli.py` to import the registry and nothing
+else. Both stay green under every option here, because:
+
+- **Classification lives in the registry**, `spanweave/adapters/__init__.py`,
+  which is under `adapters/` and where dialect knowledge is already legal — and
+  under the `detect([record])` reuse it holds **no marker table of its own**;
+  each adapter answers for itself, so the registry stays as dialect-blind as it
+  is today.
+- **The builder is untouched by dispatch.** It receives spans and, for
+  per-node provenance, an `AdapterInfo` alongside each — an opaque value it
+  copies into `Provenance` and sorts into `Meta.adapters`. It never branches on
+  one. This is already true of the single `adapter` parameter; E3 makes it a
+  per-span value, not a new kind of knowledge. The prototype in **(b)** ran
+  against **unmodified** `build.py`.
+- **The partition happens above the seam**, in `api.py`, which is one of the
+  two modules already permitted to reach the registry.
+
+The one thing that would breach it: a residual rule that hands unclaimed
+records to a named default. That is why **(e)** rejects option 3 on provenance
+grounds — it would also require the dispatcher to name a dialect.
+
+**(i) The options, and the recommendation.**
+
+**Option (a) — the registry classifies every record; each adapter parses only
+its own.** File-level detection becomes a *summary* of record-level
+classification rather than a separate mechanism. Behaviour by case:
+
+| Input | Result |
+|---|---|
+| every record claimed by one and the same adapter | exactly today's graph, today's ids, one `Meta.adapters` entry |
+| ≥2 adapters each claim ≥1 record, none doubly claimed | mixed build |
+| any record claimed by two adapters | hard error, `adapter_ambiguous`, naming the record |
+| some records claimed by nobody | `unknown` node + `unclaimed_record` per **(e)** |
+| **no** record claimed by anybody | today's `adapter_unconfident` hard error, unchanged |
+
+**Option (b) — an explicit composite `--adapter openinference+otel_genai`.** A
+new argument grammar, a new error surface for a malformed composite, and a
+question about what a name *not* in the list does to a record. It buys the
+ability to restrict mixing to a named set, which nothing has asked for. Under
+(a), `--adapter <id>` keeps its exact current meaning (force one adapter over
+everything) and remains the escape hatch for a doubly-claimed file and for
+reproducing a pre-E graph.
+
+**Option (c) — (a), but only when file-level detection is ambiguous.** *This
+one is actively unsafe, and it is worth being specific about why.*
+`DETECTION_SAMPLE_SIZE` is **50**. A trace of 10,000 OpenInference spans with
+80 GenAI `chat` spans starting at record 200 has an unambiguous first 50:
+`openinference` scores `0.9`, `otel_genai` scores `0.0`, no tie, so (c) never
+enters mixed mode — and the 80 chat spans become `unknown` with their pairings
+gone, exactly as in **(b)**'s table, in a file that built cleanly. (c)'s
+precondition is a property of the first 50 records, not of the file, so it
+gates the fix on a sampling artifact. The mixed-and-detected case is the *easy*
+one; the mixed-and-undetected case is the dangerous one, and (c) covers only
+the first.
+
+**Recommendation: option (a), always, with no composite flag and no
+ambiguity precondition.** Classification is per record because *dialect is a
+property of a record* — that is the actual fact of the matter, and file-level
+selection was an approximation that held only while a file had one producer.
+The reasons, in order:
+
+1. It is the only option that fixes the dangerous case, per (c) above.
+2. It costs no adapter API, no builder change, and no marker table anywhere:
+   `detect([record])`, already written, already pure, already total.
+3. It is behaviour-preserving where it matters. A single-dialect input produces
+   a byte-identical graph — same ids (rule 1 for all 177 corpus records), same
+   `declared_confidence` (same first-50 sample), one `Meta.adapters` entry.
+4. It makes the refusal proportionate. Today a mixed file is refused *entirely*
+   and the recommended remedy silently damages it. Under (a) the refusal
+   survives exactly where a guess would be required — one record, two claimants
+   — and nowhere else.
+
+E4's row proposes `--adapter auto|<id>|mixed`. Under this recommendation there
+is **no `mixed` mode**: `auto` mixes iff the input is mixed, and a separate
+spelling would only let a user assert something the records already settle.
+`--adapter auto` as the explicit spelling of the default is worth having;
+`--adapter mixed` is not.
+
+**(j) The smallest experiment that would falsify it.** Install
+`openinference-instrumentation-langchain` **and**
+`opentelemetry-instrumentation-genai-openai` into one environment, point both
+at one `TracerProvider`, and run a single tool-using LangChain agent turn
+through `capture/`. Then read the export and answer two questions:
+
+- **Does any record carry both markers?** If real instrumentors overlap —
+  a framework instrumentor emitting `gen_ai.*` beside its own keys, which the
+  convergence of the two conventions makes plausible — then the doubly-claimed
+  case is the **common** case rather than the corner case, a hard error per
+  record is hostile, and this memo's **(e)** is wrong. That is the single
+  finding that would overturn the recommendation.
+- **Is the file mixed at all, and is it mixed within the first 50 records?**
+  A "no" to the first retires E entirely and answers G3 (not a freeze
+  precondition). A "yes" to the first and "no" to the second is the decisive
+  argument against option (c).
+
+One capture settles both, and it is E3's fixture material either way. Until it
+exists, the honest status of finding #1 is **a real defect on a constructible
+input, with the input's occurrence in the wild predicted but unmeasured** —
+which is a weaker claim than the audit makes and a stronger one than "we made
+it up", and G3 should have it in those words.
+
+**(k) Draft `DESIGN.md` §3 text** — a new subsection after §3.1, for E3/E4 to
+land if (a) is taken. `DESIGN.md` itself is unchanged by this memo.
+
+> ### 3.2 Dispatch is per record, and it happens above the seam
+>
+> A dialect is a property of a **record**, not of a file. One process can run
+> a framework instrumentor and an SDK instrumentor at once; they share a
+> `TracerProvider` and their spans share an export. Choosing one adapter per
+> file was an approximation of the common case, and where it fails it fails
+> silently: the losing dialect's spans become `unknown`, their payloads report
+> `absent`, and every relation that joined the two dialects disappears while
+> the graph still looks complete.
+>
+> So the registry classifies each record and each adapter parses only the
+> records it claims. This does not move the seam — it *narrows* what crosses
+> it. Nothing changes below:
+>
+> - **The builder still never learns a dialect name.** It receives spans and an
+>   opaque `AdapterInfo` per span, copies it into `Provenance`, and sorts the
+>   distinct ones into `Meta.adapters`. It never branches on one.
+>   `no_dialect_outside_adapters` (`tests/gates.py`) is unchanged and stays
+>   green.
+> - **Classification stays inside `adapters/`.** The registry asks each adapter
+>   `detect([record])`; no marker table lives outside the adapter that owns the
+>   marker.
+> - **The partition happens in `api.py`**, one of the two modules
+>   `no_adapter_imports_below_the_top` already permits to reach the registry.
+>
+> Consequence, and it is the same one as §3: a new dialect is still a new file
+> under `adapters/` plus fixtures. It now also composes with every existing
+> dialect in one trace, for free, because composition is a property of the
+> dispatcher rather than of any adapter.
+
+**Draft `SPEC.md` §6.1 text** — replacing the current §6.1 in full. `SPEC.md`
+itself is unchanged by this memo.
+
+> ### 6.1 Adapter selection
+>
+> **A dialect is a property of a record.** `spanweave build` asks every
+> registered adapter about **every** record — `detect([record])`, the same
+> declaration §6 defines — and an adapter **claims** a record when it scores at
+> or above `0.5`. Each adapter then parses the records it claimed, and the
+> builder receives all of their spans together.
+>
+> | Input | Result |
+> |---|---|
+> | every record claimed by one adapter | one adapter, one `meta.adapters` entry — the single-dialect case, unchanged |
+> | several adapters each claim some records, none claims a record another claims | a **mixed** build: each adapter parses its own records, `meta.adapters` lists every contributor sorted by `(id, version)`, and each node's `provenance` names the adapter that produced it |
+> | any record claimed by two adapters | a **hard error** (`adapter_ambiguous`), naming the record, its span id, and the claimants |
+> | a record claimed by no adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning) |
+> | no record claimed by any adapter | a **hard error** (`adapter_unconfident`), listing every declared score |
+>
+> - `--adapter <id>` bypasses classification entirely: the named adapter parses
+>   every record, whatever the markers say. It is the escape hatch, and it is
+>   the remedy the ambiguity error names. `--adapter auto` is the default,
+>   spelled out.
+> - **Ambiguity is refused where a guess would be required, and nowhere else.**
+>   Two adapters claiming one record is unresolvable — they disagree about that
+>   span's kind, payloads and call ids, publishing both would invent a second
+>   span for one operation (§7), and picking one is the plausible-but-wrong
+>   graph this section exists to prevent. Two adapters claiming *different*
+>   records is not ambiguity at all: each record has exactly one answer.
+> - **Nothing is claimed by proximity.** A record's classification is a
+>   function of that record alone, so it cannot depend on input order, on
+>   registration order, or on how many neighbours matched (§5).
+> - The confidence each contributing adapter **declared** is recorded in `meta`
+>   as `declared_confidence` (§3.9), measured over the first 50 records **it
+>   claimed** — the adapter's own claim about the input it was given, not a
+>   measurement of anything. An adapter that claims every record therefore
+>   reports the same number it reported before this rule existed.
+>
+> > Detection is still ergonomics rather than evidence, and `--adapter` still
+> > works without it. What changed is the failure mode it defends against.
+> > Before, an ambiguous input was refused as a whole and the documented remedy
+> > — force an adapter — silently discarded the other dialect's meaning: its
+> > spans became `unknown`, its payloads reported `absent` although content was
+> > emitted, and every relation joining the two dialects vanished from a graph
+> > that still looked complete. Refusing a *whole file* because *one record* is
+> > ambiguous was never the honest scope of the refusal.
+
+**(l) What E2–E4 inherit from this memo, beyond the decision.**
+
+1. `ADAPTERS.md` §2 needs the record-decomposability paragraph and a checklist
+   line (E2). No adapter gains a method.
+2. `Edge.adapter` needs a rule for an edge joining two adapters (E3);
+   recommended `None`, with `SPEC.md` §3.8 saying so.
+3. `Provenance.adapter_id: str | None` is a model change and a **second**
+   decision inside this one (E3). The fallback that avoids it is diagnostic-only
+   for an unclaimed record, at the cost of a `node_count` that differs between
+   the auto and forced paths for one file.
+4. Rule 3 becomes reachable through a second door — two adapters both numbering
+   a record `"1"` — and reports nothing when it fires (E3).
+5. The scenario needs its own `expected/comparison.json` declarations, and
+   "mixed" must not go into `tests/conformance.py:DIALECTS` (E3).
+6. A separate, pre-existing defect: an index-derived `source_key` makes a
+   record's id depend on its file position, so shuffling a trace with no span
+   ids changes the graph. Not caused by dispatch; widened by it. Its own batch.
+
+**Decision:**
+
+*Not taken.* This entry is a `WORKPLAN.md` E1 halt; no code changed with it,
+and `tests/audit/probe1.py`'s mixed-instrumentation case stays in the probe
+until E2/E3 convert it. Record the decision in `WORKPLAN.md` §3.
