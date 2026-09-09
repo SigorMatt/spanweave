@@ -160,7 +160,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A5 | **Content-derived fallback ids.** Review blocker 1 / §12(f): a record with no `span_id` gets `source_key = str(index)` in both adapters, so shuffling the input rebinds ids (`sw_cde39f998fc177dc` names `beta` forward and `alpha` reversed). Fallback `source_key` becomes the record's canonical digest (A3's rule applied one level up); SPEC §3.6 rule 2 wording; both adapters identical under diff. New degenerate conformance scenario `derived_ids` with span-id-less records **and a shuffled rendering**, expected graphs equal. Shuffle tests extended beyond `WORKED_RECORDS`. Moves 0 stored expectations. Must land before E2. | done | 20 |
 | A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | done | 12 |
 | A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | done | 12 |
-| A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | todo | 10 |
+| A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | done | 10 |
 
 ### Phase B — performance
 
@@ -474,6 +474,14 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   that have one* is not diagnosed; the sentence exists only in A4's commit body
   and CHANGELOG. No WORKPLAN row names it. A7 left it deliberately rather than
   widen its own scope.
+- A8 done (`362002e`). Phase A complete. Lone-CR terminator removed, BOM and CRLF
+  kept; three A2 assertions inverted or deleted (a CR-only file is now 0 records +
+  one `malformed_record`, not N records). A3's "no id moves" overclaim corrected in
+  CHANGELOG and the `ids.derive` docstring: ids do move for a record whose source
+  key a second record also claims (rule 2 → rule 3); A5's digest fallback closed
+  the reachable reader route, but it stays reachable through the public `assign`.
+  A8 also edited TASKS.md's A2 registry line, which claimed CR-only endings are
+  accepted — the only registry edit in A5–A8.
 
 ---
 
