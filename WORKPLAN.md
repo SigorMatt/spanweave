@@ -168,7 +168,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | todo | 8 |
+| E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | awaiting decision | 8 |
 | E2 | **Registry: per-record classification.** `AdapterRegistry.classify(record) -> adapter_id | None` from the adapters' existing marker logic (no new adapter API if avoidable; `ADAPTERS.md` update if not). Detection tests: pure files unchanged; mixed file → classification map; a record claimed by two adapters → still a hard error. | awaiting E1 | 20 |
 | E3 | **Builder: multi-adapter spans.** `build_graph` accepts spans from several adapters; `ids.derive` already takes `adapter_id` per span — verify id stability; `Meta.adapters` = all used, ordered by id. Conformance scenario `mixed_instrumentation`: OpenInference agent + tool, OTel GenAI chat, expected graph **identical to `llm_tool_llm`'s canonical graph**. This extends cross-dialect equivalence to intra-trace mixing and is the batch's acceptance test. | awaiting E2 | 25 |
 | E4 | **CLI, docs, changelog.** `--adapter auto|<id>|mixed` semantics, `spanweave inspect` shows per-adapter node counts, README "What is real" section, ADAPTERS.md, SPEC §6.1 final text. | awaiting E3 | 12 |
@@ -308,6 +308,36 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   needs a qualifier, and `_received_results` consumes the `tool_call_id` key
   but not the sibling `...role` key it reads (13.36 MB of diagnostics at 400
   turns).
+- E1 memo written (`5995e0a`, `OPEN_QUESTIONS.md` §12) — **awaiting decision**.
+  Recommends **option (a) always**, not (c): the "only when file-level
+  detection is ambiguous" precondition is a property of the first 50 records,
+  not of the file, so a 10k-span OpenInference trace whose GenAI spans start at
+  record 200 would never enter mixed mode and would lose them silently.
+  Demonstrated: auto refuses (`adapter_ambiguous`); each forced build exits 0
+  and loses **2 of 7 edges** — `call_result` *and* `data`, so the audit's claim
+  is right and undercounts — and reports `Payload.state = absent` where content
+  was emitted, which is the sharper harm.
+- **E3's acceptance test as written is achievable**: `canonical()` already
+  erases `provenance` from nodes and `adapter` from edges and compares derived
+  ids positionally, and `meta.adapters` is not compared. Caveat E3 must carry:
+  a mixed rendering's payload *values* are a mix, so the scenario needs
+  `llm_tool_llm`'s existing `comparison.json` declarations, and "mixed" must
+  not enter `tests/conformance.py:DIALECTS`.
+- **A mixed trace is constructible, not observed** — 57 files / 177 records in
+  the corpus, 0 with both markers, 0 doubly claimed, 0 unclaimed. G3 should
+  weigh that. The strongest evidence is first-party and unprompted:
+  `capture/backends.py` already avoids emitting one by hand, and its comment
+  describes finding #1 exactly.
+- **E1 surfaced two extra model decisions folded inside E's**: `Edge.adapter`
+  needs a rule for a two-adapter join (memo recommends `None`), and an
+  unclaimed record wants an `unknown` node + diagnostic, which needs
+  `Provenance.adapter_id: str | None`.
+- **NEW BUG, pre-existing and dispatch-independent, no batch yet:** a record
+  with no `span_id` gets a **position-derived** id, so shuffling such a trace
+  changes the graph — a direct violation of CLAUDE.md invariant 4. Undetected
+  because all 177 corpus records have span ids. The fix is A3's own reasoning
+  (digest, not index) and moves 0 expectations. **E3 will collide with this if
+  it is left unfixed** — it wants its own batch before E3.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
