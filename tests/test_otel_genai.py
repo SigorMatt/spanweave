@@ -187,6 +187,25 @@ def test_a_tool_call_response_part_is_a_result_the_span_was_given():
     assert span.call_ids == ()
 
 
+def test_recognizing_a_received_result_reports_no_key_it_read():
+    # The audit's volume finding, checked on this side of the seam too: an
+    # adapter must not report as unmapped a key it read and acted on. This
+    # dialect carries the whole resent history inside one attribute it
+    # consumes, so a longer history adds no keys at all -- and that is a
+    # property to pin, not to assume.
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.input.messages": messages(
+                user(), responses(*[f"call_{i}" for i in range(32)])
+            ),
+        }
+    )
+    assert span.received_call_ids == tuple(f"call_{i}" for i in range(32))
+    assert span.unmapped == ()
+    assert codes_of(span) == []
+
+
 def test_a_response_part_in_the_OUTPUT_messages_is_not_a_received_result():
     span = span_of(
         {

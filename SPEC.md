@@ -369,6 +369,18 @@ recognizes but cannot read — a `start_time` in a rendering §3.1 does not
 accept — is *not* normalized, and saying so here is what keeps it from
 vanishing between the raw record and a `None`.
 
+**A key an adapter read and acted on is mapped, and is not reported here.**
+Not every mapped key becomes a field. Some are read to *decide*: a tool-result
+message's `role` is what tells the adapter that the id beside it is a result
+the span received (§4.2.1) rather than a request it merely echoed (§4.4), and
+that decision is the mapping. Reporting such a key overstates the gap — it
+says the adapter did not understand a key it in fact acted on — and at
+conversational scale it says so once per resent message per turn, which is
+quadratic in the length of the conversation. A key the adapter read and could
+**not** use is the opposite case and stays reported: a `llm.token_count.*`
+whose value is not a number is a real gap, and so is an id whose sibling role
+said it was not a result.
+
 #### `source`, per code
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
@@ -818,9 +830,12 @@ adapter can recover, and it is frequently **not** the parent/child relation.
   `warrant=explicit` for a relation the telemetry never stated. An adapter
   MUST take a requester id only from what the span itself produced. **An echo
   of a reference is not the reference.**
-- An id a span merely received is not dropped: it is left unmapped and
-  reported (§3.7). It is evidence of context, and there is no edge kind for
-  that — inventing one would be worse than saying nothing.
+- An id a span merely **echoes** — one it did not originate — is not dropped:
+  it is left unmapped and reported (§3.7). It is evidence of context, and there
+  is no edge kind for that — inventing one would be worse than saying nothing.
+  A tool-*result* id in the same resent history is the other case, not this
+  one: §4.2.1 maps it, so it and the `role` key that identified it are
+  consumed like any other mapped key.
 - Unmatched calls/results produce `unpaired_call` / `unpaired_result`
   diagnostics — never a fabricated pairing, and never a fallback to guessing by
   name or proximity.

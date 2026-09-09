@@ -70,13 +70,15 @@ def test_the_worked_example_parses_exactly_as_the_scenario_describes():
     assert spans[3].call_role is None
 
     # Real telemetry carries more than this library normalizes, and those keys
-    # are reported rather than dropped. Including the echoed ids.
+    # are reported rather than dropped. Including the echoed request id -- but
+    # NOT `llm.input_messages.2.message.tool_call_id`, which is the result this
+    # span was given and is mapped to `received_call_ids` (SPEC.md §4.2.1).
     echoed = [key for key in spans[3].unmapped if "tool_call" in key]
     assert echoed == [
         "llm.input_messages.1.message.tool_calls.0.tool_call.function.name",
         "llm.input_messages.1.message.tool_calls.0.tool_call.id",
-        "llm.input_messages.2.message.tool_call_id",
     ]
+    assert spans[3].received_call_ids == ("call_a",)
     assert [d.code for d in spans[3].diagnostics] == [codes.UNMAPPED_ATTRIBUTES]
 
 
@@ -667,3 +669,94 @@ def test_an_echoed_call_name_in_input_context_is_not_read():
     )
     assert span.call_ids == ()
     assert span.call_names == {}
+
+
+# --------------------------------------------------------------------------
+# The keys a decision reads (SPEC.md 3.7)
+# --------------------------------------------------------------------------
+
+
+def test_the_role_that_recognizes_a_tool_result_is_consumed_with_its_id():
+    # `role == "tool"` is what separates a result this span was GIVEN from an
+    # echo of a request it did not make. The adapter reads it and acts on it,
+    # so it is mapped -- reporting it as unmapped would say the adapter did
+    # not understand a key it decided with.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.2.message.role": "tool",
+            "llm.input_messages.2.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ("call_a",)
+    assert span.unmapped == ()
+    assert span.diagnostics == ()
+
+
+def test_a_result_id_repeated_on_one_span_is_consumed_every_time():
+    # The id is recorded once; both keys stating it were read and mapped.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.2.message.role": "tool",
+            "llm.input_messages.2.message.tool_call_id": "call_a",
+            "llm.input_messages.3.message.role": "tool",
+            "llm.input_messages.3.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ("call_a",)
+    assert span.unmapped == ()
+
+
+def test_a_role_that_is_not_tool_leaves_the_id_it_decided_about_reported():
+    # The rule runs in both directions: the role was read and acted on, so it
+    # is mapped; the id it decided against was not mapped to anything, so it
+    # is still reported.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.role": "assistant",
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
+
+
+def _echo_loop(turns):
+    """The agent loop of `tests/audit/probe2.py` case B, in miniature.
+
+    Each turn's llm span carries every earlier tool result in its input,
+    because the protocol requires the history to be resent.
+    """
+    records = []
+    for turn in range(turns):
+        attributes = {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.0.message.role": "user",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": f"c{turn}",
+        }
+        for earlier in range(turn):
+            attributes[f"llm.input_messages.{earlier + 1}.message.role"] = "tool"
+            attributes[f"llm.input_messages.{earlier + 1}.message.tool_call_id"] = (
+                f"c{earlier}"
+            )
+        records.append({"span_id": f"l{turn}", "name": "llm", "attributes": attributes})
+    return records
+
+
+@pytest.mark.parametrize("turns", [8, 32])
+def test_a_resent_history_does_not_grow_the_diagnostics_quadratically(turns):
+    # The audit's volume finding: every echoed tool-result message put two
+    # keys into `unmapped_attributes`, so a 400-turn trace reported ~160,000
+    # keys the adapter had in fact read. What is left is the one key per span
+    # nothing reads -- the opening user message's role -- which is linear.
+    spans = list(ADAPTER.parse(_echo_loop(turns)))
+    assert [len(span.unmapped) for span in spans] == [1] * turns
+    assert {key for span in spans for key in span.unmapped} == {
+        "llm.input_messages.0.message.role"
+    }
+    # Every earlier turn's result is still recorded (in key order, which is
+    # lexicographic and deterministic -- not turn order).
+    last = spans[-1].received_call_ids
+    assert sorted(last) == sorted(f"c{i}" for i in range(turns - 1))

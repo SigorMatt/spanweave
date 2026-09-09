@@ -212,6 +212,9 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     if model is not None:
         normalized["model"] = model
     call_ids, call_role, call_names = _call(attributes, consumed, operation)
+    # Before `unmapped` is computed, because this reads attributes and marks
+    # what it read: a key consumed after the tally is a key still reported.
+    received_call_ids = _received_results(attributes, consumed)
     status, status_note = _status(record)
 
     started_at, ended_at, unreadable_times = _timestamps(record)
@@ -257,7 +260,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_role=call_role,
         call_names=call_names,
         links=_links(record),
-        received_call_ids=_received_results(attributes, consumed),
+        received_call_ids=received_call_ids,
         attributes=normalized,
         unmapped=tuple(unmapped),
         raw=RawRecord(source=record, source_id=span_id, line_number=index),
@@ -541,17 +544,31 @@ def _received_results(
     different attribute form and is only an echo of the *request*
     (`tool_call_history_echo`). Reading either as the other is a mistake in
     opposite directions.
+
+    The role key is consumed along with the id, because it was read and acted
+    on and `unmapped` names what the adapter did **not** map (`SPEC.md` §3.7).
+    Reporting it said the adapter had failed to understand the key it decided
+    with -- once per echoed message per turn, which is quadratic in a resent
+    conversation: at 400 turns the September 2026 audit measured 13.19 MB of
+    `unmapped_attributes` diagnostics, nearly all of them these two keys.
     """
     received: list[str] = []
     for key in sorted(str(k) for k in attributes):
         if not (key.startswith(INPUT_MESSAGES) and key.endswith(RESULT_ID_SUFFIX)):
             continue
-        message = key[: -len(RESULT_ID_SUFFIX)]
-        if _as_str(attributes.get(message + ROLE_SUFFIX)) != TOOL_ROLE:
+        role_key = key[: -len(RESULT_ID_SUFFIX)] + ROLE_SUFFIX
+        if role_key in attributes:
+            consumed.add(role_key)
+        if _as_str(attributes.get(role_key)) != TOOL_ROLE:
+            # The id was not mapped, so it stays reported. The role that
+            # decided so was.
             continue
         found = _as_str(attributes[key])
-        if found is not None and found not in received:
-            consumed.add(key)
+        if found is None:
+            # Read and unusable, which is a real gap: leave it reported.
+            continue
+        consumed.add(key)
+        if found not in received:
             received.append(found)
     return tuple(received)
 

@@ -194,6 +194,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A key an adapter reads to decide is no longer reported as one it could not
+  map.** The OpenInference adapter reads a tool-result message's
+  `...message.role` to tell a result the span was **given** (`SPEC.md` §4.2.1)
+  from an echo of a request it never made (§4.4), and then reported that key
+  in `unmapped_attributes` -- saying it had failed to understand the key it had
+  just decided with. It reported the id key beside it too, because the pass
+  that consumed the id ran **after** the unmapped keys were tallied, so the
+  consumption had no effect at all. Both are two keys per resent message per
+  turn, and a conversation resends its whole history, so the diagnostics grew
+  quadratically: on the audit's 400-turn agent loop, `unmapped_attributes` was
+  **13,193,072 bytes** of the serialized graph and is now **99,092** -- one
+  key per span, the opening user message's role, which genuinely is read by
+  nothing. No id, edge, node or count changed; the OTel GenAI adapter was
+  audited for the same defect and has none (its history lives inside one
+  attribute it consumes). `SPEC.md` §3.7 now states the rule in both
+  directions: a key read and **acted on** is mapped, a key read and **not
+  usable** stays reported.
+  (audit finding 6, the diagnostics half)
+
 - **A lone carriage return is no longer a line terminator**, because a lone
   carriage return is legal JSON whitespace *inside* a record. RFC 8259 lists
   CR among the four inter-token whitespace characters, so `{"a":<CR>1}` is one

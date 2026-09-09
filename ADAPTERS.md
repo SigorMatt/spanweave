@@ -228,6 +228,12 @@ being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
 **Losslessness**
 - `unmapped` — the attribute **keys** you saw and did not normalize. Keys only;
   values are already in `raw` (`SPEC.md` §3.7).
+- **Mark every key you read and acted on as consumed**, including one you read
+  only to *decide* — a message's `role`, a part's `type`. It never becomes a
+  field, but the decision is the mapping, and reporting it says you failed to
+  understand a key you used. Mark it where you read it, and make sure that
+  runs **before** `unmapped` is tallied. A key you read and could not use is
+  the other case: leave that one reported.
 - `raw` — the source record, verbatim and unmodified, plus its line number.
 
 ## 4. Registering

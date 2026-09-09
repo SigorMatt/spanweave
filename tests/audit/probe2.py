@@ -38,6 +38,11 @@ def timed(label, fn):
 # Fixed in batch A3.
 
 # B. Agent loop with history echo: N llm->tool turns, each llm input carries every prior tool result.
+# The DIAGNOSTIC half of this case is now a regression test, not a probe:
+# tests/test_openinference.py, under "The keys a decision reads". Batch B3
+# consumed the keys the adapter reads, taking loop 400's `unmapped_attributes`
+# from 13,193,072 bytes to 99,092. The case stays here for its EDGE half (D2),
+# which is a different finding and still open.
 def loop(n):
     recs = [oi("s0", None, "AGENT", "agent", 1000.0, 1000.0 + n)]
     t = 1000.0
