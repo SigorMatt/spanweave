@@ -147,7 +147,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| B1 | **Annotation cost.** `Graph.annotate` rebuilds indexes via `dataclasses.replace` → O(N+E) per call (measured: 2,000 annotations on 3,001 nodes = 33 s). Carry `_index/_out/_in` across the replace (nodes/edges unchanged), add `Graph.annotate_many(entries)`. Tests: identity of shared indexes after annotate; `annotate_many` equals sequential `annotate`; determinism gate still green. SPEC §8. CHANGELOG. | todo | 15 |
+| B1 | **Annotation cost.** `Graph.annotate` rebuilds indexes via `dataclasses.replace` → O(N+E) per call (measured: 2,000 annotations on 3,001 nodes = 33 s). Carry `_index/_out/_in` across the replace (nodes/edges unchanged), add `Graph.annotate_many(entries)`. Tests: identity of shared indexes after annotate; `annotate_many` equals sequential `annotate`; determinism gate still green. SPEC §8. CHANGELOG. | done | 15 |
 | B2 | **Reader line splitting.** `_read_lines` re-copies the buffer per line. Measure on a 200 MB file first; implement `bytes.find`-based splitting only if ≥20% faster. Otherwise `dropped` with the numbers recorded here. | todo | 10 |
 
 ### Phase C — timestamps
@@ -256,6 +256,13 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   record the vacancy. Also, `canonical()` now maps derived ids to positional
   labels (`n0`, `n1`) — specified in `FIXTURES.md` §4.1 since Phase 1, first
   implemented here because nothing had produced a derived id before.
+- B1 done (`cee10fb`): sequential `annotate` on the audit's case went
+  12.50 s -> 1.47 s (8.5x) and `annotate_many` does the same batch in 0.011 s;
+  85% of the old time was `Graph.__post_init__`. `annotate_many` is *defined*
+  in SPEC §8 as sequential `annotate` (last-wins on a repeated
+  `(namespace, node_id, key)`; a refused entry raises and applies nothing).
+- **The neutrality gate rejects the word "cost" in `spanweave/` string
+  literals** — use "work"/"time" in any docstring a later batch adds.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
