@@ -1372,3 +1372,363 @@ itself is unchanged by this memo.
 *Not taken.* This entry is a `WORKPLAN.md` E1 halt; no code changed with it,
 and `tests/audit/probe1.py`'s mixed-instrumentation case stays in the probe
 until E2/E3 convert it. Record the decision in `WORKPLAN.md` §3.
+
+---
+
+## 13. G1: What counts as "real outside users", and when does the clock start?
+
+**(a)** `ROADMAP.md` makes outside use a freeze precondition in **three**
+places, at three different strengths, and none of them is a condition anyone
+could check. Verbatim, so the decision is taken against the text and not a
+paraphrase:
+
+> The through-line: **earn the right to be depended on before asking to be
+> depended on.** The schema does not freeze until a consumer the model was not
+> designed for has used it unchanged.
+
+> **Freeze later, on evidence.** `schema_version` `1` and `1.0.0` land when the
+> predictions are resolved, the adversarial finding is absorbed, and real users
+> have exercised the schema — not when the calendar says launch.
+
+> - **The freeze.** `schema_version` `1` and `1.0.0`, once the predictions are
+>   resolved, the Phase 2 adversarial finding is absorbed, real users have
+>   exercised the schema at `0.9.x`, **and a third dialect is rendered in the
+>   conformance corpus** — see the gate below.
+
+**The three do not say the same thing, and the difference is the question.**
+The through-line is nearly a definition already, and it is a **no-change**
+test: the evidence is that nothing had to move. The two bullets say
+*exercised*, which any use satisfies. And `CONTRIBUTING.md` #4 — which the
+proposed definition cites, and the citation resolves; it is item 4 of *Ways to
+contribute, most to least valuable* — counts the **opposite** event:
+
+> 4. **A falsification consumer.** Built something on the library that needed a
+>    change to it? Tell us what and why. That is direct evidence about the
+>    model's generality, which is the thing we most need and can least
+>    manufacture.
+
+So the documents hold both *"the schema is ready when an outsider needed
+nothing"* and *"the most valuable outside signal is an outsider who needed
+something"*. Both are real evidence, of different things. A gate that does not
+say which it counts gets argued at freeze time by whoever already has the
+answer they want — which is this project's own recurring failure shape: a
+statement nothing had to agree with until it mattered.
+
+**(b) What the gate is for, stated before the conditions are judged against
+it.** A freeze is a promise, and the thing worth measuring before making one is
+whether the schema has been tested by someone **whose interests differ from the
+author's**. Phase 4's third-dialect section already establishes what instrument
+finds defects here: *two independent implementations having to agree*. All
+three Phase 2 contract defects (`TASKS.md` 2.14) were found that way and none
+by any number of tests written by one author against one dialect. "Real outside
+users" is that same instrument pointed at the **consumer** side rather than the
+producer side. Anything in the gate that does not put a second party in a
+position of having to agree with the model is measuring **exposure** — someone
+else's bytes met our code — which is worth having and is not what the sentence
+promises.
+
+**(c) The state of the repo today, measured, because it sets the clock.**
+
+| Question | Answer, and how it was checked |
+|---|---|
+| Has `0.9.x` shipped to PyPI? | **Yes.** `0.9.0` and `0.9.1`, both `2026-08-30` (tag `v0.9.1`; `TASKS.md` 3.10 ticked, and R3). 3.10 records the verification from a directory outside the repo: `pip install spanweave` into a clean venv, `spanweave 0.9.0 (graph schema 0.1; UNFROZEN)`, `Requires:` empty, and the served sdist byte-identical to the built one (`sha256 ec3eeae2…`) |
+| Is the README's index install true? | Yes, and **test-gated in both directions** — `tests/test_doc_truth.py::test_the_readme_says_what_is_true_of_the_index_install_in_both_directions` keys the `pip install spanweave` fence to 3.10's checkbox |
+| Days on PyPI as of this memo (`2026-09-10`) | **11** |
+| Outside commits | **0.** 108 commits, one author address (`git log --format=%ae \| sort -u`) |
+| Outside adapters | **0.** Two exist; both first-party |
+| Outside captured traces | **0.** Three in `fixtures/captured/`, all produced by `make capture`, run by hand, provenance first-party |
+| Outside issues referenced anywhere in the repo | **0.** `.github/` holds `workflows/ci.yml` and nothing else — no issue template, no discussion config |
+| A recorded announcement | **None anywhere.** `TASKS.md`, `ROADMAP.md`, `AGENT.md`, `ENVIRONMENT.md` and `WORKPLAN.md` mention no post, release note, or thread |
+
+Two things follow, and they matter more than the counts.
+
+First, **the gate starts from zero on every condition.** Whatever is decided
+here is a schedule, not a scoring of things already banked. `TASKS.md` 3.11 §9
+says as much: *"two of four met … Not met: real outside users, and a third
+dialect rendered in the corpus."*
+
+Second, and not written down anywhere yet: **the package has been installable
+for eleven days and, as far as this repository records, nobody has been told it
+exists.** That reframes condition 4 below — a clock started at publication
+measures elapsed silence — and it is why the announcement belongs *before* the
+clock rather than beside it.
+
+*The honest bound on this section:* every check above is a check of **this
+repository**, run with no network (`CLAUDE.md` 5; `ENVIRONMENT.md` zones 1–2).
+GitHub issues and PyPI download counts are not visible from here. The
+recommendation in **(f)** turns that limitation into a rule rather than
+apologising for it: nothing counts until it is in the repo.
+
+**(d) The four proposed conditions, judged one at a time.**
+
+**1. An adapter contribution merged from outside.** The strongest of the four,
+and it is not close.
+
+- *Observable, and by whom:* unambiguously, by git — a merged commit whose
+  author is not the maintainer. No judgement call.
+- *Gamed or accidentally satisfied:* fraud is not the risk; **solicitation**
+  is. An adapter the maintainer commissioned, walked through, or substantially
+  rewrote in review is a weaker measurement than one that arrived. Either the
+  condition says *unsolicited*, or the record says which it was.
+- *What it evidences:* exactly what **(b)** asks for. `CONTRIBUTING.md`'s bar
+  makes a mergeable adapter render the corpus and pass equivalence against the
+  **unmodified** expected graphs — so its author had to agree with the model's
+  fields or open an issue instead. That is the two-implementations instrument.
+- **It double-counts, and that must be said out loud.** A merged outside
+  adapter also satisfies the *third dialect rendered in the corpus*
+  precondition, because CONTRIBUTING requires the renderings for merge. One PR
+  closing two of the four freeze conditions is legitimate — it genuinely is two
+  kinds of evidence — but a gate that can be halved by a single contribution
+  should say so deliberately rather than be found doing it at freeze time.
+- *Weakness:* nobody can cause it. A gate built only from events outside the
+  maintainer's control may never close. That argues for a floor and a stated
+  what-if, not against the condition.
+
+**2. A consumer built on `0.9.x` that filed a model-level issue.** Right
+instinct, three defects as drafted.
+
+- ***"Model-level" is judged by the party the gate exists to test.*** Who
+  decides an issue is model-level rather than a bug or a doc gap? Today, the
+  maintainer — the one person whose interests the gate is measuring against.
+  The project already owns a written standard for this exact classification:
+  `PREDICTIONS.md`'s shape/operational test, which `ROADMAP.md` calls **binding
+  as written there**, over the surfaces Phase 3's gate enumerates (a new field,
+  `NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code, or query
+  primitive). Require the issue to name one of those and be classified under
+  that test, and the judgement is against a document written before the event.
+- ***It never says the consumer is not us.*** `examples/` holds three consumers
+  built on this model by its author. A fourth would satisfy the condition as
+  written. The clause *not the maintainer, and not an agent working to the
+  maintainer's instruction* belongs on **every** condition; this is where its
+  absence is most visible.
+- ***It counts only failure.*** CONTRIBUTING #4's event is a consumer that
+  **needed a change**; the through-line's is a consumer that needed **none**.
+  As drafted the gate rewards the model being wrong and records nothing when it
+  is right — and "it worked, so I said nothing" is unobservable, which is the
+  genuine difficulty here rather than a drafting slip. The form that survives
+  it does not turn on the outcome: **a named, inspectable outside consumer** (a
+  repository, a post, or an issue), with a recorded answer to *did the model
+  have to change?* If yes, it is fixed before the freeze — Phase 3's gate,
+  unchanged. If no, that is the through-line's own condition, met.
+
+**3. A captured trace with provenance contributed from outside.** *This is the
+one that does not measure what the gate is for* — named plainly, as the brief
+asks. (It is also `CONTRIBUTING.md` **#2**, not #4; the #4 citation belongs to
+condition 2 and is accurate there.)
+
+- *Observable:* yes — a merged fixture plus a `FIXTURES.md` §6 provenance file.
+  Weakly attested, though: provenance is self-declared prose, and "outside" is
+  precisely the field nothing can check.
+- *What it evidences:* a trace contributor **implements nothing and agrees with
+  nothing**. It tests our *adapters* against an instrumentor's real output,
+  which is valuable and is exactly why `FIXTURES.md` §6 prefers captures to
+  hand-authored renderings — but it does not put a second party in front of the
+  schema. On the gate's stated purpose it is the weakest of the four by a wide
+  margin, and in a *two-of-four* rule it is the cheapest to obtain, which is the
+  worst possible combination.
+- **Unless it is narrowed — and then it is one of the most valuable things on
+  the whole freeze list.** Phase 4's *necessary and not sufficient* section
+  already names what reaches the nine strictly-compared node fields: *"a
+  **captured** trace from dialect three, of a scenario `fixtures/captured/`'s
+  existing pair also covers, compared against that pair field by field on the
+  nine"* — and calls it the one schedulable condition and the one most likely to
+  be assumed rather than done. A contributed capture meeting **that**
+  description is worth more than the other three. A contributed capture of a
+  dialect already captured here re-measures what is already measured. Recommend
+  the narrow form, with the comparison **run and recorded** rather than the file
+  merely merged.
+
+**4. 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace.** Two
+clauses of very different quality, ANDed, which hides that one of them does no
+work at all.
+
+- ***"30 days on PyPI" is a clock.*** Unambiguous, ungameable, and evidence of
+  nothing: no property of the schema changes because a month passed. With no
+  announcement recorded it measures how long the package sat unmentioned. It is
+  a **floor**, and a floor does not belong inside a count of conditions.
+- *It is also under-specified in a way that will be argued.* Thirty days from
+  **which** publish? `0.9.0` and `0.9.1` landed the same day, and C2 is a live
+  `0.9.2` candidate. Say **from the first `0.9.x` publish, `2026-08-30`**, and
+  that a later `0.9.z` does not restart it: the clock is on the line being
+  installable, not on a version.
+- ***"≥1 issue reproducing on a non-fixture trace"* is the real content**, and
+  it is decent. It is checkable — does the reproducer live outside `fixtures/`?
+  — and it converts itself into a regression scenario, which is what
+  `CONTRIBUTING.md`'s *Reporting a bug* already asks for. But it evidences
+  exposure, not agreement. Keep it, in the other column.
+
+**(e) "At least two of four" is the wrong shape. This is my main disagreement
+with the proposal.**
+
+The four are not four of a kind. **1** and **2** are *agreement* evidence: a
+second party's implementation or consumer had to live with the model's fields.
+**3** and **4** are *exposure* evidence: someone else's telemetry met our code.
+Any *two of N* over a heterogeneous set is satisfied by the two cheapest — and
+here the two cheapest are 3 and 4. **A contributed trace plus a bug report
+closes the gate without one person ever having had to agree with a `NodeKind`,
+an `EdgeKind`, a warrant, a `Payload` state, or the serialized document.** That
+pair satisfies the letter of the definition and leaves the sentence's meaning
+entirely unmeasured, and it is the pair most likely to arrive first, because
+both are cheap for the contributor.
+
+So **two is about the right number of events and entirely the wrong rule.** The
+recommendation below keeps the cost at two events and makes the load-bearing
+half compulsory: one from each column, plus a floor.
+
+**(f) Recommended replacement text.** `ROADMAP.md` is **not edited by this
+memo**; this is the block to land when the decision is taken. Two clauses in
+the Phase 4 freeze bullet change, and a new subsection follows *The third
+dialect is a freeze precondition*. Note also that the through-line and Phase 3's
+*Freeze later, on evidence* state the same gate in two weaker forms — each
+should gain a pointer to the subsection in the same edit, or the project ends
+up with three statements of one condition, drifting, which is the defect this
+memo opened by describing.
+
+> - **The freeze.** `schema_version` `1` and `1.0.0`, once the predictions are
+>   resolved, the Phase 2 adversarial finding is absorbed, **the outside-use
+>   gate below is met**, **and a third dialect is rendered in the conformance
+>   corpus** — see both gates below. […rest of the bullet unchanged…]
+
+> ### "Real outside users" is a stated gate, not a hope
+>
+> `0.9.x` is on PyPI so that someone whose interests differ from the author's
+> can live with the schema before it becomes a promise. That is the only thing
+> this gate measures. It is met when **all three** of the following hold.
+>
+> Two rules govern all of them. **No condition may be satisfied by the
+> maintainer, or by an agent working to the maintainer's instruction** — that
+> is the entire point of the word *outside*. And **nothing counts until it is
+> in this repository**: a merged commit, a committed fixture, or an issue
+> linked from `TASKS.md`. Everything else in this project is measured from the
+> repo, cold, by anyone; this gate is checkable the same way or it is not
+> checkable at all.
+>
+> **A. One agreement event** — a second party had to live with the model:
+>
+> 1. **An adapter merged from outside.** `CONTRIBUTING.md`'s bar already makes
+>    this the strong form: a mergeable adapter renders the corpus and passes
+>    equivalence against the **unmodified** expected graphs, so its author had
+>    to agree with the model's fields or open an issue instead. This also
+>    satisfies the third-dialect precondition above — one contribution closing
+>    both is intended, and is stated here so it is not discovered. If the
+>    contribution was solicited, the record says so; solicited is weaker
+>    evidence and still counts.
+> 2. **A named outside consumer, and what it needed.** A consumer built on
+>    `0.9.x` by someone else, identifiable from the repo (a repository, a post,
+>    or an issue), with a recorded answer to *did the model have to change?*
+>    If it did, the change is made **before** the freeze and is classified under
+>    `PREDICTIONS.md`'s shape/operational test, naming the surface — a field,
+>    `NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code, or
+>    query primitive (`CONTRIBUTING.md` #4, *a falsification consumer*). If it
+>    did not, that is this file's own through-line satisfied — *a consumer the
+>    model was not designed for used it unchanged* — and the record says so.
+>
+> **B. One exposure event** — someone else's telemetry met this code:
+>
+> 3. **A captured trace contributed from outside** (`CONTRIBUTING.md` #2), from
+>    an instrumentor `fixtures/captured/` does not already hold, **compared
+>    field by field against the existing captured pair on the nine
+>    strictly-compared node fields** — the comparison run and recorded, not the
+>    file merged. That narrow form is the one named above under *what would be
+>    sufficient for the nine strictly-compared node fields*. A capture of a
+>    dialect already captured here re-measures what is already measured and
+>    does not satisfy this.
+> 4. **An issue that reproduces on a trace not in `fixtures/`**, from telemetry
+>    this project did not produce, landed in the corpus as a scenario
+>    (`CONTRIBUTING.md`, *Reporting a bug*).
+>
+> **C. The floor.** **30 days** since the later of the first `0.9.x` publish
+> (`2026-08-30`) and the announcement below. A later `0.9.z` does not restart
+> it — the clock is on the line being installable, not on a version. The floor
+> is **not evidence** and never satisfies a condition on its own; it exists so
+> that A and B are given time to arrive rather than declared absent.
+>
+> **If the floor passes with A unmet, that is a finding and it gets written
+> down** — *published, announced, and no second party engaged with the model in
+> N days* — and then a deliberate choice between waiting, going and asking for
+> one, and freezing on the third-dialect gate alone with the absence stated in
+> the compatibility policy. What is not permitted is a freeze that happens while
+> this sentence still reads as satisfied.
+
+**(g) Announcement — a task, with an owner.** The row asks for an owner, and
+the git history shows one author on 108 commits, so *owner* cannot mean
+delegation. It means what it means at `ENVIRONMENT.md` **network zone 4**:
+outward-facing, credentialed, human-run, and **not an agent's to perform**. An
+agent may draft the text and assemble the links; posting is a halt point
+(`AGENT.md`). Proposed task text, to land with **(f)**:
+
+> ### Announcement *(owner: the maintainer, personally — human-run, `ENVIRONMENT.md` zone 4)*
+>
+> **When:** before the floor above is meaningful. Thirty days of an unannounced
+> package measures silence, not adoption.
+>
+> **Where** — at most three places, each recorded in `TASKS.md` with its date:
+> a release note on the `v0.9.1` tag; one thread where people who own agent
+> telemetry are (the OpenTelemetry GenAI community; the instrumentor
+> communities whose dialects this reads); one general post if wanted. More
+> venues do not make a bigger measurement.
+>
+> **What it may claim: nothing the README does not.** The README is truth-gated
+> (`tests/test_readme_quickstart.py`, `tests/test_doc_truth.py`), so the
+> cheapest honest rule is that every claim in the announcement is one a test in
+> this repository already holds the README to. That is enough to say: two
+> adapters, `openinference` and `otel_genai`; 22 scenarios, 18 of them compared
+> across both dialects; one deterministic graph; no runtime dependencies. Plus
+> the actual ask, which is the invitation Phase 4 is built around — *your
+> instrumentor, in one PR*.
+>
+> **What it must not claim.** An announcement that overclaims is the failure
+> mode, and each of these is a claim the repo can already prove false:
+>
+> - **Not stable, not `1.0`, not "the schema".** It is `0.1` and UNFROZEN and
+>   `spanweave --version` says so. This gate exists *because* it is unfrozen;
+>   announcing it as settled makes the freeze a formality and destroys the
+>   evidence the announcement was posted to collect.
+> - **No dialect it does not read.** Langfuse, LangSmith, Logfire, Vercel and
+>   OTLP protobuf are Phase 4 wants. "Supports OpenTelemetry" reads as all of
+>   them.
+> - **No unqualified equivalence claim.** `Node.name` is declared
+>   dialect-varying in 18 of the 18 compared scenarios. The README carries that
+>   qualifier; the announcement does not get to drop it for being long.
+> - **No security, cost, evaluation, or quality framing** (`CLAUDE.md` 1). The
+>   audiences most likely to pick this up are the ones that want exactly that,
+>   and a neutral library announced as a security tool has acquired an opinion
+>   in the only place it finally matters — the reader's.
+> - **Not "production-ready", not "battle-tested".** Zero outside users is the
+>   measurement this gate exists to change; claiming otherwise falsifies it.
+> - **Not `pip install` followed by a `fixtures/` path.** The corpus is
+>   deliberately not in the wheel — the finding `0.9.1` shipped C1 for. Any
+>   example in the announcement runs from a checkout or reads the reader's own
+>   trace.
+
+**(h) Where this meets G3, and E.** G3 asks whether mixed instrumentation is a
+freeze precondition. Not this memo's to decide; §12 (E1) supplies the fact it
+turns on — a mixed trace is **constructible but not observed**: 57 corpus
+files, 177 records, **0** carrying both markers. The gate above interacts with
+that in one direction worth having in front of G3:
+
+- **This gate is the mechanism by which a mixed trace would first be
+  *observed*.** E1's three reasons a real stack mixes dialects — both
+  instrumentors writing into one OTel SDK, the two layers seeing different
+  spans, `opentelemetry-instrument` loading every installed entry point — are
+  all properties of *someone else's* deployment. The maintainer can only
+  construct one. A contributed capture (B3) or an outside adapter author (A1)
+  is where an observed one comes from. If G3 wants observation rather than
+  construction, it is waiting on the same events this gate counts.
+- **That cuts both ways.** If E is made a freeze precondition, it is one whose
+  only instrument today is this gate — and E1 records that the project's own
+  harness deliberately avoids producing the shape by hand. If E is not made a
+  precondition, the absence should be recorded as *measured and unobserved*,
+  with E1's number, rather than assumed away; B3 is where the first
+  counter-example would arrive.
+- Smaller, in the other direction: per-record dispatch would make composition a
+  property of the dispatcher rather than of any adapter (§12(k)), so an outside
+  adapter would compose with every existing dialect for free. That raises what
+  A1 is worth, and it is an argument about ordering E before breadth rather
+  than about the freeze. G3's to weigh.
+
+**Decision:**
+
+*Not taken.* This entry is a `WORKPLAN.md` G1 halt; no code changed with it and
+`ROADMAP.md` is untouched — the text in **(f)** and **(g)** lands only when the
+decision is taken. Record the decision in `WORKPLAN.md` §3.
