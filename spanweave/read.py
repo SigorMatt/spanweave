@@ -10,7 +10,10 @@ Two things this layer must get right:
   truncated, and often has one bad line in the middle (`SECURITY.md`). A bad
   line becomes a ``malformed_record`` diagnostic carrying its text, and the
   read continues. The library that gives up on line 4,000 of 10,000 is worse
-  than useless in a pipeline.
+  than useless in a pipeline. "Malformed" includes *nested deeper than the
+  parser will recurse*, which ``json`` reports as a ``RecursionError`` rather
+  than a ``ValueError`` -- a different exception for the same fact, and one
+  that escaped this guard until ``SPEC.md`` §7 said so out loud.
 * **It is an iterator.** Nothing here requires the whole input as a
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
@@ -98,11 +101,13 @@ class RecordStream:
         text = data.decode("utf-8", errors="replace")
         try:
             document = json.loads(text)
-        except ValueError as failure:
+        # RecursionError is how `json` reports nesting it will not descend;
+        # unreadable is unreadable, and neither may leave this layer (§7).
+        except (ValueError, RecursionError) as failure:
             self._collector.add(
                 codes.MALFORMED_RECORD,
-                f"the input begins with '[' but is not a valid JSON array "
-                f"({failure}); no records were read",
+                f"the input begins with '[' but could not be read as a JSON "
+                f"array ({failure}); no records were read",
                 source=text,
             )
             return
@@ -140,12 +145,14 @@ class RecordStream:
             return
         try:
             yield json.loads(line)
-        except ValueError as failure:
+        # RecursionError: see `_read_array`. Deep nesting is a bad record,
+        # not a bad interpreter, and it is reported as one.
+        except (ValueError, RecursionError) as failure:
             self._collector.add(
                 codes.MALFORMED_RECORD,
-                f"line {number} is not valid JSON ({failure}); it was skipped, "
-                f"and its text is kept here because there is nowhere else for "
-                f"it to survive",
+                f"line {number} could not be read as JSON ({failure}); it was "
+                f"skipped, and its text is kept here because there is nowhere "
+                f"else for it to survive",
                 source=line,
             )
 

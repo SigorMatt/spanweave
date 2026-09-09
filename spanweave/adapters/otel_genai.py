@@ -458,7 +458,10 @@ def _payload(
 
     try:
         value = json.loads(reported)
-    except ValueError as failure:
+    # RecursionError is `json`'s answer to nesting it will not descend.
+    # A payload that cannot be read is `present` either way (`SPEC.md` §7);
+    # letting one of the two escape would take the whole build down.
+    except (ValueError, RecursionError) as failure:
         diagnostics.append(
             Diagnostic(
                 code=PAYLOAD_PARSE_FAILED,

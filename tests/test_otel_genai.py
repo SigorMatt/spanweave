@@ -261,6 +261,20 @@ def test_a_payload_that_does_not_parse_keeps_its_text_and_reports():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
+def test_a_deeply_nested_message_list_keeps_its_text_and_reports():
+    # Audit finding 3, through the message pair: `json.loads` answers deep
+    # nesting with RecursionError, not ValueError, so it escaped the guard
+    # above. 100k brackets is far past any interpreter's limit and costs
+    # microseconds -- the parser gives up at its own limit, not at the end of
+    # the string.
+    deep = "[" * 100_000 + "]" * 100_000
+    span = span_of({"gen_ai.operation.name": "chat", "gen_ai.input.messages": deep})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.value is None
+    assert span.inputs.raw == deep
+    assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
+
+
 def test_a_tool_span_reads_the_tool_keys_and_an_llm_span_the_message_keys():
     tool = span_of(
         {

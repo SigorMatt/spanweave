@@ -189,6 +189,26 @@ def test_unparseable_json_stays_present_and_is_diagnosed():
     assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
 
 
+def test_a_deeply_nested_payload_stays_present_and_is_diagnosed():
+    # Audit finding 3. Deep nesting is answered by `json.loads` with
+    # RecursionError, not ValueError, so it escaped the guard above and took
+    # the whole build down. 100k brackets is far past any interpreter's limit
+    # and costs microseconds: the parser gives up at its own limit, not at the
+    # end of the string.
+    deep = "[" * 100_000 + "]" * 100_000
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "output.value": deep,
+            "output.mime_type": "application/json",
+        }
+    )
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.value is None
+    assert span.outputs.raw == deep
+    assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
+
+
 def test_a_non_json_mime_keeps_the_text_as_the_value():
     span = span_of(
         {

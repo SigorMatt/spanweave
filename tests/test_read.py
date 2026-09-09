@@ -65,6 +65,33 @@ def test_an_unparseable_array_is_diagnosed_rather_than_raised():
     assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
 
 
+#: Nesting far past any interpreter's recursion limit. Cheap to build (200 KB
+#: of brackets) and cheap to reject: the parser gives up at its own limit, not
+#: at the end of the string, so these tests cost microseconds.
+DEEP = b"[" * 100_000 + b"]" * 100_000
+
+
+def test_a_deeply_nested_record_line_is_diagnosed_rather_than_raised():
+    # Audit finding 3. `json.loads` answers deep nesting with RecursionError,
+    # which is not a ValueError, so it escaped the reader's guard and took the
+    # whole read down -- exactly the "gives up on line 4,000 of 10,000"
+    # failure this module exists to prevent.
+    stream = read_trace(b'{"span_id":"s0"}\n' + DEEP + b'\n{"span_id":"s1"}\n')
+    assert list(stream) == RECORDS
+    reported = stream.diagnostics.collected()
+    assert [d.code for d in reported] == [codes.MALFORMED_RECORD]
+    assert "line 2" in reported[0].message
+    # The text survives here or nowhere.
+    assert reported[0].source == DEEP.decode()
+
+
+def test_a_deeply_nested_array_container_is_diagnosed_rather_than_raised():
+    # The same finding through the other container format.
+    stream = read_trace(DEEP)
+    assert list(stream) == []
+    assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
+
+
 def test_a_json_document_that_is_not_an_array_is_diagnosed():
     stream = read_trace(b"[")
     assert list(stream) == []

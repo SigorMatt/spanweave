@@ -212,7 +212,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 |---|---|
 | `unknown_span_kind` | the dialect's kind did not map to a `NodeKind` |
 | `unmapped_attributes` | attributes the adapter did not normalize (names only) |
-| `payload_parse_failed` | JSON mime type but the value did not parse |
+| `payload_parse_failed` | JSON mime type but the value did not parse (malformed, or nested deeper than the parser will recurse) |
 | `orphan_parent` | `parent` reference to a span not present in the trace (§4.0 — a dangling `link` is **not** reported, and why) |
 | `unpaired_call` | a requested tool call with no fulfilling span |
 | `unpaired_result` | a tool result with no requesting call |
@@ -220,7 +220,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
 | `duplicate_source_id` | two records claimed the same source id |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
-| `malformed_record` | an input line that is not valid JSON; its text is kept here |
+| `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
@@ -810,6 +810,11 @@ every registered adapter and picks the highest confidence.
   builder uses the most common one, emits `multi_trace_input`, and keeps the
   foreign records as nodes with a diagnostic. Splitting multi-trace inputs is
   the consumer's call, and `spanweave split` is deferred (`OPEN_QUESTIONS.md` §4).
+- **Input that will not parse never raises out of the reader or an adapter**
+  (`SECURITY.md`): a record that is malformed *or nested deeper than the JSON
+  parser will recurse* becomes a `malformed_record` diagnostic carrying its
+  text and the read continues, and the same inside a payload attribute becomes
+  `payload_parse_failed` with the text kept verbatim.
 - A dialect-specific binary form (OTLP protobuf) is Phase 4 and lives behind an
   optional extra — never in core (`ENVIRONMENT.md`).
 

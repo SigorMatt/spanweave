@@ -270,6 +270,7 @@ make stranger       # walk and time the install path above, from a clean venv
 | `OPEN_QUESTIONS.md` | Deliberately unresolved decisions. |
 | `PREDICTIONS.md` | Where this model is predicted to be wrong — written before the test. |
 | `SECURITY.md` | Threat model and reporting. |
+| `CHANGELOG.md` | What changed, written when it lands. Starts at the September 2026 audit-fix series. |
 | `CONTRIBUTING.md` | How to contribute. |
 | `WORKPLAN.md` | Execution state for the September 2026 audit-fix series (protocol, live batch status, decisions). Items are registered in TASKS.md; this file is removed when the series closes. |
 

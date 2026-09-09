@@ -57,12 +57,9 @@ run("mixed_detect", mixed)
 g = run("mixed_forced_oi", mixed, adapter="openinference")
 run("mixed_forced_otel", mixed, adapter="otel_genai")
 
-# 2. Deep JSON nesting inside a payload attribute (payloads are parsed as JSON).
-deep = "[" * 100000 + "]" * 100000
-run("deep_payload", [oi("s0", None, "TOOL", "t", 1.0, 2.0, {"tool.name": "t", "input.value": deep, "input.mime_type": "application/json"})])
-# 2b. Deep nesting of the record line itself.
-line = '{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n","start_time":1.0,"end_time":2.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT","x":' + deep + '}}'
-run("deep_record", None, raw=line.encode() + b"\n")
+# 2. Deep JSON nesting (audit finding 3) is now a regression test, not a probe:
+# tests/test_read.py (record line, array container), tests/test_openinference.py
+# and tests/test_otel_genai.py (payload and message list). Fixed in batch A1.
 
 # 3. Parent structure abuse
 run("self_parent", [oi("s0", "s0", "AGENT", "a", 1.0, 2.0)])
