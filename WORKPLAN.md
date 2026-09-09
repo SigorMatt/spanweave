@@ -184,7 +184,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | todo | 6 |
+| G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | awaiting decision | 6 |
 | G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | done | 6 |
 | G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | todo | 6 |
 | G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. | todo | 4 |
@@ -338,6 +338,23 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   because all 177 corpus records have span ids. The fix is A3's own reasoning
   (digest, not index) and moves 0 expectations. **E3 will collide with this if
   it is left unfixed** — it wants its own batch before E3.
+- G1 memo written (`7c26f0f`, `OPEN_QUESTIONS.md` §13) — **awaiting decision**,
+  and it argues the row's own draft is the wrong shape. Proposal: **one
+  agreement event + one exposure event + a 30-day floor**, the floor never
+  satisfying a condition by itself, nothing counting if the maintainer or their
+  agent produced it, and nothing counting until it is in the repo. Reasoning:
+  "at least two of four" lets the two cheapest conditions close the gate
+  without anyone ever having to agree with a `NodeKind`, `EdgeKind`, warrant or
+  `Payload` state — which is the only thing the gate is for. "30 days on PyPI"
+  is a clock, not evidence, and was moved out of the conditions.
+- **G1's factual findings, which G3 needs:** 0.9.0 and 0.9.1 both published
+  2026-08-30 (11 days as of 2026-09-10). Outside evidence today is **zero on
+  every checkable axis** — 108 commits/one author, no outside adapters, all
+  three captures first-party, no issue references. **No announcement is
+  recorded anywhere**, so the clock as drafted measures silence; the memo
+  places the announcement before the floor starts. It also documents a real
+  contradiction: ROADMAP's "used it unchanged" and CONTRIBUTING #4's "needed a
+  change" count *opposite* events as success.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
