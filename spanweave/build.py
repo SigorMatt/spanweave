@@ -70,7 +70,12 @@ TEMPORAL_TIED_BASIS = "sibling start_time ordering (tied, broken by node_id)"
 #: the field** -- a property of the encoding -- and never about the run: the
 #: number is kept exactly as reported and every edge is still built from it
 #: (`SPEC.md` §3.1). Strictly greater, so the bound itself is not suspect.
-TIMESTAMP_UNIT_CEILING = 1e11
+#: Written as an integer rather than `1e11` so the diagnostic that quotes it
+#: prints the whole number instead of `100000000000.0`, which reads as a
+#: float somebody chose rather than as the year-5138 bound it is. `int` and
+#: `float` compare exactly in Python, so an integer timestamp is tested as
+#: written.
+TIMESTAMP_UNIT_CEILING = 100_000_000_000
 
 #: The kinds a node's position is sorted over. `temporal` is deliberately not
 #: among them: it is derived from the timestamps that already break ties, so
@@ -147,7 +152,7 @@ def build_graph(
     )
 
 
-def _tie_break(node: Node) -> tuple[float, str]:
+def _tie_break(node: Node) -> tuple[int | float, str]:
     """`(started_at or +inf, node_id)` -- a determinism invariant (§5.2)."""
     return (node.started_at if node.started_at is not None else float("inf"), node.id)
 

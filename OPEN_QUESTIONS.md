@@ -581,9 +581,18 @@ false sentence has to be fixed under it too. Option 3 is recommended against
 for the reason above: it buys precision by asserting a unit the library has
 just finished saying it cannot know.
 
-**Decision: not taken.** This entry is a `WORKPLAN.md` C2 halt; no code changed
-with it, and probe2 case G stays in the probe until the implementing batch
-converts it. Record the decision in `WORKPLAN.md` §3.
+**Decision: option 2**, logged in `WORKPLAN.md` §3 (2026-09-10) and implemented
+by batch C3. `started_at`/`ended_at` are `int | float | None`, an integer
+literal — quoted or bare — is carried as an `int`, the ceiling constant is
+`100_000_000_000`, and C1's *"kept exactly as reported"* sentence is true by
+construction rather than by assertion. `tests/audit/probe2.py` case G is now a
+regression test (`tests/test_adapters.py`, *An integer timestamp keeps its
+digits*). What (a) and (b) describe is the state **before** C3.
+
+(c) stays open, and is the reason option 4 is recorded rather than dismissed:
+one real exporter emitting a *fractional* timestamp finer than 238 ns would
+show that option 2 is insufficient. The scan is over incoming captures, not
+over what is already committed.
 
 ## 11. D1: Should a re-declared receipt look different from a first one?
 

@@ -63,6 +63,21 @@ def test_the_verbatim_source_round_trips_byte_for_byte(document):
         )
 
 
+def test_an_integer_timestamp_is_written_as_the_integer_it_was_reported_as():
+    # Round-tripping (batch C3): a time reported as an integer literal comes
+    # back out as the identical literal, so a consumer can compare the graph
+    # against its own input without re-reading `raw.source`. Written from a
+    # trace rather than a hand-built node so the whole path is under test.
+    reported = 1700000000100000100
+    trace = (
+        b'{"trace_id":"t1","span_id":"s0","name":"op","start_time":'
+        + str(reported).encode()
+        + b',"attributes":{"openinference.span.kind":"CHAIN"}}\n'
+    )
+    body = dumps(spanweave.build(trace))
+    assert b'"started_at":1700000000100000100' in body
+
+
 def test_the_line_number_is_not_written_out(document):
     # It depends on where a record sat in one file, and the graph must not.
     assert "line_number" not in document["nodes"][0]["raw"]

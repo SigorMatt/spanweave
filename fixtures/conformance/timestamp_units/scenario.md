@@ -29,12 +29,15 @@ as `+inf` — last, but never dropped.
 
 ## Timestamps
 
-Every value is kept **exactly as reported**. `s0.started_at` is
-`1.7e+18`, not `1700000000.0`: the library does not rescale, and a consumer
-that wants seconds converts them itself. The nanosecond values are what
-produce `timestamp_unit_suspect`, which reports the *unit of the field* and
-never anything about the run — the nodes keep their numbers and the edges are
-still built from them.
+Every value is kept **exactly as reported**, digits included.
+`s0.started_at` is `1700000000000000000` — not `1700000000.0`, because the
+library does not rescale, and not `1.7e+18`, because an integer literal is
+carried as an `int` (`SPEC.md` §3.1): float64's spacing at this magnitude is
+256 ns, so a `float` here would spend digits the record wrote. A consumer that
+wants seconds converts them itself. The nanosecond values are what produce
+`timestamp_unit_suspect`, which reports the *unit of the field* and never
+anything about the run — the nodes keep their numbers and the edges are still
+built from them.
 
 Three spans carry a value over the line and three diagnostics are emitted, one
 per node: s0 and s1 have both endpoints over it and get **one** report each,
@@ -72,8 +75,9 @@ is declared.
 `openinference` writes the nanosecond values as JSON integers;
 `otel_genai` writes the same values as decimal **strings**, which is how OTLP
 JSON encodes a 64-bit integer. §3.1 says a quoted timestamp is read as the
-identical value the same literal would have produced unquoted, so the two
-renderings must produce one canonical graph — and this scenario is where that
+identical value the same literal would have produced unquoted — the same
+`int`, at the same precision — so the two renderings must produce one
+canonical graph — and this scenario is where that
 claim is executable rather than asserted. It is not a statement that one
 dialect quotes timestamps and the other does not: either exporter may, and the
 library answers the same way for both (`tests/test_adapters.py` holds the full

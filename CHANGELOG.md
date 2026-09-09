@@ -119,6 +119,42 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A timestamp reported as an integer keeps its digits.** `Node.started_at`
+  and `Node.ended_at` are now `int | float | None`: an integer literal, quoted
+  or bare, is carried as an `int`, and only a literal with a fraction or an
+  exponent becomes a `float`. Both used to end in `float(value)`, and float64's
+  spacing at epoch-nanosecond magnitude is **256 ns** -- so two spans a hundred
+  nanoseconds apart collapsed onto one number, and the `temporal` edge between
+  them was emitted as *tied*, asserting that neither started first when one
+  demonstrably did. That is not a losslessness bug (the literal was always
+  verbatim in `raw.source`) and not a determinism bug; it is the normalized
+  field failing §3.1's own promise, and an edge whose premise was wrong. It
+  bit no fixture and no captured trace -- 154 timestamp values, none above
+  1e11, none whose float differs from the literal -- but `startTimeUnixNano`
+  in OTLP JSON is an integer nanosecond count, so it is the next input rather
+  than a hypothetical one.
+
+  This is **not** a unit conversion and not an opinion about the unit: nothing
+  is scaled, nothing is inferred, and the number a consumer reads is the number
+  the record wrote. It also closes the string/number asymmetry by construction,
+  since `json.loads` yields an exact `int` for both renderings and only
+  `float()` was spending them. `SPEC.md` §3.1 states the type and §7 carries it
+  into the `NormalizedSpan` contract. The serialized field is still a JSON
+  number, so the schema is unmoved; the *literal* emitted for an
+  integer-encoded input changes, which is why it lands before the Phase 4
+  freeze rather than after it. `tests/serialized_shape.json` moves by two type
+  lines. (audit finding 5)
+
+- **`timestamp_unit_suspect` now quotes the bound as a whole number**, and its
+  `source` carries the value the record wrote. The threshold constant was
+  `1e11`, so the message read `exceeds 100000000000.0` -- a float somebody
+  chose rather than the year-5138 bound it is -- and the value it printed for
+  an integer-encoded time was the nearest float64 to it, which falsified the
+  message's own sentence *"every value is kept exactly as reported"* in exactly
+  the case the diagnostic exists to report. Both are now true as written. The
+  threshold itself is unchanged: `int` and `float` compare exactly in Python,
+  so an integer timestamp is tested as written. (audit finding 5)
+
 - **A timestamp the library cannot read is no longer silently absent.** A
   `start_time` in a rendering `SPEC.md` §3.1 does not accept -- an ISO-8601
   string, say -- became a `None` with nothing said, so the value existed in

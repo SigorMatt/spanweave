@@ -10,7 +10,7 @@ import dataclasses
 import pytest
 
 from spanweave import diagnostics as codes
-from spanweave.build import LINK_BASIS, build_graph
+from spanweave.build import LINK_BASIS, TIMESTAMP_UNIT_CEILING, build_graph
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.model import (
     AdapterInfo,
@@ -510,6 +510,25 @@ def test_a_duration_is_not_checked_only_the_reported_values_are():
 
 def test_a_span_with_no_timestamps_is_not_suspect():
     assert suspects(build([a_span("s0")])) == []
+
+
+def test_the_reported_value_the_diagnostic_shows_is_the_one_the_record_wrote():
+    # C1's message says every value is kept exactly as reported. Batch C3 is
+    # what makes that true of the message itself: an integer time reaches the
+    # node as an `int`, so both `source` and the printed text carry the digits
+    # the record wrote rather than the nearest float64 to them.
+    reported = 1700000000100000100
+    found = suspects(build([a_span("s0", started_at=reported)]))
+    assert found[0].source == {"started_at": reported}
+    assert str(reported) in found[0].message
+
+
+def test_the_ceiling_is_printed_as_the_whole_number_it_is():
+    # `1e11` printed as `100000000000.0`, which reads as a float somebody
+    # chose rather than the year-5138 bound it is (C1 handoff, batch C3).
+    message = suspects(build([a_span("s0", started_at=1.7e18)]))[0].message
+    assert "exceeds 100000000000," in message
+    assert isinstance(TIMESTAMP_UNIT_CEILING, int)
 
 
 def test_a_span_id_used_twice_with_distinct_source_keys_is_reported():

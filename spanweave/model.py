@@ -189,8 +189,11 @@ class Node:
     raw: RawRecord
     provenance: Provenance
     operation: str | None = None
-    started_at: float | None = None
-    ended_at: float | None = None
+    #: Unix seconds, as reported. An integer literal stays an `int` and a
+    #: fractional one a `float` -- float64 cannot hold epoch nanoseconds
+    #: (`SPEC.md` §3.1). Never rescaled, never converted between the two.
+    started_at: int | float | None = None
+    ended_at: int | float | None = None
     status: Status = Status.UNSET
     #: The error message as reported, verbatim.
     status_note: str | None = None

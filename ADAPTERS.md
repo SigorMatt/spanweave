@@ -126,6 +126,11 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   a trimmed string, not a leading `+`, not a date. The rule is one sentence,
   *the string, unquoted, would be a valid JSON number*, because every
   tolerated spelling beyond it is a small normalization.
+- Carry an **integer** literal as an `int` and a fractional or exponent one as
+  a `float` (`int | float | None`, `SPEC.md` §3.1). Never call `float()` on a
+  timestamp: float64's spacing at epoch-nanosecond magnitude is 256 ns, so it
+  would merge spans the record kept apart. The type follows the *literal*, so
+  a quoted integer and a bare one land as one `int`.
 - A value in a rendering you do not read must **not** become a silent `None`.
   Name the field in `unmapped` as `<record>.<field>`; the builder then adds
   `missing_timestamp` on its own. Two adapters ship with a `_timestamps()`

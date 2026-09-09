@@ -56,8 +56,8 @@ Node:
   kind:        NodeKind        # §3.2
   name:        str             # operation name as reported
   operation:   str | None      # tool name / model name / retriever name
-  started_at:  float | None    # unix seconds; None if the dialect omits it
-  ended_at:    float | None
+  started_at:  int | float | None   # unix seconds as reported; None if the
+  ended_at:    int | float | None   #   dialect omits it
   status:      Status          # ok | error | unset
   status_note: str | None      # error message as reported, verbatim
   inputs:      Payload         # §3.3 — never None; use Payload.absent()
@@ -75,9 +75,9 @@ Node:
 `started_at` and `ended_at` are **unix seconds, as reported**. The library
 never rescales, never converts, and never infers a unit: what the telemetry
 put in the field is what the node carries, and a consumer that needs another
-unit converts it itself. Only two things are decided here — which *renderings*
-of a value the library will read, and when it says the value looks like it is
-not in seconds.
+unit converts it itself. Only three things are decided here — which
+*renderings* of a value the library will read, what numeric type it is carried
+as, and when the library says the value looks like it is not in seconds.
 
 **Renderings.** A timestamp is read from a JSON number, and from a **string
 that is exactly a JSON number literal** — OTLP JSON encodes 64-bit integers as
@@ -87,20 +87,45 @@ same literal would have produced unquoted: `"1700000000"` and `1700000000` are
 the same timestamp, and the two renderings of one trace produce the same
 graph. Nothing else is a rendering. Concretely, and deliberately narrow:
 
-| Rendering | Read | Why |
-|---|---|---|
-| `1700000000`, `1700000000.5` | yes | a JSON number |
-| `"1700000000"`, `"-1"`, `"1700000000.5"`, `"1e9"` | yes | the string is a JSON number literal, and is read as that literal |
-| `"+1"` | no | JSON numbers carry no leading `+`; accepting one would read something JSON does not write |
-| `" 1700000000"`, `"1700000000 "` | no | whitespace is not part of a number, and trimming is a normalization |
-| `"01"`, `".5"`, `"1."` | no | JSON forbids each of these, so no exporter emits them |
-| `"2026-09-05T10:00:00Z"`, `"NaN"`, `"0x1"`, `""` | no | not a number in any reading |
-| `true` / `false` | no | a boolean is not a time, and Python would read it as `1` / `0` |
+| Rendering | Read | Carried as | Why |
+|---|---|---|---|
+| `1700000000`, `-1`, `0` | yes | `int` | a JSON number, written as an integer |
+| `1700000000.5` | yes | `float` | a JSON number carrying a fraction |
+| `"1700000000"`, `"-1"` | yes | `int` | the string is a JSON number literal, and is read as that literal |
+| `"1700000000.5"`, `"1e9"` | yes | `float` | the same, for a literal carrying a fraction or an exponent |
+| `"+1"` | no | — | JSON numbers carry no leading `+`; accepting one would read something JSON does not write |
+| `" 1700000000"`, `"1700000000 "` | no | — | whitespace is not part of a number, and trimming is a normalization |
+| `"01"`, `".5"`, `"1."` | no | — | JSON forbids each of these, so no exporter emits them |
+| `"2026-09-05T10:00:00Z"`, `"NaN"`, `"0x1"`, `""` | no | — | not a number in any reading |
+| `true` / `false` | no | — | a boolean is not a time, and Python would read it as `1` / `0` |
 
 The rule is one sentence — *the string, unquoted, would be a valid JSON
 number* — rather than a list of tolerated spellings, because every tolerated
 spelling is a small normalization, and a library that trims whitespace here
 has started deciding what the telemetry meant.
+
+**Numeric type.** `started_at` and `ended_at` are `int | float | None`. An
+integer literal is carried as an `int` and a literal with a fraction or an
+exponent as a `float` — that is the whole rule, and it reads the *literal*,
+not the value: `1e9` is a `float` and `"1e9"` is the same `float`, while
+`1700000000` and `"1700000000"` are one `int`. Neither type is ever converted
+into the other.
+
+The reason is that `float` cannot hold what an exporter writes. float64's
+spacing at 1.7e18 is **256 ns**, so a time reported in epoch nanoseconds —
+which is what OTLP JSON's `startTimeUnixNano` is — loses its last digits the
+moment it is passed through `float()`: two spans a hundred nanoseconds apart
+collapse onto one number, and the `temporal` edge between them is then emitted
+as tied (§4.3), asserting that neither started first when one demonstrably
+did. A seconds field carrying nanosecond digits sits on the same floor, so
+this is a property of the magnitude rather than of the unit.
+
+Keeping the reported integer is **not** a unit conversion and not an opinion
+about the unit: nothing is scaled, nothing is inferred, and the number a
+consumer reads is the number the record wrote — which is also what makes it
+round-trip, since an integer in serializes as the identical integer out. A
+consumer that wants one numeric type coerces it, in the same way a consumer
+that wants one unit converts it.
 
 **A value in a rendering the library does not read is never silently
 absent.** The field becomes `None`, the value stays verbatim in `raw.source`
@@ -889,7 +914,7 @@ NormalizedSpan:
   kind:        NodeKind
   name:        str
   operation:   str | None
-  started_at / ended_at: float | None
+  started_at / ended_at: int | float | None   # §3.1
   status:      Status
   status_note: str | None
   inputs / outputs: Payload

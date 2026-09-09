@@ -98,9 +98,8 @@ big = "x" * 40_000_000
 p = OUT / "bigline.jsonl"; p.write_text(json.dumps(oi("s0", None, "AGENT", "a", 1.0, 2.0, {"input.value": big})) + "\n")
 g = timed("single_40MB_line", lambda: spanweave.build(p)); print()
 
-# G. ns-int timestamp precision: two spans 100ns apart
-recs = [oi("s0", None, "AGENT", "a", 1700000000000000000, 1700000002000000000),
-        oi("s1", "s0", "TOOL", "t", 1700000000100000000, 1700000000200000000, {"tool.name": "t"}),
-        oi("s2", "s0", "TOOL", "u", 1700000000100000100, 1700000000200000100, {"tool.name": "u"})]
-g = spanweave.build(write("ns", recs))
-print(f"ns precision: s1.start={g.node('s1').started_at!r} s2.start={g.node('s2').started_at!r} equal={g.node('s1').started_at == g.node('s2').started_at} temporal={[ (e.src,e.dst) for e in g.edges(kind='temporal')]} duration_s1={g.node('s1').ended_at - g.node('s1').started_at}")
+# G. ns-int timestamp precision is now a regression test, not a probe:
+# tests/test_adapters.py, under "An integer timestamp keeps its digits". A
+# timestamp reported as an integer literal is carried as an `int`, so two
+# spans 100 ns apart no longer collapse onto one float and the edge between
+# them is strict rather than tied. Fixed in batch C3.

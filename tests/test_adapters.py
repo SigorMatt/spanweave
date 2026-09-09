@@ -17,8 +17,14 @@ from spanweave.adapters import (
 from spanweave.adapters.base import Adapter, NormalizedSpan
 from spanweave.adapters.openinference import OpenInferenceAdapter
 from spanweave.adapters.otel_genai import OtelGenAiAdapter
+from spanweave.build import build_graph
 from spanweave.errors import AdapterSelectionError, UnknownAdapterError
-from spanweave.model import NodeKind, RawRecord
+from spanweave.model import (
+    AdapterInfo,
+    EdgeKind,
+    NodeKind,
+    RawRecord,
+)
 from spanweave.read import record_digest
 from spanweave.seam import CallRole, SpanLink
 
@@ -252,15 +258,18 @@ REAL_ADAPTERS = (OpenInferenceAdapter(), OtelGenAiAdapter())
 
 #: `(rendered start_time, the started_at it must produce)`. `None` means the
 #: rendering is refused -- the field is not read, and §3.1's table says why.
+#: The Python **type** of each expectation is part of the table (batch C3): an
+#: integer literal is read as `int`, a fractional or exponent one as `float`,
+#: so each pair below is written with the type it must produce.
 TIMESTAMP_RENDERINGS = (
-    (1700000000, 1700000000.0),
+    (1700000000, 1700000000),
     (1700000000.5, 1700000000.5),
-    (0, 0.0),
-    (-1, -1.0),
-    ("1700000000", 1700000000.0),  # the OTLP JSON int64 encoding
+    (0, 0),
+    (-1, -1),
+    ("1700000000", 1700000000),  # the OTLP JSON int64 encoding
     ("1700000000.5", 1700000000.5),
-    ("-1", -1.0),
-    ("0", 0.0),
+    ("-1", -1),
+    ("0", 0),
     ("1e9", 1e9),
     ("1E9", 1e9),
     ("1.5e-3", 1.5e-3),
@@ -305,12 +314,17 @@ def test_a_timestamp_is_read_from_exactly_the_declared_renderings(
 ):
     span = next(iter(adapter.parse([a_record(adapter, start_time=rendered)])))
     assert span.started_at == expected
+    # The type is part of the answer rather than an implementation detail:
+    # `1 == 1.0` in Python, so equality alone cannot see a digit that float64
+    # cannot hold (`SPEC.md` §3.1, batch C3).
+    assert type(span.started_at) is type(expected)
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
 def test_end_time_is_read_the_same_way_as_start_time(adapter):
     span = next(iter(adapter.parse([a_record(adapter, end_time="1700000002")])))
-    assert span.ended_at == 1700000002.0
+    assert span.ended_at == 1700000002
+    assert type(span.ended_at) is int
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
@@ -349,6 +363,65 @@ def test_a_null_timestamp_is_absence_not_a_refused_rendering(adapter):
     for span in adapter.parse([a_record(adapter, start_time=None)]):
         assert span.started_at is None
         assert "<record>.start_time" not in span.unmapped
+
+
+# --------------------------------------------------------------------------
+# An integer timestamp keeps its digits, in every adapter at once (batch C3)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.1: a timestamp reported as an integer literal is carried as an
+# `int`, and only a fractional or exponent literal becomes a `float`. The
+# library still never rescales and still never infers a unit -- it simply
+# stops spending digits it was given. float64's spacing at epoch-nanosecond
+# magnitude is 256 ns, so passing an ns-encoded time through `float()` merges
+# spans that a record wrote apart (audit finding 5, `tests/audit/probe2.py`
+# case G before this batch consumed it).
+
+#: An epoch-nanosecond time whose last digits float64 cannot hold.
+NS_LITERAL = 1700000000100000100
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize(
+    "rendered", (NS_LITERAL, str(NS_LITERAL)), ids=("bare", "quoted")
+)
+def test_an_integer_timestamp_keeps_every_digit_the_record_wrote(adapter, rendered):
+    span = next(iter(adapter.parse([a_record(adapter, start_time=rendered)])))
+    assert span.started_at == NS_LITERAL
+    assert isinstance(span.started_at, int)
+    # The premise: this number is not one float64 can hold, so a library that
+    # went through `float()` would fail this by 100 ns whatever it asserted.
+    assert float(NS_LITERAL) != NS_LITERAL
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_two_spans_a_hundred_nanoseconds_apart_stay_apart(adapter):
+    # The whole path, because the loss used to happen in the adapter and show
+    # up in the builder: the two siblings collapsed onto one float and the
+    # edge between them was emitted as tied -- deterministic, and wrong about
+    # which span started first (`SPEC.md` §4.3).
+    spans = list(
+        adapter.parse(
+            [
+                a_record(adapter, span_id="s0"),
+                a_record(adapter, span_id="s1", parent_id="s0", start_time=NS_LITERAL),
+                a_record(
+                    adapter,
+                    span_id="s2",
+                    parent_id="s0",
+                    start_time=NS_LITERAL + 100,
+                ),
+            ]
+        )
+    )
+    graph = build_graph(
+        spans, adapter=AdapterInfo(id=adapter.id, version=adapter.version)
+    )
+    starts = {node.id: node.started_at for node in graph.nodes()}
+    assert starts["s1"] == NS_LITERAL and starts["s2"] == NS_LITERAL + 100
+    temporal = [edge for edge in graph.edges() if edge.kind is EdgeKind.TEMPORAL]
+    assert [(edge.src, edge.dst) for edge in temporal] == [("s1", "s2")]
+    assert "tied" not in temporal[0].basis
 
 
 # --------------------------------------------------------------------------

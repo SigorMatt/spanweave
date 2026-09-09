@@ -125,7 +125,7 @@
   },
   "Node": {
    "attributes": "Mapping[str, JsonValue]",
-   "ended_at": "float | None",
+   "ended_at": "int | float | None",
    "id": "NodeId",
    "inputs": "Payload",
    "kind": "NodeKind",
@@ -134,7 +134,7 @@
    "outputs": "Payload",
    "provenance": "Provenance",
    "raw": "RawRecord",
-   "started_at": "float | None",
+   "started_at": "int | float | None",
    "status": "Status",
    "status_note": "str | None",
    "usage": "Usage | None"
