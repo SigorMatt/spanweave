@@ -186,7 +186,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | awaiting decision | 6 |
 | G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | done | 6 |
-| G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | todo | 6 |
+| G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | awaiting decision | 6 |
 | G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. | todo | 4 |
 
 ### Phase H — agent identity (from the earlier review)
@@ -355,6 +355,28 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   places the announcement before the floor starts. It also documents a real
   contradiction: ROADMAP's "used it unchanged" and CONTRIBUTING #4's "needed a
   change" count *opposite* events as success.
+- G3 memo written (`ef857f8`, `OPEN_QUESTIONS.md` §14) — **awaiting decision**.
+  Answer: **E is a freeze precondition — but the row's own argument for it
+  fails.** The row argued evidential power (a trace exercising two adapters is
+  the strongest cross-adapter measurement); G3 shows that under per-record
+  dispatch each record is parsed by exactly one adapter, so no adapter-supplied
+  field is ever contested, `canonical()` erases the two fields dispatch adds,
+  and the one genuine cross-adapter value cannot be measured by a fixture we
+  constructed. The conclusion survives on a simpler ground: **E moves the
+  schema** under every option E1 leaves live (`unclaimed_record` is a new
+  diagnostic code; the recommended option widens
+  `Provenance.adapter_id: str -> str | None`). So the precondition is on the
+  **decision**, not the implementation — deciding *against* dispatch resolves
+  it equally, while freezing `adapter_id` as `str` prices a later E at a
+  migration.
+- G3 resolves the G1 collision: Phase 4 holds two kinds of precondition — work
+  that must land (ours, deliberately) vs outside evidence (not ours, by rule).
+  E is the first, so G1's maintainer-exclusion never reaches it.
+  **Phase 3 exit: met** (checked against `TASKS.md` 3.11). **G2's three
+  ROADMAP lines: keep.**
+- **G4's row is short by three items**, per G3: "tracked in `WORKPLAN.md`" in
+  TASKS.md points at a file G4 deletes, and G4's row covers `TASKS.md` + the
+  README row but not `ROADMAP.md` or the memo sign-offs.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
