@@ -10418,6 +10418,84 @@ may want to reverse.**
 touched, no `canonical()` weakened, `PREDICTIONS.md` untouched, schema not
 frozen, Phase 4 not started. `make check` green; `make shape` produces no diff.
 
+## September 2026 audit — the fix series  *(execution state in `WORKPLAN.md`)*
+
+A cold audit of the shipped `0.9.1` tree in September 2026 produced six
+findings plus five minor or roadmap-level ones. The fixes run as a series of
+batches, one batch per commit, and **`WORKPLAN.md` is that series' execution
+state**: status, order, run grouping, the decisions log, and the
+finding-to-batch map at its §5.
+
+This section is the **item registry** — what the series contains, so a reader
+of `TASKS.md` alone can see it, and so the items outlive `WORKPLAN.md`, which
+is deleted at series close (G4) with its decisions folded into this file.
+**Statuses are deliberately not duplicated here**: two places to read a status
+is one place to read a stale one. Final statuses land here at G4. Batches
+marked *halt* end in a memo and a human decision, never in code.
+
+- **A1 — RecursionError containment.** Deeply nested JSON in a record line or
+  in a payload becomes a diagnostic instead of an escaping `RecursionError`;
+  tracked in `WORKPLAN.md`.
+- **A2 — Reader tolerance.** Strip a leading UTF-8 BOM and accept CR-only line
+  endings, so the first record is not lost to its own encoding; tracked in
+  `WORKPLAN.md`.
+- **A3 — Duplicate records and duplicate span ids.** Keep one of a
+  byte-identical pair under a new diagnostic, and derive node ids so two spans
+  sharing a source id are both kept — as `SPEC.md` §3.7 already claims they
+  are; tracked in `WORKPLAN.md`.
+- **A4 — Missing trace id diagnostic.** An empty `trace_id` is silent today and
+  becomes an `info` diagnostic; tracked in `WORKPLAN.md`.
+- **B1 — Annotation cost.** `Graph.annotate` rebuilds every index on each call;
+  carry the indexes across the replace and add a batch form; tracked in
+  `WORKPLAN.md`.
+- **B2 — Reader line splitting.** Measure the reader's per-line buffer copy on a
+  large file first and replace it only if the measurement justifies it; tracked
+  in `WORKPLAN.md`.
+- **C1 — Timestamp unit suspicion and numeric strings.** Report a timestamp too
+  large to be seconds, and accept the numeric-string timestamps OTLP JSON
+  emits, converting nothing; tracked in `WORKPLAN.md`.
+- **C2 — Timestamp representation memo** *(halt)*. Float64 seconds loses
+  precision at epoch-nanosecond scale; the options go to `OPEN_QUESTIONS.md`
+  for a human; tracked in `WORKPLAN.md`.
+- **D1 — `data` edge echo memo** *(halt)*. Conversation-history echo makes
+  `data` edges quadratic in turns; the options go to `OPEN_QUESTIONS.md` for a
+  human; tracked in `WORKPLAN.md`.
+- **D2 — Echo implementation.** Implement the D1 decision, checking which
+  conformance expectations already carry echo edges before touching them;
+  tracked in `WORKPLAN.md`.
+- **E1 — Mixed-instrumentation design memo** *(halt)*. One trace carrying two
+  dialects' spans is unrepresentable today, and forcing either adapter loses
+  pairing; the options go to `OPEN_QUESTIONS.md` for a human; tracked in
+  `WORKPLAN.md`.
+- **E2 — Per-record classification.** Classify each record to an adapter from
+  the adapters' existing markers, with a record two adapters claim still a hard
+  error; tracked in `WORKPLAN.md`.
+- **E3 — Multi-adapter spans in the builder.** Build one graph from several
+  adapters' spans and prove a mixed trace yields the same canonical graph as
+  its single-dialect renderings; tracked in `WORKPLAN.md`.
+- **E4 — Mixed instrumentation: CLI and documents.** `--adapter` semantics,
+  per-adapter counts in `inspect`, and the documents that describe them;
+  tracked in `WORKPLAN.md`.
+- **F1 — OTLP JSON design memo.** Whether the OTLP JSON envelope is a
+  reader-level container format rather than an adapter, and what becomes of
+  resource and scope attributes; tracked in `WORKPLAN.md`.
+- **F2 — OTLP JSON implementation.** Reader support plus an OTLP-JSON rendering
+  of an existing scenario that must produce that scenario's one canonical
+  graph; tracked in `WORKPLAN.md`.
+- **G1 — "Real outside users" gate definition.** Replace the freeze
+  precondition's hope with a stated condition, and make the announcement a task
+  with an owner; tracked in `WORKPLAN.md`.
+- **G2 — Track the audit in `TASKS.md`.** This section: the item registry for
+  the series; tracked in `WORKPLAN.md`.
+- **G3 — Roadmap review.** Propose whether mixed instrumentation (E) is a
+  freeze precondition; the decision is the maintainer's; tracked in
+  `WORKPLAN.md`.
+- **G4 — Series close.** Record final statuses here, move the decisions log
+  here, and remove `WORKPLAN.md` and its README row; tracked in `WORKPLAN.md`.
+- **H1 — Agent identity memo** *(halt)*. `operation` is `None` for agent, chain
+  and retriever in both dialects; the options go to `OPEN_QUESTIONS.md`, and a
+  model change would be a decision, not a patch; tracked in `WORKPLAN.md`.
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK, OTLP JSON;

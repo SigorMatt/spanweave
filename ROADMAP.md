@@ -246,6 +246,10 @@ OTLP JSON; OTLP protobuf behind the `otlp` extra). A contributor-facing
 **conformance harness**: drop your dialect's rendering of each scenario in,
 run one command, see whether your adapter agrees with the canonical graph.
 
+*Raw OTLP JSON is pulled forward by the September 2026 audit as batches F1–F2,
+which ask whether the envelope is a container format for the reader rather than
+a dialect for an adapter (registered in `TASKS.md`, tracked in `WORKPLAN.md`).*
+
 The flywheel is deliberate: the contribution surface is *"add your
 instrumentor"*, backed by a corpus that makes a correct contribution obvious and
 an incorrect one impossible to merge.
