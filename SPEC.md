@@ -356,7 +356,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported |
 | `duplicate_source_id` | two records claimed the same source id |
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
-| `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record |
+| `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
@@ -1002,8 +1002,10 @@ every registered adapter and picks the highest confidence.
   input with no records, where the question *why is `trace_id` empty* is still
   owed an answer. **One diagnostic per graph, never one per record**: the fact
   is about the input as a whole, it has no node to point at, and a per-record
-  form would repeat one sentence once per span while adding nothing. Nothing
-  is invented — the library never synthesizes a trace id.
+  form would repeat one sentence once per span while adding nothing. **And
+  only then**: a record carrying no trace id among records that do is *not*
+  diagnosed — that graph has a trace id, and nothing about it is missing.
+  Nothing is invented — the library never synthesizes a trace id.
 - **A record that appears more than once is read once.** At-least-once export
   and collector retries put the same record in a file twice; keeping both
   would publish two nodes for one operation, and an invented span is worse

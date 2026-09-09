@@ -35,6 +35,7 @@ something the project has not done yet.
 from __future__ import annotations
 
 import ast
+import json
 import pathlib
 import re
 import shlex
@@ -952,3 +953,98 @@ def test_the_documents_are_right_about_which_scenarios_must_not_build():
             f"{refusing or 'none'}. Whichever moved, the other follows in the "
             f"same change (`FIXTURES.md` §4.2)"
         )
+
+
+# -- `missing_trace_id`, scope claimed against scope measured ---------------
+#
+# Batch A4 gave the builder a diagnostic for an input that identifies no
+# trace, and fenced it in two places nobody reads to learn what the library
+# does: a commit body and a CHANGELOG entry. The fence has two sides. It is
+# **one per graph**, never one per record; and it fires **only** when the
+# built graph reports no trace id at all, so a record carrying none among
+# records that do is not diagnosed -- that graph has a trace id, and nothing
+# about it is missing.
+#
+# The September 2026 review (batch A9) found that `SPEC.md` -- the one
+# document a consumer reads for what a code means -- stated the first side
+# and never the second. A reader could reasonably have expected a diagnostic
+# per id-less record and written a consumer around it.
+#
+# Correcting the sentence would leave a sentence that expires again, so it is
+# checked here against both sides of the behaviour it describes: the row must
+# say it, and the library must do it.
+
+#: The limit, verbatim, in the row `SPEC.md` §3.7 gives the code.
+MISSING_TRACE_ID_SCOPE = (
+    "only when the built graph reports no trace id at all; "
+    "a record carrying none among records that do is not diagnosed"
+)
+
+
+def a_trace_record(span_id: str, trace_id: str | None) -> dict[str, object]:
+    """One OpenInference record, with or without the trace id field."""
+    record: dict[str, object] = {
+        "span_id": span_id,
+        "parent_id": None,
+        "name": "a",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "AGENT"},
+    }
+    if trace_id is not None:
+        record["trace_id"] = trace_id
+    return record
+
+
+def missing_trace_id_count(records: list[dict[str, object]], path: pathlib.Path) -> int:
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+    )
+    graph = spanweave.build(path)
+    return len([d for d in graph.diagnostics if d.code == "missing_trace_id"])
+
+
+def test_the_spec_states_the_scope_the_missing_trace_id_diagnostic_keeps():
+    # The code table only: §3.7 also tables each code's `source` shape, and
+    # that row answers a different question.
+    code_table = section(read("SPEC.md"), "### 3.7").split("#### ")[0]
+    rows = [
+        line
+        for line in code_table.splitlines()
+        if line.startswith("| `missing_trace_id` |")
+    ]
+    assert len(rows) == 1, (
+        f"`SPEC.md` §3.7's code table gives `missing_trace_id` {len(rows)} "
+        f"row(s); it is one code and gets one row, and this check reads that "
+        f"row for the scope the library actually keeps"
+    )
+    assert MISSING_TRACE_ID_SCOPE in rows[0], (
+        f"`SPEC.md` §3.7 no longer states where `missing_trace_id` stops "
+        f"({MISSING_TRACE_ID_SCOPE!r}). The limit is real -- the test below "
+        f"measures it -- and §3.7 is where a consumer reads what a code "
+        f"means, so an unstated limit is a limit nobody can rely on"
+    )
+
+
+def test_the_library_keeps_the_scope_the_spec_states(tmp_path):
+    # Side one: a graph that reports no trace id says so, once.
+    none_at_all = missing_trace_id_count(
+        [a_trace_record(f"s{index}", None) for index in range(3)],
+        tmp_path / "none_at_all.jsonl",
+    )
+    assert none_at_all == 1, (
+        f"an input where no record carries a trace id produced "
+        f"{none_at_all} `missing_trace_id` diagnostics; `SPEC.md` §3.7 and §7 "
+        f"say one per graph, never one per record"
+    )
+    # Side two: one record short of an id is not that case at all.
+    one_short = missing_trace_id_count(
+        [a_trace_record("s0", "t1"), a_trace_record("s1", None)],
+        tmp_path / "one_short.jsonl",
+    )
+    assert one_short == 0, (
+        f"a record carrying no trace id among records that do produced "
+        f"{one_short} `missing_trace_id` diagnostic(s); that graph has a "
+        f"trace id and nothing about it is missing (`SPEC.md` §3.7)"
+    )

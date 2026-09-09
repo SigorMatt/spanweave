@@ -194,6 +194,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **`SPEC.md` did not state where `missing_trace_id` stops.** The diagnostic
+  A4 added is fenced on two sides: one per graph, never one per record, and it
+  fires **only** when the built graph reports no trace id at all -- so a record
+  carrying none among records that do is not diagnosed, because that graph has
+  a trace id and nothing about it is missing. The second half was written in a
+  commit body and in this file, and nowhere in the document a consumer reads to
+  learn what a code means; §3.7's row stated the first half only, which left it
+  reasonable to expect one diagnostic per id-less record and to build a consumer
+  around that. §3.7's row and §7's bullet now both say it. **No behavior
+  changed** -- the library has kept that scope since A4, and `tests/` held both
+  sides of it; what was missing was the sentence. `tests/test_doc_truth.py`
+  reads the scope out of §3.7 and then measures both sides through
+  `spanweave.build`, so the row and the library fail together or not at all.
+  (audit finding: minor, missing `trace_id` silent -- scope half)
+
 - **A key an adapter reads to decide is no longer reported as one it could not
   map.** The OpenInference adapter reads a tool-result message's
   `...message.role` to tell a result the span was **given** (`SPEC.md` §4.2.1)
