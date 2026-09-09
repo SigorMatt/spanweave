@@ -154,7 +154,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| C1 | **Unit suspicion + numeric strings.** New diagnostic `timestamp_unit_suspect` (warning) when a start/end value exceeds 1e11 (seconds since epoch cannot; ms/ns can). Both adapters accept numeric-string timestamps (OTLP JSON encodes int64 as strings). Values stay as reported (losslessness); nothing is converted. SPEC §3.1, §3.7. Fixtures: ns-int and string-timestamp renderings. CHANGELOG. | todo | 20 |
+| C1 | **Unit suspicion + numeric strings.** New diagnostic `timestamp_unit_suspect` (warning) when a start/end value exceeds 1e11 (seconds since epoch cannot; ms/ns can). Both adapters accept numeric-string timestamps (OTLP JSON encodes int64 as strings). Values stay as reported (losslessness); nothing is converted. SPEC §3.1, §3.7. Fixtures: ns-int and string-timestamp renderings. CHANGELOG. | done | 20 |
 | C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | todo | 6 |
 
 ### Phase D — `data` edge echo
@@ -266,6 +266,21 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - B2 dropped, numbers in its row. **Follow-up it surfaced:** if reader speed
   ever matters, the target is the dedup digest A3 introduced — `record_digest`
   re-serializes every record, 3.8 s of 7.5 s cumulative — not line splitting.
+- C1 done (`467ff97`). `timestamp_unit_suspect` is **one per node** (both
+  endpoints share an encoding, so `source` names the offending fields rather
+  than firing twice); checked on reported `started_at`/`ended_at` only, never a
+  duration, strictly `> 1e11`. A numeric string is accepted iff unquoting it
+  yields a valid JSON number; an unreadable value is named in
+  `unmapped_attributes` and still draws `missing_timestamp` — never silently
+  absent.
+- **C2 must revisit two things C1 left it:** (1) `TIMESTAMP_UNIT_CEILING`
+  compares against the value as the model holds it, so an internal
+  representation change moves the constant, the check and the diagnostic's
+  `source` together; (2) if C2 picks integer nanoseconds, the *string* path can
+  preserve every digit where the JSON-number path cannot — a new asymmetry.
+- **Pre-existing doc defect, unfixed and untested:**
+  `fixtures/conformance/README.md` still says `duplicate_span_ids` "must not
+  build" / "no expected graph". A3 made it build. No test catches it.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
