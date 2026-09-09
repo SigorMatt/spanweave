@@ -185,7 +185,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | todo | 6 |
-| G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | todo | 6 |
+| G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | done | 6 |
 | G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | todo | 6 |
 | G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. | todo | 4 |
 
@@ -224,7 +224,16 @@ Run grouping: **Run 1** = G2 A1 A2 A4 A3 B1 B2 C1 then memos C2 D1 E1 G1 G3 H1
 
 ## 4. Resume note
 
-None yet. First session starts at A1.
+Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
+
+- **No CHANGELOG file exists in this repo.** Seven rows (A1, A2, A3, B1, C1,
+  D2, F2) say "CHANGELOG." Ruling for the series: the first batch that needs
+  one checks for release notes under another name first; if there are none it
+  creates `CHANGELOG.md` with an `## [Unreleased]` section only — no invented
+  history for the already-shipped 0.9.x releases.
+- G2 touched `ROADMAP.md` (one line under the Phase 4 OTLP-JSON bullet, which
+  its row explicitly permits). §0.6's "ROADMAP.md is untouched until G3" is the
+  general rule; G3 may revert those three lines if it wants the file virgin.
 
 ---
 
