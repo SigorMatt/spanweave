@@ -155,7 +155,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | C1 | **Unit suspicion + numeric strings.** New diagnostic `timestamp_unit_suspect` (warning) when a start/end value exceeds 1e11 (seconds since epoch cannot; ms/ns can). Both adapters accept numeric-string timestamps (OTLP JSON encodes int64 as strings). Values stay as reported (losslessness); nothing is converted. SPEC §3.1, §3.7. Fixtures: ns-int and string-timestamp renderings. CHANGELOG. | done | 20 |
-| C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | todo | 6 |
+| C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | awaiting decision | 6 |
 
 ### Phase D — `data` edge echo
 
@@ -281,6 +281,15 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - **Pre-existing doc defect, unfixed and untested:**
   `fixtures/conformance/README.md` still says `duplicate_span_ids` "must not
   build" / "no expected graph". A3 made it build. No test catches it.
+- C2 memo written (`cd62d45`, `OPEN_QUESTIONS.md` §10) — **awaiting decision**.
+  It does **not** recommend the plan's "int ns internally": recommendation is
+  *keep the reported integer and never rescale* (`started_at: int | float |
+  None`), because rescaling requires knowing the unit C1 just established is
+  unknowable. Moves 5 of 108 stored timestamp slots (one fixture) vs 106 for
+  the rescale option. Classified honestly as deterministic-but-wrong-ordered,
+  not a determinism or losslessness bug; 0 corpus traces affected today. The
+  digits arrive exact from `json.loads` and die at `float(value)` in the
+  adapters, not in the reader.
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
