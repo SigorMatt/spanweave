@@ -66,7 +66,10 @@ def derive(
     ``record`` is the canonical digest of the source record, and it is
     supplied only for rule 3 -- a source key two records share. Passing it is
     what separates them; omitting it leaves rule 2's material exactly as it
-    has always been, so no id that exists today moves.
+    has always been. Which is a statement about the *material*, not about
+    every id: a record whose key a second record also claims does move, from
+    the rule-2 id to a rule-3 one. Rule 1's ids and every rule-2 id whose key
+    stays its own are where they were.
     """
     parts = (adapter_id, trace_id or "", source_key)
     material = _SEPARATOR.join(parts if record is None else (*parts, record))

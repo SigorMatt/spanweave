@@ -246,17 +246,32 @@ def test_crlf_line_endings_are_read():
     assert len(stream.diagnostics) == 0
 
 
-def test_cr_only_line_endings_are_read():
-    # Classic-Mac and some exporters end lines with CR alone. Without this the
-    # whole file is one line, and one line that long is one malformed record:
-    # the entire trace lost to a byte.
-    stream = read_trace(b'{"span_id":"s0"}\r{"span_id":"s1"}\r')
-    assert list(stream) == RECORDS
+def test_a_bare_cr_inside_a_record_is_whitespace_and_the_record_still_reads():
+    # RFC 8259 lists CR among the four inter-token whitespace characters, so a
+    # pretty-printer that writes CR-terminated lines inside a record produces
+    # this, and it is one record. A reader that split on a lone CR would turn
+    # a record that parses into two that do not -- content damaged in the name
+    # of tolerating a file format.
+    stream = read_trace(b'{"a":\r1}\n')
+    assert list(stream) == [{"a": 1}]
     assert len(stream.diagnostics) == 0
 
 
-def test_line_endings_may_be_mixed_within_one_input():
-    stream = read_trace(b'{"span_id":"s0"}\r\n{"span_id":"s1"}\r{"span_id":"s2"}\n')
+def test_a_cr_only_file_is_one_line_and_is_reported_as_one():
+    # The other side of the same rule: a lone CR is not a terminator, so a
+    # CR-only file is a single line. It is refused loudly -- one
+    # `malformed_record` carrying the text -- rather than misread, and no
+    # record vanishes silently.
+    stream = read_trace(b'{"span_id":"s0"}\r{"span_id":"s1"}\r')
+    assert list(stream) == []
+    reported = stream.diagnostics.collected()
+    assert [d.code for d in reported] == [codes.MALFORMED_RECORD]
+    assert reported[0].message.startswith("line 1 ")
+    assert reported[0].source == '{"span_id":"s0"}\r{"span_id":"s1"}'
+
+
+def test_lf_and_crlf_may_be_mixed_within_one_input():
+    stream = read_trace(b'{"span_id":"s0"}\r\n{"span_id":"s1"}\n{"span_id":"s2"}\n')
     assert list(stream) == [*RECORDS, {"span_id": "s2"}]
     assert len(stream.diagnostics) == 0
 
@@ -269,16 +284,21 @@ def test_a_crlf_counts_as_one_line_not_two():
     assert reported[0].source == "broken"
 
 
-def test_cr_only_lines_are_numbered_the_way_the_file_reads():
-    stream = read_trace(b'{"a":1}\r\rbroken\r')
+def test_a_bare_cr_does_not_advance_the_line_number():
+    # Line numbers count the terminators the reader knows, and a lone CR is
+    # not one of them, so everything up to the LF is line 1.
+    stream = read_trace(b'{"a":1}\r\rbroken\n')
     list(stream)
-    assert "line 3" in stream.diagnostics.collected()[0].message
+    reported = stream.diagnostics.collected()
+    assert reported[0].message.startswith("line 1 ")
+    assert reported[0].source == '{"a":1}\r\rbroken'
 
 
 def test_a_crlf_split_across_chunk_boundaries_is_still_one_terminator():
-    # The CR arrives in one read and its LF in the next. Treating the CR as a
-    # terminator on sight would insert a phantom blank line and shift every
-    # line number after it.
+    # The CR arrives in one read and its LF in the next, so the pair is only
+    # a pair once both chunks are in hand. The terminator is the LF and the CR
+    # ahead of it is stripped with the rest of the line's surrounding space:
+    # no phantom blank line, and no line number shifted after it.
     from spanweave.read import RecordStream
 
     stream = RecordStream("<test>", iter((b'{"a":1}\r', b"\nbroken\r\n")))
@@ -286,7 +306,8 @@ def test_a_crlf_split_across_chunk_boundaries_is_still_one_terminator():
     assert "line 2" in stream.diagnostics.collected()[0].message
 
 
-def test_a_trailing_cr_at_the_end_of_the_input_ends_the_last_line():
+def test_a_trailing_cr_at_the_end_of_the_input_does_not_cost_the_last_record():
+    # Not a terminator, just whitespace after the last record's final brace.
     stream = read_trace(b'{"span_id":"s0"}\r')
     assert list(stream) == [{"span_id": "s0"}]
     assert len(stream.diagnostics) == 0

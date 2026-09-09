@@ -10436,9 +10436,11 @@ marked *halt* end in a memo and a human decision, never in code.
 - **A1 — RecursionError containment.** Deeply nested JSON in a record line or
   in a payload becomes a diagnostic instead of an escaping `RecursionError`;
   tracked in `WORKPLAN.md`.
-- **A2 — Reader tolerance.** Strip a leading UTF-8 BOM and accept CR-only line
-  endings, so the first record is not lost to its own encoding; tracked in
-  `WORKPLAN.md`.
+- **A2 — Reader tolerance.** Strip a leading UTF-8 BOM, so the first record is
+  not lost to its own encoding; tracked in `WORKPLAN.md`. As landed it also
+  made a lone CR a line terminator; that half was withdrawn by batch A8 the
+  next day, because a lone CR is JSON whitespace inside a record and splitting
+  on it broke records that parse.
 - **A3 — Duplicate records and duplicate span ids.** Keep one of a
   byte-identical pair under a new diagnostic, and derive node ids so two spans
   sharing a source id are both kept — as `SPEC.md` §3.7 already claims they

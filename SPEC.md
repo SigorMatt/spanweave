@@ -967,9 +967,14 @@ every registered adapter and picks the highest confidence.
   first record reads like any other. Only at the start — the same bytes
   anywhere else are part of a record and are left exactly where they are. The
   input digest is taken over the bytes *as given*, BOM included.
-- **Line endings** may be LF, CRLF, or CR-only. Each is one line terminator,
-  and line numbers in diagnostics count lines the way the file does under any
-  of the three.
+- **Line endings** may be LF or CRLF. The terminator is the LF, a CRLF is one
+  line rather than two, and line numbers in diagnostics count lines the way
+  the file does under either. A **lone CR is not a terminator**: RFC 8259
+  lists it among JSON's inter-token whitespace characters, so `{"a":<CR>1}` is
+  one record and a reader that split on it would take a record that parses and
+  break it into two that do not. The consequence is stated rather than hidden:
+  a CR-only file is **one line**, and one line that long is one
+  `malformed_record` carrying its text — a loud refusal, not a silent misread.
 - Read from a path or from stdin (`-`).
 - **One input = one trace.** If records carry more than one `trace_id`, the
   builder uses the most common one, emits `multi_trace_input`, and keeps the

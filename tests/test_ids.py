@@ -133,11 +133,38 @@ def test_a_shared_source_key_derives_from_the_record_not_its_position():
 
 
 def test_a_unique_source_key_derives_exactly_as_it_always_did():
-    # Rule 2 is untouched: no id that exists today moves.
+    # Rule 2's *material* is untouched, which is narrower than "no id moves":
+    # see the test below for the record whose id rule 3 does move.
     spans = [a_record_span("1", None, {"name": "a"})]
     assert assign(spans, "some_dialect", "t1").ids == (
         derive("some_dialect", "t1", "1"),
     )
+
+
+def test_a_key_a_second_record_also_claims_moves_that_record_off_rule_2():
+    # What "rules 1 and 2 are untouched, so no node id the library produces
+    # moves" (the A3 CHANGELOG entry, corrected in A8) missed. The rules are
+    # untouched; an id is not. A record keyed `2` beside a record whose span
+    # id is `2` shares that key, so it derives under rule 3 and lands on a
+    # different id than rule 2 alone would have given it -- while the record
+    # with the span id keeps rule 1 and notices nothing.
+    #
+    # Reachable when the fallback key was the record's 1-based index: review
+    # concern 4 recorded exactly this pair. Batch A5 made the fallback the
+    # record's canonical digest, so a trace file no longer reaches it, but
+    # `assign` is public ground and a caller's two spans can still share a key.
+    source = {"name": "a"}
+    spans = [
+        a_record_span("2", "2", {"span_id": "2", "name": "b"}),
+        a_record_span("2", None, source, line=2),
+    ]
+    ids = assign(spans, "openinference", "t").ids
+    assert ids[0] == "2"
+    assert ids[1] == derive("openinference", "t", "2", record_digest(source))
+    assert ids[1] != derive("openinference", "t", "2")
+    # The id that moved, pinned: rule 2 on this key derives the literal the
+    # review reported as the "before" half of the pair.
+    assert derive("openinference", "t", "2") == "sw_fc49b046c1cd484d"
 
 
 def test_the_records_content_is_what_separates_two_shared_keys():

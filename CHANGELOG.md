@@ -159,9 +159,26 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   the record's own canonical digest joins the derivation material. It
   disambiguates on **content, never on position** -- numbering the records
   would make an id depend on where its line sat in the file, and input order
-  must not affect the result. Rules 1 and 2 are untouched, so **no node id that
-  the library produces today moves**; rule 3 covers a case that previously
-  produced no ids at all.
+  must not affect the result. Rules 1 and 2 are untouched, so **no stored
+  expectation moves and no id in the corpus changes** -- rule 1 covers every
+  record there.
+
+  That last sentence read "**no node id that the library produces today
+  moves**" until batch A8 corrected it, and it was wider than the truth. An id
+  **does** move for a record whose source key a second record also claims:
+  that record shifts from rule 2 to rule 3 and the record's digest joins its
+  material. Two ways in. A duplicated **span id** is one, and it moves nothing
+  that ever existed -- before rule 3 both records derived the *same* id and the
+  file was refused, so there was no id to move; that is the case the sentence
+  was thinking of. The other was reachable and built: while the fallback key
+  was a record's 1-based index, a record with no span id at index 2 beside a
+  record whose span id was the string `2` shared the key `2`, and the keyless
+  record's id moved (`sw_fc49b046c1cd484d` -> `sw_70ae5dd0e179edd9`, review
+  concern 4, first claim). Batch A5 has since made that fallback the record's canonical
+  digest, so no trace file reaches it now -- but `assign` is public ground and
+  a caller's two spans can still share a key, so the behaviour is pinned by
+  `tests/test_ids.py::test_a_key_a_second_record_also_claims_moves_that_record_off_rule_2`
+  rather than described.
 
   A reference to a duplicated span id still resolves to *neither* record:
   picking one would be a guess. The hard error remains as the guarantee that a
@@ -176,6 +193,23 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **A lone carriage return is no longer a line terminator**, because a lone
+  carriage return is legal JSON whitespace *inside* a record. RFC 8259 lists
+  CR among the four inter-token whitespace characters, so `{"a":<CR>1}` is one
+  record that every JSON parser reads -- and the reader, having just learned to
+  split on a bare CR, split it into two lines and reported two
+  `malformed_record`s for a record that had been fine the day before. That is
+  a tolerance about *how a file was written* reaching *what it says*, which is
+  the one thing the rule was written not to do. LF and CRLF are unchanged (the
+  terminator is the LF; the CR ahead of it goes with the whitespace the reader
+  already strips, so a CRLF is one line), and the BOM rule is unchanged.
+
+  The consequence is stated rather than hidden: a **CR-only file is one line**,
+  and one line that long is one `malformed_record` carrying its text. A loud
+  refusal on a file format nobody exports beats a silent misreading of a record
+  somebody wrote. `SPEC.md` §7 says both halves.
+  (review concern 4, third claim; correcting this series' own batch A2)
 
 - **The spec stated the canonical digest without `ensure_ascii=False`**, and
   the library has passed it since the digest existed. `SPEC.md` §3.6 is the
@@ -259,16 +293,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   pinned everywhere a node id is a string a dialect supplied
   (`FIXTURES.md` §4.1).
 
-- The reader tolerates two things about how a file was written. A UTF-8 BOM
-  (`EF BB BF`) at the head of the input is skipped before the container format
-  is detected -- `str.strip()` does not remove U+FEFF, so the BOM used to ride
-  into the parser and cost the file its first record. And LF, CRLF and CR-only
-  line endings are each one terminator, so a CR-only file is a trace rather
-  than one very long unreadable line. Neither tolerance touches content: the
-  same bytes anywhere but the head of the stream are part of a record and are
-  passed through verbatim, and the input digest still fingerprints the bytes as
-  given, BOM included. `SPEC.md` §7 states both. (audit finding: minor, BOM
-  loses first record)
+- The reader tolerates a UTF-8 BOM (`EF BB BF`) at the head of the input: it
+  is skipped before the container format is detected -- `str.strip()` does not
+  remove U+FEFF, so the BOM used to ride into the parser and cost the file its
+  first record. The tolerance does not touch content: the same bytes anywhere
+  but the head of the stream are part of a record and are passed through
+  verbatim, and the input digest still fingerprints the bytes as given, BOM
+  included. `SPEC.md` §7 states it. (audit finding: minor, BOM loses first
+  record)
+
+  This entry also announced CR-only line endings as a second terminator, and
+  said "neither tolerance touches content". The CR half did touch content and
+  was **withdrawn by batch A8** the following day, before any release carried
+  it; the entry above, under this section's newest changes, says what a lone CR
+  is instead.
 
 - Reading a record, or parsing a payload, nested deeper than the JSON parser
   will recurse no longer raises `RecursionError` out of the library. `json`

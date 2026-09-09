@@ -15,10 +15,14 @@ Two things this layer must get right:
   than a ``ValueError`` -- a different exception for the same fact, and one
   that escaped this guard until ``SPEC.md`` §7 said so out loud.
 * **It is tolerant about the wrapping, never about the content.** A UTF-8 BOM
-  at the head of the stream is skipped and LF, CRLF and CR-only line endings
-  are each one terminator (``SPEC.md`` §7) -- both are facts about how a file
-  was written, not about what it says. Neither tolerance reaches a record:
-  those same bytes anywhere else are content and are passed through verbatim.
+  at the head of the stream is skipped (``SPEC.md`` §7): that is a fact about
+  how the file was written, not about what it says, and the tolerance reaches
+  exactly the head -- those same bytes anywhere else are content and are
+  passed through verbatim. Line endings are LF and CRLF. A **lone CR is not a
+  terminator**, because a lone CR is legal JSON whitespace *inside* a record
+  (RFC 8259): splitting on it would take a record that parses and break it in
+  two, which is the tolerance reaching content -- the one thing this bullet
+  forbids.
 * **It reads each record once.** At-least-once export and collector retries
   put the same record in a file twice, and two nodes for one operation is an
   *invented* span -- worse than a missing one, because nothing downstream can
@@ -188,32 +192,24 @@ class RecordStream:
     def _read_lines(self, head: bytes, chunks: Iterator[bytes]) -> Iterator[JsonValue]:
         number = 0
         buffered = head
-        exhausted = False
         while True:
             # Everything already buffered comes out before more is pulled --
             # otherwise the first record would wait on the second chunk, and
             # "lazy" would be a claim rather than a behavior.
-            while (found := _line_break(buffered)) is not None:
-                start, end = found
-                if (
-                    not exhausted
-                    and end == len(buffered)
-                    and buffered[start:end] == b"\r"
-                ):
-                    # A CR at the very end of what has arrived might yet be
-                    # the first half of a CRLF. Waiting for the next byte is
-                    # what keeps a chunk boundary from inventing a blank line
-                    # and shifting every line number after it.
-                    break
-                line, buffered = buffered[:start], buffered[end:]
+            #
+            # The terminator is the LF, and a CRLF is one line because the CR
+            # ahead of it goes with the whitespace `_read_line` strips. A CR
+            # on its own is left where it is: it is whitespace *within* a
+            # record (`SPEC.md` §7), and a reader that split on it would break
+            # a record that parses.
+            while b"\n" in buffered:
+                line, buffered = buffered.split(b"\n", 1)
                 number += 1
                 yield from self._read_line(number, line)
-            if exhausted:
-                break
             try:
                 buffered += next(chunks)
             except StopIteration:
-                exhausted = True
+                break
         number += 1
         yield from self._read_line(number, buffered)
 
@@ -257,22 +253,6 @@ def record_digest(record: JsonValue) -> str:
 #: head of a file; `str.strip()` does not remove it, so left in place it rides
 #: into the parser and costs the file its FIRST record (`SPEC.md` §7).
 _BOM = b"\xef\xbb\xbf"
-
-
-def _line_break(data: bytes) -> tuple[int, int] | None:
-    """Where the first line terminator starts and ends, or None.
-
-    LF, CRLF and CR alone are each *one* terminator: three conventions for the
-    same fact, and a reader that knows only the first one turns a CR-only file
-    into a single unreadable line.
-    """
-    newline = data.find(b"\n")
-    carriage = data.find(b"\r")
-    if carriage < 0 or (0 <= newline < carriage):
-        return None if newline < 0 else (newline, newline + 1)
-    if data[carriage + 1 : carriage + 2] == b"\n":
-        return (carriage, carriage + 2)
-    return (carriage, carriage + 1)
 
 
 def _first_non_space(data: bytes) -> str | None:

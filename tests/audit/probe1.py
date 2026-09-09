@@ -95,9 +95,10 @@ run("two_traces_first_is_child", [dict(oi("x0", None, "AGENT", "b", 1.0, 2.0), t
 # 6. Degenerate inputs
 run("empty", None, raw=b"")
 run("whitespace", None, raw=b"\n\n   \n")
-# A BOM at the head of the file (audit finding: minor) and CR-only or CRLF line
-# endings are now regression tests, not probes: tests/test_read.py, under
-# "Encoding and line endings". Fixed in batch A2.
+# A BOM at the head of the file (audit finding: minor) and CRLF line endings
+# are now regression tests, not probes: tests/test_read.py, under "Encoding and
+# line endings". Fixed in batch A2; batch A8 withdrew A2's lone-CR terminator
+# there, because a lone CR is JSON whitespace inside a record.
 # A record with no trace id (audit finding: minor) is now a regression test,
 # not a probe: tests/test_build.py, under "Trace identity and honest
 # degradation" -- the graph still reports no trace id and now says so with
