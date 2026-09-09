@@ -67,7 +67,11 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 
 **Identity**
 - `source_key` — a stable key within this input. Prefer the dialect's span id;
-  fall back to the 1-based record index.
+  fall back to the record's canonical digest
+  (`from spanweave.read import record_digest`), which is what both shipped
+  adapters do. **Never the record's index.** A key derived from position binds
+  the node id to where the record sat in the file, and shuffling the input MUST
+  NOT change the graph (`SPEC.md` §3.6 rule 2, §5.2).
 - `span_id` / `parent_id` / `trace_id` — verbatim from the dialect, or `None`.
   **Do not synthesize ids** — that is `spanweave/ids.py`'s job.
 

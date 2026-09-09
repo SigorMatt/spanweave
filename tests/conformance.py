@@ -87,6 +87,27 @@ def canonical(
     nodes = [_node(node, erase, drop_payloads or {}) for node in document["nodes"]]
     edges = [_without(edge, ERASED_EDGE_FIELDS) for edge in document["edges"]]
     labels = _positional_labels(document["nodes"])
+    relabelled_edges = [_relabelled(edge, labels, ("src", "dst")) for edge in edges]
+    if labels:
+        # `SPEC.md` §5.2 sorts edges by `(kind, src, dst, basis)` -- over the
+        # ids the graph actually carries, which for a derived id differ by
+        # adapter by design. So two faithful renderings of a scenario with
+        # two or more edges between derived-id nodes hold the SAME edges in
+        # DIFFERENT orders, and claim 2 would fail on id-generation trivia --
+        # exactly what `_positional_labels` exists to prevent, applied to
+        # only half of what an id decides. Re-sorted on the labels, the order
+        # is the one §5.2 describes, expressed in the only ids that are
+        # comparable here. Untouched where no id was relabelled, so the
+        # library's own edge order stays pinned everywhere it means anything
+        # (`FIXTURES.md` §4.1).
+        relabelled_edges.sort(
+            key=lambda edge: (
+                edge["kind"],
+                edge["src"],
+                edge["dst"],
+                edge["basis"] or "",
+            )
+        )
     return {
         "meta": {
             "schema_version": document["schema_version"],
@@ -96,7 +117,7 @@ def canonical(
             "diagnostic_count": len(document["diagnostics"]),
         },
         "nodes": [_relabelled(node, labels, ("id",)) for node in nodes],
-        "edges": [_relabelled(edge, labels, ("src", "dst")) for edge in edges],
+        "edges": relabelled_edges,
         "diagnostics": _by_code(document["diagnostics"]),
     }
 

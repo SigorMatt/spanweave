@@ -135,7 +135,8 @@ def test_the_sweep_reads_every_committed_trace_and_refuses_none_of_them():
     # 3). That the consumer *can* report a refusal is tested below, on an
     # input the library really does refuse.
     assert refused == []
-    assert len(traces) == 43, "the corpus changed size; re-read what this bounds"
+    # 43 -> 47 at batch A5: the `derived_ids` pair, two renderings each.
+    assert len(traces) == 47, "the corpus changed size; re-read what this bounds"
 
 
 def test_a_refusal_is_a_result_and_not_an_exit(tmp_path):

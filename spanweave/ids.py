@@ -6,14 +6,15 @@ So ids are computed the same way on every machine, in every process, forever:
 
 1. the dialect's own span id, when it is unique within the trace;
 2. otherwise ``sw_`` + the first 16 hex characters of a SHA-256 over the
-   adapter id, the trace id, and the adapter's stable source key;
+   adapter id, the trace id, and the adapter's stable source key -- which,
+   where the dialect states no span id, is the record's own canonical digest;
 3. and when two records share that source key -- which is what a dialect
-   that reused a span id looks like from here -- the record's own canonical
-   digest joins the material, so the two get two ids and both are kept.
+   that reused a span id looks like from here -- the record's canonical
+   digest joins the material too, so the two get two ids and both are kept.
 
-Rule 3 disambiguates on **content, never on position**. Numbering the
-records that share a key would make an id depend on where its record sat in
-the file, and input order must not affect the result (``CLAUDE.md`` 4). It is
+Rules 2 and 3 disambiguate on **content, never on position**. Numbering the
+records would make an id depend on where its record sat in the file, and
+input order must not affect the result (``CLAUDE.md`` 4). Rule 3 is
 total because the reader has already collapsed records that are the same
 record (``SPEC.md`` §7), so two survivors sharing a key differ somewhere.
 

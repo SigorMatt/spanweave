@@ -235,9 +235,10 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
     # 30 -> 32 at batch A3: `duplicate_span_ids` stopped being a refusal and
     # became a two-node graph in both dialects (`SPEC.md` §3.6 rule 3).
     # 32 -> 34 at batch C1, which added `timestamp_units` in both dialects.
-    assert len(traces) == 34
-    assert bytes_moved == 34, "both consumers' serialized output is order-dependent"
-    assert substance_held == 34, "no per-node value or total depends on the order"
+    # 34 -> 38 at batch A5, which added the `derived_ids` pair in both.
+    assert len(traces) == 38
+    assert bytes_moved == 38, "both consumers' serialized output is order-dependent"
+    assert substance_held == 38, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -278,9 +279,9 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
             a_start_time_tie += 1
             tied_traces.append(source)
 
-    # 22 -> 24 at batch A3, and 24 -> 26 at batch C1, for the same reason as
-    # the count above.
-    assert a_choice_was_made == 26, "traces where two nodes were ready at once"
+    # 22 -> 24 at batch A3, 24 -> 26 at batch C1, and 26 -> 30 at batch A5,
+    # for the same reason as the count above.
+    assert a_choice_was_made == 30, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 

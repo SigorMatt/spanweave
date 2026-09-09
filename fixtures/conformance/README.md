@@ -56,6 +56,15 @@ Added since, each for a reason recorded at its task:
 - **`unset_and_error_status`** (2.10). The corpus was 18-of-18 tool spans
   `ok` while no real tool span was. A consumer written against it computed a
   success rate that read zero against real telemetry (finding F6).
+- **`derived_ids`** and **`derived_ids_shuffled`** (September 2026 audit,
+  batch A5). All 177 records in the corpus carried a span id, so every node id
+  in it was a string a dialect supplied and `SPEC.md` §3.6 rule 2 — the
+  derived-id path — was exercised by nothing. The fallback key it went
+  unwatched with was the record's **1-based index**, so a file of span-id-less
+  records rebound its ids when its lines were swapped, and `shuffled_order`
+  could not see it because its records have span ids. These two are that
+  scenario and its reordered twin, where the id is computed rather than
+  quoted.
 - **`timestamp_units`** (September 2026 audit, batch C1). Nothing in the
   corpus reported a timestamp in anything but seconds, and nothing reported
   one the library could not read, so neither `timestamp_unit_suspect` nor a

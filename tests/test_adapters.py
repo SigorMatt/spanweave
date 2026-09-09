@@ -19,6 +19,7 @@ from spanweave.adapters.openinference import OpenInferenceAdapter
 from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.errors import AdapterSelectionError, UnknownAdapterError
 from spanweave.model import NodeKind, RawRecord
+from spanweave.read import record_digest
 from spanweave.seam import CallRole, SpanLink
 
 
@@ -348,3 +349,62 @@ def test_a_null_timestamp_is_absence_not_a_refused_rendering(adapter):
     for span in adapter.parse([a_record(adapter, start_time=None)]):
         assert span.started_at is None
         assert "<record>.start_time" not in span.unmapped
+
+
+# --------------------------------------------------------------------------
+# The fallback source key, in every adapter at once (batch A5)
+# --------------------------------------------------------------------------
+#
+# A dialect need not carry a span id, and when it does not the adapter has to
+# supply the stable key `spanweave/ids.py` derives a node id from
+# (`SPEC.md` §3.6 rule 2). The key must come from the record's **content**,
+# never from its position: an index binds the id to where the record sat in
+# the file, and input line order MUST NOT affect the result (`SPEC.md` §5.2).
+#
+# Here rather than in either adapter's own test file for the same reason the
+# timestamp table is: the claim is that both adapters answer identically, and
+# two copies of it could drift apart and each still pass.
+
+
+def a_span_id_less_record(adapter, **fields):
+    return a_record(adapter, span_id=None, **fields)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_record_without_a_span_id_keys_on_its_content(adapter):
+    record = a_span_id_less_record(adapter, name="alpha")
+    span = next(iter(adapter.parse([record])))
+    assert span.span_id is None
+    assert span.source_key == record_digest(record)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_record_that_is_not_an_object_keys_on_its_content_too(adapter):
+    # The `unknown` branch takes its own exit before any span id is read, so
+    # it needs the rule stated separately or it keeps the index quietly.
+    spans = list(adapter.parse(["not a record", 7]))
+    assert [s.source_key for s in spans] == [
+        record_digest("not a record"),
+        record_digest(7),
+    ]
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_shuffling_span_id_less_records_does_not_rebind_their_keys(adapter):
+    records = [
+        a_span_id_less_record(adapter, name="alpha"),
+        a_span_id_less_record(adapter, name="beta"),
+    ]
+
+    def keys(order):
+        return {s.raw.source["name"]: s.source_key for s in adapter.parse(order)}
+
+    assert keys(records) == keys(list(reversed(records)))
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_span_id_still_wins_over_the_record_digest(adapter):
+    # Rule 2's fallback is a fallback. Where the dialect states an id, that id
+    # is the key, and the node id is the id itself (`SPEC.md` §3.6 rule 1).
+    span = next(iter(adapter.parse([a_record(adapter, span_id="s7")])))
+    assert span.source_key == "s7"

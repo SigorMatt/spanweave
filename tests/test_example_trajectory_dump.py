@@ -229,10 +229,14 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: tool spans carries a payload. 122 -> 134 at batch C1, which added
 #: `timestamp_units`: two renderings of three payload-free spans, each with an
 #: `inputs` and an `outputs`.
+#:
+#: `present` moved 94 -> 118 at batch A5, which added the `derived_ids` pair:
+#: two scenarios x two renderings x three tool spans, each with an `inputs`
+#: and an `outputs` that the dialect fills in.
 CORPUS_STATES = {
     "absent": 134,
     "empty": 4,
-    "present": 94,
+    "present": 118,
     "redacted": 2,
     "truncated": 0,
 }

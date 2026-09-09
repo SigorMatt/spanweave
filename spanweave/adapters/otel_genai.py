@@ -78,6 +78,7 @@ from spanweave.model import (
     Status,
     Usage,
 )
+from spanweave.read import record_digest
 from spanweave.seam import CallRole, NormalizedSpan, SpanLink
 
 ADAPTER_ID = "otel_genai"
@@ -264,7 +265,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     raw = RawRecord(source=record, line_number=index)
     if not isinstance(record, dict):
         return NormalizedSpan(
-            source_key=str(index),
+            source_key=record_digest(record),
             kind=NodeKind.UNKNOWN,
             name="",
             raw=raw,
@@ -287,7 +288,12 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     diagnostics: list[Diagnostic] = []
 
     span_id = _as_str(record.get("span_id"))
-    source_key = span_id if span_id is not None else str(index)
+    # The dialect's own id where there is one, and otherwise the record's
+    # canonical digest -- content, never position. The index is right there
+    # and it is wrong: it would bind the node id to where the record sat in
+    # the file, and a re-export with the lines swapped would rename every
+    # span (`SPEC.md` §3.6 rule 2).
+    source_key = span_id if span_id is not None else record_digest(record)
 
     kind, normalized = _kind_of(attributes, consumed, diagnostics, record)
     inputs, outputs = _payloads(kind, attributes, consumed, diagnostics)

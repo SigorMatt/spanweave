@@ -240,3 +240,54 @@ def test_the_graph_file_is_one_line_and_ends_in_a_newline():
     written = spanweave.dumps(spanweave.build(WORKED_EXAMPLE))
     assert written.endswith(b"\n")
     assert written.count(b"\n") == 1
+
+
+# --------------------------------------------------------------------------
+# The same properties over records the dialect gives NO span id (batch A5)
+# --------------------------------------------------------------------------
+#
+# Everything above runs on `WORKED_RECORDS`, and every one of those -- like all
+# 177 records the corpus held at the time -- carries a span id, so a node id is
+# a string the dialect supplied and file order cannot reach it. The one path
+# where file order CAN reach an id is the derived one (`SPEC.md` §3.6 rule 2),
+# and it was unwatched: the fallback key was the record's 1-based index, so a
+# file of span-id-less records rebound its ids when its lines were swapped.
+#
+# Byte-identity alone does not catch that. Ids are assigned in node order, so
+# the two documents matched byte for byte while each id named a different
+# record in each -- which is why the binding is asserted separately below.
+
+DERIVED_ID_EXAMPLE = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "fixtures/conformance/derived_ids/dialects/openinference.jsonl"
+)
+DERIVED_ID_RECORDS = [
+    json.loads(line)
+    for line in DERIVED_ID_EXAMPLE.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+
+
+def test_the_span_id_less_records_really_carry_no_span_id():
+    # Otherwise everything below is a second run of the tests above.
+    assert DERIVED_ID_RECORDS
+    assert not any("span_id" in record for record in DERIVED_ID_RECORDS)
+
+
+def test_shuffling_span_id_less_records_changes_nothing():
+    determinism.assert_order_independent(DERIVED_ID_RECORDS, _document_of)
+
+
+def test_shuffling_span_id_less_records_does_not_rebind_their_ids():
+    def binding(records):
+        graph = spanweave.build(_bytes_of(records))
+        return {node.id: node.raw.source["name"] for node in graph.nodes()}
+
+    forwards = binding(DERIVED_ID_RECORDS)
+    assert all(node_id.startswith("sw_") for node_id in forwards)
+    assert forwards == binding(list(reversed(DERIVED_ID_RECORDS)))
+
+
+def test_every_span_id_less_record_is_accounted_for():
+    document = spanweave.to_document(spanweave.build(DERIVED_ID_EXAMPLE))
+    determinism.assert_every_record_accounted_for(DERIVED_ID_RECORDS, document)

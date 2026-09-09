@@ -248,8 +248,12 @@ Node ids are deterministic and stable across runs, machines, and Python versions
 2. Otherwise, if the `source_key` is unique within the trace, the node id is
    `sw_` + the first 16 hex chars of
    `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key)`, where
-   `source_key` is the adapter-supplied stable key (falling back to the 1-based
-   record index).
+   `source_key` is the adapter-supplied stable key: the dialect's span id where
+   the record carries one, and otherwise the record's **canonical digest**
+   (defined in rule 3). **Never the record's position.** A 1-based index would
+   bind the id to where the record sat in the file, and input order MUST NOT
+   affect the result (§5.2) — the same reasoning rule 3 states below, applied
+   one level up.
 3. Otherwise — two or more records share one `source_key`, which is what a
    dialect that reused a span id looks like from here — the node id is `sw_` +
    the first 16 hex chars of
@@ -262,13 +266,19 @@ Node ids are deterministic and stable across runs, machines, and Python versions
 **Python's built-in `hash()` is forbidden anywhere in identity or ordering** — it
 is salted per-process and would break determinism (`CLAUDE.md` 4).
 
-**Rule 3 disambiguates on content, never on position.** The obvious
-alternative — number the records that share a key, 1, 2, 3 — would make a node
+**Rules 2 and 3 both disambiguate on content, never on position.** The obvious
+alternative — number the records, 1, 2, 3 — would make a node
 id depend on where its record sat in the file, and input order MUST NOT affect
 the result (§5.2, `CLAUDE.md` 4). Deriving from the record instead means the
 two ids are the same two ids however the file is ordered, and the record
 carrying `name: "beta"` keeps its id when the file is re-exported with the
 lines swapped.
+
+Rule 2 said "the 1-based record index" until the September 2026 audit series,
+and a file of span-id-less records really did rebind its ids when its lines
+were swapped. The fallback is content now, in both rules, for one reason: an
+id is a name for a record, and a name that moves when the file is re-exported
+names nothing.
 
 Rule 3 is total because §7 collapses byte-identical duplicate records before
 they reach here: two records that survive the reader and share a `source_key`

@@ -15,6 +15,16 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- Conformance scenarios `derived_ids` and `derived_ids_shuffled`, in both
+  dialects: three tool spans that carry **no span id**, and the same three
+  lines reversed. Every node id in them is derived, which nothing in the
+  corpus had ever been -- all 177 records carried a span id, so `SPEC.md`
+  §3.6 rule 2 was documented, implemented and exercised by no fixture at all.
+  The pair also carries the corpus's first assertion that a shuffle keeps each
+  id **on its own record**: the two graphs were byte-identical while the ids
+  had swapped records, because ids are assigned in node order, so byte
+  comparison alone could not see the defect below.
+
 - New diagnostic `timestamp_unit_suspect` (level `warning`). A `started_at` or
   `ended_at` strictly greater than **1e11** cannot be unix seconds -- 1e11
   seconds after the epoch is the year 5138, while *now* in milliseconds is
@@ -153,6 +163,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **A record with no span id is now identified by its content, not by where it
+  sat in the file.** The `source_key` both adapters fall back to when the
+  dialect states no span id was the record's 1-based index, so a file of
+  span-id-less records **rebound its node ids when its lines were swapped**:
+  the same two `sw_` ids came back, naming the other record. That contradicts
+  `CLAUDE.md` invariant 4 and `SPEC.md` §5.2 -- input line order must not
+  affect the result -- and it was invisible to the suite because every fixture
+  and every capture carries a span id. The fallback is the record's canonical
+  digest now, which is rule 3's reasoning applied one level up: an id is a
+  name for a record, and a name that moves when the file is re-exported names
+  nothing. `SPEC.md` §3.6 rule 2 and `ADAPTERS.md` §3 say so. No stored
+  expectation moved, and no id a fixture or capture produces changed: rule 1
+  covers every record in the corpus. (review blocker 1, `OPEN_QUESTIONS.md`
+  §12(f))
+
+- The cross-dialect comparison sorts a scenario's edges on the **positional
+  labels** it already gives derived ids, not on the ids themselves. `SPEC.md`
+  §5.2 sorts edges by `(kind, src, dst, basis)` over the ids the graph
+  carries, and a derived id differs by adapter by design, so two faithful
+  renderings of a scenario with two or more edges between derived-id nodes
+  held the same edges in different orders -- and the equivalence claim would
+  have failed on exactly the id-generation trivia the positional labels exist
+  to isolate. `duplicate_span_ids` never showed it: it has one edge.
+  Test-harness only; the library's own edge order is unchanged and still
+  pinned everywhere a node id is a string a dialect supplied
+  (`FIXTURES.md` §4.1).
 
 - The reader tolerates two things about how a file was written. A UTF-8 BOM
   (`EF BB BF`) at the head of the input is skipped before the container format

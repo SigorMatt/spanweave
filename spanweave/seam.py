@@ -73,8 +73,11 @@ class NormalizedSpan:
     """One source record, translated out of its dialect (`SPEC.md` §6)."""
 
     #: Stable within this input. The dialect's span id where there is one,
-    #: else the 1-based record index. Never synthesized by the adapter --
-    #: node ids are `spanweave/ids.py`'s business.
+    #: else the record's canonical digest (`spanweave.read.record_digest`) --
+    #: content, never the record's position, because a key that moves when
+    #: the file is re-exported names nothing (`SPEC.md` §3.6 rule 2). Never
+    #: synthesized by the adapter -- node ids are `spanweave/ids.py`'s
+    #: business.
     source_key: str
     kind: NodeKind
     #: As reported. Never prettified.

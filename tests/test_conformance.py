@@ -80,6 +80,13 @@ DEGENERATE = (
     # Added at 2.10, not seeded: the corpus was 18-of-18 `status: "ok"` while
     # 20 real tool spans were 19 `unset` and 1 `error` (finding F6).
     "unset_and_error_status",
+    # Added at the September 2026 audit's batch A5, not seeded: 177 of 177
+    # corpus records carried a span id, so `SPEC.md` §3.6 rule 2 -- the whole
+    # derived-id path -- was exercised by nothing, and its fallback key was
+    # the record's POSITION. The pair is the shuffle claim made where file
+    # order can actually reach an id.
+    "derived_ids",
+    "derived_ids_shuffled",
 )
 
 
@@ -842,30 +849,60 @@ def test_every_rendering_accounts_for_every_record(rendering):
 # --------------------------------------------------------------------------
 
 
-#: Dialects in which `shuffled_order` and `llm_tool_llm` are BOTH rendered.
-#: Derived, not listed: the pair below is only a determinism check in a dialect
-#: where both halves exist, and a dialect added to one and not the other must
-#: drop out rather than compare a scenario against a missing file.
-TWINNED = sorted(
-    {p.stem for p in (CORPUS / "shuffled_order/dialects").iterdir()}
-    & {p.stem for p in (CORPUS / "llm_tool_llm/dialects").iterdir()}
-    & adapter_backed()
+#: `(shuffled, ordered)`. Two pairs, and they check different halves of the
+#: same claim: in `shuffled_order`/`llm_tool_llm` every node id is a string
+#: the dialect supplied, so file order cannot reach it; in
+#: `derived_ids_shuffled`/`derived_ids` every node id is **computed**, which is
+#: the only place file order ever could reach one -- and until batch A5 it did
+#: (`SPEC.md` §3.6 rule 2).
+SHUFFLE_PAIRS = (
+    ("shuffled_order", "llm_tool_llm"),
+    ("derived_ids_shuffled", "derived_ids"),
 )
 
 
-def test_the_shuffle_pair_is_twinned_in_every_dialect_that_renders_either():
+def _twinned(shuffled, ordered):
+    """Dialects in which BOTH halves of a pair are rendered.
+
+    Derived, not listed: a pair is only a determinism check in a dialect where
+    both halves exist, and a dialect added to one and not the other must drop
+    out rather than compare a scenario against a missing file.
+    """
+    return sorted(
+        {p.stem for p in (CORPUS / shuffled / "dialects").iterdir()}
+        & {p.stem for p in (CORPUS / ordered / "dialects").iterdir()}
+        & adapter_backed()
+    )
+
+
+#: Every `(shuffled, ordered, dialect)` the pairs above can be checked in.
+SHUFFLE_CASES = [
+    (shuffled, ordered, dialect)
+    for shuffled, ordered in SHUFFLE_PAIRS
+    for dialect in _twinned(shuffled, ordered)
+]
+
+
+@pytest.mark.parametrize(("shuffled", "ordered"), SHUFFLE_PAIRS)
+def test_a_shuffle_pair_is_twinned_in_every_dialect_that_renders_either(
+    shuffled, ordered
+):
     # A dialect that renders one half and not the other would silently narrow
-    # the check above to the dialects that happen to be complete.
-    for name in ("shuffled_order", "llm_tool_llm"):
+    # the checks below to the dialects that happen to be complete.
+    twinned = set(_twinned(shuffled, ordered))
+    assert twinned, f"{shuffled}/{ordered} share no buildable dialect"
+    for name in (shuffled, ordered):
         rendered = {p.stem for p in (CORPUS / name / "dialects").iterdir()}
-        assert rendered & adapter_backed() == set(TWINNED), (
+        assert rendered & adapter_backed() == twinned, (
             f"{name} renders {sorted(rendered)}; the shuffle pair must be "
             f"rendered in the same dialects on both sides"
         )
 
 
-@pytest.mark.parametrize("dialect", TWINNED)
-def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(dialect):
+@pytest.mark.parametrize(("shuffled", "ordered", "dialect"), SHUFFLE_CASES)
+def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(
+    shuffled, ordered, dialect
+):
     # Not merely equal: identical bytes. This is the single most valuable
     # determinism check in the corpus (SPEC.md §5.2) -- and it is run per
     # dialect, because "input line order does not matter" is a claim about the
@@ -876,19 +913,38 @@ def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(dialect):
         path = CORPUS / name / f"dialects/{dialect}.jsonl"
         return canonical_bytes(canonical(to_document(spanweave.build(path)), erase))
 
-    assert graph("shuffled_order") == graph("llm_tool_llm")
+    assert graph(shuffled) == graph(ordered)
 
 
-@pytest.mark.parametrize("dialect", TWINNED)
-def test_a_shuffled_trace_really_is_a_reordering_of_its_twin(dialect):
+@pytest.mark.parametrize(("shuffled", "ordered", "dialect"), SHUFFLE_CASES)
+def test_a_shuffled_trace_really_is_a_reordering_of_its_twin(
+    shuffled, ordered, dialect
+):
     # Otherwise the test above proves nothing.
     def text(name):
         return (CORPUS / name / f"dialects/{dialect}.jsonl").read_text(encoding="utf-8")
 
-    assert sorted(text("shuffled_order").splitlines()) == sorted(
-        text("llm_tool_llm").splitlines()
-    )
-    assert text("shuffled_order") != text("llm_tool_llm")
+    assert sorted(text(shuffled).splitlines()) == sorted(text(ordered).splitlines())
+    assert text(shuffled) != text(ordered)
+
+
+@pytest.mark.parametrize("dialect", _twinned("derived_ids_shuffled", "derived_ids"))
+def test_a_shuffled_trace_of_derived_ids_keeps_each_id_on_its_own_record(dialect):
+    """The byte-identity above, said the way the defect was found (batch A5).
+
+    Two graphs can be byte-identical while each id names a *different* record
+    in each -- that is precisely what an index-derived key produced, because
+    the ids are assigned in node order and the node order is a fact about the
+    run. So the binding is asserted directly: the id that names the `lookup`
+    span forwards names the `lookup` span reversed.
+    """
+
+    def binding(name):
+        graph = spanweave.build(CORPUS / name / f"dialects/{dialect}.jsonl")
+        return {node.id: node.operation for node in graph.nodes()}
+
+    assert binding("derived_ids_shuffled") == binding("derived_ids")
+    assert all(node.startswith("sw_") for node in binding("derived_ids"))
 
 
 def test_an_unparseable_payload_keeps_its_text_verbatim():

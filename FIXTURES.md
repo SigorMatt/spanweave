@@ -109,6 +109,8 @@ implementation gets wrong.
 | `tool_call_history_echo` | a call id resent as input context by a later turn | **no** `call_result` edge from the echoing span |
 | `unset_and_error_status` | span statuses that are not `ok`, and a `status_message` | `unset` for both spellings, `error` with its note, an `absent` output |
 | `timestamp_units` | timestamps in nanoseconds, and one in a rendering §3.1 does not read | `timestamp_unit_suspect`, values unrescaled, the unread field named in `unmapped_attributes` |
+| `derived_ids` | records the dialect gives no span id, so every node id is derived | ids from the record's **content**, never its position (`SPEC.md` §3.6 rule 2) |
+| `derived_ids_shuffled` | `derived_ids`, lines reordered | byte-identical to its twin **and** every id still on its own record |
 
 Every new adapter must render **all** of these, including the degenerate ones.
 An adapter that only handles happy paths is not done.
@@ -240,6 +242,16 @@ Node ids are compared, so dialects must agree on them. Two rules make that work:
   > does (batch A3), and the mapping is now in `tests/conformance.py`. A
   > document describing a mechanism the code does not have is the same defect
   > this corpus exists to catch, one level up.
+
+  Edge **order** is relabelled too, and that half was missed. `SPEC.md` §5.2
+  sorts edges by `(kind, src, dst, basis)` over the ids the graph carries, so
+  two faithful renderings of a scenario with two or more edges between
+  derived-id nodes hold the same edges in different orders — and claim 2 would
+  fail on exactly the id-generation trivia this section exists to isolate.
+  `canonical()` re-sorts on the labels, and only where a label was applied, so
+  the library's own edge order stays pinned everywhere it means anything.
+  `duplicate_span_ids` never showed this: it has one edge. `derived_ids`
+  (batch A5) has two.
 
 ### 4.2 Scenarios that must **not** build
 
