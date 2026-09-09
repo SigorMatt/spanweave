@@ -1,41 +1,56 @@
 # duplicate_span_ids
 
-Two records claiming the same span id. **This scenario has no expected graph,
-because it must not produce one.**
+Two records claiming the same span id, differing in everything else. **Both are
+kept.** The dialect's ids are not unique, so neither record qualifies for
+`SPEC.md` §3.6 rule 1; they share a source key, so rule 3 derives an id for
+each from the record itself, and `duplicate_source_id` reports the reuse.
 
 ## Expected outcome
 
-A hard error: `DuplicateNodeIdError`, code `duplicate_node_id`, naming the id
-and both records. The expectation lives in `expected/error.json` rather than
-`expected/graph.json` (`FIXTURES.md` §4.2).
+- two `tool` nodes, one per record, in start-time order;
+- one `temporal` edge between them — they are siblings at trace root;
+- one `duplicate_source_id` diagnostic, naming the reused id `s1`.
 
-It is matched by **type and code, never by message text.** The message must be
-useful to a human — a separate test insists it says something — but pinning a
-phrase would freeze wording into the corpus, and the fixture would then
-pressure the message to stay as written the first time someone tried to
-improve it.
+Nothing is dropped and nothing is merged. A silent overwrite would lose a
+record, and losslessness is not negotiable (`CLAUDE.md` 2): a graph that
+quietly contains three of your four tool calls is worse than no graph, because
+nothing downstream can tell.
 
-Almost everything else in this corpus degrades into a diagnostic. This does
-not, and the difference is worth stating. A silent overwrite would drop a
-record, and losslessness is not negotiable (`SPEC.md` §3.6, `CLAUDE.md` 2). A
-graph that quietly contains three of your four tool calls is worse than no
-graph, because nothing downstream can tell.
+A reference to `s1` would resolve to **neither** node — two records answer to
+that id and picking one would be a guess. This scenario has no such reference;
+`tests/test_build.py` carries one.
 
-The two rules of §3.6 interlock here: a span id that is *not unique* fails
-rule 1's condition and falls through to the derived id of rule 2 — where,
-because this adapter's source key **is** that same span id, both records
-derive the same id and collide. The collision is what raises.
+## Why the ids are `n0` and `n1`
 
-An adapter that gave the two records distinct source keys would instead
-produce two nodes and a `duplicate_source_id` diagnostic, losing nothing. Both
-paths keep every record; neither guesses.
+Derived ids include the adapter id by `SPEC.md` §3.6, so two faithful
+renderings of one run cannot produce the same one. `canonical()` compares
+derived ids by position instead (`FIXTURES.md` §4.1) — this scenario is the
+first in the corpus that needs it, and the first that has any node with a
+derived id at all.
+
+## This scenario used to be a refusal
+
+Until batch A3 it carried `expected/error.json`: a duplicated span id raised
+`DuplicateNodeIdError` and the whole file was refused. Both records fell to
+rule 2, whose material was the source key — which *is* the span id — so the
+two derived the same id and collided.
+
+The September 2026 audit recorded that as finding 2: a duplicate a dialect has
+no way to prevent cost a consumer the entire trace, and `SPEC.md` §3.7 had
+always described the `duplicate_source_id` diagnostic that was supposed to fire
+instead. It could not: nothing could reach it. Rule 3 is what makes the
+documented fallback reachable, and it disambiguates on the record's content
+rather than on its position, because a position is input order and input order
+must not decide anything (`CLAUDE.md` 4).
+
+The hard error is not gone — a record is still never overwritten — but no trace
+file reaches it now (`SPEC.md` §3.6).
 
 ## Dialects
 
 - [x] `openinference` — Phase 1
 - [x] `otel_genai` — Phase 2 (2.10)
 
-No `expected/comparison.json`: this scenario has no graph to compare. §4.2's
-equivalence half is the assertion instead — **both** dialects must raise
-`DuplicateNodeIdError` with code `duplicate_node_id`. A dialect that built a
-graph where the other refused would be a finding about the model.
+`expected/comparison.json` declares `name` dialect-varying, like almost every
+other cross-dialect scenario: the two instrumentors spell a tool span's name
+differently and always have (`FIXTURES.md` §4.4).

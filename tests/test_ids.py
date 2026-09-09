@@ -89,11 +89,75 @@ def test_derived_ids_do_not_depend_on_input_order():
 
 
 # --------------------------------------------------------------------------
+# Rule 3: a source key two records share (audit finding 2, batch A3)
+# --------------------------------------------------------------------------
+
+
+def a_record_span(source_key, span_id, source, line=1):
+    return NormalizedSpan(
+        source_key=source_key,
+        span_id=span_id,
+        kind=NodeKind.CHAIN,
+        name="op",
+        raw=RawRecord(source=source, line_number=line),
+    )
+
+
+def test_two_records_claiming_one_span_id_are_both_kept():
+    # Previously a hard error, which refused the whole file for a duplicate
+    # the dialect had no way to prevent. SPEC.md 3.7 has always said
+    # `duplicate_source_id` fires here; until this rule it could not.
+    spans = [
+        a_record_span("s1", "s1", {"span_id": "s1", "name": "a"}),
+        a_record_span("s1", "s1", {"span_id": "s1", "name": "b"}, line=2),
+    ]
+    assignment = assign(spans, "some_dialect", "t1")
+    assert len(set(assignment.ids)) == 2
+    assert assignment.duplicate_source_ids == ("s1",)
+    assert all(node_id.startswith(DERIVED_PREFIX) for node_id in assignment.ids)
+
+
+def test_a_shared_source_key_derives_from_the_record_not_its_position():
+    # The alternative -- an ordinal -- would make the id depend on input
+    # order, which CLAUDE.md 4 forbids outright.
+    spans = [
+        a_record_span("s1", "s1", {"span_id": "s1", "name": "a"}),
+        a_record_span("s1", "s1", {"span_id": "s1", "name": "b"}, line=2),
+    ]
+    forwards = assign(spans, "some_dialect", "t1").ids
+    backwards = assign(list(reversed(spans)), "some_dialect", "t1").ids
+    assert forwards == tuple(reversed(backwards))
+
+
+def test_a_unique_source_key_derives_exactly_as_it_always_did():
+    # Rule 2 is untouched: no id that exists today moves.
+    spans = [a_record_span("1", None, {"name": "a"})]
+    assert assign(spans, "some_dialect", "t1").ids == (
+        derive("some_dialect", "t1", "1"),
+    )
+
+
+def test_the_records_content_is_what_separates_two_shared_keys():
+    first = a_record_span("s1", "s1", {"span_id": "s1", "name": "a"})
+    second = a_record_span("s1", "s1", {"span_id": "s1", "name": "b"}, line=2)
+    third = a_record_span("s1", "s1", {"span_id": "s1", "name": "c"}, line=3)
+    ids = assign([first, second, third], "some_dialect", "t1").ids
+    again = assign([first, third, second], "some_dialect", "t1").ids
+    assert ids[0] == again[0]
+    assert ids[1] == again[2] and ids[2] == again[1]
+
+
+# --------------------------------------------------------------------------
 # Collisions are refused, not resolved
 # --------------------------------------------------------------------------
 
 
-def test_two_records_claiming_one_span_id_is_a_hard_error():
+def test_two_records_that_are_identical_in_every_respect_is_a_hard_error():
+    # `a_span` gives both the same source record, so nothing -- not the
+    # source key, not the content -- tells them apart. The reader collapses
+    # such a pair before it reaches here (SPEC.md 7); reaching here at all
+    # means a caller built the spans itself, and there is still nothing to
+    # derive two ids from.
     spans = [a_span("s1", "s1", line=1), a_span("s1", "s1", line=2)]
     with pytest.raises(DuplicateNodeIdError) as failure:
         assign(spans, "some_dialect", "t1")

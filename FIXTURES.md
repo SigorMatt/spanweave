@@ -103,7 +103,7 @@ implementation gets wrong.
 | `clock_skew` | `ended_at` before `started_at`; missing timestamps | `nonmonotonic_time`, `missing_timestamp` |
 | `unknown_kind` | a span kind we do not map | `unknown` node **plus** diagnostic |
 | `malformed_payload_json` | JSON mime, unparseable value | `payload_parse_failed`, `raw` preserved |
-| `duplicate_span_ids` | two records claiming one id | hard error, not silent overwrite |
+| `duplicate_span_ids` | two records claiming one id | both kept, ids derived from the records, `duplicate_source_id` |
 | `cyclic_parents` | a parent cycle | graph still built, diagnostic, no hang |
 | `shuffled_order` | the same trace, lines reordered | byte-identical to its ordered twin |
 | `tool_call_history_echo` | a call id resent as input context by a later turn | **no** `call_result` edge from the echoing span |
@@ -155,7 +155,9 @@ every scenario declares is a field claim 2 never tests, and the count is not
 visible from any one scenario. Measured at `TASKS.md` 3.2: **`name` is declared
 dialect-varying by 16 of the 17 scenarios rendered in two dialects**, and the
 seventeenth (`duplicate_span_ids`) must not build, so claim 2 has never compared
-`name` at all. That is the mechanism working as designed — `name` is what two
+`name` at all. (`duplicate_span_ids` builds since batch A3 — `SPEC.md` §3.6
+rule 3 — and declares `name` like the rest, so the figure is now **17 of 17**
+and the conclusion is unchanged.) That is the mechanism working as designed — `name` is what two
 instrumentors are least likely to agree on — but it means "the same run, two
 instrumentors, one graph" is a statement about everything *else* `canonical()`
 compares. Quote the claim with that bound attached; `CONTRACTS.md` carries the
@@ -224,14 +226,38 @@ Node ids are compared, so dialects must agree on them. Two rules make that work:
   span id strings** across dialects. This is a fixture-authoring convention, and
   it is deliberate: it isolates the equivalence test to the *model*, not to
   id-generation trivia.
-- When a dialect has no span ids, the derived id (`SPEC.md` §3.6) will differ.
-  Such a scenario must say so in `scenario.md`, and `canonical()` maps ids to
-  positional labels (`n0`, `n1`, …) in topological order before comparing.
+- When a node gets a **derived** id (`SPEC.md` §3.6 rules 2 and 3) the two
+  dialects cannot agree on it: the adapter id is in the material, by design.
+  `canonical()` therefore maps every `sw_` id to a positional label (`n0`,
+  `n1`, …) in node order before comparing, and the scenario says so in its
+  `scenario.md`. A dialect's **own** span id is never relabelled — that half
+  of this section is still compared by value.
+
+  > This rule was written two phases before anything used it, and in those two
+  > phases it was **documented but not implemented**: no scenario produced a
+  > derived id, so nothing noticed. `duplicate_span_ids` is the first that
+  > does (batch A3), and the mapping is now in `tests/conformance.py`. A
+  > document describing a mechanism the code does not have is the same defect
+  > this corpus exists to catch, one level up.
 
 ### 4.2 Scenarios that must **not** build
 
 A scenario whose expected outcome is a **refusal** carries `expected/error.json`
-instead of `expected/graph.json`. `duplicate_span_ids` is the only one so far.
+instead of `expected/graph.json`. **No scenario carries one today.**
+
+`duplicate_span_ids` was the only one, and batch A3 turned it into a graph:
+two records claiming one span id are now both kept, with ids derived from the
+records themselves (`SPEC.md` §3.6 rule 3). Under those rules no *trace file*
+reaches `DuplicateNodeIdError` at all — what is left is a SHA-256 collision
+and a caller that hands the builder two identical spans — so there is nothing
+honest to write a refusal fixture out of, and inventing one to keep the
+mechanism occupied would be a fixture testing itself.
+
+The mechanism stays, described below, because the library still has refusals
+that an input *can* reach (`SPEC.md` §3.10 — an ambiguous or unrecognized
+input, for one) and the corpus must be able to pin the next one that gets a
+scenario. `tests/test_detection.py` records the vacancy at the one place it
+makes a check vacuous.
 
 Almost everything in this corpus degrades into a diagnostic; where the library
 must instead refuse (`SPEC.md` §3.6), the corpus has to be able to say so. A

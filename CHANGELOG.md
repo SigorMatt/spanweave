@@ -15,6 +15,22 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- New diagnostic `duplicate_record` (level `info`). At-least-once export and
+  collector retries put the same record in a file twice, and the library built
+  two nodes for one operation -- an *invented* span, which is worse than a
+  missing one because nothing downstream can tell. The reader now reads each
+  distinct record once and reports the collapse, carrying the record and how
+  many copies were seen. "The same record" is decided on the **parsed** record,
+  not on its bytes: the parsed value is what the library preserves
+  (`RawRecord.source`), so whitespace and key order never reach a node and
+  collapsing two lines that parse equal loses nothing -- and a bytes rule would
+  have nothing to say about the JSON-array form, where a record has no bytes of
+  its own. The **first** copy is the one kept; which one that is cannot be seen
+  in the graph, because the copies are equal and the only field separating them,
+  `line_number`, is not serialized. `SPEC.md` §3.7 and §7 state it. The
+  serialized code vocabulary gains one entry, which is additive.
+  (audit finding 2, first half)
+
 - New diagnostic `missing_trace_id` (level `info`). An input that identifies no
   trace built a graph whose `trace_id` was the empty string and said nothing
   about it -- the one degradation the builder did not report. It now says so:
@@ -27,6 +43,37 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   that graph has a trace id. `SPEC.md` §3.7 and §7 state it. The serialized
   code vocabulary gains one entry, which is additive.
   (audit finding: minor, missing `trace_id` silent)
+
+### Changed
+
+- **Two records claiming the same span id no longer refuse the file.** They are
+  both kept, with a node id each, and the `duplicate_source_id` diagnostic that
+  `SPEC.md` §3.7 has always described now actually fires. Previously a
+  duplicated span id -- something no dialect can prevent, and which an
+  at-least-once exporter produces routinely -- raised `DuplicateNodeIdError`
+  and cost the consumer the entire trace, while the documented fallback was
+  unreachable: both records fell to §3.6 rule 2, whose material *was* the span
+  id, so they derived the same id and collided.
+
+  `SPEC.md` §3.6 gains **rule 3**: when two or more records share a source key,
+  the record's own canonical digest joins the derivation material. It
+  disambiguates on **content, never on position** -- numbering the records
+  would make an id depend on where its line sat in the file, and input order
+  must not affect the result. Rules 1 and 2 are untouched, so **no node id that
+  the library produces today moves**; rule 3 covers a case that previously
+  produced no ids at all.
+
+  A reference to a duplicated span id still resolves to *neither* record:
+  picking one would be a guess. The hard error remains as the guarantee that a
+  record is never overwritten, but no trace file reaches it now.
+
+  Two visible consequences. The conformance corpus's only refusal scenario,
+  `duplicate_span_ids`, now expects a graph; `FIXTURES.md` §4.2 records that no
+  scenario carries `expected/error.json` today and why one was not invented to
+  fill the gap. And `canonical()` now compares **derived** node ids by position
+  (`n0`, `n1`, ...) rather than by value, which `FIXTURES.md` §4.1 has specified
+  since Phase 1 and nothing had implemented, because until now no scenario
+  produced a derived id. (audit finding 2)
 
 ### Fixed
 

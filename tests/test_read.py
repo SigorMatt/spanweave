@@ -311,3 +311,118 @@ def test_a_bom_costs_a_trace_none_of_its_spans_end_to_end():
     assert len(graph) == 1
     assert graph.trace_id == "t1"
     assert [d.code for d in graph.diagnostics if d.code == codes.MALFORMED_RECORD] == []
+
+
+# --- Duplicate records (audit finding 2a, batch A3) -------------------------
+#
+# At-least-once export and collector retries put the same record in a file
+# twice. Keeping both would publish two nodes for one operation -- an
+# invented span, which is worse than a missing one, because a consumer
+# counting tool calls cannot tell. The reader collapses them and says so.
+
+
+def test_an_identical_record_appearing_twice_is_read_once():
+    stream = read_trace(b'{"span_id":"s0"}\n{"span_id":"s0"}\n')
+    assert list(stream) == [{"span_id": "s0"}]
+
+
+def test_the_collapsed_copy_is_reported_not_silently_dropped():
+    stream = read_trace(b'{"span_id":"s0"}\n{"span_id":"s0"}\n')
+    list(stream)
+    reported = [
+        d for d in stream.diagnostics.collected() if d.code == codes.DUPLICATE_RECORD
+    ]
+    assert len(reported) == 1
+    assert reported[0].source == {"span_id": "s0"}
+    assert "2" in reported[0].message
+
+
+def test_the_first_copy_is_the_one_kept():
+    # Stated in SPEC.md 7 so that it is a rule rather than an accident. The
+    # copies are equal as parsed records, so the choice is observable only in
+    # `RawRecord.line_number`, which is not serialized.
+    stream = read_trace(b'{"a":1}\n{"b":2}\n{"a":1}\n')
+    assert list(stream) == [{"a": 1}, {"b": 2}]
+
+
+def test_records_that_differ_by_one_key_are_both_kept():
+    stream = read_trace(b'{"span_id":"s0","name":"a"}\n{"span_id":"s0","name":"b"}\n')
+    assert len(list(stream)) == 2
+    assert len(stream.diagnostics) == 0
+
+
+def test_a_record_written_twice_with_different_key_order_is_still_one_record():
+    # "Identical" is decided on the parsed record, because the parsed record
+    # is what the library preserves (`RawRecord.source`, SPEC.md 3.5). Key
+    # order never reaches a node, so keeping both copies would preserve
+    # nothing and invent a span.
+    stream = read_trace(b'{"a":1,"b":2}\n{"b":2,"a":1}\n')
+    assert list(stream) == [{"a": 1, "b": 2}]
+
+
+def test_three_copies_are_one_record_and_one_diagnostic():
+    stream = read_trace(b'{"a":1}\n{"a":1}\n{"a":1}\n')
+    assert list(stream) == [{"a": 1}]
+    reported = [
+        d for d in stream.diagnostics.collected() if d.code == codes.DUPLICATE_RECORD
+    ]
+    assert len(reported) == 1
+    assert "3" in reported[0].message
+
+
+def test_duplicates_are_collapsed_in_the_json_array_form_too():
+    stream = read_trace(b'[{"a":1},{"a":1}]')
+    assert list(stream) == [{"a": 1}]
+    assert len(stream.diagnostics) == 1
+
+
+def test_the_duplicate_report_does_not_depend_on_where_the_copies_sat():
+    def report(data):
+        stream = read_trace(data)
+        list(stream)
+        return [(d.code, d.message, d.source) for d in stream.diagnostics.collected()]
+
+    assert report(b'{"a":1}\n{"a":1}\n{"b":2}\n') == report(
+        b'{"a":1}\n{"b":2}\n{"a":1}\n'
+    )
+
+
+def test_two_duplicated_records_are_reported_in_a_content_determined_order():
+    # Two groups with the same count would otherwise be separated only by
+    # insertion order, and insertion order is input order (CLAUDE.md 4).
+    def report(data):
+        stream = read_trace(data)
+        list(stream)
+        return [d.source for d in stream.diagnostics.collected()]
+
+    forwards = report(b'{"a":1}\n{"a":1}\n{"b":2}\n{"b":2}\n')
+    backwards = report(b'{"b":2}\n{"b":2}\n{"a":1}\n{"a":1}\n')
+    assert forwards == backwards
+    assert len(forwards) == 2
+
+
+def test_a_duplicated_record_costs_a_trace_no_span_end_to_end():
+    # The audit case as it was reported (probe2, "exact_duplicate_line"): an
+    # exporter that sent one span twice must not produce two nodes.
+    import spanweave
+
+    def record(span_id, name, kind, parent=None):
+        return {
+            "trace_id": "t1",
+            "span_id": span_id,
+            "parent_id": parent,
+            "name": name,
+            "start_time": 1.0,
+            "end_time": 3.0,
+            "status": "OK",
+            "attributes": {"openinference.span.kind": kind},
+        }
+
+    agent = record("s0", "agent.run", "AGENT")
+    tool = record("s1", "tool.lookup", "TOOL", parent="s0")
+    lines = [agent, tool, tool]
+    graph = spanweave.build(
+        b"".join(json.dumps(line).encode("utf-8") + b"\n" for line in lines)
+    )
+    assert len(graph) == 2
+    assert [d.code for d in graph.diagnostics if d.code == codes.DUPLICATE_RECORD]

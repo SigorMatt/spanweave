@@ -183,7 +183,7 @@ because silence would be indistinguishable from an adapter nobody got round to
 declare a field *dialect-varying* — a reviewable file in the corpus, never a
 branch in the comparison code (`FIXTURES.md` §4.4). One field is declared almost
 everywhere: `name`, the span name, which two instrumentors are least likely to
-spell the same way. **16 of those 17 cross-dialect scenarios declare it**, so
+spell the same way. **17 of those 17 cross-dialect scenarios declare it**, so
 the equivalence claim above is a statement about everything else — ids, kinds,
 operations, timestamps, statuses, payload states and values, usage, and every
 edge with its warrant and basis. **If you are matching nodes by `name` across

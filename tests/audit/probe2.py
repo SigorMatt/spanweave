@@ -33,10 +33,9 @@ def timed(label, fn):
     print(f"{label}: {dt:.2f}s peak {peak:.0f}MB", end=" ")
     return r
 
-# A. Exact duplicate lines (collector retry / at-least-once export)
-recs = [oi("s0", None, "AGENT", "a", 1.0, 3.0), oi("s1", "s0", "TOOL", "t", 1.1, 1.5, {"tool.name": "t"})]
-g = timed("exact_duplicate_line", lambda: spanweave.build(write("dup", recs + [recs[1]])))
-if g: print(f"nodes={len(g)}")
+# A. Exact duplicate lines (collector retry / at-least-once export) is now a
+# regression test, not a probe: tests/test_read.py, under "Duplicate records".
+# Fixed in batch A3.
 
 # B. Agent loop with history echo: N llm->tool turns, each llm input carries every prior tool result.
 def loop(n):

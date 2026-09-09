@@ -448,7 +448,9 @@ them.
 `canonical()` compares it. Sixteen of the seventeen scenarios rendered in both
 dialects declare it dialect-varying in `expected/comparison.json`; the
 seventeenth (`duplicate_span_ids`) is a scenario that must *not* build, so it
-produces no graph to compare. The library's central claim — the same run,
+produces no graph to compare. (Since batch A3 it builds — `SPEC.md` §3.6 rule
+3 — and declares `name` like the other sixteen. Seventeen of seventeen: the
+finding is unchanged and is now unanimous.) The library's central claim — the same run,
 described by any supported instrumentor, produces the same canonical graph —
 has therefore never once been tested on `name`.
 

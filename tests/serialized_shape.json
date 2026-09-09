@@ -209,6 +209,7 @@
    "derived"
   ],
   "diagnostic_codes": [
+   "duplicate_record",
    "duplicate_source_id",
    "malformed_record",
    "missing_timestamp",

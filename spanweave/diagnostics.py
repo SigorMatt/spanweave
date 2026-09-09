@@ -50,6 +50,12 @@ NONMONOTONIC_TIME = "nonmonotonic_time"
 # A node id collision is a hard error instead (`SPEC.md` §3.6).
 DUPLICATE_SOURCE_ID = "duplicate_source_id"
 
+# The same record appeared more than once in the input -- an at-least-once
+# exporter or a collector retry. One copy is kept; keeping both would publish
+# two nodes for one operation, and an invented span is worse than a missing
+# one because nothing downstream can tell (`SPEC.md` §7).
+DUPLICATE_RECORD = "duplicate_record"
+
 # No trace id in the input at all, so the graph's `trace_id` is empty. One
 # per graph, never one per record: the fact is about the input as a whole and
 # has no node to point at (`SPEC.md` §7).
@@ -68,6 +74,7 @@ ORDERING_CYCLE = "ordering_cycle"
 
 #: Every code the library emits. A test asserts this matches `SPEC.md` §3.7.
 CODES = (
+    DUPLICATE_RECORD,
     DUPLICATE_SOURCE_ID,
     MALFORMED_RECORD,
     MISSING_TIMESTAMP,

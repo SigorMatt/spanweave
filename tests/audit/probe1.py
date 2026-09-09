@@ -65,7 +65,9 @@ run("mixed_forced_otel", mixed, adapter="otel_genai")
 run("self_parent", [oi("s0", "s0", "AGENT", "a", 1.0, 2.0)])
 run("parent_cycle", [oi("s0", "s1", "AGENT", "a", 1.0, 2.0), oi("s1", "s0", "CHAIN", "b", 1.1, 1.9)])
 run("orphan_parent", [oi("s0", "nope", "AGENT", "a", 1.0, 2.0)])
-run("duplicate_ids", [oi("s0", None, "AGENT", "a", 1.0, 3.0), oi("s1", "s0", "TOOL", "t", 1.1, 1.5, {"tool.name": "t"}), oi("s1", "s0", "TOOL", "t2", 1.6, 1.9, {"tool.name": "t2"})])
+# Two records claiming one span id (audit finding 2) is now a regression test,
+# not a probe: tests/test_build.py, under "Two records claiming one span id",
+# and tests/test_ids.py under "Rule 3". Fixed in batch A3.
 
 # 4. Timestamps
 run("ns_int_timestamps", [oi("s0", None, "AGENT", "a", 1700000000000000000, 1700000001000000000), oi("s1", "s0", "TOOL", "t", 1700000000100000000, 1700000000200000000, {"tool.name": "t"})])

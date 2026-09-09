@@ -120,7 +120,16 @@ def test_building_with_no_adapter_records_the_one_that_was_chosen(path, dialect)
 def test_the_refusal_scenarios_are_still_detected_correctly():
     # The half the skip above must not lose: an input that refuses to build
     # still has to be handed to the right adapter first.
-    assert REFUSING, "no refusal scenario in the corpus; the skip is vacuous"
+    #
+    # **The corpus currently holds no refusal scenario**, so this is vacuous
+    # and the skip above never fires -- said here rather than asserted away.
+    # `duplicate_span_ids` was the only one, and batch A3 turned it into a
+    # graph: two records claiming one span id are now both kept (`SPEC.md`
+    # §3.6 rule 3). No trace file reaches `DuplicateNodeIdError` any more, so
+    # there is nothing to write a refusal fixture out of -- and inventing one
+    # to keep a check non-vacuous would be a fixture testing itself. The
+    # mechanism stays for the next refusal that has an input (`FIXTURES.md`
+    # §4.2); the moment one is added, this stops being vacuous on its own.
     for path, dialect in INPUTS:
         if path.parent.parent.name in REFUSING:
             assert REGISTRY.detect(records(path))[0].id == dialect

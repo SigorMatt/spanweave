@@ -19,6 +19,13 @@ Two things this layer must get right:
   are each one terminator (``SPEC.md`` §7) -- both are facts about how a file
   was written, not about what it says. Neither tolerance reaches a record:
   those same bytes anywhere else are content and are passed through verbatim.
+* **It reads each record once.** At-least-once export and collector retries
+  put the same record in a file twice, and two nodes for one operation is an
+  *invented* span -- worse than a missing one, because nothing downstream can
+  tell. A repeat is skipped and reported as ``duplicate_record`` (`SPEC.md`
+  §7). Sameness is decided on the **parsed** record, because the parsed record
+  is what the library preserves; whitespace and key order never reach a node,
+  so collapsing two lines that parse equal loses nothing.
 * **It is an iterator.** Nothing here requires the whole input as a
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
@@ -36,7 +43,7 @@ from collections.abc import Iterator
 
 from spanweave import diagnostics as codes
 from spanweave.diagnostics import DiagnosticCollector
-from spanweave.model import JsonValue
+from spanweave.model import DiagnosticLevel, JsonValue
 
 #: A path, a path-like, ``"-"`` for stdin, or the bytes themselves.
 Source = bytes | str | os.PathLike[str]
@@ -75,6 +82,47 @@ class RecordStream:
         return self._hash.hexdigest() if self._consumed else None
 
     def __iter__(self) -> Iterator[JsonValue]:
+        yield from self._deduplicated(self._records())
+
+    def _deduplicated(self, records: Iterator[JsonValue]) -> Iterator[JsonValue]:
+        """Each distinct record once, with the repeats reported (`SPEC.md` §7).
+
+        Only the *first* copy is yielded. Which one that is cannot be seen in
+        the graph -- the copies are equal as parsed records, and the one field
+        that separates them, ``line_number``, is not serialized -- so stating
+        the rule is free and leaves nothing to accident.
+
+        What is held is one digest per distinct record, and the record itself
+        only for the ones that turned out to be duplicated. Streaming is not
+        given up: nothing here waits for a later record to yield an earlier
+        one.
+        """
+        seen: set[str] = set()
+        repeated: dict[str, list[JsonValue]] = {}
+        for record in records:
+            digest = record_digest(record)
+            if digest in seen:
+                entry = repeated.setdefault(digest, [record, 1])
+                entry[1] += 1
+                continue
+            seen.add(digest)
+            yield record
+        # Reported in digest order rather than in the order the repeats
+        # arrived: the collector's sort is stable, so insertion order decides
+        # ties, and insertion order would otherwise be input order.
+        for digest in sorted(repeated):
+            record, copies = repeated[digest]
+            self._collector.add(
+                codes.DUPLICATE_RECORD,
+                f"this record appears {copies} times in the input; one copy "
+                f"is kept and the rest are skipped, because they are the same "
+                f"record and two nodes for one operation would be a span that "
+                f"never happened",
+                level=DiagnosticLevel.INFO,
+                source=record,
+            )
+
+    def _records(self) -> Iterator[JsonValue]:
         chunks = self._hashed(self._chunks)
 
         # Decide the container format from the first non-whitespace byte,
@@ -186,6 +234,23 @@ class RecordStream:
                 f"else for it to survive",
                 source=line,
             )
+
+
+def record_digest(record: JsonValue) -> str:
+    """The canonical digest of a parsed record (`SPEC.md` §3.6).
+
+    One fingerprint, two callers: the reader collapses records that share it,
+    and `spanweave/ids.py` uses it to tell apart two records a dialect gave
+    one span id. Both need the *same* answer to the same question -- "is this
+    the same record?" -- so it is computed in one place.
+
+    Canonical because the digest must not depend on how the record was
+    written: sorted keys and compact separators, over the parsed value rather
+    than the bytes. `hash()` is forbidden here for the usual reason
+    (`CLAUDE.md` 4); SHA-256 is stable across processes and versions.
+    """
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 #: The UTF-8 encoding of U+FEFF. Editors and Windows tooling write it at the

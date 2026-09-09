@@ -29,7 +29,12 @@ import pytest
 from examples import cost_latency
 from examples.cost_latency import load as load_module
 from spanweave import Graph, Node, Payload, PayloadState, build, to_document
-from tests.conformance import DECLARABLE_PAYLOAD_FIELDS, canonical, scenarios
+from tests.conformance import (
+    DECLARABLE_PAYLOAD_FIELDS,
+    anonymised,
+    canonical,
+    scenarios,
+)
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 CORPUS = REPO / "fixtures" / "conformance"
@@ -74,7 +79,9 @@ def test_every_step_carries_the_usage_and_timestamps_the_expected_graph_pins(sce
     for path in scenario.dialects:
         expected = scenario.expected_graph_for(path.stem)
         attribution = cost_latency.attribute(str(path))
-        assert [step.node_id for step in attribution.steps] == [
+        # `anonymised` touches only derived ids (FIXTURES.md 4.1); a dialect's
+        # own span ids still have to match by value.
+        assert anonymised([step.node_id for step in attribution.steps]) == [
             node["id"] for node in expected["nodes"]
         ], f"{scenario.name}[{path.stem}] step order"
         for step, node in zip(attribution.steps, expected["nodes"], strict=True):
@@ -112,23 +119,37 @@ def test_the_two_dialects_attribute_alike(scenario):
         form = cost_latency.attribute(str(path)).as_dict()
         form.pop("source")
         form.pop("dialect_local")
-        forms[path.stem] = form
+        forms[path.stem] = anonymised(form)
     first, *rest = list(forms)
     for other in rest:
         assert forms[first] == forms[other], f"{scenario.name}: {first} vs {other}"
 
 
-def test_the_sweep_reads_every_committed_trace_and_names_what_it_refuses():
+def test_the_sweep_reads_every_committed_trace_and_refuses_none_of_them():
     traces = _every_committed_trace()
     results = list(cost_latency.attribute_all(traces))
     assert len(results) == len(traces)
     refused = [r for r in results if isinstance(r, cost_latency.Refused)]
-    # The refusals are the corpus doing its job, not a gap in the consumer.
-    assert {pathlib.Path(r.source).parent.parent.name for r in refused} == {
-        "duplicate_span_ids"
-    }
-    assert {r.code for r in refused} == {"duplicate_node_id"}
+    # **Every committed trace now builds.** `duplicate_span_ids` was the one
+    # that did not, and batch A3 turned it into a graph (`SPEC.md` §3.6 rule
+    # 3). That the consumer *can* report a refusal is tested below, on an
+    # input the library really does refuse.
+    assert refused == []
     assert len(traces) == 41, "the corpus changed size; re-read what this bounds"
+
+
+def test_a_refusal_is_a_result_and_not_an_exit(tmp_path):
+    # No corpus trace refuses any more, so the claim is made on an input that
+    # does: records no adapter recognizes. The point is the consumer's, not
+    # the corpus's -- one bad trace must not cost you the sweep.
+    unreadable = tmp_path / "unreadable.jsonl"
+    unreadable.write_text('{"a": 1}\n{"b": 2}\n', encoding="utf-8")
+    good = str(CORPUS / "llm_tool_llm/dialects/openinference.jsonl")
+    results = list(cost_latency.attribute_all([str(unreadable), good]))
+    refused = [r for r in results if isinstance(r, cost_latency.Refused)]
+    assert [r.source for r in refused] == [str(unreadable)]
+    assert refused[0].code == "adapter_unconfident"
+    assert len(results) == 2
 
 
 # -- tokens add; seconds do not --------------------------------------------
@@ -610,13 +631,13 @@ def test_the_cli_runs_over_a_committed_fixture_in_both_dialects():
         assert b"demo-units" in result.stdout
 
 
-def test_the_cli_reports_a_refusal_instead_of_crashing():
-    result = _run(
-        "fixtures/conformance/duplicate_span_ids/dialects/openinference.jsonl"
-    )
+def test_the_cli_reports_a_refusal_instead_of_crashing(tmp_path):
+    unreadable = tmp_path / "unreadable.jsonl"
+    unreadable.write_text('{"a": 1}\n{"b": 2}\n', encoding="utf-8")
+    result = _run(str(unreadable))
     assert result.returncode == 0
     assert b"not attributed" in result.stdout
-    assert b"duplicate_node_id" in result.stdout
+    assert b"adapter_unconfident" in result.stdout
 
 
 def test_the_json_form_sorts_its_keys():

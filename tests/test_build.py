@@ -607,3 +607,93 @@ def test_call_names_are_copied_out_of_the_caller_s_dict():
     span = dataclasses.replace(span, call_names=mutable)
     mutable["call_a"] = "something else"
     assert span.call_names == {"call_a": "lookup"}
+
+
+# --------------------------------------------------------------------------
+# Two records claiming one span id (audit finding 2, batch A3)
+# --------------------------------------------------------------------------
+#
+# The whole file used to be refused for this, and SPEC.md 3.7 has always
+# described the diagnostic that fires instead. The reproduction below is
+# probe1's `duplicate_ids` case, run through the public API.
+
+
+def _duplicated_span_id_trace():
+    import json
+
+    def record(span_id, name, kind, t0, t1, parent=None, tool=None):
+        attributes = {"openinference.span.kind": kind}
+        if tool is not None:
+            attributes["tool.name"] = tool
+        return {
+            "trace_id": "t1",
+            "span_id": span_id,
+            "parent_id": parent,
+            "name": name,
+            "start_time": t0,
+            "end_time": t1,
+            "status": "OK",
+            "attributes": attributes,
+        }
+
+    lines = [
+        record("s0", "a", "AGENT", 1.0, 3.0),
+        record("s1", "t", "TOOL", 1.1, 1.5, parent="s0", tool="t"),
+        record("s1", "t2", "TOOL", 1.6, 1.9, parent="s0", tool="t2"),
+    ]
+    return b"".join(json.dumps(line).encode("utf-8") + b"\n" for line in lines)
+
+
+def test_a_duplicated_span_id_keeps_both_records_and_says_so():
+    import spanweave
+
+    graph = spanweave.build(_duplicated_span_id_trace())
+    assert len(graph) == 3
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [d.source for d in reported] == ["s1"]
+    assert sorted(node.operation or node.name for node in graph.nodes()) == [
+        "a",
+        "t",
+        "t2",
+    ]
+
+
+def test_a_reference_to_a_duplicated_span_id_resolves_to_neither():
+    # Both records answer to `s1`, so a child pointing at it cannot be
+    # resolved to one of them, and picking either would be a guess. The child
+    # is kept and the unresolved reference is reported.
+    import json
+
+    import spanweave
+
+    child = {
+        "trace_id": "t1",
+        "span_id": "s2",
+        "parent_id": "s1",
+        "name": "c",
+        "start_time": 1.7,
+        "end_time": 1.8,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "CHAIN"},
+    }
+    trace = _duplicated_span_id_trace() + json.dumps(child).encode("utf-8") + b"\n"
+    graph = spanweave.build(trace)
+    assert len(graph) == 4
+    assert [d.source for d in graph.diagnostics if d.code == codes.ORPHAN_PARENT] == [
+        "s1"
+    ]
+    assert ("s1", "s2") not in edges_of(graph, EdgeKind.PARENT)
+
+
+def test_a_duplicated_span_id_builds_the_same_graph_in_any_order():
+    import json
+
+    import spanweave
+
+    lines = _duplicated_span_id_trace().splitlines()
+
+    def document(order):
+        graph = spanweave.build(b"".join(line + b"\n" for line in order))
+        return json.dumps([(n.id, n.name) for n in graph.nodes()], sort_keys=True)
+
+    assert document(lines) == document(list(reversed(lines)))

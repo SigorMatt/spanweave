@@ -97,8 +97,9 @@ def build_graph(
         collected.add(
             codes.DUPLICATE_SOURCE_ID,
             f"the dialect used the span id {duplicated!r} for more than one "
-            f"record; both are kept, with ids derived from their source keys "
-            f"instead",
+            f"record; every one of them is kept, with ids derived from the "
+            f"records themselves instead (SPEC.md 3.6 rule 3), and a "
+            f"reference to that id resolves to none of them",
             source=duplicated,
             adapter=adapter.id,
         )

@@ -232,9 +232,11 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
         if held_t and held_c:
             substance_held += 1
 
-    assert len(traces) == 30
-    assert bytes_moved == 30, "both consumers' serialized output is order-dependent"
-    assert substance_held == 30, "no per-node value or total depends on the order"
+    # 30 -> 32 at batch A3: `duplicate_span_ids` stopped being a refusal and
+    # became a two-node graph in both dialects (`SPEC.md` §3.6 rule 3).
+    assert len(traces) == 32
+    assert bytes_moved == 32, "both consumers' serialized output is order-dependent"
+    assert substance_held == 32, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -275,7 +277,8 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
             a_start_time_tie += 1
             tied_traces.append(source)
 
-    assert a_choice_was_made == 22, "traces where two nodes were ready at once"
+    # 22 -> 24 at batch A3, for the same reason as the count above.
+    assert a_choice_was_made == 24, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 

@@ -174,15 +174,43 @@ Node ids are deterministic and stable across runs, machines, and Python versions
 
 1. If the dialect supplies a span id that is unique within the trace, the node id
    is that string, unchanged.
-2. Otherwise the node id is `sw_` + the first 16 hex chars of
+2. Otherwise, if the `source_key` is unique within the trace, the node id is
+   `sw_` + the first 16 hex chars of
    `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key)`, where
    `source_key` is the adapter-supplied stable key (falling back to the 1-based
    record index).
+3. Otherwise — two or more records share one `source_key`, which is what a
+   dialect that reused a span id looks like from here — the node id is `sw_` +
+   the first 16 hex chars of
+   `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key + "\x00" +
+   record_digest)`, where `record_digest` is the record's **canonical digest**:
+   the SHA-256 of `json.dumps(record, sort_keys=True, separators=(",", ":"))`
+   over the verbatim source record (§3.5). Both records are kept and
+   `duplicate_source_id` (§3.7) reports the reuse.
 
 **Python's built-in `hash()` is forbidden anywhere in identity or ordering** — it
 is salted per-process and would break determinism (`CLAUDE.md` 4).
 
+**Rule 3 disambiguates on content, never on position.** The obvious
+alternative — number the records that share a key, 1, 2, 3 — would make a node
+id depend on where its record sat in the file, and input order MUST NOT affect
+the result (§5.2, `CLAUDE.md` 4). Deriving from the record instead means the
+two ids are the same two ids however the file is ordered, and the record
+carrying `name: "beta"` keeps its id when the file is re-exported with the
+lines swapped.
+
+Rule 3 is total because §7 collapses byte-identical duplicate records before
+they reach here: two records that survive the reader and share a `source_key`
+differ somewhere, so their digests differ. The two rules are one mechanism —
+a record duplicated outright is *one* record, and a span id reused for two
+different records is *two*.
+
 Id collisions within a trace are a **hard error**, not a silent overwrite.
+Under rules 1–3 no trace file can reach one: the only remaining routes are a
+SHA-256 collision and a caller that hands the builder two spans it constructed
+itself with the same key and the same record. The refusal stays as the
+structural guarantee that a record is never overwritten — it is not something
+an input is expected to trip, and no conformance scenario does.
 
 ### 3.7 Diagnostic
 
@@ -219,6 +247,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
 | `duplicate_source_id` | two records claimed the same source id |
+| `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
@@ -260,6 +289,11 @@ batch A4, registered in `TASKS.md`), for the same reason as `missing_timestamp`:
 it reports something **absent**, so there is no fragment of the input to carry.
 Unlike `missing_timestamp` it carries no `node_id` either — §7 says why it is
 one statement about the input rather than one per record.
+
+`duplicate_record` falls under the catch-all and is worth one sentence
+anyway, because its fragment is not *the* offending record but the one copy
+that was kept — every copy is the same parsed record, which is exactly why
+only one is kept.
 
 Two things the catch-all still leaves open, said plainly rather than implied.
 `unknown_span_kind`'s fragment is the dialect's kind **string** when there was
@@ -835,6 +869,30 @@ every registered adapter and picks the highest confidence.
   is about the input as a whole, it has no node to point at, and a per-record
   form would repeat one sentence once per span while adding nothing. Nothing
   is invented — the library never synthesizes a trace id.
+- **A record that appears more than once is read once.** At-least-once export
+  and collector retries put the same record in a file twice; keeping both
+  would publish two nodes for one operation, and an invented span is worse
+  than a missing one because nothing downstream can tell. The reader keeps the
+  **first** copy, skips the rest, and emits one `duplicate_record` (info) per
+  distinct record that was duplicated, carrying that record and how many
+  copies were seen.
+  - **"The same record" is decided on the parsed record, not on its bytes.**
+    What the library preserves is the parsed value (`RawRecord.source`, §3.5);
+    whitespace and key order never reach a node, so two lines that parse equal
+    are indistinguishable everywhere downstream and collapsing them loses
+    nothing. A bytes-level rule would also have nothing to say about the JSON
+    array form, where a record has no bytes of its own. Records are compared
+    by their **canonical digest** (§3.6): the SHA-256 of
+    `json.dumps(record, sort_keys=True, separators=(",", ":"))`.
+  - **Which copy is kept is stated so that it is a rule rather than an
+    accident**, but it is not observable: the copies are equal as parsed
+    records, so the only thing that distinguishes them is
+    `RawRecord.line_number`, which is not serialized (§3.5). Reordering the
+    input therefore changes nothing, including the diagnostics — the reports
+    are emitted in canonical-digest order, not in the order the copies
+    appeared.
+  - Two records that differ **anywhere**, including two that share a span id,
+    are both kept. That is §3.6 rule 3's case, not this one.
 - **Input that will not parse never raises out of the reader or an adapter**
   (`SECURITY.md`): a record that is malformed *or nested deeper than the JSON
   parser will recurse* becomes a `malformed_record` diagnostic carrying its
