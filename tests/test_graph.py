@@ -359,6 +359,19 @@ def test_an_annotation_must_be_json_serializable(graph):
         graph.annotate("s1", "ns", "k", {1, 2, 3})
 
 
+def test_an_annotation_too_deep_to_encode_is_refused_not_a_traceback(graph):
+    # The same finding as the reader's (September 2026 audit, finding 3, batch
+    # A6): `json.dumps` answers nesting it will not descend with
+    # RecursionError, which is not a ValueError, so this check -- whose whole
+    # job is "will this survive the graph file?" -- let it through and the
+    # traceback surfaced later, from the writer.
+    value = []
+    for _ in range(100_000):
+        value = [value]
+    with pytest.raises(ValueError, match="JSON-serializable"):
+        graph.annotate("s1", "ns", "k", value)
+
+
 def test_annotating_a_node_that_is_not_here_is_refused(graph):
     # Silently keeping it would mean nothing ever reads it.
     with pytest.raises(ValueError, match="no node"):

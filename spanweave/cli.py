@@ -171,12 +171,19 @@ def _read_document(path: str) -> JsonValue | None:
     Told apart by content rather than by extension: a graph document is a
     single JSON object carrying a ``schema_version``. Anything else is a
     trace, and is handed to the reader, which knows two container formats.
+
+    Every way of failing here means the same thing -- *this is not a graph
+    document* -- and none of them is this function's to report. ``RecursionError``
+    is one of them: the sniff is a ``json.loads`` like any other, and nesting
+    it will not descend is exactly what the reader one layer down turns into a
+    ``malformed_record`` (`SPEC.md` §7). Left out of this tuple it killed
+    ``inspect`` on a file ``build`` reads without complaint.
     """
     if path == "-":
         return None
     try:
         document = json.loads(pathlib.Path(path).read_bytes())
-    except (ValueError, OSError):
+    except (ValueError, OSError, RecursionError):
         return None
     if isinstance(document, dict) and "schema_version" in document:
         return document
@@ -206,7 +213,11 @@ def _do_inspect(args: argparse.Namespace) -> int:
 def _do_validate(args: argparse.Namespace) -> int:
     try:
         document = json.loads(pathlib.Path(args.graph).read_bytes())
-    except ValueError as failure:
+    # RecursionError is how `json` reports nesting it will not descend. It is
+    # the same finding as a syntax error -- this file is not readable JSON --
+    # and reporting it as one is the difference between an exit code and a
+    # traceback (`SPEC.md` §7).
+    except (ValueError, RecursionError) as failure:
         print(f"{args.graph}: not valid JSON ({failure})", file=sys.stderr)
         return EXIT_FAILED
     problems = serialize.validate(document)

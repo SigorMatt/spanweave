@@ -60,6 +60,11 @@ run("mixed_forced_otel", mixed, adapter="otel_genai")
 # 2. Deep JSON nesting (audit finding 3) is now a regression test, not a probe:
 # tests/test_read.py (record line, array container), tests/test_openinference.py
 # and tests/test_otel_genai.py (payload and message list). Fixed in batch A1.
+# The paths this probe never walked are covered too, by batch A6: the CLI's own
+# `json.loads` in `inspect` and `validate` (tests/test_cli.py) and the write
+# side -- the encoder in serialize.py (tests/test_serialize.py), the annotation
+# check (tests/test_graph.py) and an unrenderable structured attribute in both
+# adapters.
 
 # 3. Parent structure abuse
 run("self_parent", [oi("s0", "s0", "AGENT", "a", 1.0, 2.0)])

@@ -450,15 +450,20 @@ def _payload(
     reported = attributes[key]
     if mime == TEXT_MIME:
         # The one content attribute the convention states is unstructured.
-        # Not parsed, and no `payload_parse_failed` is reachable here: there
-        # is nothing to fail. A value that happens to look like JSON is still
-        # text, because the dialect says the attribute is text.
-        text = reported if isinstance(reported, str) else json.dumps(reported)
+        # Nothing is *parsed* here, so no parse can fail -- but a non-string
+        # value still has to be rendered, and rendering has its own limit.
+        # A value that happens to look like JSON is still text, because the
+        # dialect says the attribute is text.
+        text = _as_text(reported)
+        if text is None:
+            return _unrenderable(key, mime, diagnostics)
         return Payload(state=_state_of(reported), mime=mime, value=text, raw=text)
 
     if not isinstance(reported, str):
         # Already structured -- an exporter that can carry nested attributes.
-        text = json.dumps(reported)
+        text = _as_text(reported)
+        if text is None:
+            return _unrenderable(key, mime, diagnostics)
         return Payload(
             state=_state_of(reported),
             mime=mime,
@@ -486,6 +491,44 @@ def _payload(
         # it. `raw` is where it survives.
         return Payload(state=PayloadState.PRESENT, mime=mime, value=None, raw=reported)
     return Payload(state=_state_of(value), mime=mime, value=value, raw=reported)
+
+
+def _as_text(reported: JsonValue) -> str | None:
+    """The reported value as text, or ``None`` when it cannot be rendered.
+
+    `json.dumps` answers nesting it will not descend with ``RecursionError``,
+    the mirror image of what `json.loads` does to a too-deep string, and it is
+    not a ``ValueError``. An adapter never raises on a payload (`SPEC.md` §7),
+    so the failure comes back as a value the caller reports.
+    """
+    if isinstance(reported, str):
+        return reported
+    try:
+        return json.dumps(reported)
+    except RecursionError:
+        return None
+
+
+def _unrenderable(key: str, mime: str, diagnostics: list[Diagnostic]) -> Payload:
+    """A value that arrived structured and has no text form.
+
+    Reported rather than raised, for the same reason a parse failure is
+    (`SPEC.md` §7). The value still survives verbatim in the node's raw record
+    (§3.5), which is the only place it was ever going to.
+    """
+    diagnostics.append(
+        Diagnostic(
+            code=PAYLOAD_PARSE_FAILED,
+            message=(
+                f"{key} was reported as a structured value that nests deeper "
+                f"than the JSON encoder will descend, so no text form of it "
+                f"could be produced; it survives verbatim on the node's raw "
+                f"record"
+            ),
+            adapter=ADAPTER_ID,
+        )
+    )
+    return Payload(state=PayloadState.PRESENT, mime=mime, value=None, raw=None)
 
 
 def _state_of(value: JsonValue) -> PayloadState:

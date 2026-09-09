@@ -219,3 +219,110 @@ def test_no_other_missing_path_gets_the_hint_and_the_first_line_never_moves(
             f"a missing {path!r} is somebody else's problem and gets the plain "
             f"message; the hint is for a path this project's documents quote"
         )
+
+
+# --------------------------------------------------------------------------
+# Deep nesting on the CLI's own reading paths (September 2026 audit, finding 3,
+# batch A6). `build` was contained by batch A1; `inspect` and `validate` were
+# not, because each opens the file with its OWN `json.loads` and each caught
+# only `ValueError`. The parser answers nesting it will not descend with
+# `RecursionError`, so both commands died with a traceback on a file `build`
+# reads without complaint.
+# --------------------------------------------------------------------------
+
+#: A record the reader parses fine and a record nested past any interpreter's
+#: recursion limit. The deep one is second so the file is still JSONL: a file
+#: whose FIRST byte is '[' is the array container, which is a different path.
+DEEP_VALUE = b"[" * 100_000 + b"]" * 100_000
+SHALLOW_RECORD = (
+    b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
+    b'"start_time":1.0,"end_time":2.0,"status":"OK",'
+    b'"attributes":{"openinference.span.kind":"AGENT"}}\n'
+)
+DEEP_RECORD = b'{"span_id":"s9","attributes":{"input.value":' + DEEP_VALUE + b"}}\n"
+
+
+def _deep_trace(tmp_path):
+    path = tmp_path / "deep.jsonl"
+    path.write_bytes(DEEP_RECORD + SHALLOW_RECORD)
+    return str(path)
+
+
+def test_inspect_survives_a_record_nested_past_the_parsers_limit(tmp_path, capsys):
+    trace = _deep_trace(tmp_path)
+    # `build` already contains it, and that is the comparison that makes the
+    # defect legible: the same file, two commands, one traceback.
+    assert main(["build", trace, "-o", str(tmp_path / "g.json")]) == 0
+    assert main(["inspect", trace]) == 0
+    printed = capsys.readouterr().out
+    assert "nodes: 1" in printed
+    assert "malformed_record: 1" in printed
+
+
+def test_validate_survives_a_file_nested_past_the_parsers_limit(tmp_path, capsys):
+    path = tmp_path / "graph.json"
+    path.write_bytes(DEEP_VALUE)
+    assert main(["validate", str(path)]) == 1
+    assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_inspect_on_a_deep_graph_file_is_a_refusal_not_a_traceback(tmp_path, capsys):
+    # The sniff dies on this file's very first byte, so it is the sharpest
+    # form of the defect. What it must produce is the refusal any unreadable
+    # input produces -- the sniff answers "not a graph document", the reader
+    # reports the record it could not read, and detection then has nothing to
+    # be confident about. One line on stderr, an exit code, no traceback.
+    path = tmp_path / "graph.json"
+    path.write_bytes(DEEP_VALUE)
+    assert main(["inspect", str(path)]) == 1
+    assert capsys.readouterr().err.startswith("spanweave inspect: ")
+
+
+def test_build_contains_a_payload_at_the_edge_of_the_parsers_limit(tmp_path, capsys):
+    # The other half of the finding: a payload deep enough to parse but too
+    # deep to write back out. `json.dumps` in `serialize.py` recurses from
+    # inside the graph document, four levels below where `json.loads` started,
+    # so a value that arrived intact could not leave. Whatever the interpreter's
+    # limit is, the command must end in an exit code, never a traceback.
+    limit = _parser_limit()
+    for depth in range(limit - 8, limit + 1):
+        trace = tmp_path / f"d{depth}.jsonl"
+        trace.write_text(
+            json.dumps(
+                {
+                    "trace_id": "t1",
+                    "span_id": "s0",
+                    "parent_id": None,
+                    "name": "n",
+                    "start_time": 1.0,
+                    "end_time": 2.0,
+                    "status": "OK",
+                    "attributes": {
+                        "openinference.span.kind": "TOOL",
+                        "output.value": "[" * depth + "]" * depth,
+                        "output.mime_type": "application/json",
+                    },
+                }
+            )
+            + "\n"
+        )
+        code = main(["build", str(trace), "-o", str(tmp_path / f"d{depth}.json")])
+        assert code in (0, 1), depth
+        if code == 1:
+            assert capsys.readouterr().err.startswith("spanweave build: ")
+        else:
+            capsys.readouterr()
+
+
+def _parser_limit():
+    """The deepest array this interpreter's JSON parser will read."""
+    low, high = 1, 200_000
+    while low < high:
+        middle = (low + high + 1) // 2
+        try:
+            json.loads("[" * middle + "]" * middle)
+        except RecursionError:
+            high = middle - 1
+        else:
+            low = middle
+    return low

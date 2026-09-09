@@ -327,7 +327,27 @@ def _payload(
 
     mime = _as_str(attributes.get(mime_key))
     reported = attributes[value_key]
-    text = reported if isinstance(reported, str) else json.dumps(reported)
+    text = _as_text(reported)
+    if text is None:
+        # The value arrived structured -- an exporter that can carry nested
+        # attributes -- and nests deeper than `json.dumps` will descend, so
+        # there is no text to keep. Reported rather than raised, for the same
+        # reason the parse failure below is (`SPEC.md` §7); the value itself
+        # still survives verbatim in the node's raw record (§3.5), which is
+        # the only place it was ever going to.
+        diagnostics.append(
+            Diagnostic(
+                code=PAYLOAD_PARSE_FAILED,
+                message=(
+                    f"{value_key} was reported as a structured value that "
+                    f"nests deeper than the JSON encoder will descend, so no "
+                    f"text form of it could be produced; it survives verbatim "
+                    f"on the node's raw record"
+                ),
+                adapter=ADAPTER_ID,
+            )
+        )
+        return Payload(state=PayloadState.PRESENT, mime=mime, value=None, raw=None)
 
     if text == REDACTED_MARKER:
         return Payload(state=PayloadState.REDACTED, mime=mime, raw=text)
@@ -355,6 +375,22 @@ def _payload(
         return Payload(state=_state_of(value), mime=mime, value=value, raw=text)
 
     return Payload(state=_state_of(text), mime=mime, value=text, raw=text)
+
+
+def _as_text(reported: JsonValue) -> str | None:
+    """The reported value as text, or ``None`` when it cannot be rendered.
+
+    `json.dumps` answers nesting it will not descend with ``RecursionError``,
+    the mirror image of what `json.loads` does to a too-deep string, and it is
+    not a ``ValueError``. An adapter never raises on a payload (`SPEC.md` §7),
+    so the failure comes back as a value the caller reports.
+    """
+    if isinstance(reported, str):
+        return reported
+    try:
+        return json.dumps(reported)
+    except RecursionError:
+        return None
 
 
 def _state_of(value: JsonValue) -> PayloadState:

@@ -275,6 +275,43 @@ def test_a_deeply_nested_message_list_keeps_its_text_and_reports():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
+def _nest(depth):
+    """A list nested `depth` deep, built without recursing to build it."""
+    value = []
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
+    # Finding 3 (batch A6) through this dialect's already-structured branch:
+    # an exporter that can carry nested attributes hands the adapter a value
+    # it never had to parse, and rendering it back to text with `json.dumps`
+    # raises RecursionError. The record is where the value survives.
+    span = span_of(
+        {"gen_ai.operation.name": "chat", "gen_ai.input.messages": _nest(100_000)}
+    )
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.value is None
+    assert span.inputs.raw is None
+    assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
+
+
+def test_a_text_value_too_deep_to_render_is_diagnosed_not_raised():
+    # And through the one attribute the convention states is unstructured:
+    # nothing is parsed there, but a non-string value is still rendered.
+    span = span_of(
+        {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.call.arguments": _nest(100_000),
+        }
+    )
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.value is None
+    assert span.inputs.raw is None
+    assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
+
+
 def test_a_tool_span_reads_the_tool_keys_and_an_llm_span_the_message_keys():
     tool = span_of(
         {

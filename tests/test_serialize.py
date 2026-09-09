@@ -6,7 +6,7 @@ import pathlib
 import pytest
 
 import spanweave
-from spanweave.serialize import ROOT_KEYS, dumps, to_document, validate
+from spanweave.serialize import ROOT_KEYS, canonical_bytes, dumps, to_document, validate
 
 FIXTURE = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -171,3 +171,36 @@ def test_a_foreign_schema_version_is_flagged_not_rejected(document):
     document["schema_version"] = "0.0-from-the-future"
     problems = validate(document)
     assert any("not frozen" in problem for problem in problems)
+
+
+# --------------------------------------------------------------------------
+# The encoder's own limit (September 2026 audit, finding 3, batch A6)
+# --------------------------------------------------------------------------
+
+
+def _nest(depth):
+    """A list nested `depth` deep, built without recursing to build it."""
+    value = []
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback():
+    # `json.dumps` answers nesting it will not descend with RecursionError,
+    # exactly as `json.loads` does, and this is the one encoder every byte
+    # this library writes goes through. Uncontained it took down a build that
+    # had already read its input without complaint -- a graph the library
+    # holds and cannot write is a structural impossibility (`SPEC.md` §3.10),
+    # so it is named rather than raised as an interpreter's traceback.
+    with pytest.raises(spanweave.SpanweaveError) as failure:
+        canonical_bytes({"deep": _nest(100_000)})
+    assert failure.value.code == "graph_not_serializable"
+
+
+def test_the_refusal_is_the_librarys_own_error_type():
+    # A consumer routes on the library's error, per `SPEC.md` §3.10, and a
+    # bare RecursionError is not routable: it is indistinguishable from a bug
+    # in the consumer's own recursion.
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        canonical_bytes(_nest(100_000))

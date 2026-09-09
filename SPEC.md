@@ -201,6 +201,15 @@ If `mime` indicates JSON, parse into `value` and keep the source in `raw`. If
 parsing fails: `state` stays `present`, `value` is `None`, `raw` holds the
 string, and a diagnostic is emitted. Never raise on a malformed payload.
 
+The mirror case: an exporter that carries **nested attributes** hands the
+adapter a value that was never a string, and the adapter renders it back to
+text for `raw`. Rendering has the same limit parsing does — `json.dumps`
+refuses nesting it will not descend — so when there is no text form, `state`
+stays `present`, `value` and `raw` are both `None`, and the same
+`payload_parse_failed` diagnostic says so. Nothing is lost: the value is in
+the node's verbatim source record (§3.5), which is where a structured
+attribute was always going to survive.
+
 ### 3.4 Usage
 
 ```
@@ -583,7 +592,8 @@ ever gives it teeth (`ROADMAP.md`, Phase 4).
 
 Almost everything the library cannot handle becomes a **diagnostic** (§3.7).
 What remains is a short list of structural impossibilities, where continuing
-would mean publishing a graph that is quietly wrong. Those raise.
+would mean publishing a graph that is quietly wrong — or where there is no
+graph left to publish at all. Those raise.
 
 Every raised error is a `SpanweaveError` (or a subclass) and carries a stable,
 machine-matchable `code`:
@@ -603,6 +613,7 @@ SpanweaveError:
 | `adapter_detect_failed` | `AdapterSelectionError` | an adapter raised from `detect()`, which §6 forbids |
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
+| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend (§7) |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -985,6 +996,22 @@ every registered adapter and picks the highest confidence.
   parser will recurse* becomes a `malformed_record` diagnostic carrying its
   text and the read continues, and the same inside a payload attribute becomes
   `payload_parse_failed` with the text kept verbatim.
+  - **That holds for every reading path, including the CLI's own.**
+    `spanweave inspect` decides whether its argument is a built graph or a
+    trace by reading it, and `spanweave validate` reads a graph file the same
+    way; both report an unreadable file and exit non-zero. Deep nesting is
+    reported as `RecursionError` rather than as a `ValueError` — a different
+    exception for the same fact — so a guard that names only the second is a
+    guard that is not there.
+  - **Writing has a limit of its own, and it is not the parser's.** The
+    encoder meets a value several levels lower than the parser did — inside
+    the document, inside a node, inside a payload — so a value that arrived
+    intact can still have no encoding. Where something can be dropped without
+    losing it, it is: an adapter that cannot render a structured attribute
+    back to text reports `payload_parse_failed` and leaves the value in the
+    record (§3.3). Where nothing can be — a node's verbatim source record is
+    verbatim or it is nothing — the library **refuses**, with
+    `graph_not_serializable` (§3.10). It never writes a partial graph.
 - A dialect-specific binary form (OTLP protobuf) is Phase 4 and lives behind an
   optional extra — never in core (`ENVIRONMENT.md`).
 

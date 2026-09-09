@@ -209,6 +209,34 @@ def test_a_deeply_nested_payload_stays_present_and_is_diagnosed():
     assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
 
 
+def _nest(depth):
+    """A list nested `depth` deep, built without recursing to build it."""
+    value = []
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
+    # The other half of finding 3 (batch A6): an exporter that carries nested
+    # attributes hands the adapter a value it never had to parse, and the
+    # adapter renders it back to text with `json.dumps` -- which answers
+    # nesting it will not descend the same way `json.loads` does. The text is
+    # what could not be produced, so `raw` is None and the record itself is
+    # where the value survives (`SPEC.md` §3.5).
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "output.value": _nest(100_000),
+            "output.mime_type": "application/json",
+        }
+    )
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.value is None
+    assert span.outputs.raw is None
+    assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
+
+
 def test_a_non_json_mime_keeps_the_text_as_the_value():
     span = span_of(
         {

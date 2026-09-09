@@ -118,7 +118,10 @@ def check_serializable(value: JsonValue) -> None:
     """Annotation values must survive a round trip through the graph file."""
     try:
         json.dumps(value, sort_keys=True)
-    except (TypeError, ValueError) as failure:
+    # RecursionError is how `json` reports nesting it will not descend -- the
+    # same fact as a `ValueError`, reported as a different exception, and this
+    # check exists precisely to catch what the graph file could not hold.
+    except (TypeError, ValueError, RecursionError) as failure:
         raise ValueError(
             f"annotation values must be JSON-serializable so they survive "
             f"serialization; {type(value).__name__} is not ({failure})"

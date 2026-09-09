@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from spanweave.annotate import AnnotationStore
+from spanweave.errors import GraphNotSerializableError
 from spanweave.graph import Graph
 from spanweave.model import (
     Diagnostic,
@@ -48,8 +49,32 @@ ROOT_KEYS = (
 
 
 def canonical_bytes(value: JsonValue) -> bytes:
-    """The one encoder. Everything written by this library goes through it."""
-    text = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    """The one encoder. Everything written by this library goes through it.
+
+    Deep nesting is the one input that can defeat it. The reader contains what
+    the *parser* will not descend (`SPEC.md` §7), but the encoder has its own
+    limit and meets the value four levels lower down -- inside the document,
+    inside a node, inside a payload -- so a value that arrived intact can still
+    fail to leave. `json.dumps` reports that as ``RecursionError``, which is
+    not a ``ValueError`` and used to escape as an interpreter traceback from a
+    build that had read its input without complaint.
+
+    It becomes a refusal rather than a diagnostic because there is nothing to
+    degrade to: the offending value may be a node's verbatim source record, and
+    dropping it to get past this is the one thing losslessness forbids
+    (`CLAUDE.md` 2). Naming it (`SPEC.md` §3.10) is what a caller can act on.
+    """
+    try:
+        text = json.dumps(
+            value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        )
+    except RecursionError as failure:
+        raise GraphNotSerializableError(
+            f"the graph could not be encoded: a value nests deeper than this "
+            f"interpreter's JSON encoder will descend ({failure}). Nothing was "
+            f"written, and nothing was dropped to try -- the record a node "
+            f"carries is verbatim or it is nothing"
+        ) from failure
     return (text + "\n").encode("utf-8")
 
 

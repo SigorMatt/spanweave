@@ -15,6 +15,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- New error `graph_not_serializable` / `GraphNotSerializableError`, raised by
+  the one encoder every byte this library writes goes through. The reader
+  contains what the *parser* will not descend, but the encoder has its own
+  limit and meets a value four levels lower down -- inside the document,
+  inside a node, inside a payload -- so a payload that arrived intact could
+  still not leave, and `json.dumps` said so with a `RecursionError` from a
+  build that had already read its input without complaint. It is a refusal
+  rather than a diagnostic because there is nothing to degrade to: the
+  offending value may be a node's verbatim source record, and dropping that to
+  get past it is the one thing losslessness forbids. Nothing is written and
+  nothing is partial. `SPEC.md` §3.10 and §7 state it.
+  (audit finding 3, the write half)
+
 - Conformance scenarios `derived_ids` and `derived_ids_shuffled`, in both
   dialects: three tool spans that carry **no span id**, and the same three
   lines reversed. Every node id in them is derived, which nothing in the
@@ -163,6 +176,28 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **`spanweave inspect` and `spanweave validate` no longer die on a file
+  `spanweave build` reads without complaint.** Each opens the file with its own
+  `json.loads` -- `inspect` to decide whether it was handed a built graph or a
+  trace, `validate` to read the graph -- and each caught only `ValueError`,
+  which is not what the parser raises for nesting it will not descend. So the
+  containment added for the reader and the adapters stopped at the library's
+  edge: the same trace built fine, summarized with a traceback. Both now
+  report and exit non-zero, and `SPEC.md` §7 says the rule holds for every
+  reading path, the CLI's own included. (review blocker 2, audit finding 3)
+
+- **An adapter no longer raises on a structured attribute it cannot render.**
+  An exporter that carries nested attributes hands the adapter a value that
+  was never a string, and the adapter renders it back to text for `raw` with
+  `json.dumps` -- which refuses depth exactly as `json.loads` does, and not
+  with a `ValueError`. Both adapters now report `payload_parse_failed`, leave
+  `value` and `raw` `None`, and say that the value survives verbatim on the
+  node's raw record, which is where a structured attribute was always going to
+  survive. `SPEC.md` §3.3 states the case. The annotation check that exists to
+  ask *will this survive the graph file?* was blind to the same depth and now
+  refuses it with the `ValueError` it already raises for a value that is not
+  JSON. (audit finding 3, the write half)
 
 - **A record with no span id is now identified by its content, not by where it
   sat in the file.** The `source_key` both adapters fall back to when the

@@ -43,6 +43,12 @@ DUPLICATE_ADAPTER_ID = "duplicate_adapter_id"
 # A caller named an adapter that is not registered.
 UNKNOWN_ADAPTER = "unknown_adapter"
 
+# The graph is held but cannot be written: a value nests deeper than the
+# JSON encoder will descend. Nothing may be dropped to get past it -- the
+# verbatim record is the whole of losslessness -- so there is no graph to
+# publish, and saying so beats an interpreter's traceback.
+GRAPH_NOT_SERIALIZABLE = "graph_not_serializable"
+
 #: Every code the library raises. A test asserts this matches `SPEC.md` §3.10.
 ERROR_CODES = (
     ADAPTER_AMBIGUOUS,
@@ -50,6 +56,7 @@ ERROR_CODES = (
     ADAPTER_UNCONFIDENT,
     DUPLICATE_ADAPTER_ID,
     DUPLICATE_NODE_ID,
+    GRAPH_NOT_SERIALIZABLE,
     NO_ADAPTERS_REGISTERED,
     UNKNOWN_ADAPTER,
 )
@@ -95,3 +102,20 @@ class DuplicateNodeIdError(SpanweaveError):
     """
 
     code = DUPLICATE_NODE_ID
+
+
+class GraphNotSerializableError(SpanweaveError):
+    """The graph could not be encoded, so there is nothing to publish.
+
+    Raised where the reader's own guard cannot help: a value that the JSON
+    parser accepted at the top level can still nest deeper than the encoder
+    will descend once it sits inside a graph document, and `json.dumps`
+    answers that with ``RecursionError`` -- not a ``ValueError`` (`SPEC.md`
+    §3.10, and §7's rule that unreadable input never escapes as a traceback).
+
+    It is a refusal rather than a diagnostic because nothing can be dropped to
+    get past it: the offending value may be a node's verbatim source record,
+    and losslessness is not negotiable (`CLAUDE.md` 2).
+    """
+
+    code = GRAPH_NOT_SERIALIZABLE
