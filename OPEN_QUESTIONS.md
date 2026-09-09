@@ -584,3 +584,254 @@ just finished saying it cannot know.
 **Decision: not taken.** This entry is a `WORKPLAN.md` C2 halt; no code changed
 with it, and probe2 case G stays in the probe until the implementing batch
 converts it. Record the decision in `WORKPLAN.md` §3.
+
+## 11. D1: Should a re-declared receipt look different from a first one?
+
+**(a)** A chat protocol resends the whole conversation on every turn, so a
+tool-result message that §4.2.1 reads as a declaration is re-sent by every
+later turn as well. The builder emits one `data` edge per declaration, so an
+`n`-turn agent loop produces `n(n-1)/2` `data` edges where `n-1` of them are
+first receipts and the rest are the same declaration repeated. Should the
+graph distinguish the two — by `basis`, by a build flag that omits the
+repeats, or both?
+
+**(b) The mechanism, and the curve.** `_data_edges` in `spanweave/build.py`
+walks `span.received_call_ids` and joins each id to the spans that fulfilled
+it. Both adapters fill `received_call_ids` from the span's *input* message
+list (`_received_results`), which is the request the model was sent — and a
+conversational request contains the entire history. Turn `i` therefore
+declares receipt of calls `c₀…c₍ᵢ₋₁₎`, not just `c₍ᵢ₋₁₎`, and the number of
+declarations in the file is `Σi = n(n-1)/2`.
+
+Measured on `tests/audit/probe2.py` case B's shape (OpenInference, one agent
+root, `n` llm→tool turns, full history echo), rebuilt for this memo:
+
+| turns | input | nodes | `data` | all edges | build | serialized |
+|---|---|---|---|---|---|---|
+| 25 | 47 KB | 51 | 300 | 424 | 0.01 s | 0.18 MB |
+| 50 | 155 KB | 101 | 1,225 | 1,474 | 0.02 s | 0.59 MB |
+| 100 | 544 KB | 201 | 4,950 | 5,449 | 0.06 s | 2.16 MB |
+| 200 | 2.12 MB | 401 | 19,900 | 20,899 | 0.22 s | 8.28 MB |
+| 400 | 8.30 MB | 801 | **79,800** | 81,799 | 0.99 s | 32.48 MB |
+| 800 | 32.91 MB | 1,601 | 319,600 | 323,599 | 4.90 s | 128.77 MB |
+
+The audit's single data point reproduces exactly: 400 turns → 79,800, which is
+`400·399/2`. Max in-degree at 400 turns is 399, on the last llm span.
+
+**The quadratic is the telemetry's, not the builder's.** The edge count equals
+the declaration count *exactly* — 79,800 tool-result messages in, 79,800 edges
+out, one edge per declaration, no fan-out. The builder is O(1) per declaration;
+the input file is already quadratic (47 KB → 32.91 MB across the same range) for
+the same reason the edge set is. This is unlike `temporal`, where §4.3 exists
+because the *rule* could have been quadratic over a linear input. There is no
+analogous rule to narrow here: narrowing means dropping declarations.
+
+**Is any of it wrong? No — every one of the 79,800 is true.** Under §4.2.1 an
+edge asserts that the output of the span which fulfilled call X became an input
+to the span that received the message. Turn 300's request really does contain
+the results of calls `c₀…c₂₉₈`; the instrumentor really did state so, about
+that span, in that span's own record; the join is by id and compares nothing.
+Every edge is `explicit`, correctly warranted, and individually defensible. So
+this entry is **not** about wrongness. It is about **legibility and volume**,
+and that changes which option is right: nothing here licenses removing an edge
+on the grounds that it is unwarranted, because none of them is.
+
+What a consumer actually experiences is a *question* it can no longer ask.
+"What fed this span" is answered correctly and uselessly — 399 producers, all
+of them real. "Which tool output did this turn act on" has no expression at
+all, because the graph does not say which of the 399 arrived first. The only
+consumer in this repo that reads `data` edges, `examples/trajectory_dump`,
+carries a per-step `feeds` tuple; on the 400-turn trace the last step's `feeds`
+holds 399 ids and the render is unreadable.
+
+**Where the bytes actually are, at 400 turns.** Serialized output splits:
+`diagnostics` **13.36 MB**, `edges` **11.95 MB** (of which `data` edges are
+11.69 MB, 142 B each), `nodes` **8.71 MB**. The largest quadratic term is not
+the edges — it is 400 `unmapped_attributes` diagnostics naming the echoed
+`llm.input_messages.N.message.role` keys, which `_received_results` does not
+consume. The nodes are quadratic too, because invariant 2 keeps every record
+verbatim in `raw.source`. **Any** `data_echo` mode leaves both untouched.
+
+**(c) What each option costs.**
+
+1. **Option (a) — two builder-owned `basis` strings, every edge kept.**
+   No edge-set change, so no graph loses a relation and invariant 2 is not in
+   play at all. A consumer filters `basis` to get the `n-1` first receipts
+   (1.0% of the edges at 200 turns; 0.5% at 400) or keeps everything, and the
+   library decides nothing on its behalf. This is exactly §4.3's precedent:
+   one edge kind, two bases, because *"this one started first"* and *"we put
+   these in an order"* are different claims. It buys **no** byte reduction.
+
+2. **Option (b) — a `data_echo="all"|"first"` build flag.**
+   `first` mode omits `n(n-1)/2 − (n-1)` edges the telemetry declared. Against
+   invariant 2 — *nothing is ever silently dropped* — the operative word is
+   *silently*, and the flag is not automatically incompatible: an omission
+   that is announced is a reportable outcome, not a vanishing. But it is not
+   honest **as written**. To be honest it needs, at minimum:
+   - a diagnostic (one per graph, in A4's shape — there is no single node to
+     hang it on) naming the code, the mode, and the **count** omitted, so a
+     graph on disk cannot be read as complete;
+   - a `Meta` field recording the mode, because `Meta` is what a consumer
+     reads to know what produced the graph, and a graph that has been
+     narrowed by a flag is a different artifact from one that has not;
+   - a clause in §5.1, whose guarantee is *same input bytes + same adapter
+     version + same `spanweave` version → the same graph*. A build flag is a
+     fourth term in that sentence and it is currently unstated. **`--no-temporal`
+     is not the precedent it looks like**: `temporal` is `derived`-only, so
+     omitting it removes only what the library computed and can recompute.
+     `data` is `explicit`-only. Omitting it removes what the telemetry said,
+     and that has never happened in this library.
+
+   Its payoff is a **34.7%** smaller file at 400 turns (32.48 MB → ~21.21 MB)
+   — a constant factor on a curve it does not bend. The remaining 21 MB is
+   still O(turns²), because losslessness has already committed the library to
+   storing the echo verbatim. Refusing to *index* what we are required to
+   *store* is the weakest possible trade.
+
+3. **Option (c) — both.** (a) is a precondition for (b) being expressible at
+   all: without a basis distinction, "which edges did `first` mode omit" has
+   no answer in the vocabulary of the graph. If (b) is ever wanted, it is
+   additive on top of (a) and can be decided then, on volume evidence that
+   does not exist today.
+
+**(d) Option (a)'s determination: what "first" means, and whether it is
+order-independent.**
+
+For a call id X with at least one fulfiller, collect the spans that declared
+receipt of X. They are a **set**, so any function of that set is
+order-independent by construction; the ranking is by `(started_at, node_id)`,
+the same total order §5.2 already uses for node position and §4.3 for sibling
+temporal edges. Verified empirically: a 200-turn build from shuffled input is
+byte-identical to the ordered one (modulo `source_digest`, which fingerprints
+the bytes and is *meant* to move). Invariant 4 holds.
+
+It is not free of judgement, and the naming has to say so:
+
+- **A tie is a decision, not an observation.** Two receiving spans reporting
+  the same `started_at` leave the earliest decided by `node_id`. §4.3 already
+  ruled that such an edge must carry a *different* basis rather than pass as
+  an observation. So the row's "two strings" is two only if the library is
+  willing to leave a tie-broken *earliest* unmarked, which §4.3 has already
+  decided it is not. Three is the honest count. §10 (C2) sharpens this: at
+  epoch-ns magnitude float64 manufactures ties between spans the telemetry
+  distinguished, so the tie basis is not a corner case there — it is the
+  common case until C2 is decided.
+- **Untimed spans.** A span with no `started_at` has no place in the order.
+  Sorting it as `+inf` (§5.2's existing convention) means it is never the
+  earliest unless nothing is timed, which is the honest default; it already
+  draws `missing_timestamp`.
+- **The word matters (invariant 1).** "Echo" and "re-declaration" name a
+  *cause* — a protocol resending history — that the builder cannot see. All
+  it determines is *not the earliest declaring span*. A genuine fan-out, where
+  two spans each consume the same tool result once, produces the identical
+  shape and is not an echo of anything. The basis must describe the
+  determination, not the story. Proposed, in §4.3's parenthetical form:
+
+  | Situation | `basis` |
+  |---|---|
+  | earliest span declaring receipt of this call | `tool_call_id in tool-result message` |
+  | earliest, decided by `node_id` on a `started_at` tie | `tool_call_id in tool-result message (earliest tied, broken by node_id)` |
+  | any later span declaring receipt of the same call | `tool_call_id in tool-result message (not the earliest receiving span)` |
+
+  Keeping the **existing** string for the earliest case is deliberate and it
+  is what makes the change free in the corpus — see below.
+
+**How much of the corpus this touches: 4 expectations, and 0 of them change
+under the proposal.** Counted before proposing anything, per `FIXTURES.md` §4.
+Of 22 conformance scenarios, **4** have a `data` edge in
+`expected/graph.json`, **one edge each**, all with basis
+`tool_call_id in tool-result message`:
+
+- `declared_data_edge` (s1→s2), `llm_tool_llm` (s2→s3),
+  `shuffled_order` (s2→s3), `tool_call_history_echo` (s2→s3).
+
+**Every one is a first receipt. Not one scenario in the corpus carries a
+re-declaration edge**, and neither does any captured trace: across the 15
+captured files that produce `data` edges (`fixtures/captured/`,
+`capture/_scratch/fleet/`) there are **24** `data` edges, every call id
+received by exactly one span, **0** re-declarations and **0** ties. Every
+capture is a single tool round, so the shape this memo is about has never been
+observed in this repo's own material — only constructed. Under the table above
+all 4 expectations keep their current basis byte-for-byte, and D2's fixture
+work is *additive*: one new degenerate scenario (a two-turn loop where turn 3
+re-declares turn 1's result) in both dialects. Note also that
+`tool_call_history_echo` is about the **request** echo and the `call_result`
+rule (§4.4); the receipt echo is a different property and wants its own
+scenario, by the same "when this one fails, the thing that broke has a name"
+argument that scenario was created under.
+
+**Recommendation: option (a), alone, with no flag.** The reasoning is the
+finding in **(b)**: nothing here is wrong. Every edge is a relation the
+telemetry stated about itself, and the library's entire position is that it
+transcribes those and labels how. Removing true edges to save a third of the
+bytes on a curve that stays quadratic regardless is a bad trade twice over —
+it spends the invariant that makes the library depend-able and does not fix
+the problem. (a) fixes the part that is actually broken, which is that the
+graph cannot express a distinction its consumers need, and it fixes it in the
+vocabulary the library already has (`basis`, §4.3's precedent, builder-owned
+per `TASKS.md` I1), at a cost of **0** moved expectations.
+
+**If a flag is added anyway, the default is `all`.** A default of `first`
+would mean the out-of-the-box artifact silently omits declared relations,
+which is the failure mode invariant 2 names.
+
+**Two things D2 must carry that this memo cannot.** `DESIGN.md` §6 says the
+build has *"no quadratic edge construction"*; that is true per declaration and
+false per turn, and the sentence needs the qualifier. And the 13.36 MB of
+`unmapped_attributes` diagnostics is a larger volume problem than the edges —
+`_received_results` consumes the `tool_call_id` key but not the sibling
+`...message.role` key it read to decide. Neither is in D1's scope; both are
+findings, not decisions.
+
+**Draft `SPEC.md` §4.2 text** — for D2 to land if (a) is taken, as a new
+paragraph at the end of §4.2.1, immediately before *"A stated gap"*:
+
+> **A declaration repeated is still a declaration.** Conversational protocols
+> resend the whole history on every turn, so the same tool-result message
+> reappears in the request of every later span. Each occurrence is a
+> declaration made by the span that carries it, about its own input, and it is
+> true: the result did reach that span. Every one of them is transcribed, and
+> `n` such turns produce `n(n-1)/2` `data` edges — the input carries that many
+> declarations, and suppressing a relation the telemetry states plainly is the
+> failure this section exists to prevent.
+>
+> What the graph adds is which occurrence came first. For each call id, the
+> spans declaring receipt are ranked by `(started_at, node_id)` — the order
+> §5.2 already defines — and the basis records the rank:
+>
+> | Situation | `basis` |
+> |---|---|
+> | earliest span declaring receipt of this call | `tool_call_id in tool-result message` |
+> | earliest, decided by `node_id` on a `started_at` tie | `tool_call_id in tool-result message (earliest tied, broken by node_id)` |
+> | any later span declaring receipt of the same call | `tool_call_id in tool-result message (not the earliest receiving span)` |
+>
+> A span with no `started_at` sorts last and is never the earliest unless no
+> receiving span is timed. The ranking is a function of a *set* of spans, so
+> input order cannot affect it (§5.2).
+>
+> The third basis says **only** that an earlier span declared the same
+> receipt. It does not say the later declaration is an artifact of a protocol
+> resending history, because the library cannot see that: two spans genuinely
+> consuming one result produce the identical shape. As with §4.3's tie-break,
+> the warrant says the relation was stated and the basis says what was
+> determined about it — a consumer that does not care matches on `kind` and
+> ignores both.
+
+**(e) The smallest experiment that would falsify the recommendation.** Capture
+one trace with **≥5** tool-calling turns from a real framework — the corpus has
+none, which is why this shape has only ever been constructed — and run
+`examples/trajectory_dump` over it twice: once on every `data` edge, once
+filtered to the earliest-receipt basis. If the filtered render answers "which
+tool output did this turn act on" and the consumer's complaint is gone, (a) is
+sufficient and (b) is unbought generality. If instead the reported failure is
+that the graph could not be **loaded, held, or transmitted** at all, then
+volume is the binding constraint, (a) does not touch it, and (b) is bought
+honestly — at which point it still needs the diagnostic, the `Meta` field and
+the §5.1 clause listed above. One capture settles it; the same capture is D2's
+fixture material either way.
+
+**Decision:**
+
+*Not taken.* This entry is a `WORKPLAN.md` D1 halt; no code changed with it,
+and `tests/audit/probe2.py` case B stays in the probe until D2 converts it.
+Record the decision in `WORKPLAN.md` §3.
