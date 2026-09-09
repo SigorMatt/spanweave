@@ -138,7 +138,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| A1 | **RecursionError containment.** Catch `RecursionError` with `ValueError` in `read._read_line`, `read._read_array`, and payload/message JSON parsing in both adapters. Emit `malformed_record` / `payload_parse_failed`. Tests: 100k-deep array as a record line, as a payload attribute, inside `gen_ai.input.messages`. SPEC §7 Inputs: one sentence. CHANGELOG. | todo | 15 |
+| A1 | **RecursionError containment.** Catch `RecursionError` with `ValueError` in `read._read_line`, `read._read_array`, and payload/message JSON parsing in both adapters. Emit `malformed_record` / `payload_parse_failed`. Tests: 100k-deep array as a record line, as a payload attribute, inside `gen_ai.input.messages`. SPEC §7 Inputs: one sentence. CHANGELOG. | done | 15 |
 | A2 | **Reader tolerance.** Strip a UTF-8 BOM at the head of the stream; accept CR-only line endings. Tests. SPEC §7. CHANGELOG. | todo | 10 |
 | A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | todo | 25 |
 | A4 | **Missing trace id diagnostic.** `trace_id == ""` currently silent → emit `missing_trace_id` (info). SPEC §3.7. Test. | todo | 8 |
@@ -231,6 +231,15 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   one checks for release notes under another name first; if there are none it
   creates `CHANGELOG.md` with an `## [Unreleased]` section only — no invented
   history for the already-shipped 0.9.x releases.
+- A1 done (`4d7bb32`); it created `CHANGELOG.md` (`## [Unreleased]` only) under
+  the ruling above, and had to add a README Documents-table row because
+  `tests/test_doc_truth.py` requires every root `*.md` to be listed. Later
+  batches add to the existing Unreleased section.
+- **New finding, not in the audit and not yet a batch:** `json.dumps` in the
+  adapters' `_payload` non-str branch and in `serialize.py` can still raise
+  `RecursionError` on a payload that parsed just under the limit but is dumped
+  from a deeper stack. Out of A1's scope by its row's wording. Maintainer's
+  call whether to register it as a batch.
 - G2 touched `ROADMAP.md` (one line under the Phase 4 OTLP-JSON bullet, which
   its row explicitly permits). §0.6's "ROADMAP.md is untouched until G3" is the
   general rule; G3 may revert those three lines if it wants the file virgin.
