@@ -157,7 +157,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A2 | **Reader tolerance.** Strip a UTF-8 BOM at the head of the stream; accept CR-only line endings. Tests. SPEC §7. CHANGELOG. | done | 10 |
 | A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | done | 25 |
 | A4 | **Missing trace id diagnostic.** `trace_id == ""` currently silent → emit `missing_trace_id` (info). SPEC §3.7. Test. | done | 8 |
-| A5 | **Content-derived fallback ids.** Review blocker 1 / §12(f): a record with no `span_id` gets `source_key = str(index)` in both adapters, so shuffling the input rebinds ids (`sw_cde39f998fc177dc` names `beta` forward and `alpha` reversed). Fallback `source_key` becomes the record's canonical digest (A3's rule applied one level up); SPEC §3.6 rule 2 wording; both adapters identical under diff. New degenerate conformance scenario `derived_ids` with span-id-less records **and a shuffled rendering**, expected graphs equal. Shuffle tests extended beyond `WORKED_RECORDS`. Moves 0 stored expectations. Must land before E2. | todo | 20 |
+| A5 | **Content-derived fallback ids.** Review blocker 1 / §12(f): a record with no `span_id` gets `source_key = str(index)` in both adapters, so shuffling the input rebinds ids (`sw_cde39f998fc177dc` names `beta` forward and `alpha` reversed). Fallback `source_key` becomes the record's canonical digest (A3's rule applied one level up); SPEC §3.6 rule 2 wording; both adapters identical under diff. New degenerate conformance scenario `derived_ids` with span-id-less records **and a shuffled rendering**, expected graphs equal. Shuffle tests extended beyond `WORKED_RECORDS`. Moves 0 stored expectations. Must land before E2. | done | 20 |
 | A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | todo | 12 |
 | A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | todo | 12 |
 | A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | todo | 10 |
@@ -442,6 +442,14 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - The review's summary and both blockers' evidence are worth preserving: G4
   copies `patches/REVIEW-2026-09-10.md` into TASKS.md's audit section as a
   dated subsection before removing WORKPLAN.md.
+- A5 done (`b6c5ea9`). Two carry-forwards: (1) byte-identity does **not** catch an
+  id-rebinding shuffle defect — ids are assigned in node order, so both renderings
+  were byte-identical while every id named a different record; any shuffle claim
+  over derived ids needs the id-to-record **binding** assertion the batch added.
+  (2) `tests/conformance.py:canonical()` now re-sorts edges on positional labels,
+  because SPEC §5.2 sorts edges over graph ids and a derived id differs per
+  adapter by design — E3 would have hit this. `OPEN_QUESTIONS.md` §12(f)'s "real
+  today" note is now stale; A7 owns stale doc truth.
 
 ---
 
