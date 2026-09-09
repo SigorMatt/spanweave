@@ -405,3 +405,182 @@ arrives it should probably be answered in §5 (normalize it into
 `Node.attributes`) rather than here (wire it into the pairing rule). Those are
 different fixes to different problems, and the second vote is for the first
 one.
+
+---
+
+## 10. C2: Should a timestamp keep the digits the record wrote?
+
+**(a)** `Node.started_at` and `Node.ended_at` are `float | None`, and both
+adapters reach them through `_as_time`, which ends in `float(value)`. At
+epoch-nanosecond magnitude float64 cannot hold the digits an exporter wrote:
+the gap between adjacent representable values is **256 ns**, so two spans
+100 ns apart become one number. Should the model keep a wider numeric type —
+the reported integer, an integer count of nanoseconds, or `Decimal` — or stay
+on `float` and say so out loud?
+
+**(b) The failure, demonstrated.** `tests/audit/probe2.py` case G builds three
+ns-encoded spans, two of them 100 ns apart:
+
+    ns precision: s1.start=1.7000000001e+18 s2.start=1.7000000001e+18
+    equal=True temporal=[('s1', 's2')] duration_s1=100000000.0
+    bases: [('s1', 's2', 'sibling start_time ordering (tied, broken by node_id)')]
+
+The record wrote `1700000000100000000` and `1700000000100000100`. The first is
+exactly representable; the second is off by **-100 ns**. The two collapse, and
+the temporal edge between them is emitted as **tied**.
+
+The precision floor is a property of the *magnitude*, not of the nanosecond
+encoding. A 1000 ns window at 1.7e18 ns holds **4** distinct float64 values; a
+1 µs window at 1.7e9 s holds **4** as well, because the ULP there is
+**238.42 ns**. A seconds field carrying nanosecond digits sits on the same
+floor as a nanosecond field.
+
+The digits are not lost in the reader. `json.loads` returns a Python `int`,
+which is arbitrary-precision, and `raw.source` still holds
+`1700000000100000100` and serializes it verbatim. They are lost at
+`float(value)` inside the adapter, and nowhere else.
+
+**What is observably wrong — precisely.** Less than the size of the number
+suggests, and worth stating exactly, because it changes the urgency:
+
+- **Not a determinism bug.** Same bytes → same graph; float comparison is
+  deterministic even when it is lossy; shuffled input is unaffected. Invariant
+  4 holds, on every input, today.
+- **Not a losslessness bug.** The exact literal survives in `raw.source` and in
+  the serialized output. Invariant 2 holds. A consumer *can* recover the
+  digits — by re-parsing the source record, which is the complaint §2 of this
+  file already records against the library.
+- **What breaks** is `SPEC.md` §3.1's promise for the *normalized* field —
+  *"what the telemetry put in the field is what the node carries"* — and the
+  **premise** of one edge. Per §4.3 a tie-broken `temporal` edge asserts that
+  neither sibling started first; here one demonstrably did. The edge is
+  deterministic, correctly warranted `derived`, and honestly labelled a
+  decision rather than an observation — and it is a decision taken on a fact
+  the library got wrong. **Deterministic but wrong-ordered** is the honest
+  summary.
+- One further casualty, from C1: `timestamp_unit_suspect` prints *"Every value
+  is kept exactly as reported and nothing is rescaled"* while showing
+  `1.7000000001e+18` for a record that wrote `...100000100`. Its `source` field
+  carries the same lossy value. The diagnostic's own sentence is falsified in
+  exactly the case the diagnostic exists to report.
+
+**How much of this bites today: none of it.** Across the 17 captured trace
+files (`fixtures/captured/`, `capture/_scratch/fleet/`): **154** timestamp
+values, **0** above 1e11, **0** whose shortest float repr differs from the
+literal in the file, **0** pairs of distinct literals collapsing onto one
+float. **41** sibling pairs, minimum gap **81 µs** — 317x the ULP at that
+magnitude. Only one fixture, `timestamp_units`, carries a value over the line,
+and it was written by C1 to exercise the ceiling.
+
+**What would trigger it:** any exporter writing epoch nanoseconds or
+milliseconds as an integer. That is precisely `startTimeUnixNano` in OTLP JSON,
+and batch F1 sits behind this entry in `WORKPLAN.md` for that reason. It is not
+a hypothetical input; it is the next input.
+
+**The options, and what each one moves.** The stored expectations at stake:
+**22** expected graphs holding **108** timestamp slots (**106** non-null,
+**23** distinct values). Every seconds fixture writes its timestamps as
+fractional literals (`1000.0`, `1000.2`), which no option below changes; only
+`timestamp_units` writes integers, and it holds **5** non-null values.
+
+1. **Keep `float`, diagnose the loss.** A new diagnostic when a reported value
+   exceeds 2^53 (9.007e15), above which consecutive integers are no longer
+   distinguishable, or more sharply when the reported value is not exactly
+   representable. C1's "kept exactly as reported" sentence has to go either
+   way. **Moves: 0 stored expectations.** Free now and free later — nothing
+   about the schema changes. It does not fix the ordering; it documents it.
+
+2. **Keep the reported integer. Never rescale.** `started_at: int | float |
+   None`; `_as_time` returns the `int` when the literal (quoted or not) is an
+   integer literal, and `float` only when it carries a fraction or an exponent.
+   This is "integer nanoseconds internally" in *effect* for ns-encoded input
+   without being a unit conversion: the library still does not know the unit
+   and still never rescales, so §3.1's central sentence stays true rather than
+   being amended. **Moves: 5 timestamp values in one expected graph, one
+   sentence in `timestamp_units/scenario.md` that quotes `1.7e+18`, two type
+   lines in `tests/serialized_shape.json`, and §3.1's field table.** Free now.
+   After the Phase 4 freeze it is not breaking in the JSON schema — `int` and
+   `float` are both `number` — but it changes the *literal* emitted for
+   integer-encoded input, which a consumer comparing serialized bytes would
+   see; do it before the freeze and there is nothing to migrate.
+
+3. **Integer nanoseconds with a unit assumed, seconds restored in
+   serialization** (the form `WORKPLAN.md` proposes). Requires the library to
+   know the unit of the field, which is exactly what §3.1 refuses to know and
+   what C1's whole diagnostic exists because we cannot know. Multiplying a
+   reported 1.7e18 by 1e9 yields a nanosecond count in the year 5e10; and
+   multiplying a fractional-seconds float by 1e9 reintroduces the same rounding
+   the option was meant to remove, because the digits are already gone by then.
+   **Moves: all 106 stored values**, every scenario prose line that quotes one,
+   and §3.1 in full. Recommended against, in the plan's own terms.
+
+4. **`Decimal`, i.e. keep the literal exactly.** The only option that also
+   fixes fractional seconds. Its cost is not in the model, it is in the
+   **reader**: by the time an adapter sees a bare JSON number, `json.loads` has
+   produced a float, so exactness requires `json.loads(..., parse_float=
+   Decimal)` in `read.py` — which retypes every number in every payload and in
+   every `raw.source`, not just timestamps. `json.dumps` refuses `Decimal`, so
+   `canonical_bytes`, the digest and the serializer all need an encoder;
+   `Decimal("0.1") == 0.1` is `False`, so consumer comparisons quietly change
+   meaning; and a public model field gains a type every consumer must handle.
+   **Moves: the same 5 values as option 2, plus the reader, the digest and the
+   serializer.** Free now in schema terms and very expensive in blast radius.
+
+**Round-tripping.** A value read must serialize back to something a consumer
+can compare against its own input. Option 1: the float round-trips to itself,
+but not to the input literal — `1.7000000001e+18` against `1700000000100000100`
+is both a different spelling and a different number, and recovering the
+original means re-reading `raw.source`. Option 2: integer in, identical integer
+out; fractional seconds are unaffected, since Python's repr is
+shortest-round-trip and 0 of the 154 corpus literals differ from it. Option 3:
+nothing round-trips — every value is rescaled twice and comes back out as a
+float. Option 4: exact in both directions, at the price of a custom encoder.
+
+**C1's two handoffs, answered.**
+
+- **The ceiling.** `TIMESTAMP_UNIT_CEILING = 1e11` compares against the value
+  as the model holds it. Under option 2 the check needs no logic change:
+  Python compares `int` and `float` exactly rather than coercing, so an integer
+  timestamp is tested correctly as written. Two consequences follow anyway —
+  the constant should become `100_000_000_000` so the message stops printing
+  `100000000000.0`, and the diagnostic's `source` then carries the exact
+  reported value, which is what makes its "kept exactly as reported" sentence
+  true instead of false. Under option 3 the constant changes meaning entirely
+  (the field is no longer seconds); under option 4 the comparison stays exact
+  but a `Decimal` in `source` is not JSON-serializable.
+- **The string/number asymmetry** — that a quoted timestamp can preserve every
+  digit where a bare one cannot, because `json.loads` got there first. It is
+  real, and it is **confined to option 4**. For integers there is no asymmetry
+  to resolve: `json.loads` already yields an exact `int`, so both renderings
+  arrive intact and only `float()` discards them. Options 1 and 2 treat the two
+  renderings identically, which is what §3.1 already promises — *"the two
+  renderings of one trace produce the same graph"* — and option 2 keeps that
+  promise at full precision rather than at a shared loss. Only for a
+  **fractional** value does the quoted form carry digits the bare form has
+  already lost, and only an exact-decimal representation could spend them.
+
+**(c) What would settle it — and the smallest experiment that falsifies the
+recommendation below.** Find one real exporter emitting a timestamp finer than
+238 ns that is *not* an integer: scan incoming captured traces and OTLP JSON
+exports for a literal whose shortest float repr differs from the literal, or
+for two sibling spans whose literals differ while their floats do not. One hit
+means option 2 is insufficient and option 4's blast radius is bought
+honestly. The corpus today: 154 values, 0 hits; 41 sibling pairs, 0 under
+256 ns. The same scan is one loop over `start_time`/`end_time` literals and can
+run against every trace the project captures from here on.
+
+**(d) Provisional — recommendation: option 2.** Keep the reported integer;
+never rescale; leave fractional seconds on `float`. It fixes the case that
+actually bites (integer ms/ns encodings, which is every OTLP JSON export and so
+every input F1 will bring), it fixes it *without* the library forming an
+opinion about the unit, it closes the string/number asymmetry by construction,
+and it costs 5 stored values in one fixture while the schema is still unfrozen.
+Option 1 is the fallback if the answer is that nanosecond-distinct siblings are
+not worth a model change — but it should then be taken deliberately, and C1's
+false sentence has to be fixed under it too. Option 3 is recommended against
+for the reason above: it buys precision by asserting a unit the library has
+just finished saying it cannot know.
+
+**Decision: not taken.** This entry is a `WORKPLAN.md` C2 halt; no code changed
+with it, and probe2 case G stays in the probe until the implementing batch
+converts it. Record the decision in `WORKPLAN.md` §3.
