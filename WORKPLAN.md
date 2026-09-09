@@ -184,7 +184,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"\|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | done | 6 |
-| D2 | Implement §11(d): three `basis` strings per the table, earliest by `(started_at, node_id)`; every edge kept; DESIGN.md §6 qualifier; SPEC §4.2 draft text from §11 landed; the 4 corpus expectations that carry receipts must not change (verify). probe2 loop case stays as a test of edge count and basis split. | todo | 20 |
+| D2 | Implement §11(d): three `basis` strings per the table, earliest by `(started_at, node_id)`; every edge kept; DESIGN.md §6 qualifier; SPEC §4.2 draft text from §11 landed; the 4 corpus expectations that carry receipts must not change (verify). probe2 loop case stays as a test of edge count and basis split. | done | 20 |
 
 ### Phase E — mixed instrumentation in one trace (the critical one)
 
@@ -509,6 +509,19 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   gate demanded rows typed `UnionType[int, float, NoneType] | None`. A relaxed gate
   is the kind of change that should not pass unremarked, so it is named here.
 - F2's dependency on C3 is now satisfied: timestamps land as `int`.
+- D2 done (`ab4855f`), implementing the D1 decision. Every declared receipt is
+  still an edge; the three builder-owned `basis` strings say which came first.
+  The 4 receipt-carrying expectations were verified unchanged, as the row
+  required. Measured (strictly increasing timestamps, no ties): 50 turns → 1,225
+  data edges (49 earliest / 1,176 later / 0 tied); 200 → 19,900 (199 / 19,701);
+  400 → 79,800 (399 / 79,401). Reproduces the D1 memo's curve exactly. probe2
+  case B is now fully converted and removed.
+- **Carry into E3:** adding a corpus scenario moves five hard-coded corpus-census
+  counts across three example/prediction tests. One is a real finding, not
+  arithmetic: `receipt_redeclared` is the *second* shape whose edge order reaches
+  `trajectory_dump`'s transcript, so that test's "only `parallel_tool_calls`"
+  claim is now a two-shape claim. `mixed_instrumentation` will ripple the same
+  way.
 
 ---
 
