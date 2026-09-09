@@ -177,7 +177,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | C1 | **Unit suspicion + numeric strings.** New diagnostic `timestamp_unit_suspect` (warning) when a start/end value exceeds 1e11 (seconds since epoch cannot; ms/ns can). Both adapters accept numeric-string timestamps (OTLP JSON encodes int64 as strings). Values stay as reported (losslessness); nothing is converted. SPEC §3.1, §3.7. Fixtures: ns-int and string-timestamp renderings. CHANGELOG. | done | 20 |
 | C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | done | 6 |
-| C3 | **Timestamp representation, per C2 decision.** `int \| float \| None`; `_as_time` returns `int` for integer literals (quoted or bare), `float` otherwise; ceiling constant `100_000_000_000`; C1 diagnostic `source` carries the exact reported value; SPEC §3.1 field table; `timestamp_units` expected graph (5 values) and its scenario.md sentence; `tests/serialized_shape.json` (two type lines). probe2 case G converted to a test. | todo | 20 |
+| C3 | **Timestamp representation, per C2 decision.** `int \| float \| None`; `_as_time` returns `int` for integer literals (quoted or bare), `float` otherwise; ceiling constant `100_000_000_000`; C1 diagnostic `source` carries the exact reported value; SPEC §3.1 field table; `timestamp_units` expected graph (5 values) and its scenario.md sentence; `tests/serialized_shape.json` (two type lines). probe2 case G converted to a test. | done | 20 |
 
 ### Phase D — `data` edge echo
 
@@ -498,6 +498,17 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   and `tests/test_build.py` already held both sides. Worth keeping as the pattern
   for a docs-only batch: pin the behaviour anyway, and say plainly which half was
   red rather than manufacturing one.
+- C3 done (`c2486ba`), implementing the C2 decision. `started_at`/`ended_at` are
+  now `int | float | None`; an integer literal keeps its digits; ceiling constant
+  is `100_000_000_000`; C1's "kept exactly as reported" sentence is true by
+  construction. `tests/serialized_shape.json` moved exactly the two predicted type
+  lines and was regenerated with `make shape`.
+- **Worth a reviewer's eye:** C3 changed a gate, not just code — `tests/
+  test_contracts.py` now treats a closed union of number types as non-permissive,
+  so `int | float | None` needs no CONTRACTS.md inventory row. Without that the
+  gate demanded rows typed `UnionType[int, float, NoneType] | None`. A relaxed gate
+  is the kind of change that should not pass unremarked, so it is named here.
+- F2's dependency on C3 is now satisfied: timestamps land as `int`.
 
 ---
 
