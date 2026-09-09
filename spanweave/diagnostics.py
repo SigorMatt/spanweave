@@ -50,6 +50,11 @@ NONMONOTONIC_TIME = "nonmonotonic_time"
 # A node id collision is a hard error instead (`SPEC.md` §3.6).
 DUPLICATE_SOURCE_ID = "duplicate_source_id"
 
+# No trace id in the input at all, so the graph's `trace_id` is empty. One
+# per graph, never one per record: the fact is about the input as a whole and
+# has no node to point at (`SPEC.md` §7).
+MISSING_TRACE_ID = "missing_trace_id"
+
 # More than one trace id in a single input (`SPEC.md` §7).
 MULTI_TRACE_INPUT = "multi_trace_input"
 
@@ -66,6 +71,7 @@ CODES = (
     DUPLICATE_SOURCE_ID,
     MALFORMED_RECORD,
     MISSING_TIMESTAMP,
+    MISSING_TRACE_ID,
     MULTI_TRACE_INPUT,
     NONMONOTONIC_TIME,
     ORDERING_CYCLE,

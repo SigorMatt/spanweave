@@ -15,6 +15,7 @@ from spanweave.diagnostics import DiagnosticCollector
 from spanweave.model import (
     AdapterInfo,
     Diagnostic,
+    DiagnosticLevel,
     EdgeKind,
     NodeKind,
     Payload,
@@ -346,6 +347,85 @@ def test_an_input_with_no_trace_id_still_builds():
     graph = build([a_span("s0", trace=None)])
     assert graph.trace_id == ""
     assert len(graph.nodes()) == 1
+
+
+# `trace_id == ""` used to be the one degradation the builder did not report:
+# the graph said "no trace" and nothing said why. The September 2026 audit
+# (batch A4) found it; these hold the answer in place.
+
+
+def test_an_input_with_no_trace_id_says_so():
+    graph = build([a_span("s0", trace=None)])
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    reported = graph.diagnostics[0]
+    assert reported.level is DiagnosticLevel.INFO
+    # No node to point at and no fragment to carry: the absence being
+    # reported is the graph's own empty `trace_id` (`SPEC.md` §3.7).
+    assert reported.node_id is None
+    assert reported.source is None
+    assert reported.adapter == "some_dialect"
+
+
+def test_the_missing_trace_id_is_reported_once_for_the_input_not_once_per_span():
+    # Per record, a 10,000-span trace would repeat one sentence 10,000 times
+    # and add nothing on any repeat (`SPEC.md` §7).
+    graph = build([a_span(f"s{index}", trace=None) for index in range(10)])
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    assert len(graph.nodes()) == 10
+
+
+def test_a_trace_id_that_is_the_empty_string_is_no_trace_id():
+    # The dialect reported the field and reported it empty. The graph is in
+    # exactly the state it is in when no record reported one at all, so it
+    # owes the same answer.
+    graph = build([a_span("s0", trace=""), a_span("s1", trace="")])
+    assert graph.trace_id == ""
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+
+
+def test_an_input_with_no_records_reports_no_trace_id_either():
+    graph = build([])
+    assert graph.trace_id == ""
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    assert graph.meta.diagnostic_count == 1
+
+
+def test_a_trace_that_reports_its_id_is_not_diagnosed():
+    assert codes_of(build([a_span("s0")])) == []
+
+
+def test_one_record_short_of_a_trace_id_is_not_a_missing_trace_id():
+    # The graph has a trace id, so nothing about it is missing. The record
+    # that carried none is not foreign either -- it claims no other trace.
+    graph = build([a_span("s0"), a_span("s1", trace=None)])
+    assert graph.trace_id == "t1"
+    assert codes_of(graph) == []
+
+
+def test_the_audit_case_end_to_end_a_real_record_with_no_trace_id(tmp_path):
+    # The reproduction from tests/audit/probe1.py, which printed a graph with
+    # `trace=''` and no diagnostic at all.
+    import json
+
+    import spanweave
+
+    record = {
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "a",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "AGENT"},
+    }
+    path = tmp_path / "no_trace_id.jsonl"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(path)
+    assert graph.trace_id == ""
+    assert [d.code for d in graph.diagnostics if d.code == codes.MISSING_TRACE_ID] == [
+        codes.MISSING_TRACE_ID
+    ]
 
 
 def test_a_backwards_clock_is_reported_and_left_alone():

@@ -219,6 +219,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
 | `duplicate_source_id` | two records claimed the same source id |
+| `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
@@ -231,7 +232,7 @@ into diagnostics is an unnecessary exposure surface.
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; two carry an object, two carry nothing, and one carries something
+arrived as; two carry an object, three carry nothing, and one carries something
 the library computed rather than something it was given.
 
 | Code | `source` |
@@ -240,6 +241,7 @@ the library computed rather than something it was given.
 | `unpaired_result` | `{"call_id": str, "operation": str \| null}` |
 | `unmapped_attributes` | `list[str]` — attribute keys, never values |
 | `malformed_record` | `str` — the line's text |
+| `missing_trace_id` | `null` — there is no fragment. The absence being reported is the graph's own empty `trace_id`, and there is no node to point at either |
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
@@ -252,6 +254,12 @@ Two carry no fragment at all, and `ordering_cycle` carries library output rather
 than source. That is a document making a false statement about the library,
 which is a smaller instance of what 3.2 exists to find, so it is corrected here
 rather than left for a consumer to discover.
+
+`missing_trace_id` joined the `null` rows later (the September 2026 audit's
+batch A4, registered in `TASKS.md`), for the same reason as `missing_timestamp`:
+it reports something **absent**, so there is no fragment of the input to carry.
+Unlike `missing_timestamp` it carries no `node_id` either — §7 says why it is
+one statement about the input rather than one per record.
 
 Two things the catch-all still leaves open, said plainly rather than implied.
 `unknown_span_kind`'s fragment is the dialect's kind **string** when there was
@@ -818,6 +826,15 @@ every registered adapter and picks the highest confidence.
   builder uses the most common one, emits `multi_trace_input`, and keeps the
   foreign records as nodes with a diagnostic. Splitting multi-trace inputs is
   the consumer's call, and `spanweave split` is deferred (`OPEN_QUESTIONS.md` §4).
+- **An input may report no trace id at all**, and one that does still builds:
+  the graph's `trace_id` is the empty string and a `missing_trace_id` (info)
+  says so. It fires whenever the built graph reports no trace id — no record
+  carried one, or the id that won the count was itself empty — including an
+  input with no records, where the question *why is `trace_id` empty* is still
+  owed an answer. **One diagnostic per graph, never one per record**: the fact
+  is about the input as a whole, it has no node to point at, and a per-record
+  form would repeat one sentence once per span while adding nothing. Nothing
+  is invented — the library never synthesizes a trace id.
 - **Input that will not parse never raises out of the reader or an adapter**
   (`SECURITY.md`): a record that is malformed *or nested deeper than the JSON
   parser will recurse* becomes a `malformed_record` diagnostic carrying its

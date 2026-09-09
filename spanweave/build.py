@@ -110,6 +110,7 @@ def build_graph(
     )
     _report_span_diagnostics(ordered, ids, collected)
     _report_foreign_traces(ordered, ids, trace_id, collected, adapter)
+    _report_missing_trace_id(trace_id, collected, adapter)
     _report_nonmonotonic_time(ordered, ids, collected, adapter)
 
     edges = _explicit_edges(ordered, ids, by_span_id, collected, adapter)
@@ -233,6 +234,33 @@ def _report_foreign_traces(
             source=span.trace_id,
             adapter=adapter.id,
         )
+
+
+def _report_missing_trace_id(
+    trace_id: str | None,
+    collected: DiagnosticCollector,
+    adapter: AdapterInfo,
+) -> None:
+    """An input that identifies no trace says so (`SPEC.md` §7).
+
+    Once per graph, not once per record. What is missing is a property of the
+    input as a whole -- there is no node it belongs to, and repeating the same
+    sentence for every span would add nothing on any repeat. Nothing is
+    invented in its place: an unidentified trace stays unidentified.
+    """
+    if trace_id:
+        return
+    reported = (
+        "no record in this input reported a trace id"
+        if trace_id is None
+        else "the trace id this input reported is the empty string"
+    )
+    collected.add(
+        codes.MISSING_TRACE_ID,
+        f"{reported}, so this graph reports none and its trace_id is empty",
+        level=DiagnosticLevel.INFO,
+        adapter=adapter.id,
+    )
 
 
 def _report_nonmonotonic_time(

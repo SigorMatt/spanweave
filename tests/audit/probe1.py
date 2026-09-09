@@ -85,7 +85,10 @@ run("whitespace", None, raw=b"\n\n   \n")
 # A BOM at the head of the file (audit finding: minor) and CR-only or CRLF line
 # endings are now regression tests, not probes: tests/test_read.py, under
 # "Encoding and line endings". Fixed in batch A2.
-run("no_trace_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "trace_id"}])
+# A record with no trace id (audit finding: minor) is now a regression test,
+# not a probe: tests/test_build.py, under "Trace identity and honest
+# degradation" -- the graph still reports no trace id and now says so with
+# `missing_trace_id`. Fixed in batch A4.
 run("missing_span_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "span_id"}, oi("s1", None, "TOOL", "t", 1.0, 2.0, {"tool.name": "t"})])
 run("attributes_not_dict", [dict(oi("s0", None, "AGENT", "a", 1.0, 2.0), attributes=["openinference.span.kind"])])
 run("otlp_json_envelope", None, raw=json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": [{"traceId": "t1", "spanId": "s0", "name": "chat", "startTimeUnixNano": "1", "endTimeUnixNano": "2", "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}]}]}]}]}).encode())

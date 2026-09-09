@@ -13,6 +13,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ## [Unreleased]
 
+### Added
+
+- New diagnostic `missing_trace_id` (level `info`). An input that identifies no
+  trace built a graph whose `trace_id` was the empty string and said nothing
+  about it -- the one degradation the builder did not report. It now says so:
+  once per graph, never once per record, because the fact is about the input as
+  a whole, has no node to point at, and would otherwise repeat one sentence
+  once per span. It fires whether no record carried a trace id or the id the
+  input reported was itself empty, and for an input with no records at all.
+  Nothing is invented: an unidentified trace stays unidentified, and a record
+  that carries no id in an input where others do is still not diagnosed --
+  that graph has a trace id. `SPEC.md` §3.7 and §7 state it. The serialized
+  code vocabulary gains one entry, which is additive.
+  (audit finding: minor, missing `trace_id` silent)
+
 ### Fixed
 
 - The reader tolerates two things about how a file was written. A UTF-8 BOM
