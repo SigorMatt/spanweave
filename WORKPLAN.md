@@ -4,8 +4,8 @@ Status file for the fix series that follows the September 2026 audit. One
 batch = one sub-agent = one commit = one concern. This file plus git is the
 only state; any session can resume cold from it.
 
-Last updated: 2026-09-09 (plan adapted to the two-session Claude Code model;
-no batches started).
+Last updated: 2026-09-10 (decisions of 2026-09-10 applied; run 2 batches
+added).
 Baseline: commit `8d26e1b` ("I1 resolved"), 1601 tests pass, 4 skipped.
 
 ---
@@ -128,6 +128,21 @@ statuses at series close); ROADMAP.md is untouched until G3; this file is
 execution state only and is deleted at series close with §3 folded into
 TASKS.md.
 
+### 0.7 Watch (aux, read-only, report-then-stop)
+
+While the builder is on a run, aux may run `~/spanweave-ops/watch_run.sh` in a
+loop. It reads git log/status/stash/fetch, file mtimes, `pgrep`, and the
+builder transcript tail; it never writes to the repo and never runs make, uv,
+or pytest. Triggers: run finished (push landed and no batch left `todo`/`in
+progress`); builder waiting on the user; 40-minute stall while a batch is `in
+progress`; builder process gone with the run incomplete; contract tripwires on
+any new commit — touches WORKPLAN.md without a `plan:` subject, touches
+`spanweave/` while the newest commit's batch is a memo, changes
+`tests/serialized_shape.json` without a commit-body explanation, lands on
+`main`, or `git stash list` grew. It prints an evidence block and stops; it
+never restarts, fixes, or touches anything. Conventions live in
+`~/spanweave-ops/WATCH.md`, outside the repo on purpose.
+
 ---
 
 ## 1. Batch list
@@ -142,6 +157,10 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A2 | **Reader tolerance.** Strip a UTF-8 BOM at the head of the stream; accept CR-only line endings. Tests. SPEC §7. CHANGELOG. | done | 10 |
 | A3 | **Duplicate records and duplicate span ids.** (a) Byte-identical duplicate records: keep one, emit new diagnostic `duplicate_record` (SPEC §3.7 table, `diagnostics.py`, `test_codes`). (b) Same span id, different content: derive ids from `(source_key, ordinal)` so both are kept and `duplicate_source_id` fires *as SPEC §3.7 already claims*; fix the contradicting comment in `ids.py`; SPEC §3.6 rule 2 wording. Conformance degenerate scenario `duplicate_span_id` in both dialects with expected graph + diagnostics. CHANGELOG. | done | 25 |
 | A4 | **Missing trace id diagnostic.** `trace_id == ""` currently silent → emit `missing_trace_id` (info). SPEC §3.7. Test. | done | 8 |
+| A5 | **Content-derived fallback ids.** Review blocker 1 / §12(f): a record with no `span_id` gets `source_key = str(index)` in both adapters, so shuffling the input rebinds ids (`sw_cde39f998fc177dc` names `beta` forward and `alpha` reversed). Fallback `source_key` becomes the record's canonical digest (A3's rule applied one level up); SPEC §3.6 rule 2 wording; both adapters identical under diff. New degenerate conformance scenario `derived_ids` with span-id-less records **and a shuffled rendering**, expected graphs equal. Shuffle tests extended beyond `WORKED_RECORDS`. Moves 0 stored expectations. Must land before E2. | todo | 20 |
+| A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | todo | 12 |
+| A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | todo | 12 |
+| A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | todo | 10 |
 
 ### Phase B — performance
 
@@ -149,51 +168,55 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | B1 | **Annotation cost.** `Graph.annotate` rebuilds indexes via `dataclasses.replace` → O(N+E) per call (measured: 2,000 annotations on 3,001 nodes = 33 s). Carry `_index/_out/_in` across the replace (nodes/edges unchanged), add `Graph.annotate_many(entries)`. Tests: identity of shared indexes after annotate; `annotate_many` equals sequential `annotate`; determinism gate still green. SPEC §8. CHANGELOG. | done | 15 |
 | B2 | **Reader line splitting.** `_read_lines` re-copies the buffer per line. Measure on a 200 MB file first; implement `bytes.find`-based splitting only if ≥20% faster. Otherwise `dropped` with the numbers recorded here. **Measured 2026-09-09, not implemented:** 200 MB JSONL, varied line lengths (p50 754 B, 124,656 records), 7 interleaved A/B runs, spread <0.5% — current 6.012 s median vs `bytes.find` prototype 5.776 s = **1.041x (3.9%)**. Worst realistic case (uniform ~334 B lines, 626,023 records): 13.906 s vs 12.771 s = 1.089x (8.2%). Ceiling is structural: cProfile puts `_read_lines` + `_line_break` at 0.77 s of 7.51 s (10.3%); the reader is dominated by the dedup digest's `json.dumps` (2.28 s) and `json.loads` (1.11 s). Prototype verified byte-identical across 66 case/chunking pairs, then discarded. Machine: i7-4600U @ 2.1 GHz, CPython 3.12.3. | dropped | 10 |
+| B3 | **`unmapped_attributes` volume.** §11's finding: 13.36 MB of diagnostics at 400 turns because `_received_results` reads `...message.role` to decide but never marks it consumed. Mark every key an adapter *reads* as consumed, in both adapters; audit for other read-but-unconsumed keys; measure diagnostic bytes on `tests/audit/probe2.py` loop 400 before/after and record both numbers in this row. Moves 0 expectations unless a fixture's `unmapped_attributes` list shrinks — if so, regenerate and say so. | todo | 15 |
 
 ### Phase C — timestamps
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | C1 | **Unit suspicion + numeric strings.** New diagnostic `timestamp_unit_suspect` (warning) when a start/end value exceeds 1e11 (seconds since epoch cannot; ms/ns can). Both adapters accept numeric-string timestamps (OTLP JSON encodes int64 as strings). Values stay as reported (losslessness); nothing is converted. SPEC §3.1, §3.7. Fixtures: ns-int and string-timestamp renderings. CHANGELOG. | done | 20 |
-| C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | awaiting decision | 6 |
+| C2 | **Representation memo (HALT).** float64 seconds loses precision at epoch-ns scale (ULP 256 ns → 100 ns-apart spans compare equal; temporal tie falls to node id). Options: keep float + diagnostic; integer nanoseconds internally with seconds only in serialization; `Decimal`. Write `OPEN_QUESTIONS.md` entry with recommendation (int ns internal). No code until decided. | done | 6 |
+| C3 | **Timestamp representation, per C2 decision.** `int \| float \| None`; `_as_time` returns `int` for integer literals (quoted or bare), `float` otherwise; ceiling constant `100_000_000_000`; C1 diagnostic `source` carries the exact reported value; SPEC §3.1 field table; `timestamp_units` expected graph (5 values) and its scenario.md sentence; `tests/serialized_shape.json` (two type lines). probe2 case G converted to a test. | todo | 20 |
 
 ### Phase D — `data` edge echo
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | awaiting decision | 6 |
-| D2 | **Echo implementation** per decision. Check which existing conformance expectations carry echo edges before touching them (`FIXTURES.md` §4 rule). Tests, fixtures, SPEC §4.2, CHANGELOG. | awaiting D1 | 20 |
+| D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"\|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | done | 6 |
+| D2 | Implement §11(d): three `basis` strings per the table, earliest by `(started_at, node_id)`; every edge kept; DESIGN.md §6 qualifier; SPEC §4.2 draft text from §11 landed; the 4 corpus expectations that carry receipts must not change (verify). probe2 loop case stays as a test of edge count and basis split. | awaiting D1 | 20 |
 
 ### Phase E — mixed instrumentation in one trace (the critical one)
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | awaiting decision | 8 |
-| E2 | **Registry: per-record classification.** `AdapterRegistry.classify(record) -> adapter_id | None` from the adapters' existing marker logic (no new adapter API if avoidable; `ADAPTERS.md` update if not). Detection tests: pure files unchanged; mixed file → classification map; a record claimed by two adapters → still a hard error. | awaiting E1 | 20 |
-| E3 | **Builder: multi-adapter spans.** `build_graph` accepts spans from several adapters; `ids.derive` already takes `adapter_id` per span — verify id stability; `Meta.adapters` = all used, ordered by id. Conformance scenario `mixed_instrumentation`: OpenInference agent + tool, OTel GenAI chat, expected graph **identical to `llm_tool_llm`'s canonical graph**. This extends cross-dialect equivalence to intra-trace mixing and is the batch's acceptance test. | awaiting E2 | 25 |
-| E4 | **CLI, docs, changelog.** `--adapter auto|<id>|mixed` semantics, `spanweave inspect` shows per-adapter node counts, README "What is real" section, ADAPTERS.md, SPEC §6.1 final text. | awaiting E3 | 12 |
+| E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | done | 8 |
+| E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | awaiting E1 | 20 |
+| E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | awaiting E2 | 25 |
+| E4 | `--adapter auto\|<id>` (no `mixed`); `spanweave inspect` shows per-adapter node counts; README, ADAPTERS.md (the one-sentence per-record contract from §12(d)), SPEC §6.1 final text from §12, DESIGN.md §3 subsection from §12(k), CHANGELOG. | awaiting E3 | 12 |
 
 ### Phase F — OTLP JSON container (ROADMAP Phase 4 item, pulled forward)
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. | awaiting C2 | 8 |
-| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. | awaiting F1 | 25 |
+| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. **F1 may proceed directly into F2 in the same run** if its design needs no model or schema change and no new default; if it needs any, it halts as `awaiting decision` and F2 waits for run 3. | awaiting C2 | 8 |
+| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. Timestamps land as `int` per C3; `startTimeUnixNano` strings arrive intact. | awaiting F1 | 25 |
 
 ### Phase G — roadmap and governance
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | awaiting decision | 6 |
+| G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | done | 6 |
 | G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | done | 6 |
-| G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | awaiting decision | 6 |
-| G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. | todo | 4 |
+| G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | done | 6 |
+| G5 | **Roadmap text, per G1 and G3 decisions.** Land §13(f) and §14(i) text in ROADMAP.md: the outside-users condition (A and B and floor), the announcement task with owner and "what it must not claim", the general schema-movement rule for the freeze, the recorded absences (57 files / 177 records / 0 mixed; no instrumentor-emitted agent span in the corpus). Keep G2's three lines. No code. | todo | 10 |
+| G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. Also: the ROADMAP.md line and memo cross-references per §14(j); CONTRACTS.md rows; confirm every OPEN_QUESTIONS §10–§15 decision line reads the §3 decision verbatim. | todo | 4 |
 
 ### Phase H — agent identity (from the earlier review)
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| H1 | **Identity memo (HALT).** `operation` is `None` for agent/chain/retriever in both dialects. Options: map `gen_ai.agent.name` into `operation` (dialect-asymmetric); a new `identity` field carrying value + provenance (mirrors `warrant`); leave as is and document. Memo in `OPEN_QUESTIONS.md`. Model change → decision required. | awaiting decision | 6 |
+| H1 | **Identity memo (HALT).** `operation` is `None` for agent/chain/retriever in both dialects. Options: map `gen_ai.agent.name` into `operation` (dialect-asymmetric); a new `identity` field carrying value + provenance (mirrors `warrant`); leave as is and document. Memo in `OPEN_QUESTIONS.md`. Model change → decision required. | done | 6 |
+| H2 | **Identity non-mapping, per H1 decision.** SPEC §3.1: state the rule that `operation` is not populated for agent/chain/retriever from any dialect's name attribute, with the `raw.source`/`unmapped_attributes` note; fix §3.1's "retriever name" promise no dialect states; record the measured absence of instrumentor-emitted agent spans beside §14(h) item 4. OPEN_QUESTIONS §15: mark option B as the additive 1.1 path. No code. | todo | 8 |
 
 ---
 
@@ -209,8 +232,10 @@ and most valuable change and is last among implementations because it is the
 one most likely to need a second round.
 
 Run grouping: **Run 1** = G2 A1 A2 A4 A3 B1 B2 C1 then memos C2 D1 E1 G1 G3 H1
-(stops at the decision point). **Run 2** (after decisions are logged in §3)
-= D2 E2 E3 E4 F1 F2 G4. Each batch is one sub-agent regardless of run.
+(stopped at the decision point; decisions logged in §3 on 2026-09-10).
+**Run 2** = A5 → A6 → A7 → A8 → B3 → C3 → D2 → H2 → G5 → E2 → E3 → E4 → F1 →
+(F2 if F1 did not halt) → G4 (only if F2 is done; otherwise G4 waits for run
+3). Each batch is one sub-agent regardless of run.
 
 ---
 
@@ -218,7 +243,13 @@ Run grouping: **Run 1** = G2 A1 A2 A4 A3 B1 B2 C1 then memos C2 D1 E1 G1 G3 H1
 
 | Date | Batch | Decision | By |
 |---|---|---|---|
-| | | | |
+| 2026-09-10 | C2 | Option 2: keep the reported integer literal as `int`, never rescale; fractional literals stay `float`; `started_at`/`ended_at: int \| float \| None`. Ceiling constant becomes `100_000_000_000`; C1's "kept exactly as reported" sentence becomes true by construction. Implemented by C3. | maintainer |
+| 2026-09-10 | D1 | Option (a), no flag: every declared receipt stays an edge; three builder-owned `basis` strings per §11(d) table (earliest / earliest tied broken by node_id / not the earliest receiving span). DESIGN.md §6 "no quadratic edge construction" gets the per-turn qualifier. Implemented by D2. | maintainer |
+| 2026-09-10 | E1 | Option (a), always: per-record classification in the registry via `detect([record])`; no `mixed` mode, `--adapter auto` is the explicit default spelling. A record two adapters claim → hard error reusing `adapter_ambiguous`, message naming line, span id, both claimants. A record no adapter claims → `unknown` node + new `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (model change taken now, unfrozen). `Edge.adapter = None` when the two ends came from different adapters, SPEC §3.8 says so. E3 lands only after A5. | maintainer |
+| 2026-09-10 | G1 | Adopt §13(f) replacement text: one agreement event (1 or 2) AND one exposure event (3 or 4), plus a 30-day floor from the later of 2026-08-30 and the announcement; the floor is never evidence. Announcement becomes an owned task per §13(g). Implemented by G5. | maintainer |
+| 2026-09-10 | G3 | All five items of §14(h): E is a freeze precondition on schema grounds, stated as a general rule ("no freeze while any batch that moves a serialized field is open"); no "mixed trace observed" condition; absences recorded as measurements; freeze conditions sharpened now, Phase 4 PR breakdown held; G2's ROADMAP lines kept. G4 scope widened per §14(j). | maintainer |
+| 2026-09-10 | H1 | Option C: `operation` stays `None` for agent/chain/retriever; the non-mapping becomes a stated rule in SPEC §3.1 with the verbatim-in-`raw.source` note; option B (`identity` field) recorded as the additive 1.1 path in OPEN_QUESTIONS §15. Implemented by H2. | maintainer |
+| 2026-09-10 | A2 follow-up | Bare CR is legal JSON whitespace; a lone-CR *terminator* splits `{"a":\r1}` that used to parse (review overclaim 3). Resolution: keep BOM and CRLF handling, drop the lone-CR terminator; CR-only files are not a real input, CR inside a record is. Implemented by A8. | maintainer |
 
 ---
 
@@ -404,6 +435,13 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - G2 touched `ROADMAP.md` (one line under the Phase 4 OTLP-JSON bullet, which
   its row explicitly permits). §0.6's "ROADMAP.md is untouched until G3" is the
   general rule; G3 may revert those three lines if it wants the file virgin.
+- 2026-09-10: run 1 reviewed (`patches/REVIEW-2026-09-10.md`, untracked; all
+  §0.2 checks passed on all 27 commits). Decisions logged in §3; A5–A8, B3, C3,
+  G5, H2 added; run 2 order set. The three overclaims are assigned (A8, C3);
+  the CR terminator is removed by A8. Stale doc-truth lines are A7's.
+- The review's summary and both blockers' evidence are worth preserving: G4
+  copies `patches/REVIEW-2026-09-10.md` into TASKS.md's audit section as a
+  dated subsection before removing WORKPLAN.md.
 
 ---
 
