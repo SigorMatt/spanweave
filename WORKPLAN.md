@@ -161,6 +161,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | A6 | **RecursionError on the CLI path and dump paths.** Review blocker 2: `spanweave inspect`/`validate` still die (`cli.py:178`/`:208` catch `ValueError`/`OSError`; `_read_document` sniffs with its own `json.loads`). Plus resume-note finding: `json.dumps` in the adapters' `_payload` non-str branch and in `serialize.py` can raise on a payload parsed just under the limit. Route the sniff through the fixed reader or catch `RecursionError` there; catch on the dump paths with `payload_parse_failed`/a serializer diagnostic per SPEC §3.7. Tests on the CLI entry points. | done | 12 |
 | A7 | **Spec–code formula and stale doc truth.** SPEC §3.6 at lines ~258 and ~963 omits `ensure_ascii=False` that `read.py:252` passes; `{"name":"café"}` derives different ids by spec and by code. Fix SPEC; add a test that derives one node id from a spec-faithful reimplementation of the digest and compares it to the library's, and pin at least one golden `sw_` id. Also: `fixtures/conformance/README.md:75-77` ("`duplicate_span_ids` must not build") and `CONTRACTS.md:341-344` (seven rows → nine; `duplicate_source_id` now has a fixture). | done | 12 |
 | A8 | **Overclaims and the CR terminator.** Per §3 A2 follow-up: remove lone-CR terminator, keep CRLF/BOM, correct A2's CHANGELOG entry and module docstring; add `{"a":\r1}` as a passing test. Correct A3's CHANGELOG/commit-note claim "no id the library produces moves" (reachable case `sw_fc49b046c1cd484d` → `sw_70ae5dd0e179edd9`): state which ids move and why. C1's sentence is fixed by C3, not here. | done | 10 |
+| A9 | **A4 scope in SPEC.** SPEC §3.7 `missing_trace_id` row states the limit A4's commit body and CHANGELOG state: one diagnostic per graph, fires only when the built graph reports no trace id at all; a record missing an id among records that have one is not diagnosed. Docs only. | todo | 4 |
 
 ### Phase B — performance
 
@@ -168,7 +169,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | B1 | **Annotation cost.** `Graph.annotate` rebuilds indexes via `dataclasses.replace` → O(N+E) per call (measured: 2,000 annotations on 3,001 nodes = 33 s). Carry `_index/_out/_in` across the replace (nodes/edges unchanged), add `Graph.annotate_many(entries)`. Tests: identity of shared indexes after annotate; `annotate_many` equals sequential `annotate`; determinism gate still green. SPEC §8. CHANGELOG. | done | 15 |
 | B2 | **Reader line splitting.** `_read_lines` re-copies the buffer per line. Measure on a 200 MB file first; implement `bytes.find`-based splitting only if ≥20% faster. Otherwise `dropped` with the numbers recorded here. **Measured 2026-09-09, not implemented:** 200 MB JSONL, varied line lengths (p50 754 B, 124,656 records), 7 interleaved A/B runs, spread <0.5% — current 6.012 s median vs `bytes.find` prototype 5.776 s = **1.041x (3.9%)**. Worst realistic case (uniform ~334 B lines, 626,023 records): 13.906 s vs 12.771 s = 1.089x (8.2%). Ceiling is structural: cProfile puts `_read_lines` + `_line_break` at 0.77 s of 7.51 s (10.3%); the reader is dominated by the dedup digest's `json.dumps` (2.28 s) and `json.loads` (1.11 s). Prototype verified byte-identical across 66 case/chunking pairs, then discarded. Machine: i7-4600U @ 2.1 GHz, CPython 3.12.3. | dropped | 10 |
-| B3 | **`unmapped_attributes` volume.** §11's finding: 13.36 MB of diagnostics at 400 turns because `_received_results` reads `...message.role` to decide but never marks it consumed. Mark every key an adapter *reads* as consumed, in both adapters; audit for other read-but-unconsumed keys; measure diagnostic bytes on `tests/audit/probe2.py` loop 400 before/after and record both numbers in this row. Moves 0 expectations unless a fixture's `unmapped_attributes` list shrinks — if so, regenerate and say so. | todo | 15 |
+| B3 | **`unmapped_attributes` volume.** §11's finding: 13.36 MB of diagnostics at 400 turns because `_received_results` reads `...message.role` to decide but never marks it consumed. Mark every key an adapter *reads* as consumed, in both adapters; audit for other read-but-unconsumed keys; measure diagnostic bytes on `tests/audit/probe2.py` loop 400 before/after and record both numbers in this row. Moves 0 expectations unless a fixture's `unmapped_attributes` list shrinks — if so, regenerate and say so. **Measured 2026-09-10 (probe2 case B, loop 400, serialized `diagnostics`): before 13,193,072 B (13.19 MB) → after 99,092 B (0.10 MB), 133x.** Two defects, not one: `_received_results` never consumed the sibling `...message.role`, and it ran *after* `unmapped` was tallied, so its `consumed.add(...tool_call_id)` was dead code. 0 expectations moved. | done | 15 |
 
 ### Phase C — timestamps
 
@@ -233,8 +234,8 @@ one most likely to need a second round.
 
 Run grouping: **Run 1** = G2 A1 A2 A4 A3 B1 B2 C1 then memos C2 D1 E1 G1 G3 H1
 (stopped at the decision point; decisions logged in §3 on 2026-09-10).
-**Run 2** = A5 → A6 → A7 → A8 → B3 → C3 → D2 → H2 → G5 → E2 → E3 → E4 → F1 →
-(F2 if F1 did not halt) → G4 (only if F2 is done; otherwise G4 waits for run
+**Run 2** = A5 → A6 → A7 → A8 → B3 → A9 → C3 → D2 → H2 → G5 → E2 → E3 → E4 →
+F1 → (F2 if F1 did not halt) → G4 (only if F2 is done; otherwise G4 waits for run
 3). Each batch is one sub-agent regardless of run.
 
 ---
@@ -482,6 +483,15 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   the reachable reader route, but it stays reachable through the public `assign`.
   A8 also edited TASKS.md's A2 registry line, which claimed CR-only endings are
   accepted — the only registry edit in A5–A8.
+- B3 done (`7f68aca`), 13.19 MB → 0.10 MB at 400 turns. The row's finding named
+  one defect; there were two, and the second (the `_received_results` call running
+  after `unmapped` was tallied, making its `consumed.add` dead code) is the kind a
+  measurement finds and a reading does not. `otel_genai` has no equivalent defect —
+  its whole history sits inside one attribute it already consumes. probe2 case B
+  stays in the probe: D2 still needs its edge half.
+- 2026-09-10, maintainer: A9 registered (docs-only, SPEC §3.7 states A4's scope
+  limit), placed after B3 in the run-2 order. This is the unowned finding recorded
+  two notes above; it now has an owner.
 
 ---
 
