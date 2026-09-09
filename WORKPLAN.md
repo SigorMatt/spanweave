@@ -161,7 +161,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | todo | 6 |
+| D1 | **Echo memo (HALT).** History echo makes `data` edges O(turns²) (measured: 400 turns → 79,800 edges). Options: (a) two builder-owned `basis` strings, first declared receipt vs re-declaration, all edges kept (no edge-set change); (b) build flag `data_echo="all"|"first"`; (c) both. Default is the decision. Memo in `OPEN_QUESTIONS.md` + `SPEC.md` §4.2 draft text. | awaiting decision | 6 |
 | D2 | **Echo implementation** per decision. Check which existing conformance expectations carry echo edges before touching them (`FIXTURES.md` §4 rule). Tests, fixtures, SPEC §4.2, CHANGELOG. | awaiting D1 | 20 |
 
 ### Phase E — mixed instrumentation in one trace (the critical one)
@@ -290,6 +290,24 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   not a determinism or losslessness bug; 0 corpus traces affected today. The
   digits arrive exact from `json.loads` and die at `float(value)` in the
   adapters, not in the reader.
+- D1 memo written (`635e6ef`, `OPEN_QUESTIONS.md` §11) — **awaiting decision**.
+  Recommends **option (a) alone, no flag**. Key finding: the quadratic is the
+  *telemetry's*, not the builder's — edge count equals declaration count
+  exactly, and all 79,800 edges at 400 turns are `explicit`, warranted and
+  individually true under §4.2.1. So this is legibility and volume, never
+  wrongness, and a `first` mode would drop true edges for a 34.7% saving on a
+  curve that stays quadratic. Curve: 25/50/100/200/400/800 turns → 300 / 1,225
+  / 4,950 / 19,900 / 79,800 / 319,600 edges; 0.01 s → 4.90 s; 0.18 MB → 128.77
+  MB serialized. 4 of 22 scenarios carry a `data` edge, all first receipts,
+  0 re-declarations — so keeping today's string for the earliest case moves
+  **0** stored expectations.
+- **D1 says the row undercounts: three `basis` strings, not two** — a
+  tie-broken *earliest* needs its own, per §4.3's precedent, and §10/C2's float
+  ties make ties the common case at ns magnitude. D2 also inherits two defects
+  D1 found but did not fix: `DESIGN.md` §6's "no quadratic edge construction"
+  needs a qualifier, and `_received_results` consumes the `tool_call_id` key
+  but not the sibling `...role` key it reads (13.36 MB of diagnostics at 400
+  turns).
 - **New finding, not in the audit and not yet a batch:** `json.dumps` in the
   adapters' `_payload` non-str branch and in `serialize.py` can still raise
   `RecursionError` on a payload that parsed just under the limit but is dumped
