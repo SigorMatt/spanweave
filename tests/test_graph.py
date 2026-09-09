@@ -378,3 +378,162 @@ def test_annotations_survive_a_projection(graph):
     assert annotated.subgraph(edge_kinds={"parent"}).annotations_for("s1", "ns") == {
         "k": 1
     }
+
+
+# --------------------------------------------------------------------------
+# What annotating copies, and what it shares
+#
+# Annotating rebuilt the node index and both adjacency maps every time, so
+# labeling a graph cost O(nodes + edges) per label -- 2,000 annotations on a
+# 3,001-node graph took tens of seconds, and the work was pure waste: nodes
+# and edges are the one thing an annotation cannot change. These tests hold
+# the structural property (the indexes are shared, so the per-annotation work
+# does not grow with the graph) rather than a wall-clock number, which would
+# be a flake. The measurement lives in the commit message.
+# --------------------------------------------------------------------------
+
+
+def test_annotating_shares_the_node_and_edge_indexes(graph):
+    annotated = graph.annotate("s2", "ns", "k", 1)
+    # Same nodes, same edges -- so the same lookup structures, not copies of
+    # them. This identity is what makes annotating O(1) in the graph's size.
+    assert annotated._index is graph._index
+    assert annotated._out is graph._out
+    assert annotated._in is graph._in
+    assert annotated._nodes is graph._nodes
+    assert annotated._edges is graph._edges
+
+
+def test_a_shared_index_carries_nothing_between_graphs(graph):
+    # The sharing must not become a channel: annotating one graph must be
+    # invisible from every other graph that shares its indexes.
+    first = graph.annotate("s1", "ns", "k", 1)
+    second = first.annotate("s2", "ns", "k", 2)
+    third = first.annotate("s3", "ns", "k", 3)
+
+    assert len(graph.annotations) == 0
+    assert graph.annotations_for("s1", "ns") == {}
+    assert [e.sort_key for e in first.annotations] == [("ns", "s1", "k")]
+    assert first.annotations_for("s2", "ns") == {}
+    assert first.annotations_for("s3", "ns") == {}
+    assert second.annotations_for("s3", "ns") == {}
+    assert third.annotations_for("s2", "ns") == {}
+    # The annotation stores are separate objects with separate indexes; only
+    # the node/edge structures are shared.
+    assert second.annotations is not third.annotations
+    assert second.annotations._index is not third.annotations._index
+    # And the queries that read the shared structures still agree everywhere.
+    for other in (first, second, third):
+        assert other.topo_order == graph.topo_order
+        assert other.edges() == graph.edges()
+        assert other.children("s0") == graph.children("s0")
+        assert other.node("s2") == graph.node("s2")
+
+
+def test_an_annotated_graph_carries_every_field_a_built_one_has(graph):
+    # The shared-index copy sets each field explicitly; a field added to Graph
+    # later must not silently go missing from an annotated graph.
+    import dataclasses
+
+    annotated = graph.annotate("s1", "ns", "k", 1)
+    for graph_field in dataclasses.fields(graph):
+        if graph_field.name == "annotations":
+            continue
+        assert getattr(annotated, graph_field.name) == getattr(
+            graph, graph_field.name
+        ), graph_field.name
+
+
+def test_the_work_of_annotating_does_not_grow_with_the_graph(graph):
+    # The audit's case (probe2 E) in structural form: many annotations, one
+    # shared set of indexes throughout, and the last graph still correct.
+    annotated = graph
+    for index in range(200):
+        annotated = annotated.annotate("s2", "ns", f"k{index}", index)
+        assert annotated._index is graph._index
+        assert annotated._out is graph._out
+        assert annotated._in is graph._in
+    assert len(annotated.annotations) == 200
+    assert annotated.annotations_for("s2", "ns")["k199"] == 199
+    assert len(graph.annotations) == 0
+
+
+# --------------------------------------------------------------------------
+# annotate_many
+# --------------------------------------------------------------------------
+
+
+def test_annotate_many_equals_annotating_one_at_a_time(graph):
+    entries = [
+        ("s3", "b", "k", 1),
+        ("s1", "a", "k", 2),
+        ("s1", "a", "other", 3),
+        ("s2", "a", "k", 4),
+    ]
+    batched = graph.annotate_many(entries)
+    sequential = graph
+    for entry in entries:
+        sequential = sequential.annotate(*entry)
+    assert batched.annotations.entries == sequential.annotations.entries
+    assert [e.sort_key for e in batched.annotations] == [
+        e.sort_key for e in sequential.annotations
+    ]
+
+
+def test_annotate_many_lets_the_later_entry_win_on_the_same_key(graph):
+    # Same rule as annotating the same key twice, because the batch is
+    # *defined* as that sequence (`SPEC.md` §8).
+    entries = [("s2", "ns", "k", 1), ("s2", "ns", "k", 2)]
+    batched = graph.annotate_many(entries)
+    sequential = graph.annotate(*entries[0]).annotate(*entries[1])
+    assert batched.annotations_for("s2", "ns") == {"k": 2}
+    assert batched.annotations.entries == sequential.annotations.entries
+    assert len(batched.annotations) == 1
+
+
+def test_annotate_many_returns_a_new_graph_and_shares_the_indexes(graph):
+    batched = graph.annotate_many([("s1", "ns", "k", 1), ("s2", "ns", "k", 2)])
+    assert batched is not graph
+    assert len(graph.annotations) == 0
+    assert batched._index is graph._index
+    assert batched._out is graph._out
+    assert batched._in is graph._in
+
+
+def test_annotate_many_accepts_an_empty_batch(graph):
+    batched = graph.annotate_many([])
+    assert batched is not graph
+    assert len(batched.annotations) == 0
+    assert batched.topo_order == graph.topo_order
+
+
+def test_annotate_many_takes_any_iterable(graph):
+    batched = graph.annotate_many(("s1", "ns", "k", i) for i in range(3))
+    assert batched.annotations_for("s1", "ns") == {"k": 2}
+
+
+def test_annotate_many_refuses_a_bad_entry_and_applies_nothing(graph):
+    with pytest.raises(ValueError, match="no node"):
+        graph.annotate_many([("s1", "ns", "k", 1), ("nope", "ns", "k", 2)])
+    with pytest.raises(ValueError, match="reserved"):
+        graph.annotate_many([("s1", "spanweave", "k", 1)])
+    with pytest.raises(ValueError, match="JSON-serializable"):
+        graph.annotate_many([("s1", "ns", "k", {1, 2, 3})])
+    # The refusal costs the caller the batch, not half of it: nothing was
+    # written anywhere the caller can see.
+    assert len(graph.annotations) == 0
+
+
+def test_annotate_many_is_insensitive_to_nothing_but_its_order(graph):
+    one = graph.annotate_many([("s3", "b", "k", 1), ("s1", "a", "k", 2)])
+    other = graph.annotate_many([("s1", "a", "k", 2), ("s3", "b", "k", 1)])
+    assert one.annotations.entries == other.annotations.entries
+    assert [e.sort_key for e in one.annotations] == [("a", "s1", "k"), ("b", "s3", "k")]
+
+
+def test_annotate_many_never_changes_what_the_library_does(graph):
+    batched = graph.annotate_many([("s1", "ns", "kind", "tool")])
+    assert [n.id for n in batched.nodes(kind="tool")] == ["s2"]
+    assert batched.edges() == graph.edges()
+    assert batched.topo_order == graph.topo_order
+    assert [n.id for n in batched.nodes(annotated=("ns", "kind", "tool"))] == ["s1"]

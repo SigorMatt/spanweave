@@ -20,7 +20,7 @@ over ``EdgeKind`` x ``Warrant``, rather than a fork of the library.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from spanweave import annotate as annotations_module
 from spanweave.annotate import AnnotationStore
@@ -314,6 +314,43 @@ class Graph:
     ) -> Graph:
         """Attach a namespaced consumer fact, returning a **new** graph."""
         return annotations_module.annotate(self, node_id, namespace, key, value)
+
+    def annotate_many(
+        self, entries: Iterable[annotations_module.AnnotationEntry]
+    ) -> Graph:
+        """A batch of `(node_id, namespace, key, value)`, in one new graph.
+
+        Equal to calling `annotate` once per entry, in order (`SPEC.md` §8),
+        and there for the case that made the per-call work visible: a consumer
+        labeling a whole graph, which rebuilt one whole graph per label.
+        """
+        return annotations_module.annotate_many(self, entries)
+
+    def _with_annotations(self, annotations: AnnotationStore) -> Graph:
+        """This graph with different annotations, sharing everything else.
+
+        An annotation cannot change a node or an edge, so `_index`, `_out` and
+        `_in` describe the new graph exactly as well as they describe this one.
+        `dataclasses.replace` would rebuild all three through `__post_init__`,
+        which is O(nodes + edges) of pure waste per annotation -- and it was
+        measurable: 2,000 annotations on a 3,001-node graph spent 85% of their
+        time there.
+
+        The shared mappings are safe to share because nothing ever mutates
+        them: they are written once, in `__post_init__`, and only read after
+        that. Sharing is therefore invisible -- neither graph can see the
+        other's annotations, and no operation on one reaches the other
+        (`tests/test_graph.py`, "What annotating copies").
+
+        Every field is carried explicitly rather than by construction, so a
+        field added to `Graph` later cannot go missing here without the test
+        that walks `dataclasses.fields` saying so.
+        """
+        clone = object.__new__(type(self))
+        for graph_field in fields(self):
+            object.__setattr__(clone, graph_field.name, getattr(self, graph_field.name))
+        object.__setattr__(clone, "annotations", annotations)
+        return clone
 
     def annotations_for(
         self, node_id: NodeId, namespace: str

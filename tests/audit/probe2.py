@@ -82,16 +82,11 @@ for n in (500, 3000):
         except Exception as e:
             print(f"!!! query {type(e).__name__}: {str(e)[:100]}")
 
-# E. Annotation cost
-recs = [oi("s0", None, "AGENT", "a", 0.0, 9999)] + [oi(f"t{i}", "s0", "TOOL", "t", i, i + 0.5, {"tool.name": "t"}) for i in range(3000)]
-g = spanweave.build(write("ann", recs))
-for n in (500, 1000, 2000):
-    def ann():
-        h = g
-        for i in range(n):
-            h = h.annotate(f"t{i}", "probe", "k", i)
-        return h
-    timed(f"annotate n={n} (graph of {len(g)} nodes)", ann); print()
+# E. Annotation cost is now a regression test, not a probe: tests/test_graph.py,
+# under "What annotating copies" and "annotate_many". The test asserts the structural
+# property (an annotated graph shares its node and edge indexes, so the work per
+# annotation does not grow with the graph) rather than a wall-clock number.
+# Fixed in batch B1.
 
 # F. Huge single line read (a 40MB payload on one span)
 big = "x" * 40_000_000

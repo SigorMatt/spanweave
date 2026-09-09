@@ -940,6 +940,7 @@ Consumers attach their own meaning without forking the model.
 
 ```
 graph.annotate(node_id, namespace, key, value) -> Graph     # returns a NEW graph
+graph.annotate_many(entries) -> Graph                       # one new graph for a batch
 graph.annotations_for(node_id, namespace) -> Mapping
 graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
 ```
@@ -949,6 +950,24 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
 - Annotation is **immutable**: it returns a new `Graph`; the original is
   unchanged. This is what keeps determinism and pipelines composable.
 - Annotation values must be JSON-serializable.
+- `annotate_many` takes an iterable of `(node_id, namespace, key, value)`
+  entries and returns **one** new graph carrying all of them. It is *defined*
+  as applying `annotate` to each entry in order, and its result MUST equal that
+  sequence's result — including when two entries name the same
+  `(namespace, node_id, key)`, where the later entry wins exactly as annotating
+  the same key twice does. It grants no ability `annotate` does not have; it
+  exists so a consumer labeling a whole graph pays for one copy instead of one
+  per label. An empty batch returns a new graph equal to the original.
+- An entry `annotate` would refuse — reserved or empty namespace, a node this
+  graph does not hold, a value that is not JSON-serializable — is refused by
+  `annotate_many` in the same way, at the first such entry, and no graph is
+  returned. A batch produces a graph or raises; it never applies part of itself.
+- Annotating copies the **annotations**, not the nodes and edges: the new graph
+  shares its node and edge lookup structures with the graph it came from, which
+  nothing ever mutates. The cost of annotating is therefore proportional to the
+  number of annotations, not to the size of the graph, and a graph that has been
+  annotated is indistinguishable from one built with those annotations from the
+  start.
 - Annotations round-trip through serialization under a top-level `annotations`
   key, sorted by `(namespace, node_id, key)`.
 - The library **never reads** an annotation to change its own behavior. It has

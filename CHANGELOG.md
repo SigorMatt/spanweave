@@ -44,7 +44,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   code vocabulary gains one entry, which is additive.
   (audit finding: minor, missing `trace_id` silent)
 
+- `Graph.annotate_many(entries)`, which takes an iterable of
+  `(node_id, namespace, key, value)` and returns **one** new graph carrying all
+  of them. It is defined as `annotate` applied to each entry in order and equal
+  to it, so of two entries naming the same `(namespace, node_id, key)` the later
+  one wins, exactly as setting the same key twice does. Every entry is checked
+  before any is kept: a refused entry costs the caller the batch, never leaves a
+  graph carrying half of it. It grants no ability `annotate` did not have --
+  a consumer labeling a whole graph now pays for one copy instead of one per
+  label. `SPEC.md` §8 states it. (audit finding 4)
+
 ### Changed
+
+- **Annotating no longer costs a pass over the whole graph.** `annotate`
+  rebuilt the node index and both adjacency maps on every call, so labeling was
+  O(nodes + edges) *per label* -- 2,000 annotations on a 3,001-node,
+  5,999-edge graph took 12.5 s here (33 s on the audit's machine), 85% of it
+  inside that rebuild. Nodes and edges are the one thing an annotation cannot
+  change, so the new graph now shares those structures with the graph it came
+  from instead of rebuilding them: the same 2,000 annotations take 1.5 s, and
+  as one `annotate_many` batch, 0.011 s.
+
+  Nothing about the result moved. The graph is still immutable and still a new
+  object per annotation; the shared structures are written once at construction
+  and only read afterwards, so neither graph can observe the other's
+  annotations, and a test walks `dataclasses.fields(Graph)` to prove the
+  shared-index copy carries every field a rebuilt graph has. `SPEC.md` §8 states
+  the sharing and its consequence for cost. (audit finding 4)
 
 - **Two records claiming the same span id no longer refuse the file.** They are
   both kept, with a node id each, and the `duplicate_source_id` diagnostic that

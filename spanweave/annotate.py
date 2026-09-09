@@ -15,7 +15,6 @@ Three properties make that safe:
 
 from __future__ import annotations
 
-import dataclasses
 import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -32,6 +31,11 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, and deliberately so:
 #: `spanweave` annotation cannot collide with something a consumer already
 #: put there.
 RESERVED_NAMESPACE = "spanweave"
+
+#: One entry of a batch: the arguments of `annotate`, in the same order. A
+#: plain tuple rather than a type of its own, because a batch is a way of
+#: *calling* the annotation API, not a new thing in the model.
+AnnotationEntry = tuple[NodeId, str, str, JsonValue]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +79,22 @@ class AnnotationStore:
         ]
         return AnnotationStore(entries=(*kept, entry))
 
+    def with_entries(self, entries: Iterable[Annotation]) -> AnnotationStore:
+        """A new store carrying a whole batch, built once rather than N times.
+
+        The result is what repeated `with_entry` would produce: within the
+        batch the **last** entry for a `(namespace, node_id, key)` wins, just
+        as setting the same key twice does, and it replaces anything this
+        store already held for that key.
+        """
+        incoming: dict[tuple[str, str, str], Annotation] = {}
+        for entry in entries:
+            incoming[entry.sort_key] = entry
+        kept = [
+            existing for existing in self.entries if existing.sort_key not in incoming
+        ]
+        return AnnotationStore(entries=(*kept, *incoming.values()))
+
     def for_node(self, node_id: NodeId, namespace: str) -> Mapping[str, JsonValue]:
         return dict(self._index.get((namespace, node_id), {}))
 
@@ -105,15 +125,10 @@ def check_serializable(value: JsonValue) -> None:
         ) from failure
 
 
-def annotate(
+def _checked(
     graph: Graph, node_id: NodeId, namespace: str, key: str, value: JsonValue
-) -> Graph:
-    """Attach a namespaced fact to a node, returning a **new** graph.
-
-    The copy is a real copy: annotating N nodes builds N graphs. That is what
-    immutability actually takes at this scale, and immutability is what makes
-    one graph safe to hand to two consumers at once.
-    """
+) -> Annotation:
+    """One entry, refused here if it could never be read back."""
     if namespace == RESERVED_NAMESPACE:
         raise ValueError(
             f"the {RESERVED_NAMESPACE!r} namespace is reserved by the library; "
@@ -128,5 +143,31 @@ def annotate(
             f"it would never be read by anything"
         )
     check_serializable(value)
-    entry = Annotation(namespace=namespace, node_id=node_id, key=key, value=value)
-    return dataclasses.replace(graph, annotations=graph.annotations.with_entry(entry))
+    return Annotation(namespace=namespace, node_id=node_id, key=key, value=value)
+
+
+def annotate(
+    graph: Graph, node_id: NodeId, namespace: str, key: str, value: JsonValue
+) -> Graph:
+    """Attach a namespaced fact to a node, returning a **new** graph.
+
+    What gets copied is the *annotations*. Nodes and edges are the one thing
+    an annotation cannot change, so the new graph shares their lookup
+    structures with the old one rather than rebuilding them: annotating stays
+    immutable without a pass over the whole graph on every call (`SPEC.md` §8).
+    """
+    entry = _checked(graph, node_id, namespace, key, value)
+    return graph._with_annotations(graph.annotations.with_entry(entry))
+
+
+def annotate_many(graph: Graph, entries: Iterable[AnnotationEntry]) -> Graph:
+    """A whole batch of facts, in one new graph.
+
+    Defined as `annotate` applied to each entry in order, and equal to it
+    (`SPEC.md` §8): of two entries naming the same
+    `(namespace, node_id, key)`, the later one wins. Every entry is checked
+    before any of them is kept, so a refused entry loses the caller the batch
+    rather than leaving a graph carrying half of it.
+    """
+    prepared = [_checked(graph, *entry) for entry in entries]
+    return graph._with_annotations(graph.annotations.with_entries(prepared))
