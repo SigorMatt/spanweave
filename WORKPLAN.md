@@ -150,10 +150,11 @@ never restarts, fixes, or touches anything. Conventions live in
 |---|---|---|---|
 | R1 | **Timestamps are finite and bounded, or missing.** Review blocker: `_as_time` on a quoted integer of >4300 digits raises the interpreter's digit-limit `ValueError` out of `spanweave.build`; `spanweave build`/`inspect` print a traceback (regression vs C3's parent). Also the C1-era should-fix: `"1e400"` parses to `inf` and serializes as bare `Infinity`, which strict JSON parsers reject. Rule: a timestamp that is not a finite number after parsing — non-numeric, non-finite (`inf`, `nan`), or beyond the interpreter's integer digit limit — is `None` with `missing_timestamp` and the literal in `source` (truncated to 64 chars if longer). `serialize.py` uses `allow_nan=False` so a non-finite value can never be written; a test proves it. Tests: quoted 5000-digit integer, bare 5000-digit integer literal (reader path), `1e400` bare and quoted, `NaN`, via `build` and via the CLI (no traceback, exit codes as documented). Also pin current F2 behaviour with an OTLP fixture whose timestamps are nanosecond strings: it builds and emits `timestamp_unit_suspect` once per span (R3 revisits this; the test states that). SPEC §3.1, §3.7. CHANGELOG. | done (`0e4262e`) | 20 |
 | R2 | **Track the reviews; recover the two lost concerns.** G4 wrote "five other concerns were assigned" and listed three destinations; concerns 6 and 7 of the run-1 review exist nowhere in a clean checkout because `patches/` is untracked. Create `reviews/` (tracked; not a root `.md`, so doc-truth is unaffected) holding `2026-09-10-run1.md` and `2026-09-10-run2.md` verbatim from `patches/`. TASKS.md audit section: point at both files; add concerns 6 and 7 as open threads with their text; correct the "five … assigned" sentence. No code. | done (`0284ec3`) | 8 |
-| R4 | **B3's sentence matches B3's behaviour.** SPEC says a key read to decide is consumed; the adapter consumes `role` even when it could not use it, and `role` has no mapped field. Decide the smaller change inside the SPEC's own principle (losslessness + "nothing reported as unmapped that was read"): either consume only when the key decided something, or state that a read key is consumed regardless and why. Tests either way; corpus expectations must not move (verify). | todo | 10 |
+| R4 | **B3's sentence matches B3's behaviour.** SPEC says a key read to decide is consumed; the adapter consumes `role` even when it could not use it, and `role` has no mapped field. Decide the smaller change inside the SPEC's own principle (losslessness + "nothing reported as unmapped that was read"): either consume only when the key decided something, or state that a read key is consumed regardless and why. Tests either way; corpus expectations must not move (verify). | done (`cb53ef9`) | 10 |
 | R6 | **A6's narrative matches the measurement.** The commit body says the encoder's limit is lower than the parser's; measured on CPython it is ~1.9× higher, so the story is not reachable from a trace file. Correct CHANGELOG and SPEC §7 wording to what was measured; keep the containment (it is still correct to have). Record the measurement. Docs only. | todo | 6 |
 | R5 | **Corpus counts recompute from a checkout.** Five commits (name them from `git log --grep` on "57 files\|177 records\|43+14\|117+60") cite counts that include the gitignored `capture/_scratch/`. Make F2's widened census the single source: a script or test under `tests/` that counts tracked files/records only and prints the figures; replace every cited figure in CHANGELOG, TASKS.md, OPEN_QUESTIONS.md and ROADMAP.md with the recomputed one and a "(tracked files only)" qualifier. G5 already did this for its own figures — match its wording. | todo | 12 |
 | R3 | **Stated timestamp units (HALT memo).** An OTLP JSON envelope declares its unit in the field name (`startTimeUnixNano`); F2 reads it and the adapters then warn `timestamp_unit_suspect` on every span, while a genuinely seconds-encoded span in the same file is the only one *not* warned (signal inversion, measured). Options: (a) `NormalizedSpan.timestamp_unit: "s" \| "ns" \| None` — the container states `ns`, the flat record states nothing; the diagnostic fires only when no unit is stated and the value exceeds the ceiling; `started_at` still holds the reported value (C2 decision stands), and the graph carries the unit where stated (model field: schema moves); (b) the reader rescales OTLP ns to seconds before the seam (violates C2's "never rescale"); (c) leave as is and document the warning as expected on OTLP input. Memo to OPEN_QUESTIONS.md with recommendation; `awaiting decision`. | todo | 6 |
+| R8 | **The rest of the adapter follows R4's rule.** Found by R4, out of its scope: `_operation` blanket-consumes `llm.model_name` / `embedding.model_name` / `tool.name` and `_call` blanket-consumes `tool_call.id`, so a value the adapter cannot read at any of those keys is consumed and never reported -- the same contradiction with SPEC §3.7 that R4 fixed for `role`. Apply R4's decision (consume only when the key decided something) uniformly; verify corpus expectations do not move. SPEC §3.7. CHANGELOG. | todo | 10 |
 | R7 | **Series close, again.** As G4: final statuses to TASKS.md, §3 decisions moved, WORKPLAN.md and its README row removed, `make check`. Runs only after R3 is decided and implemented (run 4), or immediately if the decision is (c). | awaiting R3 | 6 |
 
 ---
@@ -161,7 +162,7 @@ never restarts, fixes, or touches anything. Conventions live in
 ## 2. Execution order
 
 Run 3 = R1 → R2 → R4 → R6 → R5 → R3 (halts). Run 4 = R3 implementation per
-decision → R7.
+decision → R8 → R7.
 
 ---
 
@@ -190,6 +191,12 @@ Empty; run 3 takes none.
   doc-truth tests exempting the verbatim archives and WORKPLAN.md. The
   recovered concern 7 is now load-bearing beyond dedup: A5 keys span-id-less
   records on a content digest, so content-equality is an identity assumption.
+- 2026-09-11: R4 decided inside the batch -- a `role` the adapter cannot read
+  decided nothing, so it stays in `unmapped_attributes`; a readable non-`tool`
+  role is still consumed, leaving B3's quadratic-diagnostics fix intact. The
+  corpus constraint was verified rather than assumed (23 files carry role
+  keys, 0 non-string values). R4 found the same contradiction at four more
+  keys and it is registered as R8 for run 4.
 
 ---
 
