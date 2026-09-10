@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from spanweave.diagnostics import UNCLAIMED_RECORD
 from spanweave.model import (
     Diagnostic,
     JsonValue,
@@ -27,6 +28,7 @@ from spanweave.model import (
     Status,
     Usage,
 )
+from spanweave.read import record_digest
 
 
 class CallRole(StrEnum):
@@ -146,3 +148,42 @@ class NormalizedSpan:
     def __post_init__(self) -> None:
         object.__setattr__(self, "attributes", dict(self.attributes))
         object.__setattr__(self, "call_names", dict(self.call_names))
+
+
+def unclaimed_span(record: JsonValue, line_number: int | None = None) -> NormalizedSpan:
+    """The seam value for a record **no adapter claimed** (`SPEC.md` §6.1).
+
+    Not a dialect's translation of the record, because no dialect offered
+    one: an `unknown` node carrying the record verbatim, and an
+    `unclaimed_record` warning saying nobody recognized it. Everything a
+    dialect would have supplied is left as it is left whenever the library
+    was not told -- absent, `None`, empty -- and that is the honest shape.
+    Reading the record's own fields here would be this module deciding what a
+    span envelope looks like on behalf of an adapter that declined it.
+
+    It lives at the seam rather than above or below it because it belongs to
+    neither side: no adapter produced it, and the builder must not learn that
+    such a thing exists as a category. The dispatcher hands it over the seam
+    like any other span (`DESIGN.md` §3).
+
+    `source_key` is the record's canonical digest -- content, never position,
+    the same key `SPEC.md` §3.6 rule 2 uses for a record whose dialect states
+    no span id.
+    """
+    return NormalizedSpan(
+        source_key=record_digest(record),
+        kind=NodeKind.UNKNOWN,
+        name="",
+        raw=RawRecord(source=record, line_number=line_number),
+        diagnostics=(
+            Diagnostic(
+                code=UNCLAIMED_RECORD,
+                message=(
+                    "no registered adapter recognized this record, so nothing "
+                    "read it; it is kept as an unknown node carrying the "
+                    "record verbatim, with no adapter on its provenance"
+                ),
+                source=record,
+            ),
+        ),
+    )

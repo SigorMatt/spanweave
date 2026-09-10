@@ -75,6 +75,14 @@ MULTI_TRACE_INPUT = "multi_trace_input"
 # carrying its text is the only place it survives.
 MALFORMED_RECORD = "malformed_record"
 
+# No registered adapter claimed this record, so nothing read it: it is kept
+# as an `unknown` node carrying the record verbatim, with no adapter on its
+# provenance (`SPEC.md` §6.1). The honest report of "you are missing an
+# adapter" -- never a discard, and never handed to a designated adapter,
+# which would put a dialect's name on a node on the strength of that dialect
+# having said nothing about the record.
+UNCLAIMED_RECORD = "unclaimed_record"
+
 # The ordering edges contain a cycle, which telemetry should not produce and
 # sometimes does. The graph is still built (`SPEC.md` §5.2).
 ORDERING_CYCLE = "ordering_cycle"
@@ -92,6 +100,7 @@ CODES = (
     ORPHAN_PARENT,
     PAYLOAD_PARSE_FAILED,
     TIMESTAMP_UNIT_SUSPECT,
+    UNCLAIMED_RECORD,
     UNKNOWN_SPAN_KIND,
     UNMAPPED_ATTRIBUTES,
     UNPAIRED_CALL,

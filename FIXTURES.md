@@ -340,6 +340,25 @@ rendering that nobody declared fails the corpus — otherwise "we could not
 express this" and "somebody forgot" look identical, and a dialect's coverage
 could quietly rot away one file at a time.
 
+### 4.3.1 A rendering several adapters read
+
+A dialect is a property of a **record**, not of a file (`SPEC.md` §6.1), so one
+trace can carry two instrumentors' spans. A scenario about that shape names its
+rendering for every adapter that reads it, joined by `+`:
+`dialects/openinference+otel_genai.jsonl`. `Rendering.supported` splits the
+stem and asks the registry about each part, and `tests/conformance.py`'s
+`DIALECTS` — the tuple that drives "silence is a failure" above — is
+deliberately **unchanged**: `+` is not a dialect, no adapter answers to the
+composite name, and no scenario is ever obliged to render a mix.
+
+Such a scenario declares both of its halves unrenderable in `coverage.json`,
+with the reason §4.3 requires, because a single-dialect rendering of it would
+not be it. What makes the declaration checkable rather than convenient is that
+the scenario's expected graph is **another scenario's file, byte for byte**:
+`mixed_instrumentation`'s is `llm_tool_llm`'s, and a test compares the two
+paths. The single-dialect renderings of that run exist — they are that
+scenario's — and the claim is that mixing changes nothing about the graph.
+
 ### 4.4 Payloads two dialects record differently
 
 **The finding this exists for.** `SPEC.md` §3.3 defines `Payload.value` as

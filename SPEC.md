@@ -303,10 +303,17 @@ RawRecord:
   line_number: int | None     # 1-based, for file-based dialects
 
 Provenance:
-  adapter_id:      str        # e.g. "openinference"
-  adapter_version: str
+  adapter_id:      str | None # e.g. "openinference"; null when no adapter
+  adapter_version: str | None #   produced this node (§6.1)
   dialect_note:    str | None # anything the adapter wants a human to know
 ```
+
+**Both adapter fields are `null` on a node no adapter produced.** A record no
+registered adapter claimed is kept as an `unknown` node carrying the record
+verbatim, with `unclaimed_record` (§6.1) beside it. Naming an adapter there
+would say a dialect read a record it declined, and provenance is the one field
+whose whole job is to say who read this. They were `str` until the September
+2026 audit series widened them, while the schema is unfrozen (`CLAUDE.md` 7).
 
 Every node MUST be traceable back to exactly one source record. Round-tripping
 `raw.source` through the serializer MUST reproduce the input record byte-for-byte
@@ -357,6 +364,29 @@ September 2026 audit series (batch A7); the library has passed it since the
 digest existed (batch A3), so it was the spec that was wrong.
 `tests/test_ids.py` derives an id from this text and compares it against the
 library's, and pins two `sw_` literals so neither side can drift quietly.
+
+**`adapter_id` is the adapter that read *that record*, not the adapter that
+read the input.** A dialect is a property of a record (§6.1), so under a mixed
+input the material of rule 2 and rule 3 differs per record, and it is the
+**empty string** for a record no adapter claimed — the same way `trace_id` is
+where the input states none. Rule 1 never consults it, which is why an input
+whose dialect states span ids gets exactly the same ids however its records
+were dispatched.
+
+**`duplicate_source_id` reports a reused *span id*, not a shared `source_key`.**
+Rule 3 fires on the `source_key`, so the two are not the same event, and the
+September 2026 audit series (batch E3, `OPEN_QUESTIONS.md` §12(f)) asked whether
+the report should move to the key. It does not, on two grounds. The first is
+reachability: since the fallback key became the record's canonical digest
+(rule 2), two records share a `source_key` **only** by sharing a span id — a
+digest is shared only by records that are the same record, and §7 has already
+collapsed those — so a key collision without an id collision is unreachable,
+and a report for it would be a report nothing can produce. The second is what
+the sentence would say: the message reports that *the dialect* reused an id,
+which is a fact about the input, whereas a `source_key` is the library's own
+construct and a diagnostic about one would be the library reporting on itself.
+Should a dialect ever arrive whose adapter derives a key that is neither, this
+is the decision to revisit.
 
 **Python's built-in `hash()` is forbidden anywhere in identity or ordering** — it
 is salted per-process and would break determinism (`CLAUDE.md` 4).
@@ -427,6 +457,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
+| `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 
@@ -545,7 +576,8 @@ Edge:
   kind:    EdgeKind        # §4
   warrant: explicit | derived      # §4.1
   basis:   str             # the exact rule/field that produced it
-  adapter: str | None      # which adapter's spans the edge was built from
+  adapter: str | None      # which adapter's spans the edge was built from;
+                           # null when they came from more than one (below)
 ```
 
 `basis` is a short, stable machine-and-human readable string naming the *reason*:
@@ -565,6 +597,18 @@ does, and until one is observed every `link` edge carries the builder's
 ends of a `data` relation and supply that edge's `basis` itself; no adapter
 ever populated it, the real case arrived in the shape §4.2.1 describes instead,
 and it was removed (`TASKS.md` I1).
+
+**`adapter` is `null` when the edge's ends came from different adapters.** A
+dialect is a property of a record (§6.1), so an edge can join two adapters'
+spans — a `call_result` whose requester one adapter read and whose fulfiller
+another did, or a `data` edge across the same seam. There is no honest single
+answer for such an edge: naming either dialect would attribute to it a relation
+the two of them made together. `null` is the value the field already carries
+for every `temporal` edge, so it says "no adapter asserted this on its own"
+rather than introducing a new state. An end that is **not a node in this
+graph** — a `link` pointing outside the trace (§4.0) — is not consulted, so a
+dangling link still names the adapter of the span that stated it. An edge
+touching a node no adapter produced is `null` for the same reason.
 
 > Note the asymmetry this creates with `adapter`, and that it is deliberate.
 > `adapter` records *whose spans this edge was built from*, which is provenance
@@ -620,9 +664,18 @@ AdapterInfo:
   declared_confidence: float | None   # the adapter's own claim; None when named
 ```
 
+`meta.adapters` carries **every adapter that produced at least one node**,
+distinct on `(id, version)` and sorted by it. An input written in one dialect
+therefore carries exactly one entry, as it always did; an input whose records
+came from two instrumentors carries both (§6.1). A record no adapter claimed
+adds no entry — there is nobody to name — and is reported by `unclaimed_record`
+instead.
+
 `AdapterInfo.declared_confidence` is where §6.1's "the chosen adapter and its
 confidence are recorded in `meta`" lands. It is `None` when the caller named the
-adapter, because there was no detection to report.
+adapter, because there was no detection to report. It is each contributor's own
+declaration over the first 50 records **it claimed**, so an adapter that claimed
+every record reports the number it reported before per-record dispatch existed.
 
 The name says `declared_` because **it is not a measurement**. Nothing in the
 trace could produce it: an adapter self-reports a number from `detect()`, and
@@ -1066,8 +1119,8 @@ declares reaches `0.5`.
 | every record claimed by the same one adapter | that adapter parses the input, and `meta.adapters` carries its one entry — the single-dialect case, unchanged |
 | a record claimed by **two** adapters | a **hard error** (`adapter_ambiguous`), naming the record's position, its span id where it has one, and both claimants |
 | no record claimed by any adapter | a **hard error** (`adapter_unconfident`), listing every declared confidence |
-| a record claimed by **no** adapter, in an input another adapter claims | the claiming adapter parses the input whole, so the record still becomes a node — an `unknown` one, the way any unmappable record does (§3.2) |
-| several adapters each claiming records, none claiming a record another claims | **not yet built as one graph.** The records sort themselves cleanly, and the builder does not yet accept spans from more than one adapter, so the input is refused by whole-input selection (`adapter_ambiguous`) as it was before classification existed |
+| a record claimed by **no** adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning). Its `provenance` names no adapter (§3.5), and it is never handed to a designated one |
+| several adapters each claiming records, none claiming a record another claims | a **mixed** build: each adapter parses the records it claimed, the builder receives all of their spans together, `meta.adapters` lists every contributor (§3.9), and each node's `provenance` names the adapter that produced it |
 
 - `--adapter <id>` bypasses classification entirely: the named adapter parses
   every record, whatever the markers say. It is the escape hatch, and it is the
@@ -1082,6 +1135,17 @@ declares reaches `0.5`.
 - **Nothing is claimed by proximity.** A record's classification is a function
   of that record alone, so it cannot depend on input order, on registration
   order, or on how many neighbours matched (§5).
+- **A mixed input is not an ambiguous one.** Each record has exactly one
+  answer, so nothing is guessed; every join is made on what the telemetry
+  stated and never on who parsed it, and an edge whose two ends came from
+  different adapters names no adapter (§3.8). Forcing one adapter over such an
+  input is still permitted and still builds: the same nodes, some of them
+  `unknown`, and without the relations that joined the two dialects.
+- **A record's `line_number` counts the input, not the partition.** An adapter
+  numbers what it is given (§3.5), and under dispatch it is given a subset, so
+  the dispatcher puts each span's number back where its record sat in the
+  input. Nothing is serialized from it either way; a diagnostic that points a
+  human at a record has to point at the file they have.
 - **Both refusals are decided over the whole input, not over a sample.** A
   record carrying two dialects' markers is refused wherever it sits, and an
   input whose first 50 records carry no marker but whose hundredth does is

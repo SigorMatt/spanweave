@@ -239,10 +239,17 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: spans per rendering report an output and no input) and `present` 118 -> 134
 #: (the three llm spans per rendering report both, and each tool span reports
 #: its result).
+#:
+#: Batch E3 added `mixed_instrumentation`: one rendering of `llm_tool_llm`'s
+#: four spans, half read by each adapter. `absent` moved 138 -> 139 (the agent
+#: span reports no output) and `present` 134 -> 141 (the other seven slots).
+#: That the states are `llm_tool_llm`'s exactly is the point of the scenario:
+#: forcing one adapter over the same file reports `absent` where content was
+#: emitted, which is the sharpest harm per-record dispatch removes.
 CORPUS_STATES = {
-    "absent": 138,
+    "absent": 139,
     "empty": 4,
-    "present": 134,
+    "present": 141,
     "redacted": 2,
     "truncated": 0,
 }

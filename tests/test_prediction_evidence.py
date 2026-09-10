@@ -79,8 +79,12 @@ def test_every_data_edge_in_the_corpus_is_declared():
 
     # 12 -> 18 at batch D2, which added `receipt_redeclared`: three `data`
     # edges per rendering, in two dialects. 11 -> 13 traces carrying one.
-    assert len(edges) == 18, "the count 3.5's record states"
-    assert len(carrying) == 13, "traces carrying at least one"
+    # 18 -> 19 at batch E3, which added `mixed_instrumentation`: one `data`
+    # edge in its one rendering, and it is the first in the corpus whose two
+    # ends were read by DIFFERENT adapters -- declared by the telemetry all
+    # the same, which is what P3 is about.
+    assert len(edges) == 19, "the count 3.5's record states"
+    assert len(carrying) == 14, "traces carrying at least one"
     assert {str(edge.warrant) for edge in edges} == {"explicit"}
     # Two bases, and P3 is untouched by the second: both say the telemetry
     # declared the receipt, and the parenthetical says only which declaration
@@ -247,9 +251,10 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
     # 32 -> 34 at batch C1, which added `timestamp_units` in both dialects.
     # 34 -> 38 at batch A5, which added the `derived_ids` pair in both.
     # 38 -> 40 at batch D2, which added `receipt_redeclared` in both.
-    assert len(traces) == 40
-    assert bytes_moved == 40, "both consumers' serialized output is order-dependent"
-    assert substance_held == 40, "no per-node value or total depends on the order"
+    # 40 -> 41 at batch E3: `mixed_instrumentation`, one rendering.
+    assert len(traces) == 41
+    assert bytes_moved == 41, "both consumers' serialized output is order-dependent"
+    assert substance_held == 41, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -290,9 +295,10 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
             a_start_time_tie += 1
             tied_traces.append(source)
 
-    # 22 -> 24 at batch A3, 24 -> 26 at batch C1, 26 -> 30 at batch A5, and
-    # 30 -> 32 at batch D2, for the same reason as the count above.
-    assert a_choice_was_made == 32, "traces where two nodes were ready at once"
+    # 22 -> 24 at batch A3, 24 -> 26 at batch C1, 26 -> 30 at batch A5,
+    # 30 -> 32 at batch D2, and 32 -> 33 at batch E3, for the same reason as
+    # the count above.
+    assert a_choice_was_made == 33, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 

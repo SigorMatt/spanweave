@@ -53,7 +53,7 @@ class Assignment:
 
 
 def derive(
-    adapter_id: str,
+    adapter_id: str | None,
     trace_id: str | None,
     source_key: str,
     record: str | None = None,
@@ -70,17 +70,34 @@ def derive(
     every id: a record whose key a second record also claims does move, from
     the rule-2 id to a rule-3 one. Rule 1's ids and every rule-2 id whose key
     stays its own are where they were.
+
+    ``adapter_id`` is ``None`` for a record **no adapter claimed**
+    (`SPEC.md` §6.1), and enters the material as the empty string -- the same
+    way an input that states no trace id does. It is not a placeholder for a
+    dialect: it is the material recording that nobody read this record.
     """
-    parts = (adapter_id, trace_id or "", source_key)
+    parts = (adapter_id or "", trace_id or "", source_key)
     material = _SEPARATOR.join(parts if record is None else (*parts, record))
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
     return f"{DERIVED_PREFIX}{digest[:DERIVED_LENGTH]}"
 
 
 def assign(
-    spans: Sequence[NormalizedSpan], adapter_id: str, trace_id: str | None
+    spans: Sequence[NormalizedSpan],
+    adapter_ids: str | Sequence[str | None] | None,
+    trace_id: str | None,
 ) -> Assignment:
-    """Give every span an id, or refuse because two of them are the same."""
+    """Give every span an id, or refuse because two of them are the same.
+
+    ``adapter_ids`` is one id for every span, or a single id when one adapter
+    produced them all. It is per span because rule 2 puts the adapter that
+    read the record into the id's material (`SPEC.md` §3.6), and under
+    per-record dispatch that is a fact about the record rather than about the
+    input (`SPEC.md` §6.1). Rule 1 -- a trace-unique span id -- never consults
+    it, which is why mixed dispatch moves no id in any trace whose dialect
+    states one.
+    """
+    per_span = _per_span(adapter_ids, len(spans))
     seen: dict[str, int] = {}
     keys: dict[str, int] = {}
     for span in spans:
@@ -89,7 +106,7 @@ def assign(
         keys[span.source_key] = keys.get(span.source_key, 0) + 1
 
     ids: list[NodeId] = []
-    for span in spans:
+    for span, adapter_id in zip(spans, per_span, strict=True):
         # A span id that is not unique within the trace does not qualify under
         # rule 1, so it falls through to a derived id. Because the adapter's
         # source key is normally that same id, those records also share a
@@ -112,6 +129,21 @@ def assign(
     _refuse_collisions(ids, spans)
     duplicates = tuple(sorted(key for key, count in seen.items() if count > 1))
     return Assignment(ids=tuple(ids), duplicate_source_ids=duplicates)
+
+
+def _per_span(
+    adapter_ids: str | Sequence[str | None] | None, count: int
+) -> tuple[str | None, ...]:
+    """One adapter id per span, whether the caller gave one or many."""
+    if adapter_ids is None or isinstance(adapter_ids, str):
+        return (adapter_ids,) * count
+    per_span = tuple(adapter_ids)
+    if len(per_span) != count:
+        raise ValueError(
+            f"{len(per_span)} adapter ids for {count} spans; every span has "
+            f"exactly one producer, or none"
+        )
+    return per_span
 
 
 def _refuse_collisions(ids: Sequence[NodeId], spans: Sequence[NormalizedSpan]) -> None:

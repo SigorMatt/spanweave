@@ -1114,6 +1114,23 @@ missing an adapter"*, which is a thing this library should be able to say.
   > the door A3 built it for — a dialect that reused a span id — and the
   > question of whether a `source_key` collision deserves its own report is
   > still E3's, on the narrower ground.
+  >
+  > **Decided — batch E3, 2026-09-10: no. `duplicate_source_id` keeps
+  > reporting the reused *span id*,** and `SPEC.md` §3.6 now says so rather
+  > than leaving it to be inferred from the code. Two grounds. **Reachability:**
+  > after A5 two records share a `source_key` *only* by sharing a span id — a
+  > digest is shared only by records that are the same record, and §7 has
+  > already collapsed those — so a key collision without an id collision
+  > cannot be produced, and a report for it would be unreachable code with a
+  > message nobody could ever read. **What the sentence would say:** the
+  > existing message reports that *the dialect* reused an id, which is a fact
+  > about the input; a `source_key` is the library's own construct, and a
+  > diagnostic about one would be the library reporting on itself.
+  > `tests/test_build.py::test_two_adapters_reusing_one_span_id_keep_both_records_and_report_it`
+  > pins the cross-adapter case that dispatch made newly reachable: both
+  > records kept, two ids, one report keyed on `"s0"`. Revisit if a dialect
+  > ever arrives whose adapter derives a key that is neither the span id nor
+  > the record digest.
 
 > **A defect this probe found that is not in the audit, is not caused by
 > dispatch, and was real when this was written — fixed by batch A5

@@ -319,23 +319,51 @@ def test_a_doubly_claimed_record_is_refused_even_beyond_the_detection_sample():
     assert "record 61" in str(failure.value)
 
 
-def test_a_record_neither_adapter_claims_is_carried_as_unclaimed():
-    """Never a discard (`CLAUDE.md` 2), and never handed over on a guess.
+STRANGER = {"span_id": "s9", "attributes": {"service.name": "whatever"}}
 
-    The record still reaches a node today, because a single-dialect input is
-    parsed whole by the adapter that claimed the rest of it. What the
-    partition adds is that the library can now *say* nobody recognized it,
-    which is the honest report of "you are missing an adapter".
-    """
-    stranger = {"span_id": "s9", "attributes": {"service.name": "whatever"}}
-    kept = [_record("openinference", 0), stranger]
+
+def test_a_record_neither_adapter_claims_is_carried_as_unclaimed():
+    """Never a discard (`CLAUDE.md` 2), and never handed over on a guess."""
+    kept = [_record("openinference", 0), STRANGER]
     partition = REGISTRY.partition(kept)
     assert partition.contributors == ("openinference",)
-    assert partition.unclaimed == (stranger,)
+    assert partition.unclaimed == (STRANGER,)
 
+
+def test_a_record_no_adapter_claims_becomes_an_unknown_node():
+    """`SPEC.md` §6.1: an `unknown` node, a warning, and no adapter named.
+
+    Before batch E3 the record was parsed by whichever adapter claimed the
+    rest of the input, so its node carried that dialect's name in its
+    `provenance` on the strength of that dialect having said nothing about
+    it. It reached a node then too -- what changes is that the library now
+    *says* nobody recognized it, which is the honest report of "you are
+    missing an adapter".
+    """
+    kept = [_record("openinference", 0), STRANGER]
     document = to_document(spanweave.build("\n".join(map(json.dumps, kept)).encode()))
     assert len(document["nodes"]) == 2
-    assert document["nodes"][1]["raw"]["source"] == stranger
+    unclaimed = document["nodes"][1]
+    assert unclaimed["raw"]["source"] == STRANGER
+    assert unclaimed["kind"] == "unknown"
+    assert unclaimed["provenance"] == {
+        "adapter_id": None,
+        "adapter_version": None,
+        "dialect_note": None,
+    }
+    # The record is not the graph's to explain away: nothing was read from it,
+    # so nothing about it is reported as read.
+    assert unclaimed["name"] == ""
+    assert unclaimed["inputs"]["state"] == "absent"
+
+    reported = [d for d in document["diagnostics"] if d["code"] == "unclaimed_record"]
+    assert len(reported) == 1
+    assert reported[0]["level"] == "warning"
+    assert reported[0]["node_id"] == unclaimed["id"]
+    assert reported[0]["source"] == STRANGER
+    assert reported[0]["adapter"] is None
+    # And the adapter that read the REST of the input is still named, once.
+    assert [a["id"] for a in document["meta"]["adapters"]] == ["openinference"]
 
 
 def test_a_marker_after_the_sample_still_decides_an_otherwise_unmarked_input():
@@ -347,30 +375,115 @@ def test_a_marker_after_the_sample_still_decides_an_otherwise_unmarked_input():
     assert [a.id for a in graph.meta.adapters] == ["openinference"]
 
 
-def test_a_trace_in_two_dialects_is_partitioned_and_still_refused_for_now():
-    """Where E leaves the library after E2, stated so the next step moves it.
-
-    The records sort themselves cleanly -- two adapters, disjoint claims, no
-    record either could argue over -- and the builder does not yet accept
-    spans from more than one adapter, so the input is refused exactly as it
-    was before classification existed. The refusal is whole-input and its
-    message says so.
-    """
-    mixed = [
+def _mixed_records():
+    """`llm_tool_llm`, half in each dialect -- the corpus fixture, in memory."""
+    return [
         _record("openinference", 0),
         _record("otel_genai", 1),
         _record("openinference", 2),
         _record("otel_genai", 3),
     ]
+
+
+def test_a_trace_in_two_dialects_is_partitioned_and_built_as_one_graph():
+    """Where E1's decision leaves the library, and what E2 could not do yet.
+
+    The records sort themselves cleanly -- two adapters, disjoint claims, no
+    record either could argue over -- and the builder now takes both sides'
+    spans together. Until batch E3 this input was **refused** by whole-input
+    selection, and the documented remedy (force an adapter) silently lost
+    every relation that joined the two dialects.
+    """
+    mixed = _mixed_records()
     partition = REGISTRY.partition(mixed)
     assert partition.contributors == ("openinference", "otel_genai")
     assert partition.unclaimed == ()
     assert [len(claim.records) for claim in partition.claims] == [2, 2]
 
-    with pytest.raises(AdapterSelectionError) as failure:
-        spanweave.build("\n".join(map(json.dumps, mixed)).encode())
-    assert failure.value.code == ADAPTER_AMBIGUOUS
-    assert "this input is ambiguous" in str(failure.value)
+    graph = spanweave.build("\n".join(map(json.dumps, mixed)).encode())
+    assert [node.id for node in graph.nodes()] == ["s0", "s1", "s2", "s3"]
+    # The two joins a single adapter cannot make, and the reason the refusal
+    # was the wrong answer rather than a safe one: each needs a field from a
+    # record the other adapter read.
+    joins = {
+        (str(edge.kind), edge.src, edge.dst)
+        for edge in graph.edges()
+        if edge.kind in (spanweave.EdgeKind.CALL_RESULT, spanweave.EdgeKind.DATA)
+    }
+    assert joins == {("call_result", "s1", "s2"), ("data", "s2", "s3")}
+    assert len(graph.edges()) == 7
+
+
+def test_a_mixed_graph_says_who_read_each_record_and_who_read_the_input():
+    mixed = spanweave.build("\n".join(map(json.dumps, _mixed_records())).encode())
+    by_node = {node.id: node.provenance.adapter_id for node in mixed.nodes()}
+    assert by_node == {
+        "s0": "openinference",
+        "s1": "otel_genai",
+        "s2": "openinference",
+        "s3": "otel_genai",
+    }
+    # Every contributor, sorted, each with the confidence IT declared over the
+    # records IT claimed (`SPEC.md` §3.9) -- not one number for the input.
+    assert [(a.id, a.declared_confidence) for a in mixed.meta.adapters] == [
+        ("openinference", 0.9),
+        ("otel_genai", 0.9),
+    ]
+    assert all(a.version for a in mixed.meta.adapters)
+
+
+def test_an_edge_names_an_adapter_only_when_both_its_ends_came_from_one():
+    """`SPEC.md` §3.8: `null` rather than a false attribution.
+
+    The `parent` edges are the control. Their ends disagree too -- s0 is an
+    OpenInference record and s1 is a GenAI one -- so if `adapter` named the
+    span that stated the relation instead of refusing to choose, these would
+    read `openinference` and the assertion below would be the wrong shape.
+    """
+    mixed = spanweave.build("\n".join(map(json.dumps, _mixed_records())).encode())
+    named = {(str(e.kind), e.src, e.dst): e.adapter for e in mixed.edges()}
+    assert named[("parent", "s0", "s1")] is None
+    assert named[("parent", "s0", "s2")] == "openinference"
+    assert named[("call_result", "s1", "s2")] is None
+    assert named[("data", "s2", "s3")] is None
+    assert named[("temporal", "s1", "s2")] is None
+
+    # And the single-dialect control: every explicit edge names its adapter.
+    pure = spanweave.build(MIXED_SCENARIO / "openinference.jsonl")
+    assert {
+        edge.adapter
+        for edge in pure.edges()
+        if edge.warrant is spanweave.Warrant.EXPLICIT
+    } == {"openinference"}
+
+
+def test_the_mixed_build_keeps_every_record_s_line_number():
+    """A number that counts a partition nobody can see points at nothing.
+
+    Each adapter numbers the subset it was handed (`ADAPTERS.md` §3), so
+    without the dispatcher putting them back, s2 and s3 would report lines 2
+    and 2 -- and `RawRecord.line_number` is what a diagnostic points a human
+    at (`SPEC.md` §3.5, §6.1).
+    """
+    mixed = spanweave.build("\n".join(map(json.dumps, _mixed_records())).encode())
+    assert [node.raw.line_number for node in mixed.nodes()] == [1, 2, 3, 4]
+
+
+def test_forcing_an_adapter_over_a_mixed_trace_still_loses_the_joins():
+    """The escape hatch, and what it costs -- unchanged by E3 (`SPEC.md` §6.1).
+
+    The node count is identical, which is what makes the loss quiet: a
+    consumer reading `nodes` and not `diagnostics` sees a complete-looking
+    four-node trace with two `unknown` spans and no tool call.
+    """
+    body = "\n".join(map(json.dumps, _mixed_records())).encode()
+    mixed = spanweave.build(body)
+    for dialect in SHIPPED:
+        forced = spanweave.build(body, adapter=dialect)
+        assert forced.meta.node_count == mixed.meta.node_count == 4
+        assert len(forced.edges()) == 5 < len(mixed.edges())
+        assert [a.id for a in forced.meta.adapters] == [dialect]
+        assert {node.provenance.adapter_id for node in forced.nodes()} == {dialect}
 
 
 def test_an_input_no_adapter_claims_at_all_is_still_refused_the_same_way():

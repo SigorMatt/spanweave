@@ -170,10 +170,21 @@ class RawRecord:
 
 @dataclass(frozen=True, slots=True)
 class Provenance:
-    """Which adapter, at which version, produced a node."""
+    """Which adapter, at which version, produced a node.
 
-    adapter_id: str
-    adapter_version: str
+    Both are ``None`` on a node **no adapter produced**: a record no
+    registered adapter claimed is kept as an `unknown` node carrying the
+    record verbatim, plus an `unclaimed_record` diagnostic (`SPEC.md` §6.1).
+    Naming an adapter there would say a dialect read a record it declined,
+    and provenance is the one field whose whole job is to say who read this.
+
+    Nullable since the September 2026 audit's batch E3, taken while the schema
+    is unfrozen: after the freeze it would be a breaking change needing a
+    version bump and a migration note (`CLAUDE.md` 7).
+    """
+
+    adapter_id: str | None
+    adapter_version: str | None
     #: Anything the adapter wants a human to know about this record.
     dialect_note: str | None = None
 
@@ -232,7 +243,10 @@ class Edge:
     #: can audit it instead of trusting it: "span.parent_span_id",
     #: "tool_call_id", "sibling start_time ordering".
     basis: str
-    #: Who asserted it, when the adapter did.
+    #: Who asserted it, when the adapter did -- and `None` when the edge's
+    #: ends came from **different** adapters, because naming one dialect for
+    #: a relation two dialects made would be a false attribution
+    #: (`SPEC.md` §3.8).
     adapter: str | None = None
 
     def __post_init__(self) -> None:

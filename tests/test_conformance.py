@@ -31,6 +31,7 @@ from tests.conformance import (
     Rendering,
     adapter_backed,
     canonical,
+    dialect_parts,
     renderings,
     scenarios,
     split_erasures,
@@ -92,6 +93,12 @@ DEGENERATE = (
     # by more than one span, so `SPEC.md` §4.2.1's rank -- which declaration
     # came first -- was exercised by nothing (`OPEN_QUESTIONS.md` §11).
     "receipt_redeclared",
+    # Added at the September 2026 audit's batch E3, not seeded: no file in the
+    # corpus carried two instrumentors' records, so `SPEC.md` §6.1's mixed
+    # build -- and every edge that joins two dialects -- was exercised by
+    # nothing (audit finding 1, `OPEN_QUESTIONS.md` §12). It is the same run as
+    # `llm_tool_llm` and shares that scenario's expected graph.
+    "mixed_instrumentation",
 )
 
 
@@ -1009,3 +1016,104 @@ def test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect():
         ("unpaired_call", "s1"): {"call_id": "call_a", "operation": "lookup"},
         ("unpaired_result", "s2"): {"call_id": "call_b", "operation": "other"},
     }
+
+
+# --------------------------------------------------------------------------
+# Mixed instrumentation (September 2026 audit, batch E3)
+# --------------------------------------------------------------------------
+#
+# `mixed_instrumentation` is the same run as `llm_tool_llm`, described half by
+# each dialect in one file. Its expected graph is that scenario's expected
+# graph, and the equality below is the acceptance test for per-record
+# dispatch: composition is what is being asserted, so a mixed trace that built
+# *a* graph but not *the* graph would be a failure that looks like a pass.
+
+MIXED = "openinference+otel_genai"
+
+
+def _mixed():
+    return next(s for s in BUILDABLE if s.name == "mixed_instrumentation")
+
+
+def _mixed_rendering():
+    scenario = _mixed()
+    return Rendering(scenario=scenario, dialect=MIXED, path=scenario.rendering(MIXED))
+
+
+def test_a_mixed_rendering_is_named_for_every_adapter_that_reads_it():
+    # `+` is not a dialect and must never become one: nothing is obliged to
+    # render a mix, and no adapter answers to the composite name.
+    scenario = _mixed()
+    assert [path.stem for path in scenario.dialects] == [MIXED]
+    assert MIXED not in DIALECTS
+    assert dialect_parts(MIXED) == DIALECTS
+    assert _mixed_rendering().supported
+
+
+def test_the_mixed_scenario_expects_llm_tool_llm_s_graph_byte_for_byte():
+    # The two files, not two built graphs: "one canonical graph" is a claim
+    # about the corpus as well as about the library, and a copy that drifted
+    # would let the assertion below pass against a graph nobody else expects.
+    assert (CORPUS / "mixed_instrumentation/expected/graph.json").read_bytes() == (
+        CORPUS / "llm_tool_llm/expected/graph.json"
+    ).read_bytes()
+
+
+def test_a_mixed_trace_produces_the_same_canonical_graph_as_each_pure_one():
+    """CLAIM 2, across scenarios rather than within one -- batch E3's acceptance.
+
+    A dialect is a property of a record (`SPEC.md` §6.1), so a trace whose
+    records come from two instrumentors describes the same run as either
+    instrumentor describing it alone, and must produce the same graph. The
+    `llm_tool_llm` declarations are applied to **both** sides: the mixed
+    rendering takes s1 and s3's payload values from OTel GenAI, which is
+    exactly the disagreement that scenario already declares.
+    """
+    reference = _llm_tool_llm()
+    forms = {
+        path.stem: canonical(
+            to_document(spanweave.build(path)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        for path in reference.dialects
+        if path.stem in adapter_backed()
+    }
+    assert len(forms) > 1, "vacuous: only one dialect of the reference built"
+    mixed = canonical(
+        to_document(spanweave.build(_mixed().rendering(MIXED))),
+        reference.erase,
+        reference.drop_payloads,
+    )
+    for dialect in sorted(forms):
+        assert mixed == forms[dialect], (
+            f"the mixed rendering disagrees with {dialect}'s. Per-record "
+            f"dispatch is supposed to recover exactly the graph either "
+            f"instrumentor produces on its own"
+        )
+
+
+def test_forcing_one_adapter_over_the_mixed_trace_keeps_the_node_count(caplog):
+    """What the escape hatch costs, pinned rather than described.
+
+    `--adapter <id>` still parses every record with the named adapter
+    (`SPEC.md` §6.1), and the loss is quiet: the same four nodes, two of them
+    `unknown`, and both edges that join the two dialects gone. The node count
+    is what makes it quiet, so it is the thing asserted -- a mixed build and a
+    forced build of one file differ in *provenance*, never in `node_count`.
+    """
+    path = _mixed().rendering(MIXED)
+    mixed = spanweave.build(path)
+    assert mixed.meta.node_count == 4
+    assert len(mixed.edges()) == 7
+
+    for dialect in DIALECTS:
+        forced = spanweave.build(path, adapter=dialect)
+        assert forced.meta.node_count == mixed.meta.node_count
+        assert len(forced.edges()) == 5
+        assert [str(edge.kind) for edge in forced.edges()].count("call_result") == 0
+        assert [str(edge.kind) for edge in forced.edges()].count("data") == 0
+        assert (
+            sum(1 for node in forced.nodes() if node.kind is spanweave.NodeKind.UNKNOWN)
+            == 2
+        )

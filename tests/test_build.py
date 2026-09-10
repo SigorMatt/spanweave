@@ -16,6 +16,8 @@ from spanweave.build import (
     DATA_TIED_BASIS,
     LINK_BASIS,
     TIMESTAMP_UNIT_CEILING,
+    Contribution,
+    build_contributed_graph,
     build_graph,
 )
 from spanweave.diagnostics import DiagnosticCollector
@@ -922,3 +924,120 @@ def test_a_duplicated_span_id_builds_the_same_graph_in_any_order():
         return json.dumps([(n.id, n.name) for n in graph.nodes()], sort_keys=True)
 
     assert document(lines) == document(list(reversed(lines)))
+
+
+# --------------------------------------------------------------------------
+# Several producers, one graph (batch E3; SPEC.md 6.1)
+# --------------------------------------------------------------------------
+#
+# The builder is handed spans and an `AdapterInfo` beside each. It never
+# learns that "two dialects" is a thing that happened -- these tests use two
+# stub adapters for exactly that reason: what is being asserted is that the
+# builder joins on what the telemetry stated and attributes on who produced
+# what, not that the two shipped dialects interoperate (`test_detection.py`
+# asserts that, over real records).
+
+OTHER = AdapterInfo(id="another_dialect", version="9.9.9", declared_confidence=0.7)
+
+
+def mixed_build(pairs, **kwargs):
+    """`pairs` is (AdapterInfo | None, [spans]), in the order given."""
+    kwargs.setdefault("temporal", False)
+    return build_contributed_graph(
+        [
+            Contribution(adapter=producer, spans=tuple(spans))
+            for producer, spans in pairs
+        ],
+        **kwargs,
+    )
+
+
+def test_each_node_names_the_adapter_that_produced_it():
+    graph = mixed_build(
+        [(ADAPTER, [a_span("s0")]), (OTHER, [a_span("s1", "s0", line=2)])]
+    )
+    assert {n.id: n.provenance.adapter_id for n in graph.nodes()} == {
+        "s0": "some_dialect",
+        "s1": "another_dialect",
+    }
+    assert {n.id: n.provenance.adapter_version for n in graph.nodes()} == {
+        "s0": "0.1.0",
+        "s1": "9.9.9",
+    }
+
+
+def test_meta_lists_every_contributor_with_its_own_declared_confidence():
+    graph = mixed_build(
+        [(OTHER, [a_span("s1", "s0", line=2)]), (ADAPTER, [a_span("s0")])]
+    )
+    # Sorted by (id, version), never by the order the contributions arrived.
+    assert [(a.id, a.declared_confidence) for a in graph.meta.adapters] == [
+        ("another_dialect", 0.7),
+        ("some_dialect", 0.9),
+    ]
+
+
+def test_an_edge_whose_ends_came_from_two_adapters_names_neither():
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0"), a_span("s1", "s0", line=2)]),
+            (OTHER, [a_span("s2", "s0", line=3)]),
+        ]
+    )
+    named = {(e.src, e.dst): e.adapter for e in graph.edges(kind=EdgeKind.PARENT)}
+    assert named == {("s0", "s1"): "some_dialect", ("s0", "s2"): None}
+
+
+def test_a_link_leaving_the_trace_still_names_the_adapter_that_stated_it():
+    # The end that is not a node is not consulted (`SPEC.md` §3.8), so a
+    # dangling link is not silently downgraded to "no adapter".
+    graph = mixed_build(
+        [(ADAPTER, [a_span("s0", links=(SpanLink(span_id="elsewhere"),))])]
+    )
+    assert [e.adapter for e in graph.edges(kind=EdgeKind.LINK)] == ["some_dialect"]
+
+
+def test_a_span_no_adapter_produced_is_a_node_with_no_provenance():
+    graph = mixed_build([(ADAPTER, [a_span("s0")]), (None, [a_span("s9", line=2)])])
+    stranger = next(n for n in graph.nodes() if n.id == "s9")
+    assert stranger.provenance.adapter_id is None
+    assert stranger.provenance.adapter_version is None
+    # And it adds no entry to meta: there is nobody to name.
+    assert [a.id for a in graph.meta.adapters] == ["some_dialect"]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_several_adapters_read_it():
+    # `missing_trace_id` is one statement about the input (`SPEC.md` §7), and
+    # under a mixed build no single adapter made it.
+    one = mixed_build([(ADAPTER, [a_span("s0", trace=None)])])
+    several = mixed_build(
+        [(ADAPTER, [a_span("s0", trace=None)]), (OTHER, [a_span("s1", trace=None)])]
+    )
+    assert [(d.code, d.adapter) for d in one.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    assert [(d.code, d.adapter) for d in several.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_two_adapters_reusing_one_span_id_keep_both_records_and_report_it():
+    """`SPEC.md` §3.6 rule 3 through the door dispatch opens.
+
+    The report is keyed on the reused **span id**, which is the fact about
+    the input; the two node ids are separated by the records' own digests,
+    which is the library's own construct and reports nothing
+    (`OPEN_QUESTIONS.md` §12(f), decided at batch E3).
+    """
+    mine = a_span("s0", name="mine")
+    theirs = dataclasses.replace(
+        a_span("s0", name="theirs", line=2),
+        raw=RawRecord(source={"span_id": "s0", "other": True}, source_id="s0"),
+    )
+    graph = mixed_build([(ADAPTER, [mine]), (OTHER, [theirs])])
+    assert len(graph.nodes()) == 2
+    assert {n.id for n in graph.nodes()} == {n.id for n in graph.nodes()}
+    assert all(n.id.startswith("sw_") for n in graph.nodes())
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert len(reported) == 1
+    assert reported[0].source == "s0"

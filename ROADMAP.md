@@ -625,10 +625,16 @@ once and counted twice is not a gate.
 
 **The shape has never been observed here, and that is recorded as a measurement
 rather than assumed away.** Over the fixture corpus this repository carries —
-**49** `*.jsonl` files, **139** records — **0** records carry both dialects'
-markers and every record carries exactly one. `tests/test_doc_truth.py`
-recomputes all three numbers, so a corpus that grows fails this sentence instead
-of outliving it. The measurement the freeze decision was taken on is
+**50** `*.jsonl` files, **143** records — **0** records carry both dialects'
+markers and every record carries exactly one. **1** file carries records of
+both: `fixtures/conformance/mixed_instrumentation/`, built by the audit
+series' batch E3 out of two existing renderings of one scenario, because
+per-record dispatch had to be testable against something. **Constructed is not
+observed**, and the two numbers sit side by side rather than one replacing the
+other: a file written here is this project's idea of the shape, and the whole
+point of the paragraph is that nobody has seen the real one.
+`tests/test_doc_truth.py` recomputes all four numbers, so a corpus that grows
+fails this sentence instead of outliving it. The measurement the freeze decision was taken on is
 `OPEN_QUESTIONS.md` §12(c)'s scan of **57 files and 177 records** on
 `2026-09-10`, which found the same **0**; that scan was of a working tree rather
 than of a checkout — it exceeds the then-committed 43 files and 117 records by

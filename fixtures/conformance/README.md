@@ -82,6 +82,19 @@ Added since, each for a reason recorded at its task:
   mirror property: the resent **request**, which must produce no
   `call_result` edge.
 
+- **`mixed_instrumentation`** (September 2026 audit, batch E3). No file in the
+  corpus carried two instrumentors' records, so nothing exercised the case a
+  real deployment produces by installing a framework instrumentor beside an
+  SDK one: they share a `TracerProvider` and their spans share an export
+  (audit finding 1, `OPEN_QUESTIONS.md` §12). Forced to one adapter, such a
+  file loses **every** relation that joins the two dialects — `call_result`
+  and `data` here — and reports `absent` payloads where content was emitted,
+  in a graph that still looks complete. This scenario is `llm_tool_llm`'s own
+  run, half in each dialect, and its `expected/graph.json` is that scenario's
+  file byte for byte. Its one rendering is named for both adapters that read
+  it, `openinference+otel_genai.jsonl`; `+` is not a dialect and nothing is
+  obliged to render a mix.
+
 ## Three things this README used to get wrong, kept as a warning
 
 - **`declared_data_edge` "has no rendering."** It did not, on the stated

@@ -146,8 +146,8 @@
    "value": "JsonValue"
   },
   "Provenance": {
-   "adapter_id": "str",
-   "adapter_version": "str",
+   "adapter_id": "str | None",
+   "adapter_version": "str | None",
    "dialect_note": "str | None"
   },
   "RawRecord": {
@@ -221,6 +221,7 @@
    "orphan_parent",
    "payload_parse_failed",
    "timestamp_unit_suspect",
+   "unclaimed_record",
    "unknown_span_kind",
    "unmapped_attributes",
    "unpaired_call",

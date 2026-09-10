@@ -42,7 +42,7 @@ import shlex
 
 import spanweave
 from spanweave.adapters import MINIMUM_CONFIDENCE, registered
-from tests.conformance import CORPUS, adapter_backed, scenarios
+from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -403,14 +403,27 @@ def test_the_readme_status_is_not_written_in_phase_numbers():
 # -- Counts, recomputed rather than reread ---------------------------------
 
 
-def corpus_counts() -> tuple[int, int, int, int]:
-    """(scenarios, rendered in two dialects, rendered in one, declaring `name`)."""
+def corpus_counts() -> tuple[int, int, int, int, int]:
+    """(scenarios, in two dialects, in one, declaring `name`, mixed).
+
+    "Mixed" is the fifth number and it is not a dialect: a rendering whose
+    stem names several adapters (`openinference+otel_genai`) is one file two
+    adapters read, which is a shape rather than a coverage gap. Counting it
+    among the single-dialect scenarios would make the README say four
+    scenarios are rendered in one dialect when one of them is rendered in
+    none.
+    """
     backed = adapter_backed()
     found = scenarios()
     cross = [
         scenario
         for scenario in found
         if len([p for p in scenario.dialects if p.stem in backed]) > 1
+    ]
+    mixed = [
+        scenario
+        for scenario in found
+        if any(len(dialect_parts(p.stem)) > 1 for p in scenario.dialects)
     ]
     declaring = [
         scenario
@@ -419,7 +432,13 @@ def corpus_counts() -> tuple[int, int, int, int]:
         and "name"
         in (scenario.path / "expected/comparison.json").read_text(encoding="utf-8")
     ]
-    return len(found), len(cross), len(found) - len(cross), len(declaring)
+    return (
+        len(found),
+        len(cross),
+        len(found) - len(cross) - len(mixed),
+        len(declaring),
+        len(mixed),
+    )
 
 
 def test_the_readme_conformance_numbers_are_the_corpus_s_numbers():
@@ -430,13 +449,14 @@ def test_the_readme_conformance_numbers_are_the_corpus_s_numbers():
     most entitled to trust. The section previously said every scenario is
     expressed in multiple dialects; four are not, each for a declared reason.
     """
-    total, cross, single, declaring = corpus_counts()
-    assert total > 0 and cross > 0 and single > 0 and declaring > 0
+    total, cross, single, declaring, mixed = corpus_counts()
+    assert total > 0 and cross > 0 and single > 0 and declaring > 0 and mixed > 0
     text = section(read("README.md"), "\n## Conformance")
     for claim in (
         f"holds\n**{total}** scenarios",
         f"**{cross}** are rendered in both dialects",
         f"The other **{single}** are rendered in one",
+        f"And **{mixed}** is rendered as a single trace carrying **both**",
         f"**{declaring} of those {cross} cross-dialect scenarios declare it**",
     ):
         flattened = claim.replace("\n", " ")
@@ -1334,8 +1354,8 @@ def test_the_two_weaker_statements_of_the_outside_use_gate_point_at_it():
     )
 
 
-def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]]:
-    """Files, records, and how many adapters claim each record.
+def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int], int]:
+    """Files, records, how many adapters claim each record, and mixed files.
 
     The claim is made with `detect([record])`, which `OPEN_QUESTIONS.md`
     §12(d) measured against a direct marker scan over the whole corpus with
@@ -1347,7 +1367,9 @@ def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]
     records = 0
     claims: dict[int, int] = {}
     unreadable: list[str] = []
+    mixed_files = 0
     for path in files:
+        per_file: set[str] = set()
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if not line.strip():
                 continue
@@ -1357,17 +1379,23 @@ def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]
             except ValueError:
                 unreadable.append(f"{path.relative_to(ROOT)}:{number}")
                 continue
-            claimed = sum(
-                1
+            claiming = [
+                adapter.id
                 for adapter in adapters
                 if adapter.detect([record]) >= MINIMUM_CONFIDENCE
-            )
-            claims[claimed] = claims.get(claimed, 0) + 1
+            ]
+            per_file.update(claiming)
+            claims[len(claiming)] = claims.get(len(claiming), 0) + 1
+        # A file two adapters read is a different measurement from a record
+        # two adapters claim, and the roadmap states both: the first is the
+        # mixed-instrumentation shape, the second is the ambiguity that shape
+        # is NOT (`SPEC.md` §6.1).
+        mixed_files += len(per_file) > 1
     assert not unreadable, (
         "these corpus lines are not JSON, so no adapter can be asked about "
         "them and this sweep cannot say what they carry: " + ", ".join(unreadable)
     )
-    return len(files), records, claims
+    return len(files), records, claims, mixed_files
 
 
 def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
@@ -1379,7 +1407,7 @@ def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
     can recompute from a checkout is the kind of claim this file exists to
     stop. The zero is the same in both.
     """
-    files, records, claims = dialect_claims_over_the_committed_corpus()
+    files, records, claims, mixed_files = dialect_claims_over_the_committed_corpus()
     stated = re.search(
         r"\*\*(\d+)\*\* `\*\.jsonl` files, \*\*(\d+)\*\* records",
         flat(read("ROADMAP.md")),
@@ -1408,6 +1436,24 @@ def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
     assert "**0** records carry both dialects' markers" in flat(read("ROADMAP.md")), (
         "ROADMAP.md no longer states the zero itself, which is the half of "
         "the measurement the freeze rule turns on"
+    )
+    # The fourth number, added with `mixed_instrumentation` (batch E3). The
+    # zero above is about RECORDS and stayed zero; what the corpus gained is a
+    # FILE holding two dialects, and a document that recorded only the zero
+    # would now read as "no mixed trace here" while one sits in `fixtures/`.
+    assert f"**{mixed_files}** file carries records of both" in flat(
+        read("ROADMAP.md")
+    ) or f"**{mixed_files}** files carry records of both" in flat(read("ROADMAP.md")), (
+        f"{mixed_files} corpus file(s) carry records of both dialects and "
+        f"ROADMAP.md does not say so. The absence it records is about the "
+        f"OUTSIDE world; a constructed fixture does not refute it, and "
+        f"leaving it unstated makes the sentence read as though the "
+        f"repository holds no such file at all"
+    )
+    assert "Constructed is not observed" in flat(read("ROADMAP.md")), (
+        "ROADMAP.md no longer distinguishes the constructed fixture from an "
+        "observation. That distinction is the whole reason both numbers are "
+        "stated"
     )
 
 

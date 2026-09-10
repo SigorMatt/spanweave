@@ -152,8 +152,8 @@ green fields are cross-checked against this table by the test.
 | `nodes[].usage.extra` | `Mapping[str, int]` | — | corpus pin | unstated + pinned |
 | `nodes[].raw.source` | `JsonValue` | `SPEC.md` §3.5 | `tests/test_serialize.py::test_the_verbatim_source_round_trips_byte_for_byte`, `tests/test_determinism.py::test_every_record_of_the_worked_example_is_accounted_for`, `tests/test_conformance.py::test_every_rendering_accounts_for_every_record` | stated + asserted |
 | `nodes[].raw.source_id` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
-| `nodes[].provenance.adapter_id` | `str` | `SPEC.md` §3.5 | corpus pin | stated + pinned |
-| `nodes[].provenance.adapter_version` | `str` | — | — | unstated, unmeasured |
+| `nodes[].provenance.adapter_id` | `str \| None` | `SPEC.md` §3.5 | corpus pin | stated + pinned |
+| `nodes[].provenance.adapter_version` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
 | `nodes[].provenance.dialect_note` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
 
 ### `edges[]`
@@ -300,10 +300,13 @@ the library rely on that no document states and no test asserts?*
   therefore the thing `duplicate_source_id` is about. Present and non-null on
   every node of every fixture; erased by `canonical()`; asserted nowhere.
 - `nodes[].provenance.adapter_id` — that it names the adapter that parsed *this*
-  record, which is what makes a mixed-adapter graph readable. Pinned by one
-  fixture literal.
-- `nodes[].provenance.adapter_version` — that it is the adapter's version. No
-  document states it, no test asserts it, and it duplicates
+  record, which is what makes a mixed-adapter graph readable, and that it is
+  `null` where no adapter did (`SPEC.md` §3.5, §6.1). Pinned by one fixture
+  literal; the null half is asserted by
+  `tests/test_detection.py::test_a_record_no_adapter_claims_becomes_an_unknown_node`.
+- `nodes[].provenance.adapter_version` — that it is the adapter's version, and
+  `null` beside a `null` id. §3.5 states it since batch E3 of the September
+  2026 audit series; no test asserts the version itself, and it duplicates
   `meta.adapters[].version` with nothing relating the two.
 - `nodes[].provenance.dialect_note` — stated as deliberately free-form
   ("anything the adapter wants a human to know"), which is a real contract and
@@ -339,8 +342,8 @@ the library rely on that no document states and no test asserts?*
   was false for three of them until this session corrected and asserted it.
   What is still relied on: that a consumer can branch on `code` to know
   `source`'s shape. True for the nine rows now stated; the catch-all still
-  covers two codes no fixture emits (`duplicate_record`, `multi_trace_input`),
-  so for those it is stated and unmeasured. Both halves of that sentence said
+  covers three codes no fixture emits (`duplicate_record`, `multi_trace_input`,
+  `unclaimed_record`), so for those it is stated and unmeasured. Both halves of that sentence said
   something else — "seven rows", and `duplicate_source_id` and
   `malformed_record` among the unmeasured — until batch A7 of the September
   2026 audit series: the table gained rows, and A3 gave `duplicate_source_id`

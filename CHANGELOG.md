@@ -15,6 +15,63 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A trace whose records come from two instrumentors now builds as one
+  graph.** The builder takes spans from several adapters at once: each adapter
+  parses the records it claimed, an `AdapterInfo` travels beside each span,
+  and `meta.adapters` carries every contributor with the confidence **it**
+  declared over the records **it** claimed. Until now such an input was
+  refused, and the remedy the refusal named -- force one adapter -- silently
+  lost every relation that joined the two dialects: on the new
+  `mixed_instrumentation` fixture, two of seven edges, both of them the
+  `explicit` ones (`call_result` and `data`), while payloads reported `absent`
+  where content had been emitted and the graph still looked complete. The node
+  count is the same either way, which is what made the loss quiet, and a test
+  pins that equality beside the edges. (audit finding 1, the build half;
+  `SPEC.md` §6.1, §3.9)
+
+  The acceptance test is an equality between two scenarios: the mixed
+  rendering's canonical graph **is** `llm_tool_llm`'s, whose expected
+  `graph.json` it shares byte for byte. The builder joins on what the
+  telemetry stated and never on who parsed it, so nothing about a relation
+  depends on the partition.
+
+- **`Provenance.adapter_id` and `adapter_version` are now `str | None`, and a
+  record no adapter claims becomes an `unknown` node plus a new
+  `unclaimed_record` warning.** It is never handed to a designated adapter:
+  that would put a dialect's name on a node on the strength of that dialect
+  having said nothing about the record, and provenance is the one field whose
+  whole job is to say who read this. The node carries the record verbatim and
+  nothing normalized -- nobody read it, so nothing in it has been read. **This
+  moves the serialized graph** (`tests/serialized_shape.json` regenerated:
+  the two `Provenance` types, and the new code in the diagnostic vocabulary);
+  the schema is unfrozen and this is the window in which the change is a minor
+  release rather than a migration (`CLAUDE.md` 7). (`SPEC.md` §3.5, §3.7, §6.1)
+
+- **`Edge.adapter` is `null` when the edge's two ends came from different
+  adapters.** Naming either dialect would attribute to it a relation the two of
+  them made together; `null` is the value the field already carries for every
+  `temporal` edge. An end that is not a node in this graph -- a `link` pointing
+  outside the trace -- is not consulted, so a dangling link still names the
+  adapter of the span that stated it. (`SPEC.md` §3.8)
+
+- **Conformance scenario `mixed_instrumentation`.** `llm_tool_llm`'s run,
+  described half by each instrumentor in one file, every record verbatim from
+  that scenario's two renderings. Its single rendering is named for both
+  adapters that read it (`openinference+otel_genai.jsonl`); `+` is not a
+  dialect, is not in `tests/conformance.py`'s `DIALECTS`, and nothing is
+  obliged to render a mix (`FIXTURES.md` §4.3.1). Determinism is asserted where
+  the new mechanism could reach it: a shuffled mixed trace produces the same
+  document **and** the same id-to-record binding.
+
+- **Decided: `duplicate_source_id` keeps reporting the reused span id**, not
+  the `source_key` (`OPEN_QUESTIONS.md` §12(f), asked by the E1 memo). Since
+  the fallback key became the record's canonical digest, a `source_key`
+  collision without a span-id collision is unreachable -- and the message
+  reports something *the dialect* did, where a `source_key` is the library's
+  own construct. The cross-adapter case dispatch made newly reachable is now a
+  test: two adapters reusing one span id keep both records, get two ids from
+  the records' own digests, and draw one report. (`SPEC.md` §3.6)
+
 - **A dialect is now decided per record, not per file.** The registry gained
   `classify(record)` -- which adapters claim this one record -- and
   `partition(records)`, which sorts a whole input into them; `spanweave.build`

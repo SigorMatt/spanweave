@@ -291,3 +291,67 @@ def test_shuffling_span_id_less_records_does_not_rebind_their_ids():
 def test_every_span_id_less_record_is_accounted_for():
     document = spanweave.to_document(spanweave.build(DERIVED_ID_EXAMPLE))
     determinism.assert_every_record_accounted_for(DERIVED_ID_RECORDS, document)
+
+
+# --------------------------------------------------------------------------
+# The same properties over a trace TWO adapters read (batch E3)
+# --------------------------------------------------------------------------
+#
+# Everything above runs on a file one adapter reads whole. Under per-record
+# dispatch the records are partitioned before they are parsed, and a partition
+# is built by walking the input -- which is a second place file order could
+# reach the result, and the only one the shuffle checks above cannot see.
+
+MIXED_EXAMPLE = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "fixtures/conformance/mixed_instrumentation/dialects"
+    / "openinference+otel_genai.jsonl"
+)
+MIXED_RECORDS = [
+    json.loads(line)
+    for line in MIXED_EXAMPLE.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+
+
+def test_the_mixed_records_really_come_from_two_dialects():
+    # Otherwise everything below is a third run of the tests above.
+    from spanweave.adapters import classify
+
+    assert sorted({classify(record) for record in MIXED_RECORDS}) == [
+        ("openinference",),
+        ("otel_genai",),
+    ]
+
+
+def test_shuffling_a_mixed_trace_changes_nothing():
+    determinism.assert_order_independent(MIXED_RECORDS, _document_of)
+
+
+def test_shuffling_a_mixed_trace_does_not_rebind_its_ids():
+    # A5's lesson, applied to the new mechanism: byte-identity alone would not
+    # catch a rebinding, because ids are assigned in node order.
+    def binding(records):
+        graph = spanweave.build(_bytes_of(records))
+        return {
+            node.id: (node.raw.source["name"], node.provenance.adapter_id)
+            for node in graph.nodes()
+        }
+
+    forwards = binding(MIXED_RECORDS)
+    assert len(forwards) == 4
+    assert forwards == binding(list(reversed(MIXED_RECORDS)))
+
+
+def test_every_record_of_a_mixed_trace_is_accounted_for():
+    document = spanweave.to_document(spanweave.build(MIXED_EXAMPLE))
+    determinism.assert_every_record_accounted_for(MIXED_RECORDS, document)
+
+
+def test_a_record_no_adapter_claims_is_accounted_for_too():
+    # Losslessness where it is least automatic: nobody parsed this record, so
+    # nothing but the dispatcher could have kept it (`SPEC.md` §6.1).
+    records = [*MIXED_RECORDS, {"span_id": "s9", "attributes": {"nonsense": 1}}]
+    document = spanweave.to_document(spanweave.build(_bytes_of(records)))
+    determinism.assert_every_record_accounted_for(records, document)
+    determinism.assert_order_independent(records, _document_of)

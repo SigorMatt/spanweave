@@ -255,6 +255,21 @@ def _by_code(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
 #: exemption list is an invitation to put something in it.
 DIALECTS = ("openinference", "otel_genai")
 
+#: What separates the dialect ids in the stem of a rendering **several**
+#: adapters read: `openinference+otel_genai.jsonl`. A dialect is a property of
+#: a record rather than of a file (`SPEC.md` §6.1), so one file can carry two
+#: instrumentors' records, and the corpus needs a way to name that file's
+#: contents without inventing a dialect for it. `+` is that way, and it is
+#: deliberately **not** a member of `DIALECTS`: nothing is obliged to render a
+#: mix, no adapter answers to the composite name, and the parts are the only
+#: things a registry ever sees.
+COMPOSITE = "+"
+
+
+def dialect_parts(dialect: str) -> tuple[str, ...]:
+    """The dialects a rendering's stem names -- one, or several joined by `+`."""
+    return tuple(dialect.split(COMPOSITE))
+
 
 @dataclass(frozen=True)
 class Scenario:
@@ -410,7 +425,15 @@ class Rendering:
 
     @property
     def supported(self) -> bool:
-        return self.dialect in adapter_backed()
+        """Can the library read this rendering at all?
+
+        Every dialect the stem names must have an adapter -- one name, or
+        each part of a composite. A mixed rendering is buildable exactly when
+        both of its halves are, which is the same question asked twice and
+        never a new capability of the harness.
+        """
+        backed = adapter_backed()
+        return all(part in backed for part in dialect_parts(self.dialect))
 
     @property
     def skip_reason(self) -> str:

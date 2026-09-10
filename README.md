@@ -173,11 +173,16 @@ canonical graph**. That equivalence is the library's entire reason to exist, and
 it is a test, not a claim: `make conformance`.
 
 **What it covers today, in numbers rather than adjectives.** The corpus holds
-**25** scenarios. **21** are rendered in both dialects and compared across them.
+**26** scenarios. **21** are rendered in both dialects and compared across them.
 The other **4** are rendered in one, because the second dialect genuinely cannot
 express them — and each says so in a `coverage.json` file carrying the reason,
 because silence would be indistinguishable from an adapter nobody got round to
-(`FIXTURES.md` §4.3).
+(`FIXTURES.md` §4.3). And **1** is rendered as a single trace carrying **both**
+dialects' records, because a mixed trace is the shape it is about: a dialect is
+a property of a record rather than of a file, so one file can hold two
+instrumentors' spans and still be one run (`SPEC.md` §6.1). Its expected graph
+is the graph the single-dialect renderings of that same run produce — that
+equality is the assertion.
 
 **One field is set aside, said here rather than found later.** A scenario may
 declare a field *dialect-varying* — a reviewable file in the corpus, never a
