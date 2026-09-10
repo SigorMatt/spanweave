@@ -763,6 +763,87 @@ def test_an_id_with_no_role_beside_it_reports_only_the_id():
     assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
 
 
+@pytest.mark.parametrize("key", ["tool.name", "llm.model_name", "embedding.model_name"])
+@pytest.mark.parametrize("value", [7, None, {"name": "lookup"}, [], True])
+def test_a_name_the_adapter_cannot_read_decides_nothing_and_stays_reported(key, value):
+    # The same rule one function over: `_operation` used to mark all three
+    # name keys consumed BEFORE reading any of them, so a name it could not
+    # read as a string left `operation` None and vanished from `unmapped`
+    # anyway. A key that decided nothing was not acted on (SPEC.md 3.7).
+    span = span_of({"openinference.span.kind": "TOOL", key: value})
+    assert span.operation is None
+    assert span.attributes.get("model") is None
+    assert span.unmapped == (key,)
+
+
+def test_a_readable_name_is_still_consumed_even_where_another_key_won():
+    # The other direction, unchanged: both names were read, `tool.name` won
+    # `operation` and `llm.model_name` still became `model`, so neither is a
+    # gap. The model key is read whether or not the tool key decided first.
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "lookup",
+            "llm.model_name": "m",
+            "embedding.model_name": "e",
+        }
+    )
+    assert span.operation == "lookup"
+    assert span.attributes["model"] == "m"
+    assert span.unmapped == ()
+
+
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_fulfilling_call_id_the_adapter_cannot_read_stays_reported(value):
+    # `tool_call.id` was consumed before it was read, so a span whose id the
+    # adapter could not read fulfilled nothing AND reported nothing -- the
+    # one key that says this span answered a call disappeared.
+    span = span_of({"openinference.span.kind": "TOOL", "tool_call.id": value})
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == ("tool_call.id",)
+
+
+def test_an_unreadable_fulfilling_id_does_not_hide_the_calls_the_span_requested():
+    # The fall-through is the requester scan, and it still runs: the span is
+    # a requester, and the id it could not read is reported beside it.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "tool_call.id": 7,
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.call_role is CallRole.REQUESTER
+    assert span.unmapped == ("tool_call.id",)
+
+
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_requested_call_id_the_adapter_cannot_read_stays_reported(value):
+    # Same key in its other rendering, same rule: the id was not recovered,
+    # so the key that stated it is a gap and is reported.
+    key = "llm.output_messages.0.message.tool_calls.0.tool_call.id"
+    span = span_of({"openinference.span.kind": "LLM", key: value})
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == (key,)
+
+
+def test_a_requested_id_repeated_in_one_output_is_consumed_every_time():
+    # Unchanged: the second key stating the id was read and acted on -- the
+    # id is recorded once -- so neither key is reported.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+            "llm.output_messages.0.message.tool_calls.1.tool_call.id": "call_a",
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.unmapped == ()
+
+
 def _echo_loop(turns):
     """The agent loop of `tests/audit/probe2.py` case B, in miniature.
 

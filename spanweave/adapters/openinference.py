@@ -431,12 +431,27 @@ def _usage(attributes: Mapping[str, JsonValue], consumed: set[str]) -> Usage | N
 def _operation(
     attributes: Mapping[str, JsonValue], consumed: set[str]
 ) -> tuple[str | None, str | None]:
-    """The tool / model / retriever name, when the dialect names one."""
-    consumed.update({TOOL_NAME, LLM_MODEL, EMBEDDING_MODEL})
+    """The tool / model / retriever name, when the dialect names one.
+
+    Each key is consumed where it is READ, not before (`SPEC.md` §3.7): a name
+    the adapter cannot read as a string decided nothing -- `operation` and
+    `model` stay `None` -- so it stays in `unmapped` rather than being claimed
+    as mapped. All three are read even though at most two are used, because a
+    readable name that merely lost to another key was still read and acted on.
+    """
     tool = _as_str(attributes.get(TOOL_NAME))
-    model = _as_str(attributes.get(LLM_MODEL)) or _as_str(
-        attributes.get(EMBEDDING_MODEL)
+    llm = _as_str(attributes.get(LLM_MODEL))
+    embedding = _as_str(attributes.get(EMBEDDING_MODEL))
+    consumed.update(
+        key
+        for key, value in (
+            (TOOL_NAME, tool),
+            (LLM_MODEL, llm),
+            (EMBEDDING_MODEL, embedding),
+        )
+        if value is not None
     )
+    model = llm or embedding
     if tool is not None:
         return tool, model
     return model, model
@@ -462,10 +477,14 @@ def _call(
     Ids echoed in input context are left unconsumed, so they surface in
     `unmapped` and are reported rather than dropped. They are evidence of
     context, and the library has no edge kind for that.
+
+    An id the adapter cannot read is not an id: it states no call, and it is
+    consumed only where it is read (`SPEC.md` §3.7), so it stays reported like
+    any other key read and not usable.
     """
-    consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
+        consumed.add(TOOL_CALL_ID)
         # A fulfiller's own `operation` already names the tool; carrying it
         # here too is what lets both unpaired codes share one `source` shape.
         named = {fulfilling: operation} if operation is not None else {}
@@ -476,9 +495,15 @@ def _call(
     for key in sorted(str(k) for k in attributes):
         if not key.startswith(OUTPUT_MESSAGES) or not key.endswith(CALL_ID_SUFFIX):
             continue
-        consumed.add(key)
         found = _as_str(attributes[key])
-        if found is None or found in requested:
+        if found is None:
+            # Nothing was recovered here, so nothing was mapped: the key that
+            # stated an unreadable id stays reported (`SPEC.md` §3.7).
+            continue
+        consumed.add(key)
+        if found in requested:
+            # Read and acted on -- the id is already recorded once -- so the
+            # second key stating it is not a gap.
             continue
         requested.append(found)
         # The name sits beside the id under the same `...tool_calls.M.` stem,

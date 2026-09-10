@@ -528,6 +528,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A name or a call id the adapter could not read is reported too.** The
+  `role` fix above stated the rule -- a key is consumed where it is *read*,
+  never before -- and four more keys in the same adapter still broke it. The
+  operation names (`tool.name`, `llm.model_name`, `embedding.model_name`) were
+  all marked consumed before any of them was read, and `tool_call.id` was
+  marked consumed before it was read in either of its renderings (the bare key
+  a fulfilling span carries, and the `...tool_calls.N.tool_call.id` a
+  requesting span states in its own output). So a name or an id that arrived
+  as a number, a null or an object left `operation`, `model` and `call_ids`
+  exactly as if the key had never been sent, *and* vanished from
+  `unmapped_attributes` -- the one place a consumer could have seen that
+  something was there and could not be read. Now each of the four is consumed
+  only where its value was readable; a readable one is still consumed even
+  where another key won the field, because it was read and acted on. No
+  conformance or corpus expectation moved: 25 tracked files carry one of these
+  keys and none carries a non-string value at one, in either the flat or the
+  OTLP `KeyValue` rendering.
+  (audit finding 6, follow-up; `SPEC.md` §3.7, `ADAPTERS.md` §3)
+
 - **An unreadable `role` is reported again, because it decided nothing.** The
   previous fix marked a tool-result message's `...message.role` consumed the
   moment the key was *present*, so a `role` the adapter could not read as a

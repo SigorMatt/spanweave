@@ -519,6 +519,17 @@ because a `role` never becomes a field of its own — consuming it would let the
 fact that one arrived unreadable vanish between the raw record and a decision
 that was never made.
 
+That is the adapter's rule, not one key's: **a key is consumed where it is
+read, never before**. A name the adapter cannot read as a string
+(`tool.name`, `llm.model_name`, `embedding.model_name`) leaves `operation` and
+`model` `None`, and a call id it cannot read (`tool_call.id`, in the
+fulfilling form or the requested one) leaves the span stating no call — each
+of those is a key read and not usable, so each stays reported. Marking the key
+consumed ahead of the read is the same overstatement pointing the other way:
+it claims the adapter mapped a value it never had, and the claim is loudest
+exactly where it is wrong, because the value that survives only in `raw` is
+the one nothing else records.
+
 #### `source`, per code
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
