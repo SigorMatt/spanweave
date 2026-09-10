@@ -191,7 +191,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | done | 8 |
-| E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | todo | 20 |
+| E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | done | 20 |
 | E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | todo | 25 |
 | E4 | `--adapter auto\|<id>` (no `mixed`); `spanweave inspect` shows per-adapter node counts; README, ADAPTERS.md (the one-sentence per-record contract from §12(d)), SPEC §6.1 final text from §12, DESIGN.md §3 subsection from §12(k), CHANGELOG. | todo | 12 |
 
@@ -552,6 +552,25 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - **Third unowned staleness:** ROADMAP Phase 2's shareable note says "16 of the 17
   both-dialect scenarios" declare `Node.name` varying; it is now 21 of 21. G5's
   new text states the true form; the old line is untouched.
+- E2 done (`b68ef21`). Classification only, above the seam; no model change and
+  `serialized_shape.json` did not move. Byte-identity was **proven**, not asserted:
+  all 63 `*.jsonl` in the tree serialized before and after, `diff` clean, with a
+  durable per-trace form kept in the suite. No new adapter API — `detect([record])`
+  reused; `ADAPTERS.md` §2 gained the record-decomposability contract.
+- Two behaviour changes in E2, both refusals and both specced in §6.1: a
+  doubly-claimed record is now refused wherever it sits (previously invisible past
+  the 50-record sample), and an input whose marker first appears after record 50
+  now builds instead of raising `adapter_unconfident`. Selection is O(records)
+  instead of O(50): +41 ms on a 3.17 s build (1.3%).
+- **E3's inherited work, stated by E2:** a multi-contributor input is partitioned
+  and then still refused by whole-input `detect()`;
+  `test_a_trace_in_two_dialects_is_partitioned_and_still_refused_for_now` is the
+  test E3 must change. `Partition.unclaimed` is populated but its records are still
+  parsed by the single contributor — that is what keeps byte-identity. E2 added no
+  conformance fixture deliberately: a trace with an unclaimed or doubly-claimed
+  record breaks `test_doc_truth.py`'s census against the ROADMAP numbers G5 just
+  landed, so `mixed_instrumentation` is where that measurement moves — **E3 must
+  update the ROADMAP census and expect D2's five hard-coded counts to move.**
 
 ---
 
