@@ -266,6 +266,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **`SPEC.md` §3.1 promised a retriever name no dialect states, and stated no
+  rule for the names it declines.** `operation` was documented as *"tool name /
+  model name / retriever name"*. Neither adapter has ever read a retriever's
+  name -- no attribute for one exists in either dialect, and OTel GenAI names
+  the *operation*, `retrieval`, not the retriever -- so the third of the three
+  names has never been produced. Meanwhile the one identity a dialect does
+  state normatively, `gen_ai.agent.name`, is deliberately **not** read, and the
+  only place that was written down was an adapter docstring and two fixture
+  notes. §3.1 now carries an `operation` subsection: the field holds a tool or
+  model name the dialect states in a dedicated attribute, no dialect's agent,
+  chain or retriever name is read into it, and a declined name survives twice
+  over -- verbatim in `raw.source` (§3.5) and announced by an
+  `unmapped_attributes` diagnostic naming the key (§3.7). Two precisions are
+  stated with it: the rule is about name attributes and not about the kind, so
+  an agent span that also carries a model attribute still gets the model in
+  both dialects; and a retriever name is simply not among the names any dialect
+  states. `ADAPTERS.md` and `CONTRACTS.md`, which repeated the promise, follow.
+
+  **No behavior changed** -- nothing under `spanweave/` moved, and this is the
+  H1 decision (`OPEN_QUESTIONS.md` §15, `WORKPLAN.md` §3, 2026-09-10) written
+  where it binds. Mapping an agent name into `operation` was rejected: it was
+  measured to diverge in 11 of 18 cross-dialect scenarios, and the corpus's only
+  repair would have erased 22 tested cross-dialect `operation` assertions. A
+  uniform `identity` field stays open as an **additive** change for a later
+  schema version rather than a precondition of the freeze.
+  `tests/test_doc_truth.py` reads the rule out of §3.1 and then measures it on
+  both dialects, so the sentence and the library fail together or not at all.
+  (audit finding: minor, agent/chain/retriever identity)
+
 - **`SPEC.md` did not state where `missing_trace_id` stops.** The diagnostic
   A4 added is fenced on two sides: one per graph, never one per record, and it
   fires **only** when the built graph reports no trace id at all -- so a record

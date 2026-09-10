@@ -1048,3 +1048,203 @@ def test_the_library_keeps_the_scope_the_spec_states(tmp_path):
         f"{one_short} `missing_trace_id` diagnostic(s); that graph has a "
         f"trace id and nothing about it is missing (`SPEC.md` §3.7)"
     )
+
+
+# -- `operation` and the names no dialect reads into it ---------------------
+#
+# Batch H1 measured that `Node.operation` is `None` on every `agent`, `chain`
+# and `retriever` node the corpus produces, in both dialects, and asked
+# whether it should stay that way (`OPEN_QUESTIONS.md` §15). The decision
+# (`WORKPLAN.md` §3, 2026-09-10) was option C: it stays, and the non-mapping
+# becomes a rule in `SPEC.md` rather than a sentence in an adapter docstring.
+#
+# Two things are checked here, because a rule stated only in prose expires the
+# way every other sentence in this file expired. §3.1 must state it; and the
+# library must do it, on both dialects, with the declined name still reachable
+# where §3.1 says a consumer will find it.
+#
+# The second half also pins the *precision*: the rule is about name
+# attributes, not about the field being empty on those kinds. An agent span
+# that carries a model attribute gets the model, in both dialects. Suppressing
+# `operation` by kind would satisfy a careless reading of the rule and would
+# be a different library.
+
+#: The rule, verbatim, in `SPEC.md` §3.1.
+OPERATION_NAME_RULE = (
+    "**No dialect's agent, chain or retriever name is read into `operation`.**"
+)
+
+#: The `gen_ai.agent.name` attribute OTel GenAI states and the adapter declines.
+GENAI_AGENT_NAME = "gen_ai.agent.name"
+
+
+def spec_operation_subsection() -> str:
+    """The text of §3.1's `operation` subsection, and nothing else."""
+    spec = read("SPEC.md")
+    start = spec.index("#### `operation`")
+    return spec[start : spec.index("#### Timestamps", start)]
+
+
+def openinference_span(kind: str, extra: dict[str, object]) -> dict[str, object]:
+    attributes: dict[str, object] = {"openinference.span.kind": kind}
+    attributes.update(extra)
+    return {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "agent.run",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": attributes,
+    }
+
+
+def otel_genai_span(operation: str, extra: dict[str, object]) -> dict[str, object]:
+    attributes: dict[str, object] = {"gen_ai.operation.name": operation}
+    attributes.update(extra)
+    return {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": f"{operation} agent.run",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": attributes,
+    }
+
+
+def one_node(record: dict[str, object], adapter: str, path: pathlib.Path):
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    graph = spanweave.build(path, adapter=adapter)
+    assert len(graph.nodes()) == 1, (
+        f"{adapter} produced {len(graph.nodes())} nodes for one record; this "
+        f"check is about the one node's `operation` and needs exactly one"
+    )
+    return graph
+
+
+def test_the_spec_states_which_names_never_reach_operation():
+    subsection = spec_operation_subsection()
+    assert OPERATION_NAME_RULE in subsection, (
+        f"`SPEC.md` §3.1 no longer states the rule ({OPERATION_NAME_RULE!r}). "
+        f"It is the whole content of the H1 decision (`OPEN_QUESTIONS.md` §15, "
+        f"`WORKPLAN.md` §3), and §3.1 is where a consumer reads what a field "
+        f"holds -- an unstated rule is one an adapter can quietly break"
+    )
+    assert "raw.source" in subsection and "unmapped_attributes" in subsection, (
+        "`SPEC.md` §3.1 states the non-mapping without saying where the "
+        "declined name survives. Both halves are the decision: the value in "
+        "`raw.source` (§3.5), the fact of declining it in an "
+        "`unmapped_attributes` diagnostic (§3.7)"
+    )
+    # The defect H1 found in passing: §3.1's own field list promised a name
+    # no dialect states. The comment beside the field is what a reader sees
+    # first, so it is what this reads.
+    declaration = [
+        line
+        for line in section(read("SPEC.md"), "### 3.1 Node").splitlines()
+        if line.strip().startswith("operation:")
+    ]
+    assert len(declaration) == 1, (
+        f"`SPEC.md` §3.1 declares `operation` {len(declaration)} times; it is "
+        f"one field on `Node` and gets one line"
+    )
+    assert "retriever" not in declaration[0], (
+        f"`SPEC.md` §3.1 promises a retriever name again ({declaration[0]!r}). "
+        f"No dialect this library reads states one -- OTel GenAI names the "
+        f"operation, `retrieval`, not the retriever -- so the promise cannot "
+        f"be kept (`OPEN_QUESTIONS.md` §15(b))"
+    )
+
+
+def test_no_dialect_reads_an_agent_chain_or_retriever_name_into_operation(tmp_path):
+    # OpenInference: the name is the span `name` and nothing else, on all
+    # three kinds. Nothing is read into `operation`.
+    for index, kind in enumerate(("AGENT", "CHAIN", "RETRIEVER")):
+        graph = one_node(
+            openinference_span(kind, {}),
+            "openinference",
+            tmp_path / f"oi_{index}.jsonl",
+        )
+        node = graph.nodes()[0]
+        assert node.operation is None, (
+            f"an OpenInference {kind} span put {node.operation!r} in "
+            f"`operation`; `SPEC.md` §3.1 says only a tool or model name "
+            f"reaches that field, and this span states neither"
+        )
+        assert node.raw.source["name"] == "agent.run", (
+            "the span name is the only place OpenInference states this "
+            "thing's identity, and `raw.source` is where `SPEC.md` §3.1 says "
+            "a consumer finds a name the library declined to normalize"
+        )
+
+    # OTel GenAI: `gen_ai.agent.name` is stated, declined, and still reachable.
+    graph = one_node(
+        otel_genai_span("invoke_agent", {GENAI_AGENT_NAME: "agent.run"}),
+        "otel_genai",
+        tmp_path / "genai_agent.jsonl",
+    )
+    node = graph.nodes()[0]
+    assert node.operation is None, (
+        f"the `otel_genai` adapter read a declined name into `operation` "
+        f"({node.operation!r}). `SPEC.md` §3.1 states the non-mapping, and "
+        f"`OPEN_QUESTIONS.md` §15(f) measured what breaks if it is undone: "
+        f"11 of 18 cross-dialect scenarios diverge"
+    )
+    assert node.raw.source["attributes"][GENAI_AGENT_NAME] == "agent.run", (
+        f"{GENAI_AGENT_NAME} is not verbatim in `raw.source`. §3.1's whole "
+        f"claim is that declining to normalize a name does not lose it"
+    )
+    unmapped = [
+        d
+        for d in graph.diagnostics
+        if d.code == "unmapped_attributes" and GENAI_AGENT_NAME in (d.source or ())
+    ]
+    assert len(unmapped) == 1, (
+        f"{GENAI_AGENT_NAME} was declined without being announced "
+        f"({len(unmapped)} `unmapped_attributes` diagnostics name it). "
+        f"`raw.source` is where a consumer finds the name; the diagnostic is "
+        f"how a consumer learns to look (`SPEC.md` §3.1)"
+    )
+
+    # A GenAI retrieval span states no retriever name to decline, so the
+    # third of §3.1's formerly promised names has nothing behind it either.
+    graph = one_node(
+        otel_genai_span("retrieval", {}), "otel_genai", tmp_path / "genai_retr.jsonl"
+    )
+    assert graph.nodes()[0].operation is None, (
+        f"a GenAI `retrieval` span produced `operation` "
+        f"{graph.nodes()[0].operation!r}; the convention names the operation, "
+        f"not the retriever, so there is no name for the field to hold"
+    )
+
+
+def test_the_rule_is_about_name_attributes_not_about_the_kind(tmp_path):
+    # `SPEC.md` §3.1's first precision, measured on both dialects: an agent
+    # span that also names a model gets the model. That is the ordinary rule,
+    # it is symmetric, and it is why the corpus's `null`s are a property of
+    # the fixtures rather than of the kind (`OPEN_QUESTIONS.md` §15(b)).
+    openinference = one_node(
+        openinference_span("AGENT", {"llm.model_name": "m1"}),
+        "openinference",
+        tmp_path / "oi_model.jsonl",
+    )
+    otel_genai = one_node(
+        otel_genai_span(
+            "invoke_agent",
+            {GENAI_AGENT_NAME: "agent.run", "gen_ai.request.model": "m1"},
+        ),
+        "otel_genai",
+        tmp_path / "genai_model.jsonl",
+    )
+    both = (openinference.nodes()[0].operation, otel_genai.nodes()[0].operation)
+    assert both == ("m1", "m1"), (
+        f"an agent span carrying a model attribute produced `operation` "
+        f"{both} in (openinference, otel_genai); `SPEC.md` §3.1 says the rule "
+        f"is about name attributes and not about the kind, and that both "
+        f"dialects agree here -- if that stopped being true the spec's "
+        f"precision is wrong, and if it became `None` the field was "
+        f"suppressed by kind, which §3.1 does not say"
+    )

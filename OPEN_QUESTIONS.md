@@ -1985,6 +1985,19 @@ it.
 4. **Record the absence as a measurement**: 57 files, 177 records, 0 with both
    markers, with the `capture/backends.py` comment as the strongest first-party
    evidence and the honest note that it is a prediction about the world.
+
+   A **second measured absence** belongs beside it, recorded here by batch H2
+   from §15(j). Across the three captured traces — `openai_tool_call.jsonl`,
+   `genai_tool_call.jsonl`, `genai_workflow.jsonl`, 17 records — there are 4
+   `agent` spans, and **0 of them come from an instrumentor**. All four are
+   written by the harness (`capture/backends.py`, `agent_span_attributes` and
+   `genai_agent_span_attributes`), for the reason that file states: executing
+   an agent turn is not an SDK call and there is nothing for an instrumentor
+   to wrap. It is the same shape of claim as the mixed-trace one — a
+   measurement of this corpus, and a prediction about the world only until an
+   agent-framework instrumentation package is run through `capture/` (§15(j)).
+   It bears on the freeze the same way: §15's option B would normalize an
+   attribute whose cross-dialect behaviour nobody here has observed.
 5. **Sharpen the freeze conditions now; hold `TASKS.md`'s provisional Phase 4
    at its current resolution.** The exit is met (**(c)**), so sharpening is
    licensed — but the PR-level breakdown of Phase 4 depends on four open
@@ -2434,9 +2447,28 @@ zero marginal cost. Recommend scheduling it there. It is **not** a gate:
    `capture/backends.py`. Whatever is decided, that absence should be recorded
    beside §14(h) item 4's other measured absence (**j**).
 
-**Decision:**
+**Decision: option C**, logged in `WORKPLAN.md` §3 (2026-09-10) and
+implemented by batch H2. `operation` stays `None` for `agent`, `chain` and
+`retriever` wherever no dialect states a tool or model name, and the
+non-mapping is now a **stated rule in `SPEC.md` §3.1** — with the note that the
+value survives verbatim in `raw.source` and that `unmapped_attributes` names the
+key — rather than an adapter docstring. Option A is rejected on **(e)** and
+**(f)**. The `retriever name` defect in **(b)** is fixed in the same batch, in
+`SPEC.md` §3.1 and in the two documents that repeated it (`ADAPTERS.md`,
+`CONTRACTS.md`); the precedence observation beside it is stated in §3.1 as a
+precision rather than changed, because it is symmetric across both dialects and
+therefore not a defect. What **(a)**–**(g)** describe is the state **before**
+H2; nothing under `spanweave/` moved with it.
 
-*Not taken.* This entry is a `WORKPLAN.md` H1 halt; no code changed with it, and
-`SPEC.md`, `DESIGN.md` and `spanweave/` are untouched — the `SPEC.md` §3.1
-paragraph described in **(i)** lands only when the decision is taken. Record the
-decision in `WORKPLAN.md` §3.
+**Option B is the additive `1.1` path, and stays open on those terms.** Per
+**(h)**, a new optional `Node.identity` is the additive case `CLAUDE.md` 7
+permits after the freeze, so it does not have to land before it and is not
+foreclosed by this decision — unlike option A, which the decision closes. What
+would reopen it is the evidence **(j)** names and this corpus does not have: an
+*instrumentor-emitted* agent span, in a second dialect, carrying a name
+attribute. Until then the field would be one dialect's attribute under a
+normalized name, which is a rename rather than a normalization. If B is ever
+taken it arrives as a version bump's worth of announcement, not quietly: it
+changes what `canonical()` compares and what every consumer written against `1`
+sees (**h**), and it adds a key to all 22 stored `expected/graph.json` files and
+a line to `FIXTURES.md` §4's test-enforced Compared list (**g**).

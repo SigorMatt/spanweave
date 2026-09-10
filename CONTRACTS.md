@@ -255,7 +255,7 @@ the library rely on that no document states and no test asserts?*
   two dialects, and the 17th produces no graph — so `name` has **never** been
   compared across dialects, in any scenario, at any point in this project. Four
   renderings pin it. Nothing else touches it.
-- `nodes[].operation` — that the tool, model or retriever name is written
+- `nodes[].operation` — that the tool or model name is written
   verbatim in the dialect's own spelling. Two dialects agree on it in 15 of 16
   compared scenarios, which is the strongest evidence any unstated field here
   has. What is unstated is the *name-space*: one captured trace carries

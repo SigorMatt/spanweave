@@ -55,7 +55,7 @@ Node:
   id:          NodeId          # stable, deterministic (§3.6)
   kind:        NodeKind        # §3.2
   name:        str             # operation name as reported
-  operation:   str | None      # tool name / model name / retriever name
+  operation:   str | None      # tool or model name, when stated (below)
   started_at:  int | float | None   # unix seconds as reported; None if the
   ended_at:    int | float | None   #   dialect omits it
   status:      Status          # ok | error | unset
@@ -69,6 +69,50 @@ Node:
 ```
 
 `name` is reported, not derived. Do not prettify, title-case, or rewrite it.
+
+#### `operation`
+
+`operation` carries a name the dialect states in a **dedicated attribute**,
+and is `None` when it states none. Exactly two kinds of attribute fill it
+today: a tool name (`tool.name`, `gen_ai.tool.name`) and a model name
+(`llm.model_name`, `embedding.model_name`, `gen_ai.request.model`). Nothing
+else does, and `None` is an answer rather than a gap to be filled.
+
+**No dialect's agent, chain or retriever name is read into `operation`.** OTel
+GenAI states an agent's name normatively, in `gen_ai.agent.name`, and the
+adapter deliberately declines it. OpenInference states no name attribute for
+any of the three kinds, so its adapter has nothing to decline. The rule is
+stated here rather than left to each adapter because the alternative is
+asymmetry: a field exactly one dialect could fill would be that dialect's
+attribute wearing a normalized name, and a consumer reading it would get a
+value that is `null` in the other dialect on the same logical span. Whether a
+uniform identity should exist at all is `OPEN_QUESTIONS.md` §15, and it is not
+this field.
+
+Declining to normalize a name is not losing it, and the library says so twice:
+
+- the **value**, verbatim, in `raw.source` (§3.5) — serialized on every node
+  unconditionally, and byte-exact through a round trip;
+- the **fact that it was not normalized**, as an `unmapped_attributes`
+  diagnostic (§3.7) naming the key — keys only, as that code always is.
+
+`raw.source` is where a consumer finds the name; the diagnostic is how a
+consumer learns to look for it.
+
+Two precisions, so the rule is not read wider than it is:
+
+- It is a rule about **name attributes**, not a rule that the field is empty
+  on those kinds. An `agent`, `chain` or `retriever` span that also carries a
+  *model* attribute gets the model in `operation`, in both dialects, by the
+  ordinary rule above. Every such node in this project's corpus reads `null`
+  because those spans carry no model attribute — not because the kind
+  suppresses the field.
+- **A retriever name is not one of the names any dialect states.** Earlier
+  wording of this section listed one; no attribute for it exists in either
+  dialect read today (OTel GenAI names the *operation*, `retrieval`, not the
+  retriever), so no such value has ever been produced. A retriever span
+  reaches `operation` only through `embedding.model_name`, and what it holds
+  then is a model name.
 
 #### Timestamps
 

@@ -114,8 +114,10 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   step. Then the evidence exists, and the question is a fresh one rather than a
   re-derivation.
 - `name` — as reported. Do not prettify or rewrite.
-- `operation` — the tool/model/retriever name when the dialect distinguishes it
-  from `name`.
+- `operation` — the tool or model name, when the dialect states one in a
+  dedicated attribute. Never an agent's, a chain's or a retriever's own
+  name: no dialect read today states a retriever's, and the one that states
+  an agent's is declined rather than normalized (`SPEC.md` §3.1).
 
 **Timestamps** — `started_at` / `ended_at`, unix seconds, **as reported**.
 - Never rescale and never infer a unit, whatever the dialect calls its field.
