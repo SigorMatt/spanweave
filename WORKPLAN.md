@@ -156,17 +156,25 @@ never restarts, fixes, or touches anything. Conventions live in
 | R3 | **Stated timestamp units (HALT memo).** An OTLP JSON envelope declares its unit in the field name (`startTimeUnixNano`); F2 reads it and the adapters then warn `timestamp_unit_suspect` on every span, while a genuinely seconds-encoded span in the same file is the only one *not* warned (signal inversion, measured). Options: (a) `NormalizedSpan.timestamp_unit: "s" \| "ns" \| None` — the container states `ns`, the flat record states nothing; the diagnostic fires only when no unit is stated and the value exceeds the ceiling; `started_at` still holds the reported value (C2 decision stands), and the graph carries the unit where stated (model field: schema moves); (b) the reader rescales OTLP ns to seconds before the seam (violates C2's "never rescale"); (c) leave as is and document the warning as expected on OTLP input. Memo to OPEN_QUESTIONS.md with recommendation; `awaiting decision`. | done (`5697313`, OPEN_QUESTIONS §17) | 6 |
 | R11 | **R3 decision (c) landed.** SPEC §3.7 `timestamp_unit_suspect` row and §7 OTLP container section state the expected per-span warning on a conformant nanosecond export and why it is not rescaled; ADAPTERS.md one sentence; R1's two pin tests gain the comment that the behaviour is documented, not merely current; OPEN_QUESTIONS §17 decision line filled verbatim from §3. Docs and test comments only. | done (`aef2404`) | 6 |
 | R8 | **The rest of the adapter follows R4's rule.** Found by R4, out of its scope: `_operation` blanket-consumes `llm.model_name` / `embedding.model_name` / `tool.name` and `_call` blanket-consumes `tool_call.id`, so a value the adapter cannot read at any of those keys is consumed and never reported -- the same contradiction with SPEC §3.7 that R4 fixed for `role`. Apply R4's decision (consume only when the key decided something) uniformly; verify corpus expectations do not move. SPEC §3.7. CHANGELOG. | done (`97ce154`) | 10 |
-| R9 | **The rest of the cited figures recompute too.** Found by R5, outside its row's grep (which named only the 57/177 family): four more non-recomputable figures are cited in durable documents -- C3's "154 timestamp values", D2's "15 captured files / 24 data edges", and F1/F2's "64 of 64" and "46 `malformed_record`". Extend `tests/corpus_census.py` to compute each from `git ls-files`, replace the cited figures, and let R5's `no_durable_document_states_the_working_tree_census_as_a_fact` test cover them. | todo | 10 |
+| R9 | **The rest of the cited figures recompute too.** Found by R5, outside its row's grep (which named only the 57/177 family): four more non-recomputable figures are cited in durable documents -- C3's "154 timestamp values", D2's "15 captured files / 24 data edges", and F1/F2's "64 of 64" and "46 `malformed_record`". Extend `tests/corpus_census.py` to compute each from `git ls-files`, replace the cited figures, and let R5's `no_durable_document_states_the_working_tree_census_as_a_fact` test cover them. **Widened by the run-3 cold review (R5 finding 1):** planting wrong values in six of R5's own figures left all 39 doc-truth tests green, so R9 must *pin* every recomputable figure to the census, not only add four more unpinned ones -- a sibling test that scans every durable document for an asserted figure and requires it to equal the census. | done (`67d788d`) | 10 |
 | R10 | **An empty `parentSpanId` is no parent, as F1 says it is.** Found by R3, out of scope: an OTLP root span carries `parentSpanId: ""` and the builder emits `orphan_parent` ("parent span '' is not in this input") on every root -- contradicting F1's claim in OPEN_QUESTIONS §16(e) that `""` is treated as no parent. Decide where the empty string is normalised away (reader or seam), fix, and cover with an OTLP fixture whose roots draw no diagnostic. Corpus diagnostic expectations will move; state the before/after. SPEC §3.1. CHANGELOG. | todo | 10 |
 | R12 | **The same rule, at the keys R8's row did not name.** Found by R8, out of its scope: `_payload` consumes `input.mime_type` / `output.mime_type` before reading and `_kind_of` consumes `openinference.span.kind` before reading (whose `unknown_span_kind` message says "no attribute" even when the key is present and unreadable); `adapters/otel_genai.py` blanket-consumes `gen_ai.tool.name`, `gen_ai.request.model` and `gen_ai.tool.call.id` the same way. The last one is not cosmetic: the two dialects report an unreadable name/id differently, which is a cross-dialect equivalence claim. Apply R4's rule uniformly; verify corpus expectations do not move. SPEC §3.7. CHANGELOG. | todo | 10 |
-| R7 | **Series close, again.** As G4: final statuses to TASKS.md, §3 decisions moved, WORKPLAN.md and its README row removed, `make check`. Runs only after R3 is decided and implemented (run 4), or immediately if the decision is (c). | awaiting R3 | 6 |
+| R13 | **R6's correction is false on CPython 3.14.** Review F1 (blocker for series close): `uv run` selects 3.14 in this repo, CI tests 3.11-3.13 only, and on 3.14 the encoder gives out ~2,865 levels *before* the parser for nested dicts (37241 vs 40106) -- A6's retracted claim. SPEC §7 and CHANGELOG: demote "the encoder's limit **is** the parser's" and "no trace file reaches the refusal at all" to interpreter-named observations carrying the measured table; keep the four-level positional claim, which is R6's real and durable contribution. The pin test builds dicts, not lists, and records the observed ratio rather than asserting a direction the library does not control. Add 3.14 to the CI matrix. | todo | 15 |
+| R14 | **The digit limit is an environment fact.** Review F2: `PYTHONINTMAXSTRDIGITS=0` changes the graph bytes for R1's inputs, which is invariant 4. Document the dependency in SPEC §3.1 and `ENVIRONMENT.md`; derive R1's boundary tests from `sys.get_int_max_str_digits()` so they hold on any legal configuration; state in §7 that the graph depends on this interpreter setting and how to pin it. | todo | 10 |
+| R15 | **The sdist ships `reviews/`.** Review F3: `/reviews` is missing from the sdist include allowlist, so a stranger unpacking the sdist gets TASKS.md's citation without the review -- R2's defect with `patches/` swapped out. Add it, and make `audit_sdist` assert tracked-documents ⊆ sdist for every file TASKS.md cites. | todo | 4 |
+| R16 | **Error codes are routable from the CLI, and `validate` refuses what `build` refuses.** Review F4: `cli.py` prints the `code` alongside the message for every `SpanweaveError`; exit codes are documented in README and SPEC §7, not only in a source comment; `spanweave validate` parses with `parse_constant` so a document carrying bare `NaN`/`Infinity` is reported invalid, matching `build`; `errors.py:107-119` wording updated for the `ValueError` arm; `serialize.py:77` distinguishes a circular reference from a non-finite number. | todo | 12 |
+| R17 | **R3 record corrections.** Review §7: disclose in OPEN_QUESTIONS §17 that the headline measurement's envelope omitted `parentSpanId` (with it: 201 `orphan_parent` + 200 `timestamp_unit_suspect`, and the noise argument gets *stronger*); note that the schema is currently unfrozen where the memo prices (a2); fix the known-false claim at `OPEN_QUESTIONS.md:2692`. Docs only. | todo | 6 |
+| R7 | **Series close, again.** As G4: final statuses to TASKS.md, §3 decisions moved, WORKPLAN.md and its README row removed, `make check`. Runs only after R3 is decided and implemented (run 4), or immediately if the decision is (c). **Additionally (run-3 review):** resolve the TASKS.md `R<n>` name collisions by prefixing this series' batch ids `audit-R…` in TASKS.md (F5); record R1's harsh-degradation note (one `NaN` refuses a whole graph, and the library already carries a non-JSON literal as *text* elsewhere) and the remaining review nits under open threads. | blocked by R11-R17 | 8 |
 
 ---
 
 ## 2. Execution order
 
-Run 3 = R1 → R2 → R4 → R6 → R5 → R3 (halts). Run 4 = R11 → R8 → R9 → R10 →
-R7 (series close).
+Run 3 = R1 → R2 → R4 → R6 → R5 → R3 (halts).
+
+Run 4 = R11 → R8 → R9 → R10 → R12 → R13 → R14 → R15 → R16 → R17 → R7
+(series close). R7 is blocked until R11-R17 land: the run-3 cold review
+makes F1 a blocker for the close.
 
 ---
 
@@ -250,6 +258,22 @@ R7 (series close).
   `otel_genai.py`; registered as R12. R12 arrived after run 4's order was
   fixed, so it is not in run 4 -- R7 carries it as an open thread unless the
   human opens a run 5 first.
+- 2026-09-11: R9 recomputed four more figure families and moved every one:
+  C3's 154 timestamp values -> 34, D2's 24 data edges over 15 files -> 4 over 3,
+  F1's "64 of 64" -> 50 of 50, and the "46 malformed_record" recomputed from
+  nothing at all (it was a temp-dir export no tracked file carries; the tracked
+  figure is 327). Substantive: C3's "it bit no fixture and no captured trace"
+  was measured over a scope holding no fixtures -- over the tracked corpus 10
+  literals of 300 sit above the ceiling, the ten C1 wrote to sit there.
+- 2026-09-11: the run-3 cold review (patches/REVIEW-2026-09-11-run3.md) lands
+  between R9 and R10 and reorders the rest of the run. Its F1 is a blocker for
+  the series close and is materially worse than the defect R6 was fixing: R6
+  replaced A6's over-claim with a different over-claim, and its pin test is
+  green only because it nests lists where a graph document nests dicts. R12-R17
+  now stand between R10 and R7, and R7 is blocked until they land. R9's row is
+  widened in place rather than reopened as a new row, because R9's own commit
+  already added the binding test the review asked for; the widening is verified
+  by a follow-up pass, not assumed.
 
 ---
 
