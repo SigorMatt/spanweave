@@ -11,6 +11,7 @@ import pytest
 
 import spanweave
 from spanweave import diagnostics as codes
+from spanweave.model import EdgeKind
 from spanweave.read import read_trace
 
 JSONL = b'{"span_id":"s0"}\n{"span_id":"s1"}\n'
@@ -837,6 +838,43 @@ def test_an_otlp_export_builds_the_spans_it_carries_end_to_end():
     # C3's decision, reached through the reader without the reader applying it.
     assert llm.started_at == 1000 and isinstance(llm.started_at, int)
     assert llm.usage is not None and llm.usage.input_tokens == 42
+
+
+def test_a_root_span_draws_no_diagnostic_for_the_parent_it_does_not_have():
+    """`SPEC.md` §4.0 and §7 — batch R10, found by the R3 memo.
+
+    A root's `parentSpanId` is a proto3 `bytes` field holding its default, and
+    a marshaler that emits defaults writes it as `""`. Read as a reference it
+    names a span no input can contain, so **every root of every export** drew
+    `orphan_parent` — the diagnostic that means "this trace is incomplete",
+    on the one span that proves it is not. It is no parent, and it is
+    normalized at the seam.
+    """
+    import spanweave
+
+    root = dict(OTLP_SPAN, spanId="s0", parentSpanId="")
+    child = dict(OTLP_SPAN, spanId="s1", parentSpanId="s0")
+    graph = spanweave.build(json.dumps(envelope(root, child)).encode("utf-8"))
+
+    assert codes.ORPHAN_PARENT not in [d.code for d in graph.diagnostics]
+    assert [(e.src, e.dst) for e in graph.edges() if e.kind is EdgeKind.PARENT] == [
+        ("s0", "s1")
+    ]
+    # Losslessness (`CLAUDE.md` 2): the reader renamed the key and left the
+    # value, so what the export wrote is still readable on the node.
+    assert graph.node("s0").raw.source["parent_id"] == ""
+
+
+def test_a_parent_the_export_names_and_does_not_carry_is_still_an_orphan():
+    # The other half, and the reason the rule is "exactly the empty string":
+    # `orphan_parent` still reports a parent that was *named*. Silencing that
+    # would trade one wrong answer for a worse one.
+    import spanweave
+
+    named = dict(OTLP_SPAN, spanId="s0", parentSpanId="s9")
+    graph = spanweave.build(json.dumps(envelope(named)).encode("utf-8"))
+    reported = [d for d in graph.diagnostics if d.code == codes.ORPHAN_PARENT]
+    assert [d.source for d in reported] == ["s9"]
 
 
 def test_no_trace_in_the_tree_reaches_the_otlp_branches():

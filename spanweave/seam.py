@@ -150,6 +150,39 @@ class NormalizedSpan:
         object.__setattr__(self, "call_names", dict(self.call_names))
 
 
+def parent_ref(value: JsonValue) -> str | None:
+    """The parent a record states, or ``None`` when it states none.
+
+    A record spells "no parent" **two** ways, and they are the same statement
+    (`SPEC.md` §4.0): the field is absent, or the field is present and empty.
+    The second is the ordinary one rather than an edge case -- an OTLP
+    `parentSpanId` is a proto3 ``bytes`` field, an unset one is the empty
+    string, and a marshaler that emits defaults writes ``""`` on every root
+    span of every export (`SPEC.md` §7).
+
+    Read as a *reference*, that empty string names a span no input can
+    contain, so every root drew an `orphan_parent` -- the diagnostic that
+    means "this trace is incomplete", reported on the one span that proves it
+    is not. So it is normalized here, at the seam, and the builder goes on
+    testing presence: an id that is not an id must not reach the layer that
+    has no way to tell.
+
+    **Exactly the empty string.** ``" "`` and ``"0000000000000000"`` are
+    references like any other, because trimming or decoding one would be
+    deciding what the telemetry meant. Nothing is lost either way: the record
+    is in ``raw`` verbatim, so which of the two renderings the exporter used
+    is still readable on the node (`CLAUDE.md` 2).
+
+    It lives here rather than in each adapter because two dialects disagreeing
+    about one root is a cross-dialect equivalence claim, not a detail: the
+    same run exported twice must produce the same graph, and a rule copied
+    into two modules is a rule that can drift in one of them.
+    """
+    if not isinstance(value, str) or value == "":
+        return None
+    return value
+
+
 def unclaimed_span(record: JsonValue, line_number: int | None = None) -> NormalizedSpan:
     """The seam value for a record **no adapter claimed** (`SPEC.md` §6.1).
 

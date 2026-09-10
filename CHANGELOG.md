@@ -25,7 +25,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   Until now a compact export built **one `unknown` node** holding the entire
   file under a forced adapter and was refused by detection, and an indented
   one -- what a file receiver writes -- produced **one `malformed_record`
-  diagnostic per line and no nodes** -- **327** of them for the indented export
+  diagnostic per line and no nodes** -- **328** of them for the indented export
   a checkout now carries as `otlp_container/dialects/openinference.json`
   (tracked files only). Nine span keys are renamed, `attributes` is
   folded from OTLP's `KeyValue` list into an object, and **every other key is
@@ -311,7 +311,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   documents state **34** timestamp literals over the **3** captured traces a
   checkout carries, **4** `data` edges over the same three, **50 of 50** tracked
   `*.jsonl` opening on `trace_id`, and **one `malformed_record` per line**
-  (**327** for the indented export `otlp_container` carries), each with the
+  (**328** for the indented export `otlp_container` carries), each with the
   *(tracked files only)* qualifier and each cited as history where the old
   figure is quoted. **One claim moved rather than only its arithmetic**: C3's
   *"it bit no fixture"* was measured over a scope that held no fixtures, and the
@@ -559,6 +559,30 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **A root span's empty `parentSpanId` is no parent, and no longer an orphan.**
+  OTLP's `parentSpanId` is a proto3 `bytes` field; an unset one is the empty
+  string, and a marshaler that emits default-valued fields writes
+  `"parentSpanId": ""` on **every root span of every export**. The reader
+  renamed it verbatim, `_as_str` handed it on unchanged, and the builder tested
+  only for `None` -- so every root drew `orphan_parent`, *"parent span '' is not
+  in this input"*: the diagnostic that means a trace was sampled, filtered or
+  exported mid-run, reported on the one span that proves it was not. A record
+  spells "no parent" two ways -- the field absent, or the field present and
+  empty -- and both are now `None` at the seam, in one shared rule
+  (`spanweave.seam.parent_ref`) rather than one copy per adapter, because two
+  dialects disagreeing about a root is a cross-dialect equivalence claim.
+  Exactly the empty string: `" "` and `"0000000000000000"` are references like
+  any other, and a parent that *was* named and is absent still draws
+  `orphan_parent`. Nothing is dropped -- the empty string is still in the node's
+  verbatim `raw.source`, so which rendering the exporter used is still readable
+  (`CLAUDE.md` 2). The corpus could not see any of this: `otlp_container`
+  omitted the field on its roots, as proto3's canonical form allows. Both of its
+  renderings now write it, which is what a real exporter writes, and both roots
+  draw no diagnostic -- **before: 1 `orphan_parent` per rendering; after: 0**,
+  with the stored expectations (2 `unmapped_attributes`) and the byte-identity
+  with `llm_tool_llm`'s graph unchanged.
+  (audit batch R10, found by R3; `SPEC.md` §4.0, §6, §7, §3.7)
 
 - **A name or a call id the adapter could not read is reported too.** The
   `role` fix above stated the rule -- a key is consumed where it is *read*,

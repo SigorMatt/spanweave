@@ -476,7 +476,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unknown_span_kind` | the dialect's kind did not map to a `NodeKind` |
 | `unmapped_attributes` | attributes the adapter did not normalize (names only) |
 | `payload_parse_failed` | JSON mime type but the value did not parse (malformed, or nested deeper than the parser will recurse) |
-| `orphan_parent` | `parent` reference to a span not present in the trace (§4.0 — a dangling `link` is **not** reported, and why) |
+| `orphan_parent` | `parent` reference to a span not present in the trace (§4.0 — a dangling `link` is **not** reported, and why; an **empty** parent reference is *no parent* rather than an absent one, and is not reported either) |
 | `unpaired_call` | a requested tool call with no fulfilling span |
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
@@ -871,6 +871,42 @@ Consequences a consumer must know:
   edge connect the same pair. One result per *relation* is what `edges()` is
   for.
 
+#### No parent, and a parent this input does not carry
+
+`orphan_parent` reports a parent the record **named** and this input does not
+carry. A record that names no parent at all is a **root**, and a root is not a
+truncated trace: it gets no edge, no diagnostic, and nothing to report.
+
+The two are not always spelled apart, which is the whole of this rule. A
+record states "no parent" in **two** renderings, and they are the same
+statement:
+
+| Rendering | Meaning |
+|---|---|
+| the field is absent (`parent_id` missing, `parentSpanId` omitted) | no parent |
+| the field is present and **empty** (`""`) | no parent |
+
+The second is not an edge case in the wild, it is the ordinary one: OTLP's
+`parentSpanId` is a proto3 `bytes` field, an unset `bytes` field is the empty
+string, and a marshaler that emits default-valued fields writes
+`"parentSpanId": ""` on **every root span of every export** (§7). Read as a
+reference, that empty string names a span no input can contain, so every root
+would draw an `orphan_parent` — the diagnostic saying "this trace is
+incomplete" about the one span that proves it is not.
+
+So an empty parent reference is **no parent**, and the normalization happens in
+the adapter, at the seam (§6): `NormalizedSpan.parent_id` is `None`, and the
+builder — which tests presence, and should never have to ask whether an id is
+really an id — never sees it. Exactly the empty string, and nothing else: a
+parent id of `" "` or `"0000000000000000"` is a reference like any other and is
+reported like any other, because trimming or decoding one would be deciding
+what the telemetry meant.
+
+Nothing is dropped in the process (`CLAUDE.md` 2). The empty string is still in
+the node's `raw.source`, verbatim (§3.5), so a consumer that wants to know
+which of the two renderings the exporter used reads it there. What is
+normalized away is the *reference*, into the absence it already stated.
+
 ### 4.1 Warrant
 
 - **`explicit`** — the telemetry asserted this relation. The adapter is
@@ -1131,6 +1167,15 @@ Adapter (Protocol):
 Rules binding on every adapter:
 
 1. **Never invent.** If a field isn't in the input, it is `None` / `absent`.
+
+   The corollary the seam depends on: **a field that says nothing is `None`,
+   not the empty thing it said it with.** `parent_id` is the case that has a
+   rule of its own, because a dialect spells "no parent" two ways — the field
+   absent, or the field present and empty — and one of the two is what a
+   conformant OTLP export writes on every root (§4.0, §7). Both are `None` at
+   the seam. An empty id is not a reference, so it never reaches the builder as
+   one, and no root of any export is reported as an orphan. The empty string
+   itself is untouched in `raw`, as everything else is.
 2. **Never drop silently.** Unrecognized attributes go in `unmapped`; the whole
    record is preserved in `raw`.
 3. **Never interpret.** No roles, no severity, no scoring, no redaction of
@@ -1353,6 +1398,14 @@ declares reaches `0.5`.
     OTLP `SpanKind`, and mapping one onto a `NodeKind` would be an
     interpretation made below the adapter seam, by the one layer forbidden to
     have one.
+  - **`parentSpanId` is renamed like the other eight, empty string and all.**
+    A root span's `parentSpanId` is a proto3 `bytes` field holding its default,
+    which a marshaler may omit or may write as `""` — both are conformant, and
+    an export that writes it puts `""` on every root it carries. The reader
+    normalizes neither rendering away: it renames the key and leaves the value,
+    because deciding that an empty reference is *no* reference is a statement
+    about the dialect's field and belongs to the layer that owns the field. The
+    adapters make it, and a root therefore draws no `orphan_parent` (§4.0).
   - **`attributes` is folded** from OTLP's `[{"key", "value"}]` list to an
     object, unwrapping each `AnyValue` by its tag: `stringValue`, `boolValue`,
     `doubleValue`, `arrayValue`, `kvlistValue` (folded by this same rule),

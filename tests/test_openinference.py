@@ -539,6 +539,33 @@ def test_an_unreadable_timestamp_becomes_none_rather_than_a_guess():
     assert span.started_at is None
 
 
+def test_a_parent_id_is_taken_as_the_reference_the_record_states():
+    span = span_of({"openinference.span.kind": "TOOL"}, parent_id="s0")
+    assert span.parent_id == "s0"
+
+
+def test_an_empty_parent_id_is_no_parent_rather_than_an_empty_reference():
+    # `SPEC.md` §4.0: a record spells "no parent" two ways -- the field absent,
+    # or the field present and empty -- and an OTLP export writes the second on
+    # every root (`parentSpanId` is a proto3 `bytes` field holding its default).
+    # Read as a reference it would name a span no input can contain, so every
+    # root would draw `orphan_parent`. It is normalized here, at the seam, so
+    # the builder never has to ask whether an id is really an id.
+    span = span_of({"openinference.span.kind": "AGENT"}, parent_id="")
+    assert span.parent_id is None
+    # Losslessness (`CLAUDE.md` 2): what the record wrote is still there, and
+    # the fact was read to decide something, so it is not reported as unmapped.
+    assert span.raw.source["parent_id"] == ""
+    assert span.unmapped == ()
+
+
+def test_only_the_empty_string_is_no_parent():
+    # Exactly the empty string. Trimming or decoding any other id would be
+    # deciding what the telemetry meant (`SPEC.md` §4.0).
+    for stated in (" ", "0000000000000000", "null"):
+        assert span_of({"openinference.span.kind": "TOOL"}, parent_id=stated).parent_id
+
+
 def test_span_links_are_transcribed_including_cross_trace_ones():
     span = span_of(
         {"openinference.span.kind": "AGENT"},

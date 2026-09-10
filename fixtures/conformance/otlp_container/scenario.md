@@ -39,6 +39,21 @@ line, and an array of exports. One of those tests adds `resource`, `scope` and
 `kind` to *this* fixture's own spans and asserts exactly the difference this
 paragraph predicts.
 
+## The root's parent
+
+Both renderings write `"parentSpanId": ""` on the root — the empty `bytes`
+field an emit-defaults marshaler puts on **every root of every export**, and
+the thing a JSONL root says by carrying no `parent_id` key at all. The
+scenario asserts that those are the same statement: the root draws **no**
+diagnostic, and the graph is still `llm_tool_llm`'s byte for byte.
+
+It was not, until the September 2026 audit series (batch R10). An empty parent
+reference was read as a parent this input does not carry, so every root of
+every OTLP export drew an `orphan_parent` — the diagnostic for a trace that
+was sampled, filtered or exported mid-run, reported on the one span that
+proves it was not (`SPEC.md` §4.0). The fixture omitted the field, so the
+corpus could not see it.
+
 ## Timestamps
 
 The spans carry `startTimeUnixNano` / `endTimeUnixNano` holding

@@ -80,7 +80,7 @@ from spanweave.model import (
     Usage,
 )
 from spanweave.read import record_digest
-from spanweave.seam import CallRole, NormalizedSpan, SpanLink
+from spanweave.seam import CallRole, NormalizedSpan, SpanLink, parent_ref
 
 ADAPTER_ID = "otel_genai"
 ADAPTER_VERSION = "0.1.0"
@@ -332,7 +332,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     return NormalizedSpan(
         source_key=source_key,
         span_id=span_id,
-        parent_id=_as_str(record.get("parent_id")),
+        parent_id=parent_ref(record.get("parent_id")),
         trace_id=_as_str(record.get("trace_id")),
         kind=kind,
         name=_as_str(record.get("name")) or "",

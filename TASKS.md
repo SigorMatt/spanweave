@@ -10779,7 +10779,7 @@ clean is the one nobody rereads.
    to a temporary directory. All four recompute from `git ls-files` now, in
    the same module, and the documents state **34** timestamp values over
    **3** captured files, **4** `data` edges over the same three, **50 of 50**
-   tracked `*.jsonl`, and **one `malformed_record` per line** (**327** for
+   tracked `*.jsonl`, and **one `malformed_record` per line** (**328** for
    the indented export F2's fixture carries). One claim moved rather than its
    arithmetic: C3's *"it bit no fixture"* was measured over a scope holding
    no fixtures, and the widened scan finds the **10** integer literals

@@ -420,6 +420,22 @@ def test_an_unreported_status_is_unset():
     )
 
 
+def test_an_empty_parent_id_is_no_parent_rather_than_an_empty_reference():
+    # The same rule as `test_openinference.py`'s, and it must be the same rule:
+    # a record spells "no parent" two ways -- the field absent, or the field
+    # present and empty -- and this dialect is the one an OTLP export carries
+    # most often, where every root writes `parentSpanId: ""` (`SPEC.md` §4.0,
+    # §7). Two dialects reporting one root differently is a cross-dialect
+    # equivalence claim, not a cosmetic difference.
+    span = span_of({"gen_ai.operation.name": "chat"}, parent_id="")
+    assert span.parent_id is None
+    assert span.raw.source["parent_id"] == ""
+    assert span.unmapped == ()
+    # Exactly the empty string: any other id is a reference like any other.
+    assert span_of({"gen_ai.operation.name": "chat"}, parent_id=" ").parent_id == " "
+    assert span_of({"gen_ai.operation.name": "chat"}, parent_id="s0").parent_id == "s0"
+
+
 def test_a_record_key_the_adapter_does_not_read_is_reported():
     span = span_of({"gen_ai.operation.name": "chat"}, events=[{"name": "x"}])
     assert "<record>.events" in span.unmapped

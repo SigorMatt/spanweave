@@ -105,6 +105,14 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   NOT change the graph (`SPEC.md` §3.6 rule 2, §5.2).
 - `span_id` / `parent_id` / `trace_id` — verbatim from the dialect, or `None`.
   **Do not synthesize ids** — that is `spanweave/ids.py`'s job.
+- `parent_id` has one shared rule, and it is not optional: fill it with
+  `from spanweave.seam import parent_ref`. A dialect spells "no parent" two
+  ways — the field absent, or the field present and **empty** — and an OTLP
+  export writes the second on every root it carries. Both must be `None`, or
+  the builder reads an empty reference as a parent this input does not carry
+  and reports every root as an orphan (`SPEC.md` §4.0). Use the shared helper
+  rather than your own check: two adapters disagreeing about one root is a
+  cross-dialect equivalence failure, not a detail.
 
 **Classification**
 - `kind` — map to the closed `NodeKind` set (`SPEC.md` §3.2). If the dialect's

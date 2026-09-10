@@ -2610,7 +2610,7 @@ every span — sitting in that one node's `raw.source`. Lossless, and useless.
 *Pretty-printed*, which is what a file receiver and every `curl | jq` writes:
 **one `malformed_record` diagnostic per line and 0 nodes.** Each line of the
 indented document is a line that is not JSON, and the reader says so once for
-each — **327** times for
+each — **328** times for
 `fixtures/conformance/otlp_container/dialects/openinference.json`, the
 indented export a checkout carries today (tracked files only).
 
