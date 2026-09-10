@@ -57,8 +57,11 @@ Added since, each for a reason recorded at its task:
   `ok` while no real tool span was. A consumer written against it computed a
   success rate that read zero against real telemetry (finding F6).
 - **`derived_ids`** and **`derived_ids_shuffled`** (September 2026 audit,
-  batch A5). All 177 records in the corpus carried a span id, so every node id
-  in it was a string a dialect supplied and `SPEC.md` §3.6 rule 2 — the
+  batch A5). Every one of the 117 records a checkout then held carried a span
+  id — the batch said 177, counting a working tree that included the
+  git-ignored `capture/_scratch/` (batch R5; `tests/corpus_census.py` counts
+  tracked files only) — so every node id in the corpus was a string a dialect
+  supplied and `SPEC.md` §3.6 rule 2 — the
   derived-id path — was exercised by nothing. The fallback key it went
   unwatched with was the record's **1-based index**, so a file of span-id-less
   records rebound its ids when its lines were swapped, and `shuffled_order`

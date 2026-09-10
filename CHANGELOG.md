@@ -201,8 +201,13 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 - Conformance scenarios `derived_ids` and `derived_ids_shuffled`, in both
   dialects: three tool spans that carry **no span id**, and the same three
   lines reversed. Every node id in them is derived, which nothing in the
-  corpus had ever been -- all 177 records carried a span id, so `SPEC.md`
-  §3.6 rule 2 was documented, implemented and exercised by no fixture at all.
+  corpus had ever been -- every one of the **117** records a checkout then
+  held carried a span id, so `SPEC.md` §3.6 rule 2 was documented, implemented
+  and exercised by no fixture at all. (This entry said "all 177 records" until
+  batch R5: 177 was a scan of a working tree that counted the git-ignored
+  `capture/_scratch/`. `tests/corpus_census.py` counts tracked files only, and
+  makes these two scenarios the reason **12** of today's **151** records carry
+  no span id.)
   The pair also carries the corpus's first assertion that a shuffle keeps each
   id **on its own record**: the two graphs were byte-identical while the ids
   had swapped records, because ids are assigned in node order, so byte
@@ -289,6 +294,32 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **Every corpus figure this repository states is now counted from `git
+  ls-files`, and states that it is.** `57 files / 177 records` was measured on
+  a **working tree** holding local capture output under `capture/_scratch/`,
+  which git ignores; it exceeded the tracked corpus of the day -- 43 files,
+  117 records -- by exactly that scratch (14 files, 60 records), and it reached
+  five commit bodies (`b6c5ea9`, `5995e0a`, `4774496`, `8adb8f2`, `fcc842d`)
+  and six documents before anyone tried to reproduce it. Commit bodies cannot
+  be rewritten; the documents can, and are: `ROADMAP.md`, `OPEN_QUESTIONS.md`
+  §12(c), §12(d), §12(f), §13(h) and §14, `TASKS.md`, `CHANGELOG.md` and the
+  two corpus documents that repeated it now assert **52 files / 151 records
+  (tracked files only)** and cite the old pair as history, saying what it was
+  and what it recomputes to. The count itself is `tests/corpus_census.py`, new
+  and runnable (`uv run python -m tests.corpus_census`): it takes its file list
+  from git rather than walking the tree, so a scratch capture, a half-finished
+  fixture or a downloaded trace **cannot** move a number a document asserts,
+  and `tests/test_doc_truth.py` recomputes the sentences against it -- with a
+  planted untracked file proving the walk it replaced would have counted one.
+  Two claims moved rather than only their arithmetic: **1** corpus file now
+  carries both dialects' markers (the constructed `mixed_instrumentation`
+  fixture, not an observation), and *"every record in the corpus carries a
+  span id"* stopped being true when batch A5 added the span-id-less
+  `derived_ids` pair -- **139** of the 151 records carry one, **135** of those
+  trace-unique. The **0 records carrying both markers** that the freeze
+  precondition rests on is unchanged under every one of these numbers. **No
+  behavior changed**; nothing under `spanweave/` moved.
+
 - **The write-side depth guard is documented as what it is, and the
   measurement is on the record.** A6 introduced `graph_not_serializable` and
   narrated it as an encoder whose *limit* is lower than the parser's. It is
@@ -353,8 +384,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   those memos were decided on: `57 files / 177 records` was a working-tree
   scan that included the git-ignored `capture/_scratch/`, so it does not
   recompute from a checkout -- the **0 records carrying both dialects'
-  markers** that the decision rests on is unchanged either way. **No behavior
-  changed**; nothing under `spanweave/` moved.
+  markers** that the decision rests on is unchanged either way. (Both sections
+  now *assert* the tracked pair, **52 files / 151 records**, and cite 57/177 as
+  history; batch R5.) **No behavior changed**; nothing under `spanweave/`
+  moved.
 - **A timestamp reported as an integer keeps its digits.** `Node.started_at`
   and `Node.ended_at` are now `int | float | None`: an integer literal, quoted
   or bare, is carried as an `int`, and only a literal with a fraction or an

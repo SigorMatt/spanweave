@@ -41,10 +41,9 @@ import re
 import shlex
 
 import spanweave
-from spanweave.adapters import MINIMUM_CONFIDENCE, registered
-from spanweave.diagnostics import MALFORMED_RECORD
-from spanweave.read import read_trace
+from spanweave.adapters import registered
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
+from tests.corpus_census import census
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -1428,56 +1427,20 @@ def test_the_two_weaker_statements_of_the_outside_use_gate_point_at_it():
 def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int], int]:
     """Files, records, how many adapters claim each record, and mixed files.
 
+    Counted by `tests/corpus_census.py`, which takes its file list from `git
+    ls-files` rather than walking the tree: the numbers below are asserted by
+    documents as things a stranger recomputes from a checkout, and a walk
+    counts whatever is lying in the working directory. That is not
+    hypothetical -- it is how `57 files / 177 records` reached five commit
+    bodies (batch R5). The plant at the end of this file holds the line.
+
     The claim is made with `detect([record])`, which `OPEN_QUESTIONS.md`
     §12(d) measured against a direct marker scan over the whole corpus with
     zero disagreements -- so this counts what an adapter would actually do,
     not what a regex over attribute keys says it would.
     """
-    # Every rendering the corpus holds, whatever container it is in, read the
-    # way the library reads it. It was a `*.jsonl` glob and a `splitlines()`
-    # until batch F2 put an OTLP export in the corpus -- at which point the
-    # sweep would have gone on reporting the old numbers, and the promise two
-    # paragraphs of `ROADMAP.md` make ("a corpus that grows fails this
-    # sentence") would have quietly stopped being true (`SPEC.md` §7).
-    files = sorted(
-        {
-            *(ROOT / "fixtures").rglob("*.jsonl"),
-            *(ROOT / "fixtures/conformance").glob("*/dialects/*.json"),
-        }
-    )
-    adapters = registered()
-    records = 0
-    claims: dict[int, int] = {}
-    unreadable: list[str] = []
-    mixed_files = 0
-    for path in files:
-        per_file: set[str] = set()
-        stream = read_trace(path)
-        found = list(stream)
-        unreadable.extend(
-            f"{path.relative_to(ROOT)}: {diagnostic.message}"
-            for diagnostic in stream.diagnostics.collected()
-            if diagnostic.code == MALFORMED_RECORD
-        )
-        for record in found:
-            records += 1
-            claiming = [
-                adapter.id
-                for adapter in adapters
-                if adapter.detect([record]) >= MINIMUM_CONFIDENCE
-            ]
-            per_file.update(claiming)
-            claims[len(claiming)] = claims.get(len(claiming), 0) + 1
-        # A file two adapters read is a different measurement from a record
-        # two adapters claim, and the roadmap states both: the first is the
-        # mixed-instrumentation shape, the second is the ambiguity that shape
-        # is NOT (`SPEC.md` §6.1).
-        mixed_files += len(per_file) > 1
-    assert not unreadable, (
-        "these corpus records are not JSON, so no adapter can be asked about "
-        "them and this sweep cannot say what they carry: " + ", ".join(unreadable)
-    )
-    return len(files), records, claims, mixed_files
+    counted = census()
+    return counted.files, counted.records, counted.claims, counted.mixed_files
 
 
 def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
@@ -1588,3 +1551,160 @@ def test_the_roadmap_records_the_agent_span_absence_the_captures_show():
             f"instrumentor emits them now, the absence has ended and the "
             f"roadmap says so"
         )
+
+
+# The census the sentences above and below are counted from reads git's file
+# list, not the working tree (`tests/corpus_census.py`). Five commits of the
+# September 2026 audit series cited `57 files / 177 records`, a pair measured
+# on a tree holding local capture output git ignores, and no reader could
+# reproduce it. A walk cannot hold that line -- it counts whatever is lying in
+# the directory -- so the plant below is the property, not a nicety.
+def test_the_corpus_census_counts_only_what_git_tracks(tmp_path):
+    """An untracked trace under `fixtures/` must not move a stated number.
+
+    Planted in the real corpus directory on purpose: a temporary copy would
+    prove something about a temporary directory, and the sentences in
+    `ROADMAP.md` and `OPEN_QUESTIONS.md` are about this one.
+    """
+    del tmp_path
+    before = dialect_claims_over_the_committed_corpus()
+    planted = ROOT / "fixtures/conformance/llm_tool_llm/dialects/_r5_plant.jsonl"
+    assert not planted.exists(), f"{planted} exists; a previous run left it"
+    planted.write_text(
+        '{"span_id": "planted", "attributes": {"openinference.span.kind": "LLM"}}\n',
+        encoding="utf-8",
+    )
+    try:
+        after = dialect_claims_over_the_committed_corpus()
+    finally:
+        planted.unlink()
+    assert after == before, (
+        f"an untracked file under `fixtures/` moved the census from {before} "
+        f"to {after}. Every document that states a corpus size states one a "
+        f"stranger is supposed to recompute from a checkout, and a working-"
+        f"tree walk counts what a checkout does not contain -- which is "
+        f"exactly how `57 files / 177 records` got written down five times"
+    )
+
+
+def test_the_open_questions_census_is_the_tracked_census():
+    """§12's figures, recomputed rather than believed.
+
+    §12(c) is the measurement the freeze precondition rests on, §12(d) is the
+    cross-check that `detect([record])` classifies a record the way a direct
+    marker scan does, and §12(f) is what the corpus says about ids. All three
+    stated a working-tree pair until batch R5; all three are counted here from
+    `git ls-files`.
+    """
+    counted = census()
+    text = flat(read("OPEN_QUESTIONS.md"))
+
+    stated = re.search(
+        r"scanned end to end — \*\*(\d+)\*\* files, \*\*(\d+)\*\* records "
+        r"\(tracked files only\)",
+        text,
+    )
+    assert stated is not None, (
+        "OPEN_QUESTIONS.md §12(c) no longer states the size of the corpus its "
+        "mixed-dialect absence was measured over, qualified as tracked. The "
+        "qualifier is half the claim: an unqualified pair is what five commit "
+        "bodies got wrong"
+    )
+    assert (int(stated.group(1)), int(stated.group(2))) == (
+        counted.files,
+        counted.records,
+    ), (
+        f"§12(c) says {stated.group(1)} files and {stated.group(2)} records; "
+        f"the tracked corpus is {counted.files} and {counted.records}"
+    )
+    for adapter_id, files in sorted(counted.sole_dialect_files.items()):
+        assert f"**{files}** are `{adapter_id}`-only" in text, (
+            f"§12(c) does not say that {files} corpus files are "
+            f"{adapter_id}-only, which is what the census counts"
+        )
+
+    disagreements = re.search(
+        r"over all \*\*(\d+)\*\* tracked corpus records: \*\*(\d+) disagreements\*\*",
+        text,
+    )
+    assert disagreements is not None, (
+        "OPEN_QUESTIONS.md §12(d) no longer states the marker-scan cross-check "
+        "over a stated number of records"
+    )
+    assert (
+        int(disagreements.group(1)),
+        int(disagreements.group(2)),
+    ) == (counted.records, counted.marker_disagreements), (
+        f"§12(d) claims {disagreements.group(2)} disagreement(s) over "
+        f"{disagreements.group(1)} records; re-run over the tracked corpus it "
+        f"is {counted.marker_disagreements} over {counted.records}. A "
+        f"disagreement means `detect([record])` and the marker it scans for "
+        f"have parted company, which is the whole basis of per-record dispatch"
+    )
+
+    ids = re.search(
+        r"of the \*\*(\d+)\*\* tracked corpus records, \*\*(\d+)\*\* carry a "
+        r"`span_id` and \*\*(\d+)\*\* of those are trace-unique",
+        text,
+    )
+    assert ids is not None, (
+        "OPEN_QUESTIONS.md §12(f) no longer states how much of the corpus "
+        "takes `SPEC.md` §3.6 rule 1. It said *177 of 177* -- every record -- "
+        "which stopped being true the moment batch A5 added a span-id-less "
+        "scenario, and nothing recomputed it"
+    )
+    assert tuple(int(group) for group in ids.groups()) == (
+        counted.records,
+        counted.with_span_id,
+        counted.trace_unique_span_id,
+    ), (
+        f"§12(f) says {ids.groups()}; the tracked corpus is "
+        f"({counted.records}, {counted.with_span_id}, "
+        f"{counted.trace_unique_span_id})"
+    )
+
+
+#: A census pair no reader can reproduce, and the words that mark a mention of
+#: it as history rather than as a claim. `57 files / 177 records` was measured
+#: on a working tree holding git-ignored capture output; it reached five commit
+#: bodies, which cannot be rewritten, so the durable documents say what it was
+#: and what it recomputes to instead.
+WORKING_TREE_CENSUS = re.compile(r"\b177\b|\b57 files\b|\b57 corpus files\b")
+CENSUS_HISTORY_MARKERS = (
+    "working tree",
+    "working-tree",
+    "capture/_scratch",
+    "checkout",
+    "batch R5",
+)
+
+
+def test_no_durable_document_states_the_working_tree_census_as_a_fact():
+    """The stale pair may be quoted as history; it may not be asserted.
+
+    Paragraph-scoped, because that is the unit a reader takes a claim from: a
+    provenance note three paragraphs away does not stop the sentence in front
+    of them from being wrong. Verbatim blockquotes are exempt -- they are
+    records of a moment, like `reviews/`, and rewriting one would be a
+    falsification rather than a correction -- so where a quote carries the old
+    pair, the editorial line around it is what carries the correction.
+    """
+    offenders: list[str] = []
+    for path in durable_documents():
+        for paragraph in path.read_text(encoding="utf-8").split("\n\n"):
+            if any(line.lstrip().startswith(">") for line in paragraph.splitlines()):
+                continue
+            if not WORKING_TREE_CENSUS.search(paragraph):
+                continue
+            if any(marker in paragraph for marker in CENSUS_HISTORY_MARKERS):
+                continue
+            offenders.append(f"{path.relative_to(ROOT)}: {flat(paragraph)[:120]}")
+    assert not offenders, (
+        "these paragraphs state a corpus census a reader cannot reproduce "
+        "from a checkout, with nothing marking it as history: "
+        + "; ".join(offenders)
+        + ". `57 files / 177 records` counted a working tree holding the "
+        "git-ignored `capture/_scratch/`; `tests/corpus_census.py` counts "
+        "what git tracks, and a document either states that figure or says "
+        "which one it is quoting and why"
+    )

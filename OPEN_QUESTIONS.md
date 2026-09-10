@@ -960,20 +960,29 @@ source.
 in this repo's own harness — and not observed.** Said plainly, because G3 will
 ask whether E is a freeze precondition and the answer turns on this.
 
-What the corpus shows, scanned end to end (57 `*.jsonl` files, 177 records):
+What the corpus shows, scanned end to end — **52** files, **151** records
+(tracked files only):
 
-- **0 files** carry both markers. 37 are `openinference`-only, 20 are
-  `otel_genai`-only.
+- **1 file** carries both markers, and it is
+  `fixtures/conformance/mixed_instrumentation/`, constructed here by batch E3
+  out of two renderings of one scenario. Of the rest, **27** are
+  `openinference`-only and **24** are `otel_genai`-only. **Constructed is not
+  observed**, which is the whole point of this subsection.
 - **0 records** carry both markers. **0 records** carry neither.
 
-*Provenance of the pair, added by batch G4 (2026-09-10) because it does not
-recompute: the scan was of a **working tree**, not of a checkout. It exceeds the
-then-committed 43 files and 117 records by exactly the 14 files and 60 records
-of local capture output under `capture/_scratch/`, which git ignores. A
-stranger checking it out measures the smaller pair; `ROADMAP.md` therefore
-asserts a recomputable pair and cites 57/177 as the measurement the decision
-was taken on. **The 0 is unchanged either way**, so nothing that rests on this
-finding moves.*
+*Provenance of the pair. This subsection asserted 57 `*.jsonl` files and 177
+records from batch E1 (2026-09-10) until batch R5 (2026-09-11) replaced it
+with the figures above. That scan was of a **working tree**, not of a
+checkout: it exceeded the then-committed 43 files and 117 records by exactly
+the 14 files and 60 records of local capture output under `capture/_scratch/`,
+which git ignores, so no reader could reproduce it — and it reached five
+commit bodies before anyone tried. The pair above is counted from `git
+ls-files` by `tests/corpus_census.py`, which is now the single source for
+every corpus figure in this repository, and `tests/test_doc_truth.py`
+recomputes it against this sentence. It is larger than 43/117 because the
+corpus has grown since, not because anything untracked is being counted.
+**The 0 is unchanged under every one of those numbers**, so nothing that rests
+on this finding moves.*
 
 So the shape has never been captured here. What makes it more than a thought
 experiment is three things:
@@ -1015,7 +1024,9 @@ per-record scan that returns `0.9` if **any** record in its sample carries its
 prefix in `attributes`, and `0.0` otherwise. That makes `detect([record])` a
 per-record classifier with no new method: *this adapter claims this record* iff
 `detect([record]) >= MINIMUM_CONFIDENCE`. Checked against a direct marker scan
-over all **177** corpus records: **0 disagreements**.
+over all **151** tracked corpus records: **0 disagreements**. (The check was
+first run over 177 records of a working tree, batch E1; `tests/corpus_census.py`
+re-runs it over what a checkout holds on every test run.)
 
 - **Total.** Every branch of both `detect()` bodies is an `isinstance` guard
   with a `0.0` fall-through, and there is deliberately no blanket `except`
@@ -1099,11 +1110,16 @@ missing an adapter"*, which is a thing this library should be able to say.
 (`SPEC.md` §3.6), and dispatch touches each differently:
 
 - **Rule 1 — a trace-unique `span_id` is the id.** Dispatch-independent: the
-  id is the dialect's own string and no adapter id enters it. **This is every
-  record in the corpus**: 177 of 177 carry a usable `span_id`. So for every
-  fixture and every capture that exists today, mixed dispatch moves **no id at
-  all**. Verified: the mixed build's nodes are `s0`–`s3`, the same ids the
-  pure builds give.
+  id is the dialect's own string and no adapter id enters it. This was **every
+  record in the corpus** when the memo was written — stated here as 177 of 177,
+  which was 117 of 117 in a checkout — so mixed dispatch moved **no id at all**
+  in any fixture or capture that then existed. It is no longer every record:
+  batch A5 added `derived_ids` and `derived_ids_shuffled` *because* nothing
+  exercised rule 2, so of the **151** tracked corpus records, **139** carry a
+  `span_id` and **135** of those are trace-unique. The other 16 take the two
+  rules below — 12 with no span id at all, 4 sharing one — and that is where
+  dispatch moves an id. Verified for the mixed build itself: its nodes are
+  `s0`–`s3`, the same ids the pure builds give.
 - **Rule 2 — no `span_id` → `derive(adapter_id, trace_id, source_key)`.** Ids
   **move**, for two independent reasons. `adapter_id` changes for the records
   the other adapter now parses; and `source_key` falls back to the 1-based
@@ -1164,7 +1180,9 @@ missing an adapter"*, which is a thing this library should be able to say.
 > the
 > id-to-record **binding** rather than byte-identity, which is the assertion
 > this defect hid behind. Read the rest as the finding, not as the state of
-> the library. A record with **no** `span_id` gets an id
+> the library — including its corpus figure: the 177 records it quotes were a
+> working-tree scan, the checkout held 117 then and holds 151 now, and 12 of
+> those carry no span id precisely because A5 added them (batch R5). A record with **no** `span_id` gets an id
 > derived from its position in the file, so shuffling the input changes the
 > graph. Measured on a forced single-adapter build, no mixing involved: the
 > document (modulo `source_digest`) and the per-record id assignment both
@@ -1306,8 +1324,12 @@ The reasons, in order:
 2. It costs no adapter API, no builder change, and no marker table anywhere:
    `detect([record])`, already written, already pure, already total.
 3. It is behaviour-preserving where it matters. A single-dialect input produces
-   a byte-identical graph — same ids (rule 1 for all 177 corpus records), same
-   `declared_confidence` (same first-50 sample), one `Meta.adapters` entry.
+   a byte-identical graph — same ids under every rule, because one dialect
+   means one claimant and `adapter_id` is the only thing dispatch feeds into an
+   id; same `declared_confidence` (same first-50 sample); one `Meta.adapters`
+   entry. (This read *"rule 1 for all 177 corpus records"* until batch R5:
+   135 of the 151 tracked records take rule 1 today, and the conclusion does
+   not depend on which rule any of them takes.)
 4. It makes the refusal proportionate. Today a mixed file is refused *entirely*
    and the recommended remedy silently damages it. Under (a) the refusal
    survives exactly where a guess would be required — one record, two claimants
@@ -1785,8 +1807,8 @@ agent may draft the text and assemble the links; posting is a halt point
 
 **(h) Where this meets G3, and E.** G3 asks whether mixed instrumentation is a
 freeze precondition. Not this memo's to decide; §12 (E1) supplies the fact it
-turns on — a mixed trace is **constructible but not observed**: 57 corpus
-files, 177 records, **0** carrying both markers. The gate above interacts with
+turns on — a mixed trace is **constructible but not observed**: **52** corpus
+files, **151** records (tracked files only), **0** carrying both markers. The gate above interacts with
 that in one direction worth having in front of G3:
 
 - **This gate is the mechanism by which a mixed trace would first be
@@ -1945,8 +1967,9 @@ id. That is an outside-evidence event — §13's B column — not a new gate.
 **Evidential power and urgency point different ways, as the brief asks be said.**
 The row's argument is about **power**: how much would a mixed trace tell us. The
 answer above is *less than the row assumes, and on constructed input almost
-nothing*. §12(c)'s finding is about **urgency**: 57 corpus files, 177 records,
-**0** carrying both markers — constructible, structurally motivated, first-party
+nothing*. §12(c)'s finding is about **urgency**: **52** corpus files, **151**
+records (tracked files only), **0** carrying both markers — constructible,
+structurally motivated, first-party
 evidence in `capture/backends.py` that the project itself steers around the
 shape, and **not observed**. An unobserved failure mode is a weaker precondition
 than an observed one, so urgency is low too.
@@ -2033,15 +2056,17 @@ it.
    covering all of them is honest, is shorter than four, and does not require
    the roadmap to relitigate each.
 3. **Do not add a "mixed trace observed" condition.** **(f)**.
-4. **Record the absence as a measurement**: 57 files, 177 records, 0 with both
-   markers, with the `capture/backends.py` comment as the strongest first-party
-   evidence and the honest note that it is a prediction about the world.
+4. **Record the absence as a measurement**: **52** files, **151** records
+   (tracked files only), 0 with both markers, with the `capture/backends.py`
+   comment as the strongest first-party evidence and the honest note that it is
+   a prediction about the world.
 
-   *Batch G4 (2026-09-10): the 57/177 pair is §12(c)'s working-tree scan and
-   does not recompute from a checkout — it exceeds the then-committed 43 files
-   and 117 records by the git-ignored `capture/_scratch/`. `ROADMAP.md` states
-   both pairs and which one a stranger can check; the **0** this item rests on
-   is the same in either.*
+   *This item said `57 files, 177 records` until batch R5 (2026-09-11). That
+   pair was §12(c)'s working-tree scan and did not recompute from a checkout —
+   it exceeded the then-committed 43 files and 117 records by the git-ignored
+   `capture/_scratch/`. The pair above is what `tests/corpus_census.py` counts
+   from `git ls-files`, `ROADMAP.md` states the same one, and the **0** this
+   item rests on is the same under all three.*
 
    A **second measured absence** belongs beside it, recorded here by batch H2
    from §15(j). Across the three captured traces — `openai_tool_call.jsonl`,
@@ -2121,6 +2146,12 @@ sufficient*:
 > seen. Recorded as a measurement rather than assumed away, and the capture that
 > would settle it is a human act, schedulable alongside the dialect-three
 > capture above.
+
+*The draft above quotes §12(c)'s working-tree pair. What landed in
+`ROADMAP.md` states the tracked corpus instead — 52 files, 151 records,
+counted by `tests/corpus_census.py` — and names one constructed mixed file
+that did not exist when this was drafted. The **0** is the same in both
+(batch R5, 2026-09-11).*
 
 **(j) G2's three lines in `ROADMAP.md`: they should stay.** §0.6 says
 *"`ROADMAP.md` is untouched until G3"*, so G3 is the batch entitled to judge

@@ -10688,7 +10688,8 @@ HEAD with two span-id-less records, input order reversed:
 
 The id *set* is stable; the id-to-record *binding* is not — a direct violation
 of CLAUDE.md invariant 4. Nothing caught it because the shuffle tests ran only
-over `WORKED_RECORDS` and **0 of 117** corpus records lacked a span id: the
+over `WORKED_RECORDS` and **0 of 117** tracked corpus records lacked a span
+id (the commit body said 177, a working-tree figure; batch R5): the
 gate was correctly shaped and blind to this input class. **Pre-existing**,
 dating to Phase 0/1; A3 neither introduced nor worsened it but *removed the
 obstacle* to fixing it. Answered by batch **A5**, which also added the
@@ -10751,10 +10752,16 @@ clean is the one nobody rereads.
 7. **The corpus census figure the G3 decision was taken on does not
    recompute.** "57 files / 177 records" was measured on a working tree that
    included the git-ignored `capture/_scratch/`: 57 = 43 committed `*.jsonl` +
-   14 scratch, and 177 = 117 + 60. `ROADMAP.md` therefore asserts the
-   recomputable pair and cites 57/177 with that provenance, and
-   `OPEN_QUESTIONS.md` §12(c) and §14 now say the same. The **decision is
-   unaffected**: 0 records carry both markers either way. A separate corpus —
+   14 scratch, and 177 = 117 + 60. It reached five commit bodies (`b6c5ea9`,
+   `5995e0a`, `4774496`, `8adb8f2`, `fcc842d`), which cannot be rewritten.
+   **Closed by batch R5** (2026-09-11): `tests/corpus_census.py` counts the
+   corpus from **`git ls-files`** — tracked files only, so a scratch capture
+   cannot move a number a document asserts — and is the single source for
+   every corpus figure here. It counts **52 files / 151 records** today, and
+   `ROADMAP.md`, `CHANGELOG.md` and `OPEN_QUESTIONS.md` §12(c), §12(d),
+   §12(f), §13(h) and §14 now assert that pair and cite 57/177 as history.
+   The **decision is unaffected**: 0 records carry both markers under every one
+   of those numbers. A separate corpus —
    `fixtures/captured/`, 3 traces / 17 records / 4 agent spans / 0
    instrumentor-emitted — carries the agent-span absence, and the two are
    labelled as such wherever they appear.

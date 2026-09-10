@@ -4,9 +4,10 @@ Three tool spans, none of which carries a `span_id`. Every node id in this
 scenario is therefore **derived** (`SPEC.md` §3.6 rule 2) rather than a string
 the dialect supplied.
 
-It is here because the corpus had 177 records and every one of them carried a
-usable span id, so rule 2 — the whole fallback path — was exercised by no
-fixture at all. What that hid: the fallback `source_key` was the record's
+It is here because every record the corpus then held carried a usable span id
+— 117 of them in a checkout, stated as 177 at the time from a scan of a
+working tree that counted the git-ignored `capture/_scratch/` (batch R5) — so
+rule 2, the whole fallback path, was exercised by no fixture at all. What that hid: the fallback `source_key` was the record's
 **1-based index**, so a file of span-id-less records rebound its ids when its
 lines were swapped, and `shuffled_order` could not see it because its records
 have span ids. The fallback is the record's canonical digest now, and this

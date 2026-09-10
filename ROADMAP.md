@@ -627,8 +627,8 @@ once and counted twice is not a gate.
 
 **The shape has never been observed here, and that is recorded as a measurement
 rather than assumed away.** Over the fixture corpus this repository carries —
-**52** trace files, **151** records — **0** records carry both dialects'
-markers and every record carries exactly one. **1** file carries records of
+**52** trace files, **151** records, tracked files only — **0** records carry
+both dialects' markers and every record carries exactly one. **1** file carries records of
 both: `fixtures/conformance/mixed_instrumentation/`, built by the audit
 series' batch E3 out of two existing renderings of one scenario, because
 per-record dispatch had to be testable against something. **Constructed is not
@@ -640,13 +640,17 @@ fails this sentence instead of outliving it — over every rendering the corpus
 holds, read the way the library reads it, rather than over `*.jsonl` lines: the
 sweep counted lines until the audit series' batch F2 put an **OTLP JSON export**
 in the corpus, at which point a corpus that grew by two files and eight records
-would not have failed this sentence at all. The measurement the freeze decision was taken on is
-`OPEN_QUESTIONS.md` §12(c)'s scan of **57 files and 177 records** on
-`2026-09-10`, which found the same **0**; that scan was of a working tree rather
-than of a checkout — it exceeds the then-committed 43 files and 117 records by
+would not have failed this sentence at all. The count is
+`tests/corpus_census.py`, which takes its file list from **`git ls-files`**
+rather than walking the tree, so an untracked file cannot move a number this
+document asserts. The measurement the freeze decision was taken on is
+`OPEN_QUESTIONS.md` §12(c)'s scan of `2026-09-10`, which found the same **0**;
+that scan was of a working tree rather than of a checkout — it stated 57 files
+and 177 records, exceeding the then-committed 43 files and 117 records by
 exactly the 14 files and 60 records of local capture output under
-`capture/_scratch/`, which git ignores — so the smaller pair above is the one a
-stranger can check, and the **0** is the claim either of them makes. The shape
+`capture/_scratch/`, which git ignores — so the tracked pair above is the one a
+stranger can check, §12(c) now states that pair too, and the **0** is the claim
+all of them make. The shape
 is constructible and structurally motivated — two instrumentors share one
 `TracerProvider`, and this repo's own capture harness steers around it by hand
 — so it is predicted rather than seen, and the capture that would settle it is a
