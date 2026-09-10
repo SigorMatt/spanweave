@@ -153,9 +153,10 @@ never restarts, fixes, or touches anything. Conventions live in
 | R4 | **B3's sentence matches B3's behaviour.** SPEC says a key read to decide is consumed; the adapter consumes `role` even when it could not use it, and `role` has no mapped field. Decide the smaller change inside the SPEC's own principle (losslessness + "nothing reported as unmapped that was read"): either consume only when the key decided something, or state that a read key is consumed regardless and why. Tests either way; corpus expectations must not move (verify). | done (`cb53ef9`) | 10 |
 | R6 | **A6's narrative matches the measurement.** The commit body says the encoder's limit is lower than the parser's; measured on CPython it is ~1.9× higher, so the story is not reachable from a trace file. Correct CHANGELOG and SPEC §7 wording to what was measured; keep the containment (it is still correct to have). Record the measurement. Docs only. | done (`e243aeb`) | 6 |
 | R5 | **Corpus counts recompute from a checkout.** Five commits (name them from `git log --grep` on "57 files\|177 records\|43+14\|117+60") cite counts that include the gitignored `capture/_scratch/`. Make F2's widened census the single source: a script or test under `tests/` that counts tracked files/records only and prints the figures; replace every cited figure in CHANGELOG, TASKS.md, OPEN_QUESTIONS.md and ROADMAP.md with the recomputed one and a "(tracked files only)" qualifier. G5 already did this for its own figures — match its wording. | done (`8d67589`) | 12 |
-| R3 | **Stated timestamp units (HALT memo).** An OTLP JSON envelope declares its unit in the field name (`startTimeUnixNano`); F2 reads it and the adapters then warn `timestamp_unit_suspect` on every span, while a genuinely seconds-encoded span in the same file is the only one *not* warned (signal inversion, measured). Options: (a) `NormalizedSpan.timestamp_unit: "s" \| "ns" \| None` — the container states `ns`, the flat record states nothing; the diagnostic fires only when no unit is stated and the value exceeds the ceiling; `started_at` still holds the reported value (C2 decision stands), and the graph carries the unit where stated (model field: schema moves); (b) the reader rescales OTLP ns to seconds before the seam (violates C2's "never rescale"); (c) leave as is and document the warning as expected on OTLP input. Memo to OPEN_QUESTIONS.md with recommendation; `awaiting decision`. | todo | 6 |
+| R3 | **Stated timestamp units (HALT memo).** An OTLP JSON envelope declares its unit in the field name (`startTimeUnixNano`); F2 reads it and the adapters then warn `timestamp_unit_suspect` on every span, while a genuinely seconds-encoded span in the same file is the only one *not* warned (signal inversion, measured). Options: (a) `NormalizedSpan.timestamp_unit: "s" \| "ns" \| None` — the container states `ns`, the flat record states nothing; the diagnostic fires only when no unit is stated and the value exceeds the ceiling; `started_at` still holds the reported value (C2 decision stands), and the graph carries the unit where stated (model field: schema moves); (b) the reader rescales OTLP ns to seconds before the seam (violates C2's "never rescale"); (c) leave as is and document the warning as expected on OTLP input. Memo to OPEN_QUESTIONS.md with recommendation; `awaiting decision`. | awaiting decision (`5697313`, OPEN_QUESTIONS §17) | 6 |
 | R8 | **The rest of the adapter follows R4's rule.** Found by R4, out of its scope: `_operation` blanket-consumes `llm.model_name` / `embedding.model_name` / `tool.name` and `_call` blanket-consumes `tool_call.id`, so a value the adapter cannot read at any of those keys is consumed and never reported -- the same contradiction with SPEC §3.7 that R4 fixed for `role`. Apply R4's decision (consume only when the key decided something) uniformly; verify corpus expectations do not move. SPEC §3.7. CHANGELOG. | todo | 10 |
 | R9 | **The rest of the cited figures recompute too.** Found by R5, outside its row's grep (which named only the 57/177 family): four more non-recomputable figures are cited in durable documents -- C3's "154 timestamp values", D2's "15 captured files / 24 data edges", and F1/F2's "64 of 64" and "46 `malformed_record`". Extend `tests/corpus_census.py` to compute each from `git ls-files`, replace the cited figures, and let R5's `no_durable_document_states_the_working_tree_census_as_a_fact` test cover them. | todo | 10 |
+| R10 | **An empty `parentSpanId` is no parent, as F1 says it is.** Found by R3, out of scope: an OTLP root span carries `parentSpanId: ""` and the builder emits `orphan_parent` ("parent span '' is not in this input") on every root -- contradicting F1's claim in OPEN_QUESTIONS §16(e) that `""` is treated as no parent. Decide where the empty string is normalised away (reader or seam), fix, and cover with an OTLP fixture whose roots draw no diagnostic. Corpus diagnostic expectations will move; state the before/after. SPEC §3.1. CHANGELOG. | todo | 10 |
 | R7 | **Series close, again.** As G4: final statuses to TASKS.md, §3 decisions moved, WORKPLAN.md and its README row removed, `make check`. Runs only after R3 is decided and implemented (run 4), or immediately if the decision is (c). | awaiting R3 | 6 |
 
 ---
@@ -163,7 +164,7 @@ never restarts, fixes, or touches anything. Conventions live in
 ## 2. Execution order
 
 Run 3 = R1 → R2 → R4 → R6 → R5 → R3 (halts). Run 4 = R3 implementation per
-decision → R8 → R9 → R7.
+decision → R8 → R9 → R10 → R7.
 
 ---
 
@@ -214,6 +215,15 @@ Empty; run 3 takes none.
   stands. Tracked census: 52 files, 151 records; the old 57/177 was a working
   tree whose tracked part was then 43/117. Four further non-recomputable
   figures were outside R5's row and are registered as R9.
+- 2026-09-11: R3 halts the run, `awaiting decision` (OPEN_QUESTIONS §17). It
+  corrected two things the row had wrong: `timestamp_unit_suspect` is the
+  *builder's* diagnostic, not the adapters', and option (a) as the row stated
+  it silences both sides of the inversion instead of fixing it -- so the memo
+  splits (a) into (a1)/(a2)/(a'). Recommendation is (c) now, holding
+  (a1)+(a') until a second consumer needs the unit. R3 also found the
+  `parentSpanId: ""` orphan_parent contradiction, registered as R10.
+- 2026-09-11: run 3 ends here. Run 4 resumes at R3's decision, then R8, R9,
+  R10, R7. Nothing is blocked; nothing failed twice.
 
 ---
 
