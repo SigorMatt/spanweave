@@ -1288,15 +1288,33 @@ declares reaches `0.5`.
     reported as `RecursionError` rather than as a `ValueError` — a different
     exception for the same fact — so a guard that names only the second is a
     guard that is not there.
-  - **Writing has a limit of its own, and it is not the parser's.** The
-    encoder meets a value several levels lower than the parser did — inside
-    the document, inside a node, inside a payload — so a value that arrived
-    intact can still have no encoding. Where something can be dropped without
-    losing it, it is: an adapter that cannot render a structured attribute
-    back to text reports `payload_parse_failed` and leaves the value in the
-    record (§3.3). Where nothing can be — a node's verbatim source record is
-    verbatim or it is nothing — the library **refuses**, with
-    `graph_not_serializable` (§3.10). It never writes a partial graph.
+  - **Writing is contained too — but the encoder's limit is the parser's,
+    and what differs is where in the document the value sits.** Both draw on
+    one interpreter-wide C recursion budget: measured on CPython 3.12.3,
+    `json.loads` and `json.dumps` each give out at 9997 nested containers,
+    taken at equal call depth. The gap is positional. A value the reader met
+    two containers into a trace record — the record, its `attributes` — is
+    met by the encoder six containers into the graph document: `nodes`, the
+    node, `raw`, `source`, `attributes`. **Four levels, and those four levels
+    are the whole of it.** On this interpreter that makes a band a few levels
+    wide, at the very top of the parser's range, which reads and cannot be
+    written: measured end to end, an attribute nesting to 9993 is read and
+    the graph holding it is writable only to 9991. On an interpreter whose
+    encoder has headroom over its parser the four levels cost nothing and no
+    trace file reaches the refusal at all. So this is **not** a defect a user
+    routinely hits, and this document does not claim it is.
+    **The containment stays regardless**, for reasons that do not depend on
+    which of the two an interpreter gives you: the depth at which either
+    gives out belongs to the interpreter and not to this library — it moves
+    between builds and an embedder can move it — the encoder's input is not
+    only what the reader parsed, and a `RecursionError` arriving at a caller
+    is an interpreter's traceback rather than a routable code (§3.10). Where
+    something can be dropped without losing it, it is: an adapter that cannot
+    render a structured attribute back to text reports `payload_parse_failed`
+    and leaves the value in the record (§3.3). Where nothing can be — a
+    node's verbatim source record is verbatim or it is nothing — the library
+    **refuses**, with `graph_not_serializable` (§3.10). It never writes a
+    partial graph.
   - **What it writes is RFC 8259 JSON, so a non-finite number is not
     writable at all.** The encoder runs with `allow_nan=False`. `Infinity`,
     `-Infinity` and `NaN` are Python's extension to JSON rather than JSON, and

@@ -189,7 +189,8 @@ def test_a_foreign_schema_version_is_flagged_not_rejected(document):
 
 
 # --------------------------------------------------------------------------
-# The encoder's own limit (September 2026 audit, finding 3, batch A6)
+# The encoder's own containment (September 2026 audit, finding 3, batch A6;
+# the claim about *why* it is reachable corrected in batch R6)
 # --------------------------------------------------------------------------
 
 
@@ -219,6 +220,106 @@ def test_the_refusal_is_the_librarys_own_error_type():
     # in the consumer's own recursion.
     with pytest.raises(spanweave.GraphNotSerializableError):
         canonical_bytes(_nest(100_000))
+
+
+def _deepest_accepted(attempt):
+    """The deepest nesting `attempt` survives, found by bisection.
+
+    Measured, never hard-coded: the ceiling belongs to the interpreter's C
+    recursion budget, not to this library, and it differs between builds and
+    between embedders (`SPEC.md` §7).
+    """
+
+    def survives(depth):
+        try:
+            attempt(depth)
+        # The encoder reports depth as its own refusal (above), the parser
+        # reports it as the interpreter's `RecursionError`. Same fact.
+        except (RecursionError, spanweave.GraphNotSerializableError):
+            return False
+        return True
+
+    low, high = 1, 2
+    while survives(high):
+        low, high = high, high * 2
+        assert high < 10**7, "no depth this interpreter refuses"
+    while high - low > 1:
+        middle = (low + high) // 2
+        if survives(middle):
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+#: How far apart the two measurements below may land and still be one budget.
+#: Each is taken through a different call path -- `json.loads` through the
+#: decoder, `canonical_bytes` through `json.dumps` -- and the frames of that
+#: path cost a level or two. A *budget* difference would not be this small.
+CALL_PATH_SLACK = 16
+
+
+def test_the_encoder_does_not_give_out_before_the_parser_does():
+    # `SPEC.md` §7 used to say writing had a limit *lower* than the parser's.
+    # It has the same one: both draw on the interpreter's single C recursion
+    # budget, and measured on CPython 3.12.3 they give out within a level of
+    # each other (9997 nested containers each, taken at equal call depth).
+    # What the old sentence needed -- an encoder that gives out materially
+    # earlier -- is what this pins as false, so the story cannot come back.
+    parser = _deepest_accepted(lambda depth: json.loads("[" * depth + "]" * depth))
+    encoder = _deepest_accepted(lambda depth: canonical_bytes(_nest(depth)))
+    assert encoder >= parser - CALL_PATH_SLACK, (
+        f"the parser reads {parser} levels and the encoder writes {encoder}"
+    )
+
+
+def _deepest_nesting(value):
+    """How many containers deep the deepest value in `value` sits.
+
+    Iterative, because the things this file measures are deeper than the
+    interpreter would let a recursive walk go.
+    """
+    deepest = 0
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict):
+            deepest = max(deepest, depth)
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            deepest = max(deepest, depth)
+            stack.extend((child, depth + 1) for child in item)
+    return deepest
+
+
+def test_the_document_puts_a_records_value_four_levels_below_where_it_was_read(
+    tmp_path,
+):
+    # What makes the refusal reachable at all is position, not limit: a value
+    # the reader met two containers into a trace record -- the record, its
+    # `attributes` -- is met by the encoder six containers into the graph
+    # document: `nodes`, the node, `raw`, `source`, `attributes`. Those four
+    # levels are the whole of the gap (`SPEC.md` §7), so they are measured
+    # here rather than asserted in prose, and a document shape that moved
+    # them would say so.
+    nested = 1
+    for _ in range(40):
+        nested = {"a": nested}
+    record = {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "n",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "TOOL", "deep": nested},
+    }
+    trace = tmp_path / "deep.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    document = to_document(spanweave.build(trace))
+    assert _deepest_nesting(record) == 42  # the record, `attributes`, 40 more
+    assert _deepest_nesting(document) - _deepest_nesting(record) == 4
 
 
 # --------------------------------------------------------------------------

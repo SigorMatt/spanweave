@@ -184,11 +184,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 - New error `graph_not_serializable` / `GraphNotSerializableError`, raised by
   the one encoder every byte this library writes goes through. The reader
-  contains what the *parser* will not descend, but the encoder has its own
-  limit and meets a value four levels lower down -- inside the document,
-  inside a node, inside a payload -- so a payload that arrived intact could
-  still not leave, and `json.dumps` said so with a `RecursionError` from a
-  build that had already read its input without complaint. It is a refusal
+  contains what the *parser* will not descend; the encoder draws on the same
+  interpreter budget but meets a value four levels lower down -- inside the
+  document, inside a node, inside a payload -- so a payload that arrived at
+  the very top of the parser's range could still not leave, and `json.dumps`
+  said so with a `RecursionError` from a build that had already read its
+  input without complaint. (That band is narrow and interpreter-specific,
+  and the sentence above said "the encoder has its own limit" until batch R6
+  measured it; `SPEC.md` §7 carries the measurement.) It is a refusal
   rather than a diagnostic because there is nothing to degrade to: the
   offending value may be a node's verbatim source record, and dropping that to
   get past it is the one thing losslessness forbids. Nothing is written and
@@ -285,6 +288,34 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **The write-side depth guard is documented as what it is, and the
+  measurement is on the record.** A6 introduced `graph_not_serializable` and
+  narrated it as an encoder whose *limit* is lower than the parser's. It is
+  not: both draw on one interpreter-wide C recursion budget, and measured
+  here on CPython 3.12.3 (Linux, `sys.getrecursionlimit()` 1000, which is not
+  what bounds either) `json.loads` and `json.dumps` each give out at **9997
+  nested containers**, taken at equal call depth -- a ratio of 1.00, neither
+  the lower limit A6 claimed nor the ~1.9x *higher* one the run-2 review
+  measured on its own interpreter (`json.loads` 40112, `json.dumps` 74493).
+  What is real is **position**: a value the reader meets two containers into
+  a trace record is met by the encoder six containers into the graph document
+  (`nodes` -> the node -> `raw` -> `source` -> `attributes`), four levels
+  further down. Those four levels are the whole gap, so how reachable the
+  refusal is depends on the interpreter you are on: measured end to end here,
+  a record whose attribute nests to 9993 is read and the graph holding it is
+  writable only to 9991 -- a band two levels wide out of ten thousand -- while
+  on an interpreter with the review's headroom no trace file reaches it at
+  all. **The guard stays**, and the reason no longer rests on the wrong
+  mechanism: the depth at which either gives out is the interpreter's and not
+  this library's, the encoder's input is not only what the reader parsed, and
+  a `RecursionError` reaching a caller is a traceback rather than a routable
+  code. `SPEC.md` §7 states it that way, `serialize.py`'s docstring follows,
+  and two tests in `tests/test_serialize.py` pin it: one re-measures both
+  limits and fails if the encoder ever becomes materially the shallower of
+  the two, the other pins the four-level offset to the document's actual
+  shape. Documentation only -- no behaviour, no model, no serialized shape
+  changed. (run-2 review, the A6 should-fix)
 
 - **The cold reviews are in the repository, and the two concerns that were
   lost with them are open threads again.** Both reviews of the September 2026

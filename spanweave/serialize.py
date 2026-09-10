@@ -52,12 +52,15 @@ def canonical_bytes(value: JsonValue) -> bytes:
     """The one encoder. Everything written by this library goes through it.
 
     Deep nesting is the one input that can defeat it. The reader contains what
-    the *parser* will not descend (`SPEC.md` §7), but the encoder has its own
-    limit and meets the value four levels lower down -- inside the document,
-    inside a node, inside a payload -- so a value that arrived intact can still
-    fail to leave. `json.dumps` reports that as ``RecursionError``, which is
-    not a ``ValueError`` and used to escape as an interpreter traceback from a
-    build that had read its input without complaint.
+    the *parser* will not descend (`SPEC.md` §7); the encoder draws on the
+    same interpreter budget, but meets the value four levels lower down --
+    inside the document, inside a node, inside a payload -- so a value that
+    arrived at the top of the parser's range can still fail to leave. That
+    band is narrow and interpreter-specific (§7 records the measurement), and
+    the guard does not depend on it: `json.dumps` reports depth as
+    ``RecursionError``, which is not a ``ValueError``, and uncontained it
+    escapes as an interpreter traceback from a build that had read its input
+    without complaint.
 
     It becomes a refusal rather than a diagnostic because there is nothing to
     degrade to: the offending value may be a node's verbatim source record, and
