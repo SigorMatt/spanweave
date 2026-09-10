@@ -23,8 +23,12 @@ from spanweave.errors import SpanweaveError
 from spanweave.model import JsonValue
 from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 
-# Exit codes. 0 success, 1 a refusal or an unimplemented path, 2 argparse's own
-# usage error (argparse chooses that one, not us).
+# Exit codes. 0 success, 1 a refusal, 2 argparse's own usage error (argparse
+# chooses that one, not us). They are documented in `SPEC.md` §7 and in the
+# README, not only here: an exit code is the first thing a script branches on
+# and a comment inside the package is the last place its author looks. `1` is
+# never subdivided -- the status says *there is no graph*, and the error code
+# on stderr says why (`SPEC.md` §3.10).
 EXIT_OK = 0
 EXIT_FAILED = 1
 
@@ -245,9 +249,29 @@ def _do_inspect(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _refuse_the_constant(token: str) -> float:
+    """``NaN``, ``Infinity``, ``-Infinity``: Python's extension, not JSON.
+
+    ``json.loads`` reads all three by default. This library's encoder writes
+    none of them (`serialize.canonical_bytes`, ``allow_nan=False``), so a
+    graph document carrying one is a document this library could not have
+    written and a strict parser on the other end cannot read -- and a
+    ``validate`` that read it would bless a file ``build`` refuses, with both
+    commands claiming to be about the same thing (`SPEC.md` §7).
+
+    Raised as a ``ValueError`` because that is what the caller already treats
+    as *this file is not readable JSON*: it is the same finding as a syntax
+    error and it is reported as one.
+    """
+    raise ValueError(f"{token} is not JSON: RFC 8259 has no such token")
+
+
 def _do_validate(args: argparse.Namespace) -> int:
     try:
-        document = json.loads(pathlib.Path(args.graph).read_bytes())
+        document = json.loads(
+            pathlib.Path(args.graph).read_bytes(),
+            parse_constant=_refuse_the_constant,
+        )
     # RecursionError is how `json` reports nesting it will not descend. It is
     # the same finding as a syntax error -- this file is not readable JSON --
     # and reporting it as one is the difference between an exit code and a
@@ -365,7 +389,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SpanweaveError as failure:
         # The deliberate refusals: an ambiguous input, a duplicate id. They
         # are messages, not tracebacks -- the caller can act on them.
-        print(f"spanweave {args.command}: {failure}", file=sys.stderr)
+        #
+        # The `code` leads, in brackets, because `SPEC.md` §3.10's rule is
+        # *match on the code, never on the message* and a caller running this
+        # as a subprocess has nothing else: without it `adapter_unconfident`
+        # and `graph_not_serializable` are both "exit 1 and a sentence", and
+        # the only way to tell them apart is the English nobody promised to
+        # keep. An `OSError` below prints no bracket -- it is the operating
+        # system's answer and has no code in that table to print.
+        print(
+            f"spanweave {args.command}: [{failure.code}] {failure}",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
     except OSError as failure:
         # This line is the contract-shaped half and does not move: it is what

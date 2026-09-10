@@ -561,3 +561,124 @@ def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, cap
         document = json.loads(out.read_text())
         assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == digits
         capsys.readouterr()
+
+
+# --------------------------------------------------------------------------
+# A refusal is routable from outside the process (run-3 review F4, batch R16)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.10: match on the `code`, never on the message. A caller running
+# `spanweave` as a subprocess has neither the exception nor the type -- only an
+# exit status and a line of text -- so the line carries the code in brackets
+# (§7, *Failures*). Without it `adapter_unconfident` and
+# `graph_not_serializable` are both "exit 1 and a sentence", and the only way
+# to tell them apart is the English nobody promised to keep.
+
+_UNRECOGNIZABLE = '{"hello":"world"}\n'
+
+_NON_FINITE_SPAN = (
+    '{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
+    '"start_time":NaN,"end_time":2.0,"status":"OK",'
+    '"attributes":{"openinference.span.kind":"AGENT"}}\n'
+)
+
+
+def _refusal(tmp_path, text, argv):
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(text)
+    return [str(part).replace("TRACE", str(trace)) for part in argv]
+
+
+@pytest.mark.parametrize(
+    ("text", "argv", "code"),
+    (
+        (_UNRECOGNIZABLE, ["build", "TRACE"], "adapter_unconfident"),
+        (_UNRECOGNIZABLE, ["inspect", "TRACE"], "adapter_unconfident"),
+        (_UNRECOGNIZABLE, ["build", "TRACE", "--adapter", "nope"], "unknown_adapter"),
+        (_NON_FINITE_SPAN, ["build", "TRACE"], "graph_not_serializable"),
+    ),
+    ids=("unconfident-build", "unconfident-inspect", "unknown-adapter", "non-finite"),
+)
+def test_a_raised_refusal_names_its_code_on_stderr(tmp_path, capsys, text, argv, code):
+    argv = _refusal(tmp_path, text, argv)
+    assert main(argv) == 1
+    printed = capsys.readouterr().err
+    assert printed.startswith(f"spanweave {argv[0]}: [{code}] "), printed
+    assert printed.count("\n") == 1, "a refusal is one line"
+
+
+def test_the_bracket_is_the_only_machine_readable_part_of_the_line(tmp_path, capsys):
+    # The rule stated as a property: whatever the prose says, the code a
+    # caller reads off the line is the code the library raised.
+    from spanweave.errors import ERROR_CODES
+
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_UNRECOGNIZABLE)
+    assert main(["build", str(trace)]) == 1
+    printed = capsys.readouterr().err
+    bracketed = printed[printed.index("[") + 1 : printed.index("]")]
+    assert bracketed in ERROR_CODES
+
+
+def test_a_failure_the_library_did_not_raise_carries_no_code(tmp_path, capsys):
+    # An `OSError` is the operating system's answer and has no code in
+    # §3.10's table. Inventing one would name a contract that does not exist,
+    # so this line is byte-for-byte the line it always was.
+    missing = tmp_path / "nope.jsonl"
+    assert main(["build", str(missing)]) == 1
+    printed = capsys.readouterr().err
+    assert printed.startswith("spanweave build: [Errno 2] "), printed
+    assert not printed.startswith("spanweave build: [graph")
+
+
+# --------------------------------------------------------------------------
+# `validate` refuses what `build` refuses to write (run-3 review F4)
+# --------------------------------------------------------------------------
+
+
+def _graph_with_a_bare_nan(tmp_path):
+    """A graph document that is exactly what `build` wrote, plus one `NaN`.
+
+    Placed inside `raw.source`, which is where a non-finite number reaches a
+    graph at all (`SPEC.md` §7): every field the library normalizes refuses
+    one, so a document carrying one carries it verbatim or not at all.
+    """
+    out = tmp_path / "graph.json"
+    assert main(["build", TRACE, "-o", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert '"start_time":1000.0' in text
+    out.write_text(text.replace('"start_time":1000.0', '"start_time":NaN', 1))
+    return out
+
+
+def test_validate_refuses_a_graph_carrying_a_bare_nan(tmp_path, capsys):
+    # The asymmetry this closes: `build` will not write this document, and
+    # `validate` used to call it valid and exit 0 -- so the two commands
+    # disagreed about one file while both claimed to be about well-formedness.
+    graph = _graph_with_a_bare_nan(tmp_path)
+    capsys.readouterr()
+    assert main(["validate", str(graph)]) == 1
+    printed = capsys.readouterr()
+    assert "not valid JSON" in printed.err
+    assert "NaN" in printed.err
+    assert "valid" not in printed.out
+
+
+@pytest.mark.parametrize("token", ("NaN", "Infinity", "-Infinity"))
+def test_validate_refuses_every_token_rfc_8259_does_not_define(tmp_path, capsys, token):
+    graph = _graph_with_a_bare_nan(tmp_path)
+    graph.write_text(graph.read_text(encoding="utf-8").replace("NaN", token, 1))
+    capsys.readouterr()
+    assert main(["validate", str(graph)]) == 1
+    assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_build_refuses_to_write_the_document_validate_now_refuses_to_read(
+    tmp_path, capsys
+):
+    # The two halves are one rule, so they are asserted together: the trace
+    # that produces the document above is the trace `build` refuses.
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_NON_FINITE_SPAN)
+    assert main(["build", str(trace), "-o", str(tmp_path / "g.json")]) == 1
+    assert "graph_not_serializable" in capsys.readouterr().err

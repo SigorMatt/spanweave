@@ -174,6 +174,32 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
 - **Dialect-agnostic core.** Adding a dialect is a new *adapter*, never a change
   to the graph model.
 
+## Exit codes
+
+| Exit | Meaning |
+|---|---|
+| `0` | it worked |
+| `1` | a refusal: the library raised, a file could not be read, or a graph did not validate |
+| `2` | a usage error (argparse's own) |
+
+A failure the library **raised** prints its stable error `code` in brackets, so
+a script can tell one refusal from another without matching English:
+
+```
+$ spanweave build not-a-trace.jsonl
+spanweave build: [adapter_unconfident] no adapter is confident enough about
+this input (highest 0.00, minimum 0.50). Confidence declared by each adapter:
+openinference 0.00, otel_genai 0.00. Name one explicitly with --adapter if you
+know the dialect.
+```
+
+Codes are a public contract from `0.9.x` and every one is listed in `SPEC.md`
+§3.10. **The bracket is the whole of what is machine-readable on that line** —
+the prose after it is for you, and may be reworded in any release. A failure
+the library did *not* raise, such as a file that is not there, prints no
+bracket: it has no code to print. And `1` is never subdivided — the exit status
+says *there is no graph*, the code says why.
+
 ## Conformance
 
 A scenario in `fixtures/conformance/` is one run, rendered in **each dialect

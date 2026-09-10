@@ -461,3 +461,53 @@ def test_a_trace_carrying_an_unquoted_infinity_refuses_rather_than_writing_it(
 
 def with_code(graph, code):
     return [item for item in graph.diagnostics if item.code == code]
+
+
+# --------------------------------------------------------------------------
+# One exception type, two facts (run-3 review F4, batch R16)
+# --------------------------------------------------------------------------
+#
+# `json.dumps` answers a non-finite number and a value that refers back to
+# itself with the same `ValueError`. The refusal names which of the two it
+# found, because a caller sent looking for a number that is not there is a
+# caller the message misled (`SPEC.md` §7, *Outputs*).
+
+
+def _self_referential():
+    source = {"attributes": {}}
+    source["attributes"]["itself"] = source
+    return {"raw": {"source": source}}
+
+
+def test_a_circular_reference_is_refused_as_a_circular_reference():
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes(_self_referential())
+    message = str(failure.value)
+    assert failure.value.code == "graph_not_serializable"
+    assert "refers back to itself" in message
+    assert "number" not in message, message
+
+
+def test_the_non_finite_refusal_still_names_the_number():
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {"source": {"start_time": float("nan")}}})
+    assert "number JSON has no way to write" in str(failure.value)
+
+
+def test_a_value_that_is_both_is_reported_as_the_number_it_holds():
+    # Both facts are true of this value; the message names the one a caller
+    # can find by looking, and says nothing false about the other.
+    value = _self_referential()
+    value["raw"]["source"]["start_time"] = float("inf")
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes(value)
+    assert "number JSON has no way to write" in str(failure.value)
+
+
+def test_a_mapping_keyed_by_a_non_finite_number_is_reported_as_the_number():
+    # The walk looks at keys too. A mapping keyed by `nan` defeats the encoder
+    # the same way a value does, and reporting it as a cycle would be the
+    # original defect with the two facts swapped.
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {float("nan"): "keyed by a number"}})
+    assert "number JSON has no way to write" in str(failure.value)

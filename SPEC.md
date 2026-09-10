@@ -852,7 +852,7 @@ SpanweaveError:
 | `adapter_detect_failed` | `AdapterSelectionError` | an adapter raised from `detect()`, which §6 forbids |
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
-| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend, or is a non-finite number RFC 8259 cannot write (§7) |
+| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7) |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -865,6 +865,14 @@ a broken adapter cannot tell them apart from the type. The alternative to a
 code is string-matching the message, which silently makes every message a
 compatibility surface and means nobody can improve one without breaking a
 caller.
+
+**A caller who has only stderr can follow that rule too.** A rule nobody can
+obey from where they stand is not a contract, and a process that runs
+`spanweave` as a subprocess stands outside the exception: all it has is an
+exit status and a line of text. So the CLI prints the code in brackets ahead
+of the message (§7, *Failures*). That does not make stderr a matching
+surface — it puts the code, which is the matching surface, somewhere a caller
+can reach.
 
 ## 4. Edge kinds — the centerpiece
 
@@ -1446,6 +1454,25 @@ declares reaches `0.5`.
     reported as `RecursionError` rather than as a `ValueError` — a different
     exception for the same fact — so a guard that names only the second is a
     guard that is not there.
+  - **`validate` refuses what `build` refuses to write.** Python's JSON parser
+    reads the bare tokens `NaN`, `Infinity` and `-Infinity`, which RFC 8259
+    does not define (§3.1); the encoder this library writes with refuses them
+    (*Outputs*, below). A graph document carrying one is therefore a document
+    this library could not have produced and a strict parser on the other end
+    cannot read, so `spanweave validate` parses with those constants refused
+    and reports such a file as not valid JSON — the same finding, and the same
+    exit code, as a syntax error. The alternative is worse than a gap: a
+    `validate` that reads the tokens its own encoder will not write blesses a
+    file `build` would refuse, and the two commands disagree about one file
+    while both say they are about well-formedness.
+  - **`inspect` is not `validate`, and does not make that check.** It
+    summarizes what it is handed and never encodes anything, so a graph
+    document holding a bare `NaN` — or any other shape `build` could not have
+    produced — is summarized rather than refused. That is the division of
+    labour rather than an oversight: `inspect` answers *what is in this file*,
+    `validate` answers *is this file a well-formed graph*, and folding the
+    second question into the first would make the summary command the
+    gatekeeper for a document nobody asked it to judge.
   - **Writing is contained too, and how much room it has is the
     interpreter's answer rather than this library's.** What is fixed is
     *position*. A value the reader met two containers into a trace record —
@@ -1514,6 +1541,14 @@ declares reaches `0.5`.
     the only way one reaches the encoder is inside a node's verbatim source
     record — the case just above, where nothing can be dropped — and it is the
     same refusal for the same reason.
+    - **A value that refers back to itself is refused too, and is said to be
+      that.** `json.dumps` reports a cycle and a non-finite number with the
+      same exception type, so the refusal states which of the two it actually
+      found rather than whichever is more common. Nothing the reader parses
+      can hold a cycle — JSON has no way to write one — so a cycle reaches the
+      encoder only from a graph a caller assembled in memory, and a refusal
+      that misnamed it would send that caller looking for a number that is not
+      there.
 - **OTLP JSON** (`ExportTraceServiceRequest`: an object whose `resourceSpans`
   is a list) is a third **container**, not a dialect. The spans inside it are
   in whatever dialect their instrumentor speaks — possibly two dialects in one
@@ -1615,14 +1650,32 @@ declares reaches `0.5`.
   warrant, diagnostics grouped by code, payload-availability tallies.
   Informational; not a stable contract.
 - **Failures** (stderr): a command that fails prints one line,
-  `spanweave <command>: <the failure>`. When the file it could not open does
-  **not exist** and its path is one this project's own documents quote — the
-  `fixtures/` corpus, which ships in the source tree and not in the installed
-  package — a second, clearly secondary `hint:` line follows it, naming where
-  those paths resolve from. The first line is byte-for-byte unchanged by the
-  presence of the second, and the exit code is unchanged. Both lines are prose
-  for a human: §3.10's rule holds here as it does everywhere — match on an
-  error `code`, never on a message, and stderr is not a matching surface.
+  `spanweave <command>: <the failure>`.
+  - **A failure the library raised names its code.** When the failure is a
+    `SpanweaveError` (§3.10), the line carries that error's `code` in square
+    brackets ahead of the message:
+    `spanweave build: [graph_not_serializable] the graph could not be encoded: …`.
+    Without it §3.10's rule — *match on the code, never on the message* — is
+    unfollowable from the one place most callers stand: `adapter_unconfident`
+    and `graph_not_serializable` are otherwise both "exit 1 and an English
+    sentence", and a script that wants to retry an ambiguous input with
+    `--adapter` but fail hard on a graph that cannot be written has nothing to
+    branch on but prose. The bracket is the *whole* of what is machine-readable
+    on that line; everything after it is for a human and may be reworded in any
+    release.
+  - **A failure the library did not raise carries no bracket.** An `OSError`
+    from a file that is not there is the operating system's answer, not a
+    refusal this library defines, and it has no code in §3.10's table. Printing
+    an invented one would name a contract that does not exist, so the line
+    stays exactly as it was. When the file it could not open does **not
+    exist** and its path is one this project's own documents quote — the
+    `fixtures/` corpus, which ships in the source tree and not in the
+    installed package — a second, clearly secondary `hint:` line follows it,
+    naming where those paths resolve from. The first line is byte-for-byte
+    unchanged by the presence of the second, and the exit code is unchanged.
+    Both lines are prose for a human, and neither is a matching surface: what
+    a caller matches on is the bracketed code above, and this failure has
+    none.
 - Output goes to stdout / files **only**. Core never opens a network connection.
 
 ### Invocation
@@ -1634,6 +1687,23 @@ spanweave validate <graph.json>
 spanweave adapters
 spanweave --version
 ```
+
+### Exit codes
+
+| Exit | Meaning |
+|---|---|
+| `0` | the command did what it was asked |
+| `1` | a refusal: the library raised (§3.10), a file could not be read, or a graph did not validate |
+| `2` | a usage error — argparse's, chosen by argparse and not by this library |
+
+**`1` is deliberately not subdivided.** An exit status answers *did it work*,
+and a caller that needs to know *why* reads the bracketed error `code` on
+stderr (*Failures*, above), which is the thing §3.10 makes a contract. Splitting
+`1` into a family of numbers would create a second contract that says less than
+the first — 8 bits, no room to add a cause, and nothing to say about the
+failures that carry no code at all — and it would have to be frozen alongside
+it. A raised refusal and an unreadable file exit the same way on purpose: from
+outside, both mean *there is no graph*.
 
 ## 8. Annotation API
 

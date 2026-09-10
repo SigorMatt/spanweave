@@ -40,6 +40,8 @@ import pathlib
 import re
 import shlex
 
+import pytest
+
 import spanweave
 from spanweave.adapters import registered
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
@@ -2206,3 +2208,87 @@ def test_no_test_hard_codes_the_digit_limit_it_is_supposed_to_derive():
                 f"directly: {line.strip()!r}. {helper} is where that happens, "
                 f"because it restores the ambient setting afterwards"
             )
+
+
+# -- The exit codes and the failure line, held to the CLI --------------------
+#
+# Run-3 review F4. Exit codes lived in a comment in `spanweave/cli.py` and
+# nowhere a reader looks; the error `code` §3.10 makes a public contract never
+# reached stderr at all. Both are documented now, and both are recomputed here
+# rather than restated -- a documented exit code that the CLI stopped using is
+# the failure this whole file exists for.
+
+
+def exit_codes_the_cli_uses():
+    """Every status `spanweave` can exit with, read off the CLI itself.
+
+    `2` is argparse's, not this library's, so it is obtained the way a caller
+    would meet it: by making the usage error and reading what argparse chose.
+    """
+    from spanweave.cli import EXIT_FAILED, EXIT_OK, main
+
+    with pytest.raises(SystemExit) as usage:
+        main(["no-such-subcommand"])
+    return {EXIT_OK, EXIT_FAILED, int(usage.value.code or 0)}
+
+
+def exit_code_rows(text):
+    """The first column of every `| \\`0\\` |`-shaped row in some markdown."""
+    return {int(found) for found in re.findall(r"^\|\s*`(\d+)`\s*\|", text, re.M)}
+
+
+def test_the_documents_state_every_exit_code_the_cli_uses():
+    used = exit_codes_the_cli_uses()
+    assert used == {0, 1, 2}, (
+        f"the CLI exits with {sorted(used)}. That is a change to a documented "
+        f"contract (`SPEC.md` §7, *Exit codes*), so the tables move with it"
+    )
+    for where, heading in (
+        ("README.md", "\n## Exit codes"),
+        ("SPEC.md", "\n### Exit codes"),
+    ):
+        text = read(where)
+        assert heading in text, (
+            f"{where} no longer has an {heading.strip()} section. Exit codes "
+            f"lived only in a source comment once; that is what F4 found"
+        )
+        documented = exit_code_rows(section(text, heading))
+        assert documented == used, (
+            f"{where}'s exit-code table states {sorted(documented)} and the "
+            f"CLI exits with {sorted(used)}"
+        )
+
+
+def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, capsys):
+    """The transcript under *Exit codes*, run rather than believed.
+
+    The README shows one refusal in full because the bracket is the whole
+    point of the section, and a shown line nobody runs is how the quickstart
+    came to open with a file that did not exist (`tests/readme_quickstart.py`).
+    Wrapping is not part of the claim, so both sides are flattened; everything
+    else -- the code, the adapters, their declared confidence -- is compared
+    exactly, and is whatever the library says today.
+    """
+    from spanweave.cli import main
+
+    body = section(read("README.md"), "\n## Exit codes")
+    fences = re.findall(r"^```\n(.*?)^```", body, re.M | re.S)
+    transcripts = [fence for fence in fences if fence.lstrip().startswith("$ ")]
+    assert len(transcripts) == 1, (
+        "the README's Exit codes section no longer shows exactly one "
+        "transcript, so this test is comparing something other than the line "
+        "a reader is shown"
+    )
+    lines = transcripts[0].splitlines()
+    argv = shlex.split(lines[0][2:])[1:]
+    assert argv[0] == "build", argv
+    named = argv[-1]
+    trace = tmp_path / named
+    trace.write_text('{"hello":"world"}\n', encoding="utf-8")
+
+    assert main([*argv[:-1], str(trace)]) == 1
+    printed = flat(capsys.readouterr().err)
+    shown = flat("\n".join(lines[1:])).replace(named, str(trace))
+    assert printed == shown, (
+        f"the README shows\n  {shown}\nand the CLI prints\n  {printed}"
+    )

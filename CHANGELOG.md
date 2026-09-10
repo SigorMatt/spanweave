@@ -298,6 +298,47 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A refusal is now routable from outside the process, and `spanweave
+  validate` refuses the document `spanweave build` refuses to write.**
+  `spanweave/errors.py` has said *"match on this, never on the message"* since
+  Phase 1 and `SPEC.md` §3.10 makes error codes a public contract from
+  `0.9.x`, but the CLI printed `spanweave <command>: <message>` and dropped the
+  code -- so from a subprocess, which is where most callers stand,
+  `adapter_unconfident` and `graph_not_serializable` were both "exit 1 and an
+  English sentence" and the only way to tell them apart was the prose nobody
+  promised to keep. A raised `SpanweaveError` now prints its code in brackets
+  first: `spanweave build: [adapter_unconfident] no adapter is confident
+  enough…`. An `OSError` deliberately prints **no** bracket -- it is the
+  operating system's answer, it has no code in §3.10's table, and inventing
+  one would name a contract that does not exist. The exit codes themselves
+  (`0`, `1`, argparse's `2`) lived only in a comment inside `spanweave/cli.py`
+  and are now a table in `SPEC.md` §7 and in the README, with the reason `1` is
+  never subdivided stated rather than left to be inferred. Both tables are
+  recomputed from the CLI by `tests/test_doc_truth.py`, and the failure line the
+  README shows is *run* there rather than believed.
+
+  The second half is the asymmetry found while checking the first: `validate`
+  called `json.loads` with no `parse_constant`, so a graph document carrying a
+  bare `NaN` printed `valid` and exited `0` -- a document the encoder refuses to
+  write (`allow_nan=False`, batch R1) and a strict parser on the other end
+  cannot read. `validate` now parses with those constants refused and reports
+  such a file as not valid JSON, the same finding and the same exit code as a
+  syntax error. `inspect` is unchanged and says so in §7: it summarizes what it
+  is handed and never encodes anything, and folding well-formedness into the
+  summary command would make it the gatekeeper for a question nobody asked it.
+
+  Two wording defects in the same contract went with it. The docstring of
+  `GraphNotSerializableError` still said `json.dumps` answers depth with
+  `RecursionError` *"not a `ValueError`"* while R1 had added exactly a
+  `ValueError` arm; it now names all three defeats (depth, a non-finite number, a value that refers back
+  to itself) and which of the two exception types each arrives as. And
+  `serialize.py`'s `except ValueError` was broader than its message: a circular
+  reference -- the other thing `json.dumps` raises `ValueError` for -- was
+  reported as *"it holds a number JSON has no way to write (Circular reference
+  detected)"*. The refusal now looks at the value rather than at the
+  interpreter's message and says which of the two it met.
+  (run-3 review finding F4, batch R16; `SPEC.md` §3.10, §7)
+
 - **The interpreter's integer-string digit limit is named as an input to the
   graph, and no test hard-codes it any more.** `CLAUDE.md` 4 promises the same
   graph from the same bytes *on any machine*; batch R1's rule made a legal
