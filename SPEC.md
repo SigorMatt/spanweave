@@ -530,6 +530,27 @@ it claims the adapter mapped a value it never had, and the claim is loudest
 exactly where it is wrong, because the value that survives only in `raw` is
 the one nothing else records.
 
+The rule is the adapter's whole surface, not a list of keys, and three of its
+cases are worth naming because each looks like an exception and is not:
+
+- **A key read to *type* another one.** A mime type the adapter cannot read as
+  a string (`input.mime_type`, `output.mime_type`) types nothing: the payload
+  is `present` with no mime, exactly as if the key had never been sent. It is
+  reported. So is a mime stated beside **no value at all** — an `absent`
+  payload carries no mime either, so that key was never read.
+- **A key whose only unreadable rendering is `null`.** A span kind is rendered
+  with `str()`, so every value but `null` is read and is preserved verbatim as
+  `attributes.reported_kind`; `null` alone leaves nothing, and is reported.
+  The `unknown_span_kind` diagnostic must also say **which** of the two
+  happened: a message that says "no attribute" of a key the span carried is
+  untrue in the one place a reader would look to find out.
+- **The same key in two dialects.** An unreadable name or call id
+  (`tool.name` / `gen_ai.tool.name`, `tool_call.id` / `gen_ai.tool.call.id`)
+  never reaches a node field, so `unmapped_attributes` is the *entire* report
+  of it. One dialect reporting it and the other swallowing it is therefore a
+  cross-dialect difference in the only place the difference could be seen, and
+  §1's claim is that the two dialects describe one run the same way.
+
 #### `source`, per code
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated

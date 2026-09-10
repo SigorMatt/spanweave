@@ -14,6 +14,8 @@ invent.
 import json
 import pathlib
 
+import pytest
+
 from spanweave import diagnostics as codes
 from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.model import NodeKind, PayloadState, Status
@@ -439,6 +441,110 @@ def test_an_empty_parent_id_is_no_parent_rather_than_an_empty_reference():
 def test_a_record_key_the_adapter_does_not_read_is_reported():
     span = span_of({"gen_ai.operation.name": "chat"}, events=[{"name": "x"}])
     assert "<record>.events" in span.unmapped
+
+
+# --------------------------------------------------------------------------
+# The keys a decision reads (SPEC.md 3.7)
+# --------------------------------------------------------------------------
+#
+# The same rule `test_openinference.py` states at this heading, at this
+# dialect's keys: a key is consumed where it is READ, never before, so a value
+# the adapter cannot read decided nothing and stays reported. It is not a
+# second copy of one adapter's habit -- an unreadable name or call id reported
+# by one dialect and swallowed by the other is a cross-dialect difference
+# (`tests/test_adapters.py` holds the two side by side).
+
+
+@pytest.mark.parametrize("value", [7, None, {"name": "lookup"}, [], True])
+@pytest.mark.parametrize("key", ["gen_ai.tool.name", "gen_ai.request.model"])
+def test_a_name_the_adapter_cannot_read_decides_nothing_and_stays_reported(key, value):
+    # `_operation` marked both name keys consumed before reading either.
+    span = span_of({"gen_ai.operation.name": "execute_tool", key: value})
+    assert span.operation is None
+    assert span.attributes.get("model") is None
+    assert span.unmapped == (key,)
+
+
+def test_a_readable_name_is_still_consumed_even_where_the_kind_declined_it():
+    # The other direction: both names were read, and a `gen_ai.tool.name` on a
+    # span this dialect did not call a tool is still a name the adapter read
+    # -- so neither key is a gap, and `operation` is still the model.
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.tool.name": "lookup",
+            "gen_ai.request.model": "m",
+        }
+    )
+    assert span.operation == "m"
+    assert span.attributes["model"] == "m"
+    assert span.unmapped == ()
+
+
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_fulfilling_call_id_the_adapter_cannot_read_stays_reported(value):
+    # The one key that says this span answered a call: consumed before it was
+    # read, so a span whose id the adapter could not read fulfilled nothing
+    # AND reported nothing.
+    span = span_of(
+        {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.call.id": value}
+    )
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == ("gen_ai.tool.call.id",)
+
+
+def test_an_unreadable_fulfilling_id_does_not_hide_the_calls_the_span_requested():
+    # The fall-through is the requester scan of the span's own output, and it
+    # still runs: the span is a requester, and the id it could not read is
+    # reported beside it.
+    span = span_of(
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.tool.call.id": 7,
+            "gen_ai.output.messages": messages(calls("call_a")),
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.call_role is CallRole.REQUESTER
+    assert span.unmapped == ("gen_ai.tool.call.id",)
+
+
+def test_an_operation_name_reported_as_null_is_present_and_the_diagnostic_says_so():
+    # `attributes.get(OPERATION)` answers `None` for a key that is absent and
+    # for one whose value is `null`, and the message said "no attribute" for
+    # both. The key was present and could not be read: it is reported, and the
+    # message says what actually happened (SPEC.md 3.7).
+    span = span_of({"gen_ai.operation.name": None})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes.get("reported_kind") is None
+    assert span.unmapped == ("gen_ai.operation.name",)
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no gen_ai.operation.name attribute" not in kind_diagnostic.message
+    assert "null" in kind_diagnostic.message
+
+
+def test_an_operation_name_the_dialect_omits_is_an_absence_and_says_that_instead():
+    span = span_of({"gen_ai.agent.name": "a"})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.unmapped == ("gen_ai.agent.name",)
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no gen_ai.operation.name attribute" in kind_diagnostic.message
+
+
+@pytest.mark.parametrize("value", [7, True, ["retrieval"]])
+def test_an_operation_name_that_is_not_a_string_is_still_read_and_consumed(value):
+    # What "readable" means at this key, pinned: the operation is rendered
+    # with `str()`, so anything but `null` is read, is preserved verbatim as
+    # `reported_kind`, and is therefore mapped rather than reported.
+    span = span_of({"gen_ai.operation.name": value})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes["reported_kind"] == str(value)
+    assert span.unmapped == ()
 
 
 # --------------------------------------------------------------------------

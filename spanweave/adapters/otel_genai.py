@@ -364,14 +364,27 @@ def _kind_of(
 ) -> tuple[NodeKind, dict[str, JsonValue]]:
     normalized: dict[str, JsonValue] = {}
     reported = attributes.get(OPERATION)
-    consumed.add(OPERATION)
     if reported is None:
+        # `get` answers `None` twice over -- for a key the span never carried
+        # and for one carrying `null` -- and those are different facts. The
+        # kind is unknown either way, but only the second is something the
+        # adapter was told and could not read, so only the second is a key
+        # that decided nothing and stays reported (`SPEC.md` §3.7). The
+        # message says which one happened, because one that says "no
+        # attribute" of a key that was sent is untrue. The same wording as
+        # `openinference.py`'s, because an unreadable kind reported one way by
+        # one dialect and another way by the other is a cross-dialect
+        # difference in the only place it could be seen.
         diagnostics.append(
             Diagnostic(
                 code=UNKNOWN_SPAN_KIND,
                 message=(
-                    f"no {OPERATION} attribute, so the kind is unknown; the "
-                    f"span is kept and the record is preserved verbatim"
+                    f"{OPERATION} was reported as null, so the kind is "
+                    f"unknown; the span is kept, the record is preserved "
+                    f"verbatim, and the key stays reported as unmapped"
+                    if OPERATION in attributes
+                    else f"no {OPERATION} attribute, so the kind is unknown; "
+                    f"the span is kept and the record is preserved verbatim"
                 ),
                 source=record,
                 adapter=ADAPTER_ID,
@@ -379,6 +392,9 @@ def _kind_of(
         )
         return NodeKind.UNKNOWN, normalized
 
+    # Anything else was read: `str` renders it, and whatever it renders is
+    # kept verbatim as `reported_kind` below when it maps to no `NodeKind`.
+    consumed.add(OPERATION)
     text = str(reported)
     mapped = OPERATIONS.get(text)
     if mapped is not None:
@@ -442,12 +458,15 @@ def _payload(
     consumed: set[str],
     diagnostics: list[Diagnostic],
 ) -> Payload:
-    consumed.add(key)
     if key not in attributes:
         # The instrumentor emitted nothing. Not the same as emitting nothing
-        # *in* something (SPEC.md §3.3).
+        # *in* something (SPEC.md §3.3). Nothing to consume either: a key is
+        # consumed where it is read (`SPEC.md` §3.7), and this one was not
+        # there to read. Unlike the dialect next door, the mime is the
+        # convention's rather than an attribute, so there is no second key.
         return Payload.absent()
 
+    consumed.add(key)
     reported = attributes[key]
     if mime == TEXT_MIME:
         # The one content attribute the convention states is unstructured.
@@ -570,10 +589,20 @@ def _operation(
     tool / model / retriever name (`SPEC.md` §3.2); an agent's name is not one
     of those, and mapping it would put a value in a field OpenInference leaves
     empty on the same span. It surfaces in `unmapped` and is reported.
+
+    Each key is consumed where it is READ, not before (`SPEC.md` §3.7): a name
+    the adapter cannot read as a string decided nothing -- `operation` and
+    `model` stay `None` -- so it stays in `unmapped` rather than being claimed
+    as mapped. Both are read even where the kind means only one can be used,
+    because a readable name that merely lost the field was still read.
     """
-    consumed.update({TOOL_NAME, REQUEST_MODEL})
     tool = _as_str(attributes.get(TOOL_NAME))
     model = _as_str(attributes.get(REQUEST_MODEL))
+    consumed.update(
+        key
+        for key, value in ((TOOL_NAME, tool), (REQUEST_MODEL, model))
+        if value is not None
+    )
     if kind is NodeKind.TOOL and tool is not None:
         return tool, model
     return model, model
@@ -599,10 +628,14 @@ def _call(
     like a requester, and the builder would state a `call_result` relation the
     telemetry never asserted (`SPEC.md` §4.4). Those echoed ids stay inside the
     input payload, where a consumer can still see them.
+
+    An id the adapter cannot read is not an id: it states no call, and it is
+    consumed only where it is read (`SPEC.md` §3.7), so it stays reported like
+    any other key read and not usable -- as it is in the dialect next door.
     """
-    consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
+        consumed.add(TOOL_CALL_ID)
         # A fulfiller's own `operation` already names the tool; carrying it
         # here too is what lets both unpaired codes share one `source` shape.
         named = {fulfilling: operation} if operation is not None else {}

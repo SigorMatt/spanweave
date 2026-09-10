@@ -584,6 +584,28 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   with `llm_tool_llm`'s graph unchanged.
   (audit batch R10, found by R3; `SPEC.md` §4.0, §6, §7, §3.7)
 
+- **The rule now holds at every deciding key in both dialects, and the
+  diagnostic stops saying "no attribute" of a key that was sent.** Three more
+  OpenInference keys and three OTel GenAI ones were still marked consumed
+  before they were read: `input.mime_type` / `output.mime_type` (a mime the
+  adapter cannot read types nothing -- the payload is `present` with no mime
+  -- and a mime stated beside *no value* is never read at all, since an
+  `absent` payload carries none), `openinference.span.kind`, and
+  `gen_ai.tool.name`, `gen_ai.request.model`, `gen_ai.tool.call.id`. The last
+  three are not cosmetic: an unreadable name or call id never reaches a node
+  field, so `unmapped_attributes` is the entire report of it, and until now
+  OpenInference reported one while OTel GenAI swallowed it -- a cross-dialect
+  difference in the only place the difference could be seen. A span kind is
+  the odd one: every value but `null` is read with `str()` and preserved as
+  `attributes.reported_kind`, so only `null` is unreadable there, and its
+  `unknown_span_kind` message said *"no `openinference.span.kind` attribute"*
+  of a span that carried one. Both adapters now say which of the two happened.
+  No conformance or corpus expectation moved: across every tracked `.json` /
+  `.jsonl`, these keys occur 221 times in 51 files and **none** carries a
+  non-string value or a mime with no value beside it, in either the flat or
+  the OTLP `KeyValue` rendering.
+  (audit finding 6, follow-up; `SPEC.md` §3.7)
+
 - **A name or a call id the adapter could not read is reported too.** The
   `role` fix above stated the rule -- a key is consumed where it is *read*,
   never before -- and four more keys in the same adapter still broke it. The

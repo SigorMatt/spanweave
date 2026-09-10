@@ -665,3 +665,70 @@ def test_an_adapter_that_raises_while_classifying_is_named():
         registry.partition(ONE)
     assert failure.value.code == ADAPTER_DETECT_FAILED
     assert "raiser" in str(failure.value)
+
+
+# --------------------------------------------------------------------------
+# The keys a decision reads, in every adapter at once (batch R12)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §3.7: a key is consumed where it is READ, never before, so a value
+# the adapter could not read decided nothing and stays in `unmapped`. Each
+# adapter's own test file states the rule at each of its keys; what lives here
+# is the claim the two must make **together**. A tool name or a call id that
+# one dialect reports and the other swallows is a cross-dialect difference in
+# the only place the difference could be seen -- an unreadable value never
+# reaches a node field, so `unmapped_attributes` is the whole report.
+
+#: The key each dialect states one deciding fact at. The keys differ; what
+#: must not differ is whether an unreadable value at them is reported.
+DECIDING_KEYS = {
+    "openinference": {
+        "operation": "tool.name",
+        "call_id": "tool_call.id",
+        "kind": "openinference.span.kind",
+    },
+    "otel_genai": {
+        "operation": "gen_ai.tool.name",
+        "call_id": "gen_ai.tool.call.id",
+        "kind": "gen_ai.operation.name",
+    },
+}
+
+
+def a_record_stating(adapter, **facts):
+    """`a_record`, with each named fact written at this dialect's key for it."""
+    record = a_record(adapter)
+    stated = {DECIDING_KEYS[adapter.id][fact]: value for fact, value in facts.items()}
+    record["attributes"] = {**record["attributes"], **stated}
+    return record
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("value", [7, None, {"name": "lookup"}, [], True])
+def test_an_operation_name_neither_dialect_can_read_is_reported_by_both(adapter, value):
+    span = next(iter(adapter.parse([a_record_stating(adapter, operation=value)])))
+    assert span.operation is None
+    assert span.unmapped == (DECIDING_KEYS[adapter.id]["operation"],)
+    assert codes.UNMAPPED_ATTRIBUTES in [d.code for d in span.diagnostics]
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_call_id_neither_dialect_can_read_is_reported_by_both(adapter, value):
+    span = next(iter(adapter.parse([a_record_stating(adapter, call_id=value)])))
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == (DECIDING_KEYS[adapter.id]["call_id"],)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_span_kind_reported_as_null_is_reported_by_both(adapter):
+    # And is reported *as present* by both: the diagnostic that used to say
+    # "no attribute" said it in both dialects, of a key both had been sent.
+    span = next(iter(adapter.parse([a_record_stating(adapter, kind=None)])))
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.unmapped == (DECIDING_KEYS[adapter.id]["kind"],)
+    [reported] = [d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND]
+    key = DECIDING_KEYS[adapter.id]["kind"]
+    assert f"no {key} attribute" not in reported.message
+    assert "null" in reported.message

@@ -871,6 +871,98 @@ def test_a_requested_id_repeated_in_one_output_is_consumed_every_time():
     assert span.unmapped == ()
 
 
+@pytest.mark.parametrize("value", [7, None, {"type": "json"}, [], True])
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_mime_type_the_adapter_cannot_read_decides_nothing_and_stays_reported(
+    stem, value
+):
+    # `_payload` marked both of its keys consumed before reading either, so a
+    # mime type it could not read as a string typed nothing -- the payload is
+    # `present` with no mime, exactly as if the key had never been sent -- and
+    # vanished from `unmapped` as well (SPEC.md 3.7).
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.value": "hello",
+            f"{stem}.mime_type": value,
+        }
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.state is PayloadState.PRESENT
+    assert payload.mime is None
+    assert span.unmapped == (f"{stem}.mime_type",)
+
+
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_mime_type_with_no_value_beside_it_was_never_read(stem):
+    # The same rule for a key that is readable and still decides nothing: the
+    # payload is `absent`, `Payload.absent()` carries no mime, so the mime the
+    # instrumentor stated was never read and is not consumed.
+    span = span_of(
+        {"openinference.span.kind": "LLM", f"{stem}.mime_type": "text/plain"}
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.state is PayloadState.ABSENT
+    assert payload.mime is None
+    assert span.unmapped == (f"{stem}.mime_type",)
+
+
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_readable_mime_is_consumed_with_the_value_it_typed(stem):
+    # The other direction, unchanged: the mime was read and it decided how the
+    # value is read, so neither key is a gap.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.value": '{"a": 1}',
+            f"{stem}.mime_type": "application/json",
+        }
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.mime == "application/json"
+    assert payload.value == {"a": 1}
+    assert span.unmapped == ()
+
+
+def test_a_span_kind_reported_as_null_is_present_and_the_diagnostic_says_so():
+    # `attributes.get(SPAN_KIND)` answers `None` for a key that is absent and
+    # for one whose value is `null`, and the message said "no attribute" for
+    # both. The key was present and could not be read: it is reported, and the
+    # message says what actually happened (SPEC.md 3.7).
+    span = span_of({"openinference.span.kind": None})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes.get("reported_kind") is None
+    assert span.unmapped == ("openinference.span.kind",)
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no openinference.span.kind attribute" not in kind_diagnostic.message
+    assert "null" in kind_diagnostic.message
+
+
+def test_a_span_kind_the_dialect_omits_is_an_absence_and_says_that_instead():
+    # The pin on the other half: nothing was sent, so nothing is reported and
+    # the message is the one it always was.
+    span = span_of({})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.unmapped == ()
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no openinference.span.kind attribute" in kind_diagnostic.message
+
+
+@pytest.mark.parametrize("value", [7, True, ["GUARDRAIL"]])
+def test_a_span_kind_that_is_not_a_string_is_still_read_and_still_consumed(value):
+    # What "readable" means at this key, pinned: the kind is rendered with
+    # `str()`, so anything but `null` is read, is preserved verbatim as
+    # `reported_kind`, and is therefore mapped rather than reported.
+    span = span_of({"openinference.span.kind": value})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes["reported_kind"] == str(value)
+    assert span.unmapped == ()
+
+
 def _echo_loop(turns):
     """The agent loop of `tests/audit/probe2.py` case B, in miniature.
 

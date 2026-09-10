@@ -277,14 +277,24 @@ def _kind_of(
 ) -> tuple[NodeKind, dict[str, JsonValue]]:
     normalized: dict[str, JsonValue] = {}
     reported = attributes.get(SPAN_KIND)
-    consumed.add(SPAN_KIND)
     if reported is None:
+        # `get` answers `None` twice over -- for a key the span never carried
+        # and for one carrying `null` -- and those are different facts. The
+        # kind is unknown either way, but only the second is something the
+        # adapter was told and could not read, so only the second is a key
+        # that decided nothing and stays reported (`SPEC.md` §3.7). The
+        # message says which one happened, because one that says "no
+        # attribute" of a key that was sent is untrue.
         diagnostics.append(
             Diagnostic(
                 code=UNKNOWN_SPAN_KIND,
                 message=(
-                    f"no {SPAN_KIND} attribute, so the kind is unknown; the "
-                    f"span is kept and the record is preserved verbatim"
+                    f"{SPAN_KIND} was reported as null, so the kind is "
+                    f"unknown; the span is kept, the record is preserved "
+                    f"verbatim, and the key stays reported as unmapped"
+                    if SPAN_KIND in attributes
+                    else f"no {SPAN_KIND} attribute, so the kind is unknown; "
+                    f"the span is kept and the record is preserved verbatim"
                 ),
                 source=record,
                 adapter=ADAPTER_ID,
@@ -292,6 +302,9 @@ def _kind_of(
         )
         return NodeKind.UNKNOWN, normalized
 
+    # Anything else was read: `str` renders it, and whatever it renders is
+    # kept verbatim as `reported_kind` below when it maps to no `NodeKind`.
+    consumed.add(SPAN_KIND)
     text = str(reported)
     mapped = KINDS.get(text.upper())
     if mapped is not None:
@@ -322,14 +335,21 @@ def _payload(
     consumed: set[str],
     diagnostics: list[Diagnostic],
 ) -> Payload:
-    consumed.add(value_key)
-    consumed.add(mime_key)
     if value_key not in attributes:
         # The instrumentor emitted nothing. Not the same as emitting nothing
-        # *in* something (SPEC.md §3.3).
+        # *in* something (SPEC.md §3.3). An `absent` payload carries no mime
+        # either, so a mime type stated beside no value is never read here and
+        # is not consumed: it stays reported (`SPEC.md` §3.7).
         return Payload.absent()
 
+    consumed.add(value_key)
     mime = _as_str(attributes.get(mime_key))
+    if mime is not None:
+        # Consumed where it is READ. A mime the adapter cannot read as a
+        # string types nothing -- the payload is `present` with no mime,
+        # exactly as if the key had never been sent -- so it decided nothing
+        # and stays reported (`SPEC.md` §3.7).
+        consumed.add(mime_key)
     reported = attributes[value_key]
     text = _as_text(reported)
     if text is None:
