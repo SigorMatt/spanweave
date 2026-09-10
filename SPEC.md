@@ -1374,21 +1374,41 @@ declares reaches `0.5`.
     reported as `RecursionError` rather than as a `ValueError` — a different
     exception for the same fact — so a guard that names only the second is a
     guard that is not there.
-  - **Writing is contained too — but the encoder's limit is the parser's,
-    and what differs is where in the document the value sits.** Both draw on
-    one interpreter-wide C recursion budget: measured on CPython 3.12.3,
-    `json.loads` and `json.dumps` each give out at 9997 nested containers,
-    taken at equal call depth. The gap is positional. A value the reader met
-    two containers into a trace record — the record, its `attributes` — is
-    met by the encoder six containers into the graph document: `nodes`, the
-    node, `raw`, `source`, `attributes`. **Four levels, and those four levels
-    are the whole of it.** On this interpreter that makes a band a few levels
-    wide, at the very top of the parser's range, which reads and cannot be
-    written: measured end to end, an attribute nesting to 9993 is read and
-    the graph holding it is writable only to 9991. On an interpreter whose
-    encoder has headroom over its parser the four levels cost nothing and no
-    trace file reaches the refusal at all. So this is **not** a defect a user
-    routinely hits, and this document does not claim it is.
+  - **Writing is contained too, and how much room it has is the
+    interpreter's answer rather than this library's.** What is fixed is
+    *position*. A value the reader met two containers into a trace record —
+    the record, its `attributes` — is met by the encoder six containers into
+    the graph document: `nodes`, the node, `raw`, `source`, `attributes`.
+    **Four levels, and those four levels are the whole of the offset.**
+    Whether they cost anything depends on which of `json.loads` and
+    `json.dumps` gives out first, and **that is a property of the
+    interpreter and of the container shape, not of this library.** Measured
+    2026-09-11 on Linux x86-64, one fresh process per measurement, under this
+    library's own `dumps` arguments, with `sys.getrecursionlimit()` 1000
+    throughout — which bounds neither, because both draw on a C stack budget:
+
+    | CPython | nesting | `json.loads` | `json.dumps` | |
+    |---|---|---|---|---|
+    | 3.11.15 | dicts, lists | 992 | 992 | coincide |
+    | 3.12.3 | dicts, lists | 9997 | 9997 | coincide |
+    | 3.13.14 | dicts, lists | 9998 | 9998 | coincide |
+    | 3.14.6 | **dicts** | ~40,100 | ~37,240 | encoder gives out ~2,900 levels first |
+    | 3.14.6 | lists | ~40,110 | ~74,480 | encoder has ~34,000 levels spare |
+
+    3.14's figures are given approximately on purpose: it tests the actual C
+    stack pointer, so repeating the measurement in a fresh process moves each
+    number by tens of levels, and enlarging the environment block moved them
+    by about 170. **A graph document is nested dicts at every level**, so
+    3.14's dict row is the row that applies to it, and on that interpreter the
+    encoder is the shallower of the two. On 3.11, 3.12 and 3.13 the two
+    coincide and the four positional levels are the entire band: measured end
+    to end on 3.12.3, a record whose attribute nests to 9993 is read and the
+    graph holding it is writable only to 9991. **No row of this table is a
+    universal and none of it is a promise** — the next release, another build,
+    or an embedder that resizes the stack moves every number in it, and three
+    successive attempts to state this quantity as a fact about the library
+    each measured one interpreter and were falsified on another (`TASKS.md`,
+    the September 2026 audit's open threads).
     **The containment stays regardless**, for reasons that do not depend on
     which of the two an interpreter gives you: the depth at which either
     gives out belongs to the interpreter and not to this library — it moves
@@ -1401,6 +1421,17 @@ declares reaches `0.5`.
     node's verbatim source record is verbatim or it is nothing — the library
     **refuses**, with `graph_not_serializable` (§3.10). It never writes a
     partial graph.
+    - **Known deviation, on an interpreter whose encoder is the shallower of
+      the two.** The bullet above says input that will not parse never raises
+      out of the reader. Where the encoder gives out first, the *reader*
+      meets the encoder before the parser refuses anything: duplicate
+      detection digests each record with `json.dumps` (§3.6) and that call is
+      not contained, so on CPython 3.14.6 a record nesting beyond about
+      37,250 raises `RecursionError` out of `spanweave.build` instead of
+      becoming a `malformed_record`. On 3.11, 3.12 and 3.13 no such band
+      exists and the reader refuses cleanly. This is a defect against the
+      rule, not an exception to it; it is recorded as an open thread in
+      `TASKS.md` rather than left to be found.
   - **What it writes is RFC 8259 JSON, so a non-finite number is not
     writable at all.** The encoder runs with `allow_nan=False`. `Infinity`,
     `-Infinity` and `NaN` are Python's extension to JSON rather than JSON, and

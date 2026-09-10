@@ -10813,6 +10813,48 @@ clean is the one nobody rereads.
    digest — the same content-equality assumption, now load-bearing for
    identity as well as for dedup.
 
+10. **The JSON depth ceiling is not a fact about this library, and three
+    consecutive attempts to write it down as one were wrong.** A6 said the
+    encoder's limit is *lower* than the parser's; the run-2 review said it is
+    ~1.9x *higher*; R6 said the two are *identical*. Each measured exactly one
+    interpreter and wrote a universal, and R6 additionally measured the wrong
+    container -- nested lists, where every level of a graph document is a
+    dict. All three are true of the interpreter that was in front of them and
+    false of another: measured 2026-09-11, CPython 3.11.15, 3.12.3 and 3.13.14
+    give `json.loads` and `json.dumps` the same ceiling for both shapes, while
+    3.14.6 gives the encoder ~2,900 levels *less* for dicts and ~34,000 more
+    for lists, and even 3.14's own numbers move by tens of levels between
+    fresh processes because it tests the C stack pointer. **The standing rule
+    that comes out of it:** this quantity is a property of an interpreter
+    build, its container shape and its stack, so a document states it only as
+    a measurement naming all three, never as a mechanism and never as a
+    promise. `SPEC.md` §7 carries the table on those terms and
+    `tests/test_serialize.py` measures both shapes, records the ratio it
+    observed, and asserts only the containment -- which is the library's own.
+    The second cause was structural and is closed with it: CI's matrix was a
+    hard-coded list that had drifted below `requires-python`, so the only
+    interpreter where the two ceilings differ was the one nothing ran; the
+    matrix is now derived from the classifiers and `tests/test_acceptance.py`
+    fails if they disagree. (run-3 review F1, batch R13. This project has no
+    `DEBT.md` or `DECISIONS.md` for it to live in; this section is where the
+    series' durable record already is.)
+11. **On CPython 3.14 a deeply nested record raises `RecursionError` out of
+    `spanweave.build`.** Found by R13 while measuring for thread 10, and
+    outside its row, which was documentation, one test and CI. `SPEC.md` §7
+    says input that will not parse never raises out of the reader; where the
+    encoder gives out *before* the parser -- 3.14 with dicts -- the reader
+    meets the encoder first, because `read.py:306` (`record_digest`) digests
+    every record with an uncontained `json.dumps` (§3.6). Measured on 3.14.6:
+    a record whose attribute nests to 37,240 builds and writes, one nesting to
+    37,260 raises `RecursionError` from `spanweave.build`, and above ~40,100
+    the parser refuses first and the record becomes a `malformed_record` as it
+    should. On 3.11-3.13 the band does not exist and the reader refuses
+    cleanly at every depth. The deviation is stated in `SPEC.md` §7 as a
+    defect against the rule rather than an exception to it. Fixing it is a
+    behaviour change -- a record that cannot be digested has to degrade to
+    something, and the spec does not say to what -- so it is a batch of its
+    own, not a patch.
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK, OTLP JSON;

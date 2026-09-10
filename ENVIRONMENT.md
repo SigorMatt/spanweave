@@ -8,8 +8,13 @@ fix one deliberately, don't let them drift.
 
 - Python **3.11+**.
 - OS: Linux or macOS. CI runs on `ubuntu-latest`.
-- CI additionally runs the test matrix on **3.11, 3.12, and 3.13**. A library
-  meant to sit underneath other people's tools must not narrow their runtime.
+- CI additionally runs the test matrix on **3.11, 3.12, 3.13 and 3.14** — one
+  job per `Programming Language :: Python` classifier in `pyproject.toml`, and
+  `tests/test_acceptance.py` fails if the two lists disagree. A library meant
+  to sit underneath other people's tools must not narrow their runtime, and a
+  matrix that quietly stops short of the declared range is how that happens:
+  3.14 is the only interpreter on which the JSON encoder and parser give out
+  at different depths (`SPEC.md` §7), and it was the one version CI skipped.
 
 ## Toolchain
 

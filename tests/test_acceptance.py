@@ -11,6 +11,7 @@ library.
 """
 
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -77,10 +78,42 @@ def test_ci_runs_the_same_harness_rather_than_its_own():
 
 
 def test_ci_still_covers_every_supported_python():
-    # A library underneath other people's tools must not narrow their runtime
-    # (ENVIRONMENT.md).
-    for version in ("3.11", "3.12", "3.13"):
-        assert f'"{version}"' in WORKFLOW
+    """The matrix is DERIVED from the classifiers, never listed twice.
+
+    A library underneath other people's tools must not narrow their runtime
+    (ENVIRONMENT.md), and the classifiers are what an index renders as the
+    range it supports. Held equal rather than hard-coded because a hard-coded
+    list is exactly how these two drifted: CI ran 3.11-3.13 while
+    `requires-python` said `>=3.11`, and every version in that list happened
+    to be one where `json.loads` and `json.dumps` give out at the same depth.
+    The one version that diverges -- and that a local `uv run` picks in a
+    fresh checkout -- was the one nothing tested, which left `SPEC.md` §7
+    asserting a universal that is false there (run-3 review F1). A list
+    written down twice goes stale in one of the two places; a derived one
+    cannot.
+    """
+    classifiers = set(
+        re.findall(
+            r"Programming Language :: Python :: (\d+\.\d+)",
+            (REPO / "pyproject.toml").read_text(encoding="utf-8"),
+        )
+    )
+    assert classifiers, "pyproject.toml names no Python version classifier"
+    matrix = set(re.findall(r'"(\d+\.\d+)"', _matrix_line()))
+    assert matrix == classifiers, (
+        f"CI's matrix runs {sorted(matrix)} and pyproject.toml advertises "
+        f"{sorted(classifiers)}. An index renders the classifiers; CI proves "
+        f"them. A version in one list and not the other is either untested "
+        f"support or unadvertised work."
+    )
+
+
+def _matrix_line():
+    """The `python-version:` line of CI's check matrix."""
+    for line in WORKFLOW.splitlines():
+        if line.strip().startswith("python-version:"):
+            return line
+    raise AssertionError("ci.yml declares no python-version matrix")
 
 
 # --------------------------------------------------------------------------

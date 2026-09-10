@@ -187,14 +187,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 - New error `graph_not_serializable` / `GraphNotSerializableError`, raised by
   the one encoder every byte this library writes goes through. The reader
-  contains what the *parser* will not descend; the encoder draws on the same
-  interpreter budget but meets a value four levels lower down -- inside the
-  document, inside a node, inside a payload -- so a payload that arrived at
-  the very top of the parser's range could still not leave, and `json.dumps`
+  contains what the *parser* will not descend; the encoder meets a value four
+  levels lower down -- inside the document, inside a node, inside a payload --
+  so a payload that arrived intact could still not leave, and `json.dumps`
   said so with a `RecursionError` from a build that had already read its
-  input without complaint. (That band is narrow and interpreter-specific,
-  and the sentence above said "the encoder has its own limit" until batch R6
-  measured it; `SPEC.md` §7 carries the measurement.) It is a refusal
+  input without complaint. (Whether those four levels cost anything is the
+  interpreter's answer and not this library's, and it differs by container
+  shape. This sentence said "the encoder has its own limit" until R6, then
+  "draws on one interpreter-wide C recursion budget" until R13; `SPEC.md` §7
+  now carries the measured table instead of a mechanism.) It is a refusal
   rather than a diagnostic because there is nothing to degrade to: the
   offending value may be a node's verbatim source record, and dropping that to
   get past it is the one thing losslessness forbids. Nothing is written and
@@ -377,33 +378,75 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   precondition rests on is unchanged under every one of these numbers. **No
   behavior changed**; nothing under `spanweave/` moved.
 
+- **The JSON depth ceilings are a table with an interpreter in every row, not
+  a sentence.** R6 (below) replaced A6's over-claim with another one: it said
+  *"the encoder's limit **is** the parser's"* and gave the mechanism as *"both
+  draw on one interpreter-wide C recursion budget"*, from a measurement taken
+  on one interpreter, over nested **lists**. A graph document is nested
+  **dicts** at every level, and on CPython 3.14 -- inside `requires-python`,
+  and what a `uv run` in a fresh checkout picks -- the encoder gives out
+  roughly 2,900 levels *before* the parser for dicts, which is the direction
+  A6 claimed and R6 retracted. Re-measured for R13, one fresh process per
+  measurement, Linux x86-64, under this library's `dumps` arguments:
+
+  | CPython | nesting | `json.loads` | `json.dumps` | |
+  |---|---|---|---|---|
+  | 3.11.15 | dicts, lists | 992 | 992 | coincide |
+  | 3.12.3 | dicts, lists | 9997 | 9997 | coincide |
+  | 3.13.14 | dicts, lists | 9998 | 9998 | coincide |
+  | 3.14.6 | **dicts** | ~40,100 | ~37,240 | encoder first |
+  | 3.14.6 | lists | ~40,110 | ~74,480 | parser first |
+
+  So `SPEC.md` §7 now carries the table, names its interpreters, says in terms
+  that **no row of it is a promise** -- 3.14's numbers move by tens of levels
+  between fresh processes, because it tests the C stack pointer -- and drops
+  *"no trace file reaches the refusal at all"*, which is false on 3.14. What
+  survives unchanged is R6's real contribution, the **positional** claim: the
+  encoder meets a record's value four levels below where the reader met it
+  (`nodes` -> the node -> `raw` -> `source` -> `attributes`), and that offset
+  is this library's own and is pinned by a test that measures it off a built
+  document. The limit pin now nests **dicts as well as lists**, records the
+  ratio it observed instead of asserting a direction the library does not
+  control, and asserts only what the library does control: that one level past
+  whatever ceiling this interpreter has, the failure is
+  `graph_not_serializable` and not a bare `RecursionError`. CI gained **3.14**,
+  and the matrix is now derived from the classifiers in `pyproject.toml` rather
+  than listed twice -- the blind spot was structural, since every version CI
+  tested happened to be one where the two ceilings coincide. Documentation,
+  one test and CI only -- no behaviour, no model, no serialized shape changed.
+  (run-3 review F1)
+
 - **The write-side depth guard is documented as what it is, and the
   measurement is on the record.** A6 introduced `graph_not_serializable` and
-  narrated it as an encoder whose *limit* is lower than the parser's. It is
-  not: both draw on one interpreter-wide C recursion budget, and measured
-  here on CPython 3.12.3 (Linux, `sys.getrecursionlimit()` 1000, which is not
-  what bounds either) `json.loads` and `json.dumps` each give out at **9997
-  nested containers**, taken at equal call depth -- a ratio of 1.00, neither
-  the lower limit A6 claimed nor the ~1.9x *higher* one the run-2 review
-  measured on its own interpreter (`json.loads` 40112, `json.dumps` 74493).
-  What is real is **position**: a value the reader meets two containers into
-  a trace record is met by the encoder six containers into the graph document
-  (`nodes` -> the node -> `raw` -> `source` -> `attributes`), four levels
-  further down. Those four levels are the whole gap, so how reachable the
-  refusal is depends on the interpreter you are on: measured end to end here,
-  a record whose attribute nests to 9993 is read and the graph holding it is
-  writable only to 9991 -- a band two levels wide out of ten thousand -- while
-  on an interpreter with the review's headroom no trace file reaches it at
-  all. **The guard stays**, and the reason no longer rests on the wrong
-  mechanism: the depth at which either gives out is the interpreter's and not
-  this library's, the encoder's input is not only what the reader parsed, and
-  a `RecursionError` reaching a caller is a traceback rather than a routable
-  code. `SPEC.md` §7 states it that way, `serialize.py`'s docstring follows,
-  and two tests in `tests/test_serialize.py` pin it: one re-measures both
-  limits and fails if the encoder ever becomes materially the shallower of
-  the two, the other pins the four-level offset to the document's actual
-  shape. Documentation only -- no behaviour, no model, no serialized shape
-  changed. (run-2 review, the A6 should-fix)
+  narrated it as an encoder whose *limit* is lower than the parser's, and
+  presented the defect as one users hit. **Measured on CPython 3.12.3**
+  (Linux, `sys.getrecursionlimit()` 1000, which is not what bounds either)
+  `json.loads` and `json.dumps` each give out at **9997 nested containers**
+  taken at equal call depth -- so on *that* interpreter A6's direction does
+  not hold, and neither does the ~1.9x *higher* one the run-2 review measured
+  on its own (`json.loads` 40112, `json.dumps` 74493). *(R6 wrote those two
+  observations up as a universal -- "the encoder's limit **is** the parser's",
+  "one interpreter-wide C recursion budget" -- and measured nested lists.
+  **R13, above, corrects that**: the direction differs by interpreter and by
+  container shape, and on CPython 3.14 the encoder is the shallower of the two
+  for the dicts a graph document is made of. R6's numbers stand as
+  measurements of the interpreter they name; only the generalisation was
+  wrong.)*
+  What is real, and what survives R13, is **position**: a value the reader
+  meets two containers into a trace record is met by the encoder six
+  containers into the graph document (`nodes` -> the node -> `raw` ->
+  `source` -> `attributes`), four levels further down. Those four levels are
+  the whole gap, so how reachable the refusal is depends on the interpreter
+  you are on: measured end to end on 3.12.3, a record whose attribute nests to
+  9993 is read and the graph holding it is writable only to 9991 -- a band two
+  levels wide out of ten thousand. **The guard stays**, and the reason rests
+  on nothing an interpreter decides: the depth at which either gives out is
+  the interpreter's and not this library's, the encoder's input is not only
+  what the reader parsed, and a `RecursionError` reaching a caller is a
+  traceback rather than a routable code. `SPEC.md` §7 states it that way,
+  `serialize.py`'s docstring follows, and two tests in
+  `tests/test_serialize.py` pin it. Documentation only -- no behaviour, no
+  model, no serialized shape changed. (run-2 review, the A6 should-fix)
 
 - **The cold reviews are in the repository, and the two concerns that were
   lost with them are open threads again.** Both reviews of the September 2026

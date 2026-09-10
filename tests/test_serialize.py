@@ -194,12 +194,41 @@ def test_a_foreign_schema_version_is_flagged_not_rejected(document):
 # --------------------------------------------------------------------------
 
 
-def _nest(depth):
+def _nested_lists(depth):
     """A list nested `depth` deep, built without recursing to build it."""
     value = []
     for _ in range(depth):
         value = [value]
     return value
+
+
+def _nested_dicts(depth):
+    """An object nested `depth` deep -- the shape a graph document has.
+
+    Every level of a graph document is an object: `nodes`, the node, `raw`,
+    `source`, `attributes`. Measuring lists instead is how the limit pin below
+    came to be green on an interpreter where the sentence it pinned is false
+    (run-3 review F1), so the shape is named in the helper rather than left to
+    whoever edits the test next.
+    """
+    value = {}
+    for _ in range(depth):
+        value = {"a": value}
+    return value
+
+
+def _lists_text(depth):
+    return "[" * depth + "1" + "]" * depth
+
+
+def _dicts_text(depth):
+    """`depth` nested JSON objects as *text*, never through `json.dumps`.
+
+    Built by concatenation on purpose: the encoder has a ceiling of its own
+    and that ceiling is what is being measured, so a harness that reached the
+    input through `json.dumps` would cap the measurement with itself.
+    """
+    return '{"a":' * depth + "1" + "}" * depth
 
 
 def test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback():
@@ -210,7 +239,7 @@ def test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback():
     # holds and cannot write is a structural impossibility (`SPEC.md` §3.10),
     # so it is named rather than raised as an interpreter's traceback.
     with pytest.raises(spanweave.SpanweaveError) as failure:
-        canonical_bytes({"deep": _nest(100_000)})
+        canonical_bytes({"deep": _nested_dicts(100_000)})
     assert failure.value.code == "graph_not_serializable"
 
 
@@ -219,7 +248,7 @@ def test_the_refusal_is_the_librarys_own_error_type():
     # bare RecursionError is not routable: it is indistinguishable from a bug
     # in the consumer's own recursion.
     with pytest.raises(spanweave.GraphNotSerializableError):
-        canonical_bytes(_nest(100_000))
+        canonical_bytes(_nested_dicts(100_000))
 
 
 def _deepest_accepted(attempt):
@@ -252,25 +281,76 @@ def _deepest_accepted(attempt):
     return low
 
 
-#: How far apart the two measurements below may land and still be one budget.
-#: Each is taken through a different call path -- `json.loads` through the
-#: decoder, `canonical_bytes` through `json.dumps` -- and the frames of that
-#: path cost a level or two. A *budget* difference would not be this small.
-CALL_PATH_SLACK = 16
+#: How far past a ceiling measured in *this* process the assertions below
+#: step before treating it as passed. Bisection makes each ceiling exact here,
+#: so the margin is not for this process: CPython 3.14 tests the actual C
+#: stack pointer, so the same measurement in a fresh process lands tens of
+#: levels away (measured 2026-09-11: ~25 levels between runs, ~170 when the
+#: environment block grew), and a margin below that would make the test a
+#: report on the machine it ran on.
+MEASUREMENT_NOISE = 256
 
 
-def test_the_encoder_does_not_give_out_before_the_parser_does():
-    # `SPEC.md` §7 used to say writing had a limit *lower* than the parser's.
-    # It has the same one: both draw on the interpreter's single C recursion
-    # budget, and measured on CPython 3.12.3 they give out within a level of
-    # each other (9997 nested containers each, taken at equal call depth).
-    # What the old sentence needed -- an encoder that gives out materially
-    # earlier -- is what this pins as false, so the story cannot come back.
-    parser = _deepest_accepted(lambda depth: json.loads("[" * depth + "]" * depth))
-    encoder = _deepest_accepted(lambda depth: canonical_bytes(_nest(depth)))
-    assert encoder >= parser - CALL_PATH_SLACK, (
-        f"the parser reads {parser} levels and the encoder writes {encoder}"
+def test_the_two_json_depth_ceilings_are_measured_and_neither_is_this_librarys(
+    record_property,
+):
+    """Record where the parser and the encoder give out. Assert containment.
+
+    This test deliberately asserts **no direction**. Which of `json.loads` and
+    `json.dumps` gives out first is a property of the interpreter *and of the
+    container shape*, and this library controls neither: on CPython 3.11-3.13
+    the two coincide, while on 3.14.6 the encoder gives out ~2,900 levels
+    earlier for **dicts** and ~34,000 levels later for **lists**
+    (`SPEC.md` §7 carries the table). Three consecutive attempts to state this
+    quantity as a fact -- A6, the run-2 review, R6 -- each measured one
+    interpreter and wrote a universal, and R6's pin was green on 3.14 only
+    because it nested lists where a graph document nests dicts (run-3 review
+    F1). So both shapes are measured, both are recorded, and the assertions
+    are confined to what is the library's own: that one level past whatever
+    ceiling this interpreter has, the failure is the library's named refusal
+    and not a bare `RecursionError`, and that where a readable-but-unwritable
+    band exists it is that same refusal rather than a traceback.
+    """
+    observed = {}
+    for shape, text, build in (
+        ("dicts", _dicts_text, _nested_dicts),
+        ("lists", _lists_text, _nested_lists),
+    ):
+        parser = _deepest_accepted(lambda depth, fn=text: json.loads(fn(depth)))
+        encoder = _deepest_accepted(lambda depth, fn=build: canonical_bytes(fn(depth)))
+        observed[shape] = (parser, encoder)
+        record_property(
+            f"json_depth_{shape}",
+            f"parser={parser} encoder={encoder} ratio={encoder / parser:.3f}",
+        )
+
+    # The shape a graph document has at every level, and so the only row of
+    # the two that says anything about this library's own output.
+    parser, encoder = observed["dicts"]
+
+    # Up to the measured ceiling the encoder writes, which is what makes the
+    # bisection above a measurement rather than a coincidence.
+    assert canonical_bytes(_nested_dicts(encoder)).endswith(b"\n"), (
+        f"the bisection says the encoder writes {encoder} levels and it does "
+        f"not (parser {parser}, shapes {observed})"
     )
+    # Past it, the refusal is the library's and is named. This is the whole of
+    # what the library controls here, and it is red if the `RecursionError`
+    # arm of `canonical_bytes` is ever dropped -- on every interpreter, under
+    # either direction, because the ceiling it steps past is measured and not
+    # assumed.
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        canonical_bytes(_nested_dicts(encoder + MEASUREMENT_NOISE))
+
+    # The band that the parser reads and the encoder cannot write: empty
+    # wherever the two coincide, thousands of levels wide on CPython 3.14.
+    # Exercised where it exists, recorded as empty where it does not -- the
+    # test never asserts which of the two it got.
+    band = parser - encoder
+    record_property("readable_but_unwritable_dict_levels", band)
+    if band > 2 * MEASUREMENT_NOISE:
+        with pytest.raises(spanweave.GraphNotSerializableError):
+            canonical_bytes(json.loads(_dicts_text((encoder + parser) // 2)))
 
 
 def _deepest_nesting(value):

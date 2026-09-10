@@ -52,12 +52,15 @@ def canonical_bytes(value: JsonValue) -> bytes:
     """The one encoder. Everything written by this library goes through it.
 
     Deep nesting is the one input that can defeat it. The reader contains what
-    the *parser* will not descend (`SPEC.md` §7); the encoder draws on the
-    same interpreter budget, but meets the value four levels lower down --
-    inside the document, inside a node, inside a payload -- so a value that
-    arrived at the top of the parser's range can still fail to leave. That
-    band is narrow and interpreter-specific (§7 records the measurement), and
-    the guard does not depend on it: `json.dumps` reports depth as
+    the *parser* will not descend (`SPEC.md` §7); the encoder meets the value
+    four levels lower down -- inside the document, inside a node, inside a
+    payload -- so a value that arrived intact can still fail to leave. How
+    much room there is for those four levels is the interpreter's answer and
+    not this library's, and it differs by container shape: §7 carries the
+    measured table, in which CPython 3.11-3.13 give the parser and the
+    encoder the same ceiling while 3.14 gives the encoder ~2,900 levels
+    *less* for nested dicts -- the shape a graph document has at every level.
+    The guard depends on none of that: `json.dumps` reports depth as
     ``RecursionError``, which is not a ``ValueError``, and uncontained it
     escapes as an interpreter traceback from a build that had read its input
     without complaint.
