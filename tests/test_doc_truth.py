@@ -43,7 +43,7 @@ import shlex
 import spanweave
 from spanweave.adapters import registered
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
-from tests.corpus_census import census
+from tests.corpus_census import Census, census
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -1899,4 +1899,240 @@ def test_no_durable_document_states_the_working_tree_census_as_a_fact():
         "git-ignored `capture/_scratch/`; `tests/corpus_census.py` counts "
         "what git tracks, and a document either states that figure or says "
         "which one it is quoting and why"
+    )
+
+
+#: Every figure family `tests/corpus_census.py` counts, as the shapes the
+#: documents write them in. The pair shape names itself, so it is scanned
+#: everywhere; the rest are single numbers that mean nothing on their own
+#: (`4 data edges` is a census figure in one paragraph and a worked example in
+#: the next), so they are scanned only inside a paragraph that states the
+#: census's own scope -- `CENSUS_SCOPE` below, which is the qualifier G5 and R5
+#: made every one of these sentences carry.
+#:
+#: A number is written `(?<![\d,./-])(\d+)` so that `n(n-1)/2 data edges` and
+#: `1,225 data edges` are not read as the census's four.
+CENSUS_FIGURE_PATTERNS: tuple[tuple[str, str, bool], ...] = (
+    (
+        "corpus files / records",
+        r"(?<![\d,./-])(\d+) (?:(?:trace|corpus|captured|tracked|committed|fixture) )*"
+        r"files?\s*(?:/|,|and|--|—|-|:)\s*(\d+) records?\b",
+        False,
+    ),
+    (
+        "captured files",
+        r"(?<![\d,./-])(\d+) captured (?:trace )?files?\b",
+        True,
+    ),
+    (
+        "timestamp literals",
+        r"(?<![\d,./-])(\d+) timestamp (?:values|literals)\b",
+        True,
+    ),
+    (
+        "sibling pairs",
+        r"(?<![\d,./-])(\d+) sibling pairs\b",
+        True,
+    ),
+    (
+        "minimum sibling gap",
+        r"minimum gap (?:of )?(\d+) µs",
+        True,
+    ),
+    (
+        "`data` edges",
+        r"(?<![\d,./-])(\d+) data edges\b",
+        True,
+    ),
+    (
+        "tracked `*.jsonl` head scan",
+        r"(?<![\d,./-])(\d+) of (\d+) tracked \.jsonl",
+        True,
+    ),
+    (
+        "`malformed_record` diagnostics for an indented export",
+        r"(?<![\d,./-])(\d+) malformed_record\b"
+        r"|malformed_record (?:diagnostic )?per line \((\d+)"
+        r"|(?<![\d,./-])(\d+) of them for the indented export",
+        True,
+    ),
+)
+
+#: What marks a paragraph as counting the corpus rather than reasoning about
+#: it. Every sentence R5 and R9 rewrote carries one of these, because stating
+#: the scope was half of what those batches were for.
+CENSUS_SCOPE = (
+    "tracked files only",
+    "tracked corpus",
+    "checkout carries",
+    "checkout now carries",
+    "tracked .jsonl",
+)
+
+#: The figures that were measured over a working tree and no longer recompute,
+#: by family. A durable document may still *name* one -- five commit bodies
+#: carry them and cannot be rewritten -- so this test allows the value and
+#: leaves the "say it is history" half to
+#: `test_no_durable_document_states_the_working_tree_census_as_a_fact`. The two
+#: tests divide the work: that one says a retired figure must be marked as
+#: history, this one says a figure that is neither the census's nor retired is
+#: simply wrong.
+RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
+    # `57 files / 177 records` was the working-tree scan; `43 files / 117
+    # records` was what git tracked at the time and `14 files / 60 records` the
+    # git-ignored `capture/_scratch/` difference between them (batch R5).
+    "corpus files / records": {(57, 177), (43, 117), (14, 60)},
+    # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
+    "captured files": {(17,), (15,)},
+    "timestamp literals": {(154,)},
+    "sibling pairs": {(41,)},
+    "minimum sibling gap": {(81,)},
+    "`data` edges": {(24,)},
+    # F1's `64 of 64` counted `*.jsonl` files a checkout does not carry.
+    "tracked `*.jsonl` head scan": {(64, 64)},
+    # F1's `46` counted the lines of an export `probe1.py` never committed.
+    "`malformed_record` diagnostics for an indented export": {(46,)},
+}
+
+
+def census_figures(paragraph: str) -> list[tuple[str, tuple[int, ...]]]:
+    """Every corpus figure a paragraph asserts, by family, in reading order.
+
+    `paragraph` is raw markdown: emphasis and code spans are stripped here, so
+    that `**52** files / **151** records`, a table cell, and a plain sentence
+    are all read as one claim. That is the half of R5's guard the run-3 review
+    called weak -- a figure is bold in at least one of the places it appears.
+    """
+    text = flat(unemphasized(paragraph))
+    scoped = any(marker in text for marker in CENSUS_SCOPE)
+    found: list[tuple[str, tuple[int, ...]]] = []
+    for family, pattern, requires_scope in CENSUS_FIGURE_PATTERNS:
+        if requires_scope and not scoped:
+            continue
+        for match in re.finditer(pattern, text):
+            found.append(
+                (family, tuple(int(group) for group in match.groups() if group))
+            )
+    return found
+
+
+def stated_census_figures(counted: Census) -> dict[str, set[tuple[int, ...]]]:
+    """What each family's numbers are, over the tracked tree, by every scope.
+
+    A family gets a *set*, not a value, because two scopes are legitimately in
+    the documents at once: the whole tracked corpus and the captured subset,
+    and for the head scan the brace count and the first-key count. A figure
+    that is one of them is checkable; a figure that is none of them is the
+    thing this test exists to find.
+    """
+    whole = counted.timestamps
+    captured = counted.captured_timestamps
+    edges = counted.captured_receipts
+    scan = counted.head_scan
+    gaps = {
+        (gap,)
+        for gap in (whole.minimum_sibling_gap_us, captured.minimum_sibling_gap_us)
+        if gap is not None
+    }
+    return {
+        "corpus files / records": {(counted.files, counted.records)},
+        "captured files": {(len(counted.captured),), (edges.files,)},
+        "timestamp literals": {(whole.literals,), (captured.literals,)},
+        "sibling pairs": {(whole.sibling_pairs,), (captured.sibling_pairs,)},
+        "minimum sibling gap": gaps,
+        "`data` edges": {(edges.data_edges,)},
+        "tracked `*.jsonl` head scan": {
+            (scan.beginning_with_brace, scan.files),
+            (scan.first_member_key_trace_id, scan.files),
+        },
+        "`malformed_record` diagnostics for an indented export": {
+            (export.lines_that_are_not_json,) for export in counted.indented_exports
+        },
+    }
+
+
+def test_every_corpus_figure_a_durable_document_asserts_is_the_census():
+    """The sibling of the site-by-site tests above, scanned rather than listed.
+
+    `test_the_open_questions_census_is_the_tracked_census` and
+    `test_the_cited_corpus_figures_are_the_tracked_census` recompute the
+    figures at the sites they name. The run-3 cold review showed what that
+    leaves open: deliberately wrong pairs planted in `OPEN_QUESTIONS.md`
+    §13(h), §14 and §14(h), in `CHANGELOG.md` twice and in `TASKS.md` note 7
+    left every test in this file green, because those sites are not on either
+    list -- so a copy of the census can rot in place exactly the way
+    `57 files / 177 records` did, which is the defect batch R5 existed to end.
+
+    This test names no site. It scans every durable document for a figure in
+    one of the census's families and requires it to be a number the census
+    computes, or one of the retired numbers above, which the drift test then
+    requires to be marked as history. Adding a new sentence that cites the
+    corpus therefore needs no test edit, and copying an old one somewhere new
+    cannot outlive the number it copied.
+    """
+    counted = census()
+    stated = stated_census_figures(counted)
+    offenders: list[str] = []
+    for path in durable_documents():
+        for paragraph in path.read_text(encoding="utf-8").split("\n\n"):
+            if any(line.lstrip().startswith(">") for line in paragraph.splitlines()):
+                continue
+            for family, values in census_figures(paragraph):
+                if values in stated[family] or values in RETIRED_CENSUS_FIGURES.get(
+                    family, set()
+                ):
+                    continue
+                offenders.append(
+                    f"{path.relative_to(ROOT)} states {family} as "
+                    f"{', '.join(str(value) for value in values)}; the census "
+                    f"counts {sorted(stated[family])} -- "
+                    f"{flat(unemphasized(paragraph))[:120]}"
+                )
+    assert not offenders, (
+        "these paragraphs state a corpus figure that is neither what "
+        "`tests/corpus_census.py` counts over the tracked tree nor a retired "
+        "figure the documents quote as history:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_corpus_figure_scan_reads_emphasis_tables_and_separators():
+    """The matcher, proven against the spellings the documents actually use.
+
+    A guard that only matches one spelling of a figure is a guard that a
+    reformatting silently disables, which is the run-3 review's second half of
+    this finding. Bold, a table cell, and each separator the tree uses are all
+    one claim, and a figure inside a scope-stating paragraph is read for every
+    family.
+    """
+    for spelling in (
+        "The corpus holds **99** files, **999** records.",
+        "| corpus | 99 files / 999 records |",
+        "scanned end to end — 99 files and 999 records",
+        "a working tree of 99 trace files: 999 records",
+        "`99` corpus files -- `999` records",
+    ):
+        assert census_figures(spelling) == [("corpus files / records", (99, 999))], (
+            f"the corpus-pair scan does not read {spelling!r} as a claim about "
+            f"the corpus, so a document may state it and no test will notice"
+        )
+
+    scoped = (
+        "Over the tracked corpus: **888** captured trace files, **888** "
+        "timestamp values, **888** sibling pairs, minimum gap **888** µs, "
+        "**888** `data` edges, **888** of **888** tracked `*.jsonl`, and "
+        "**888** `malformed_record` diagnostics."
+    )
+    families = {family for family, _ in census_figures(scoped)}
+    assert families == {family for family, _, _ in CENSUS_FIGURE_PATTERNS[1:]}, (
+        f"a paragraph stating every scoped family was read as {families}"
+    )
+    unscoped = (
+        "A four-turn loop transcribing every earlier turn produces **888** "
+        "`data` edges and **888** timestamp values, none of them counted over "
+        "anything this repository carries."
+    )
+    assert not census_figures(unscoped), (
+        "the scoped families were read out of a paragraph that never says "
+        "which scope it counted, which is how a worked example becomes a "
+        "false failure"
     )
