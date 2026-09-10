@@ -286,6 +286,23 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The September 2026 audit-fix series is closed, and `WORKPLAN.md` is
+  gone.** That file was the series' execution state -- protocol, live batch
+  status, decisions log, resume note, finding-to-batch map -- and was written
+  to be deleted once the series ended, so that no reader would have two places
+  to look up a status and one place to read a stale one. Everything of it that
+  outlives the series is now in `TASKS.md` under *September 2026 audit*: every
+  batch with its final status and commit, the decisions taken on 2026-09-10,
+  the cold review of run 1 with both of its blockers, the finding-to-batch map,
+  and -- deliberately kept -- the seven threads the series did **not** close.
+  Its README row is removed with it, the six memo sign-offs in
+  `OPEN_QUESTIONS.md` and the `ROADMAP.md` pointer now name `TASKS.md`, and
+  `OPEN_QUESTIONS.md` §12(c) and §14 state the provenance of the corpus census
+  those memos were decided on: `57 files / 177 records` was a working-tree
+  scan that included the git-ignored `capture/_scratch/`, so it does not
+  recompute from a checkout -- the **0 records carrying both dialects'
+  markers** that the decision rests on is unchanged either way. **No behavior
+  changed**; nothing under `spanweave/` moved.
 - **A timestamp reported as an integer keeps its digits.** `Node.started_at`
   and `Node.ended_at` are now `int | float | None`: an integer literal, quoted
   or bare, is carried as an `int`, and only a literal with a fraction or an
@@ -416,7 +433,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   states. `ADAPTERS.md` and `CONTRACTS.md`, which repeated the promise, follow.
 
   **No behavior changed** -- nothing under `spanweave/` moved, and this is the
-  H1 decision (`OPEN_QUESTIONS.md` §15, `WORKPLAN.md` §3, 2026-09-10) written
+  H1 decision (`OPEN_QUESTIONS.md` §15, 2026-09-10) written
   where it binds. Mapping an agent name into `operation` was rejected: it was
   measured to diverge in 11 of 18 cross-dialect scenarios, and the corpus's only
   repair would have erased 22 tested cross-dialect `operation` assertions. A

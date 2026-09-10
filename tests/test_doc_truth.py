@@ -1077,8 +1077,9 @@ def test_the_library_keeps_the_scope_the_spec_states(tmp_path):
 # Batch H1 measured that `Node.operation` is `None` on every `agent`, `chain`
 # and `retriever` node the corpus produces, in both dialects, and asked
 # whether it should stay that way (`OPEN_QUESTIONS.md` §15). The decision
-# (`WORKPLAN.md` §3, 2026-09-10) was option C: it stays, and the non-mapping
-# becomes a rule in `SPEC.md` rather than a sentence in an adapter docstring.
+# (`TASKS.md`, September 2026 audit, 2026-09-10) was option C: it stays, and
+# the non-mapping becomes a rule in `SPEC.md` rather than a sentence in an
+# adapter docstring.
 #
 # Two things are checked here, because a rule stated only in prose expires the
 # way every other sentence in this file expired. §3.1 must state it; and the
@@ -1152,7 +1153,7 @@ def test_the_spec_states_which_names_never_reach_operation():
     assert OPERATION_NAME_RULE in subsection, (
         f"`SPEC.md` §3.1 no longer states the rule ({OPERATION_NAME_RULE!r}). "
         f"It is the whole content of the H1 decision (`OPEN_QUESTIONS.md` §15, "
-        f"`WORKPLAN.md` §3), and §3.1 is where a consumer reads what a field "
+        f"`TASKS.md`), and §3.1 is where a consumer reads what a field "
         f"holds -- an unstated rule is one an adapter can quietly break"
     )
     assert "raw.source" in subsection and "unmapped_attributes" in subsection, (

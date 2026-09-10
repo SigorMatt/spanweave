@@ -40,9 +40,22 @@ annotation permits an open set of values:
 
 Out of scope, and it is a type-level fact rather than a judgement: the closed
 enums (`NodeKind`, `EdgeKind`, `Warrant`, `Status`, `PayloadState`,
-`DiagnosticLevel`), and `int` / `float` / `bool` fields. `tests/test_contracts.py`
+`DiagnosticLevel`), and `int` / `float` / `bool` fields — **including a closed
+union of them**. `tests/test_contracts.py`
 applies exactly this rule to the model and fails if a field appears on either
 side of it without a row here.
+
+**One relaxation of that rule, named because a gate that moves quietly is worth
+less than one that does not.** The September 2026 audit's batch C3 made
+`Node.started_at` and `Node.ended_at` `int | float | None` (`TASKS.md`,
+*September 2026 audit*; `OPEN_QUESTIONS.md` §10). A union of number types is
+not an open vocabulary — it constrains a consumer exactly as one of its members
+does — so `tests/test_contracts.py` was taught to read `int | float | None` as
+the `int | float` it is, and those two fields take no row here. Before that
+change the gate demanded rows typed `UnionType[int, float, NoneType] | None`,
+which would have recorded a type the model does not have. The relaxation is
+type-level, like the rule it extends: it admits no field whose *vocabulary* is
+open.
 
 **One field is excluded by the rule and named anyway, so its absence is not
 mistaken for coverage:** `meta.adapters[].declared_confidence` is `float | None`,

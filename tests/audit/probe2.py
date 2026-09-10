@@ -2,8 +2,8 @@
 
 September 2026 audit. Each case prints what spanweave did; lines marked
 !!! UNCAUGHT are contract violations, REFUSED are hard errors, the rest are
-graphs with their diagnostics. See WORKPLAN.md section 5 for the mapping
-from case to fix batch. Not collected by pytest; batches convert cases into
+graphs with their diagnostics. See the finding-to-batch map in TASKS.md,
+"September 2026 audit", for the mapping from case to fix batch. Not collected by pytest; batches convert cases into
 regression tests as they fix them.
 """
 import json, pathlib, sys, time, tracemalloc

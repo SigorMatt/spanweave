@@ -10418,85 +10418,332 @@ may want to reverse.**
 touched, no `canonical()` weakened, `PREDICTIONS.md` untouched, schema not
 frozen, Phase 4 not started. `make check` green; `make shape` produces no diff.
 
-## September 2026 audit — the fix series  *(execution state in `WORKPLAN.md`)*
+## September 2026 audit — the fix series  *(closed 2026-09-10)*
 
 A cold audit of the shipped `0.9.1` tree in September 2026 produced six
-findings plus five minor or roadmap-level ones. The fixes run as a series of
-batches, one batch per commit, and **`WORKPLAN.md` is that series' execution
-state**: status, order, run grouping, the decisions log, and the
-finding-to-batch map at its §5.
+findings plus five minor or roadmap-level ones. The fixes ran as a series of
+batches — one batch per commit, one concern per batch — on branch
+`audit-fixes` from base `02e9f6e`, in two runs separated by a decision point.
 
-This section is the **item registry** — what the series contains, so a reader
-of `TASKS.md` alone can see it, and so the items outlive `WORKPLAN.md`, which
-is deleted at series close (G4) with its decisions folded into this file.
-**Statuses are deliberately not duplicated here**: two places to read a status
-is one place to read a stale one. Final statuses land here at G4. Batches
-marked *halt* end in a memo and a human decision, never in code.
+`WORKPLAN.md` was that series' execution state: protocol, live status, run
+grouping, the decisions log, the resume note, and the finding-to-batch map. It
+was written to be **deleted at series close**, and batch G4 deleted it.
+Everything of it that outlives the series is here: the batch list with each
+batch's final status and commit, the decisions taken, the cold review of run 1,
+the finding-to-batch map, and — kept apart on purpose — the threads the series
+did **not** close.
+
+This section is the **item registry**. **Statuses were deliberately not
+duplicated here while the series ran** (two places to read a status is one
+place to read a stale one); they land here once, at the close. Batches marked
+*halt* ended in a memo and a human decision, never in code.
+
+### The batches, with final status
+
+Legend: **done** · **done (decided)** — a memo batch whose decision was taken
+and logged below · **dropped** — measured and deliberately not implemented.
 
 - **A1 — RecursionError containment.** Deeply nested JSON in a record line or
-  in a payload becomes a diagnostic instead of an escaping `RecursionError`;
-  tracked in `WORKPLAN.md`.
+  in a payload becomes a diagnostic instead of an escaping `RecursionError`.
+  It also created `CHANGELOG.md` (an `## [Unreleased]` section only — no
+  invented history for the shipped `0.9.x` releases), because seven rows in the
+  series called for one and the repo had none. — **done** (`4d7bb32`).
 - **A2 — Reader tolerance.** Strip a leading UTF-8 BOM, so the first record is
-  not lost to its own encoding; tracked in `WORKPLAN.md`. As landed it also
-  made a lone CR a line terminator; that half was withdrawn by batch A8 the
-  next day, because a lone CR is JSON whitespace inside a record and splitting
-  on it broke records that parse.
+  not lost to its own encoding. As landed it also made a lone CR a line
+  terminator; that half was withdrawn by batch A8 the next day, because a lone
+  CR is JSON whitespace inside a record and splitting on it broke records that
+  parse. — **done** (`817951e`).
 - **A3 — Duplicate records and duplicate span ids.** Keep one of a
   byte-identical pair under a new diagnostic, and derive node ids so two spans
   sharing a source id are both kept — as `SPEC.md` §3.7 already claims they
-  are; tracked in `WORKPLAN.md`.
+  are. It **deviated from its plan deliberately**: rule 3 puts the record's
+  canonical *digest* into id derivation rather than `(source_key, ordinal)`,
+  because an ordinal is input position, which CLAUDE.md invariant 4 forbids
+  from affecting the result. Consequence the corpus still carries:
+  `DuplicateNodeIdError` is no longer reachable from any trace file, and the
+  vacancy is recorded in `FIXTURES.md` §4.2 rather than papered over. —
+  **done** (`b44c3a5`).
 - **A4 — Missing trace id diagnostic.** An empty `trace_id` is silent today and
-  becomes an `info` diagnostic; tracked in `WORKPLAN.md`.
-- **B1 — Annotation cost.** `Graph.annotate` rebuilds every index on each call;
-  carry the indexes across the replace and add a batch form; tracked in
-  `WORKPLAN.md`.
-- **B2 — Reader line splitting.** Measure the reader's per-line buffer copy on a
-  large file first and replace it only if the measurement justifies it; tracked
-  in `WORKPLAN.md`.
+  becomes an `info` diagnostic — **one per graph, never one per record**, and
+  only when the built graph reports no trace id at all. — **done** (`e25ab29`).
+- **A5 — Content-derived fallback ids.** The run-1 review's first blocker: a
+  record with no `span_id` took a *position*-derived source key, so shuffling
+  such a trace rebound every id. The fallback key becomes the record's
+  canonical digest — A3's reasoning applied one level up. — **done**
+  (`b6c5ea9`).
+- **A6 — RecursionError on the CLI and dump paths.** The run-1 review's second
+  blocker: `inspect` and `validate` still died on deep JSON, and the write half
+  was real too — a payload at depth 9994 parses and builds, then the encoder
+  raises. Contained with a new `graph_not_serializable` error code. — **done**
+  (`477fe9b`).
+- **A7 — Spec–code formula and stale doc truth.** `SPEC.md`'s node-id digest
+  formula omitted the `ensure_ascii=False` the code passes, so a spec-faithful
+  reimplementation derived different ids for any non-ASCII record; plus the
+  stale `duplicate_span_ids` and `CONTRACTS.md` count lines the review found.
+  Docs only — the code was right and the spec was wrong. — **done** (`945ead4`).
+- **A8 — Overclaims and the CR terminator.** Remove A2's lone-CR terminator
+  (keep BOM and CRLF), and correct three claims stated more broadly than they
+  were true. Phase A complete. — **done** (`362002e`).
+- **A9 — A4's scope in `SPEC.md`.** State in §3.7 the limit that until then
+  lived only in A4's commit body: a record carrying no trace id *among records
+  that have one* is not diagnosed. Docs only. — **done** (`05067da`).
+- **B1 — Annotation cost.** `Graph.annotate` rebuilt every index on each call;
+  carry the indexes across the replace and add a batch form. Measured: 12.50 s
+  → 1.47 s (8.5x) on the audit's case, and `annotate_many` does the same batch
+  in 0.011 s. — **done** (`cee10fb`).
+- **B2 — Reader line splitting.** Measure the reader's per-line buffer copy on
+  a large file first and replace it only if the measurement justifies it. **It
+  did not.** 200 MB JSONL, varied line lengths (p50 754 B, 124,656 records), 7
+  interleaved A/B runs, spread <0.5%: 6.012 s median vs a `bytes.find`
+  prototype's 5.776 s = **1.041x (3.9%)**. Worst realistic case (uniform
+  ~334 B lines, 626,023 records): 13.906 s vs 12.771 s = 1.089x (8.2%). The
+  ceiling is structural — cProfile puts `_read_lines` + `_line_break` at 0.77 s
+  of 7.51 s (10.3%); the reader is dominated by the dedup digest's
+  `json.dumps` (2.28 s) and `json.loads` (1.11 s). The prototype was verified
+  byte-identical across 66 case/chunking pairs, then discarded. Machine: i7-4600U
+  @ 2.1 GHz, CPython 3.12.3. **If reader speed ever matters, the target is the
+  dedup digest A3 introduced, not line splitting.** — **dropped** (measured
+  2026-09-09; no code commit).
+- **B3 — `unmapped_attributes` volume.** Mark every key an adapter *reads* as
+  consumed. Two defects, not the one the audit named: `_received_results` never
+  consumed the sibling `...message.role`, and it ran *after* `unmapped` was
+  tallied, so its own `consumed.add` was dead code. Measured at 400 turns:
+  13,193,072 B → 99,092 B of serialized diagnostics (133x). 0 expectations
+  moved. — **done** (`7f68aca`).
 - **C1 — Timestamp unit suspicion and numeric strings.** Report a timestamp too
   large to be seconds, and accept the numeric-string timestamps OTLP JSON
-  emits, converting nothing; tracked in `WORKPLAN.md`.
+  emits, converting nothing. One diagnostic per node, on reported
+  `started_at`/`ended_at` only, strictly `> 1e11`. — **done** (`467ff97`).
 - **C2 — Timestamp representation memo** *(halt)*. Float64 seconds loses
-  precision at epoch-nanosecond scale; the options go to `OPEN_QUESTIONS.md`
-  for a human; tracked in `WORKPLAN.md`.
+  precision at epoch-nanosecond scale; the options went to `OPEN_QUESTIONS.md`
+  §10 for a human. The memo did **not** recommend the plan's "int ns
+  internally": rescaling requires knowing the unit C1 had just established is
+  unknowable. — **done (decided)** (`cd62d45`).
+- **C3 — Timestamp representation, per the C2 decision.** `started_at` /
+  `ended_at` become `int | float | None`; an integer literal — quoted or bare —
+  keeps its digits; the ceiling constant becomes `100_000_000_000`; C1's *"kept
+  exactly as reported"* sentence becomes true by construction.
+  `tests/serialized_shape.json` moved exactly the two predicted type lines. —
+  **done** (`c2486ba`).
 - **D1 — `data` edge echo memo** *(halt)*. Conversation-history echo makes
-  `data` edges quadratic in turns; the options go to `OPEN_QUESTIONS.md` for a
-  human; tracked in `WORKPLAN.md`.
+  `data` edges quadratic in turns; the options went to `OPEN_QUESTIONS.md` §11.
+  Key finding: the quadratic is the *telemetry's*, not the builder's — every
+  one of the 79,800 edges at 400 turns is `explicit`, warranted, and
+  individually true under §4.2.1, so this is legibility and volume, never
+  wrongness. — **done (decided)** (`635e6ef`).
 - **D2 — Echo implementation.** Implement the D1 decision, checking which
-  conformance expectations already carry echo edges before touching them;
-  tracked in `WORKPLAN.md`.
+  conformance expectations already carry echo edges before touching them. Every
+  declared receipt is still an edge; three builder-owned `basis` strings say
+  which came first. Measured: 50 turns → 1,225 data edges (49 earliest / 1,176
+  later / 0 tied); 400 → 79,800 (399 / 79,401). — **done** (`ab4855f`).
 - **E1 — Mixed-instrumentation design memo** *(halt)*. One trace carrying two
   dialects' spans is unrepresentable today, and forcing either adapter loses
-  pairing; the options go to `OPEN_QUESTIONS.md` for a human; tracked in
-  `WORKPLAN.md`.
+  pairing; the options went to `OPEN_QUESTIONS.md` §12. Demonstrated rather
+  than argued: each forced build exits 0 and loses **2 of 7 edges** —
+  `call_result` *and* `data` — and reports `Payload.state = absent` where
+  content was emitted. — **done (decided)** (`5995e0a`).
 - **E2 — Per-record classification.** Classify each record to an adapter from
   the adapters' existing markers, with a record two adapters claim still a hard
-  error; tracked in `WORKPLAN.md`.
+  error. Byte-identity was proven, not asserted: all 63 `*.jsonl` in the tree
+  serialized before and after, `diff` clean. — **done** (`b68ef21`).
 - **E3 — Multi-adapter spans in the builder.** Build one graph from several
   adapters' spans and prove a mixed trace yields the same canonical graph as
-  its single-dialect renderings; tracked in `WORKPLAN.md`.
-- **E4 — Mixed instrumentation: CLI and documents.** `--adapter` semantics,
-  per-adapter counts in `inspect`, and the documents that describe them;
-  tracked in `WORKPLAN.md`.
+  its single-dialect renderings. **The series' acceptance test passes:**
+  `mixed_instrumentation`'s expected `graph.json` is `llm_tool_llm`'s, byte for
+  byte. `§12(f)` was decided here — `duplicate_source_id` keeps reporting on the
+  **span id**, because after A5 a `source_key` collision without a span-id
+  collision is unreachable. — **done** (`696bffb`).
+- **E4 — Mixed instrumentation: CLI and documents.** `--adapter auto|<id>`,
+  per-adapter counts in `inspect`, and the documents that describe them.
+  `auto` names the existing default rather than changing it. Phase E complete.
+  — **done** (`10c5214`).
 - **F1 — OTLP JSON design memo.** Whether the OTLP JSON envelope is a
   reader-level container format rather than an adapter, and what becomes of
-  resource and scope attributes; tracked in `WORKPLAN.md`.
+  resource and scope attributes (`OPEN_QUESTIONS.md` §16). The decisive
+  argument, worth keeping: an OTLP export's spans are in whatever dialect their
+  instrumentor speaks, so an `otlp_json` **adapter** would re-create audit
+  finding 1 one level below where it can be answered. Judged **no halt** — no
+  model change, no schema change, no new default, no new diagnostic code — so
+  it continued straight into F2. — **done** (`c943543`).
 - **F2 — OTLP JSON implementation.** Reader support plus an OTLP-JSON rendering
   of an existing scenario that must produce that scenario's one canonical
-  graph; tracked in `WORKPLAN.md`.
+  graph; `otlp_container` shares `llm_tool_llm/expected/graph.json` byte for
+  byte. No existing input changed, proven across all 64 traces. — **done**
+  (`ff05b2d`).
 - **G1 — "Real outside users" gate definition.** Replace the freeze
   precondition's hope with a stated condition, and make the announcement a task
-  with an owner; tracked in `WORKPLAN.md`.
+  with an owner (`OPEN_QUESTIONS.md` §13). It argued its own plan row was the
+  wrong shape: *"at least two of four"* lets the two cheapest conditions close
+  the gate without anyone ever having to agree with a `NodeKind`, `EdgeKind`,
+  warrant or `Payload` state — which is the only thing the gate is for. —
+  **done (decided)** (`7c26f0f`).
 - **G2 — Track the audit in `TASKS.md`.** This section: the item registry for
-  the series; tracked in `WORKPLAN.md`.
+  the series. — **done** (`ad77259`).
 - **G3 — Roadmap review.** Propose whether mixed instrumentation (E) is a
-  freeze precondition; the decision is the maintainer's; tracked in
-  `WORKPLAN.md`.
+  freeze precondition; the decision is the maintainer's (`OPEN_QUESTIONS.md`
+  §14). Answer: **it is — but the plan's own argument for it fails.** Not
+  evidential power (under per-record dispatch each record is parsed by exactly
+  one adapter, so no adapter-supplied field is ever contested) but the simpler
+  ground that **E moves the schema**. The precondition therefore binds the
+  *decision*, not the implementation. — **done (decided)** (`ef857f8`).
+- **G5 — Roadmap text, per the G1 and G3 decisions.** Land the outside-use
+  condition, the announcement task with its owner, the general
+  schema-movement rule for the freeze, and the recorded absences in
+  `ROADMAP.md`. G2's three lines kept and now pinned verbatim by a doc-truth
+  test. No code. — **done** (`4774496`).
 - **G4 — Series close.** Record final statuses here, move the decisions log
-  here, and remove `WORKPLAN.md` and its README row; tracked in `WORKPLAN.md`.
+  here, carry the run-1 review and the open threads here, re-point the
+  `ROADMAP.md` and `OPEN_QUESTIONS.md` cross-references, and remove
+  `WORKPLAN.md` and its README row. — **done** (this commit).
 - **H1 — Agent identity memo** *(halt)*. `operation` is `None` for agent, chain
-  and retriever in both dialects; the options go to `OPEN_QUESTIONS.md`, and a
-  model change would be a decision, not a patch; tracked in `WORKPLAN.md`.
+  and retriever in both dialects; the options went to `OPEN_QUESTIONS.md` §15,
+  and a model change would have been a decision, not a patch. The dialect
+  asymmetry is measured, not asserted: injecting `gen_ai.agent.name` diverges
+  **11 of 18** cross-dialect scenarios against a baseline of 0. — **done
+  (decided)** (`c945ef9`).
+- **H2 — Identity non-mapping, per the H1 decision.** State in `SPEC.md` §3.1
+  that no dialect's agent, chain or retriever name is read into `operation`,
+  with the `raw.source` / `unmapped_attributes` note; delete the "retriever
+  name" promise no dialect states (it appeared verbatim in `ADAPTERS.md` and
+  `CONTRACTS.md` too). Docs only. — **done** (`df0ba2c`).
+
+### Decisions taken 2026-09-10  *(moved here from `WORKPLAN.md` §3)*
+
+Six memo batches halted together on purpose, so the decisions could be taken in
+one sitting. This table is the record; each `OPEN_QUESTIONS.md` entry carries
+the same decision at its own *Decision* line.
+
+| Date | Batch | Decision | By |
+|---|---|---|---|
+| 2026-09-10 | C2 | Option 2: keep the reported integer literal as `int`, never rescale; fractional literals stay `float`; `started_at`/`ended_at: int \| float \| None`. Ceiling constant becomes `100_000_000_000`; C1's "kept exactly as reported" sentence becomes true by construction. Implemented by C3. | maintainer |
+| 2026-09-10 | D1 | Option (a), no flag: every declared receipt stays an edge; three builder-owned `basis` strings per §11(d) table (earliest / earliest tied broken by node_id / not the earliest receiving span). DESIGN.md §6 "no quadratic edge construction" gets the per-turn qualifier. Implemented by D2. | maintainer |
+| 2026-09-10 | E1 | Option (a), always: per-record classification in the registry via `detect([record])`; no `mixed` mode, `--adapter auto` is the explicit default spelling. A record two adapters claim → hard error reusing `adapter_ambiguous`, message naming line, span id, both claimants. A record no adapter claims → `unknown` node + new `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (model change taken now, unfrozen). `Edge.adapter = None` when the two ends came from different adapters, SPEC §3.8 says so. E3 lands only after A5. | maintainer |
+| 2026-09-10 | G1 | Adopt §13(f) replacement text: one agreement event (1 or 2) AND one exposure event (3 or 4), plus a 30-day floor from the later of 2026-08-30 and the announcement; the floor is never evidence. Announcement becomes an owned task per §13(g). Implemented by G5. | maintainer |
+| 2026-09-10 | G3 | All five items of §14(h): E is a freeze precondition on schema grounds, stated as a general rule ("no freeze while any batch that moves a serialized field is open"); no "mixed trace observed" condition; absences recorded as measurements; freeze conditions sharpened now, Phase 4 PR breakdown held; G2's ROADMAP lines kept. G4 scope widened per §14(j). | maintainer |
+| 2026-09-10 | H1 | Option C: `operation` stays `None` for agent/chain/retriever; the non-mapping becomes a stated rule in SPEC §3.1 with the verbatim-in-`raw.source` note; option B (`identity` field) recorded as the additive 1.1 path in OPEN_QUESTIONS §15. Implemented by H2. | maintainer |
+| 2026-09-10 | A2 follow-up | Bare CR is legal JSON whitespace; a lone-CR *terminator* splits `{"a":\r1}` that used to parse (review overclaim 3). Resolution: keep BOM and CRLF handling, drop the lone-CR terminator; CR-only files are not a real input, CR inside a record is. Implemented by A8. | maintainer |
+
+### The audit's findings, and which batch answered each
+
+| Audit # | Finding | Batch |
+|---|---|---|
+| 1 | mixed instrumentation unrepresentable; forced adapter loses `call_result` | E1–E4 |
+| 2 | any duplicate span id refuses the file; documented fallback unreachable | A3 |
+| 3 | `RecursionError` escapes on deep JSON (record or payload) | A1, A6 |
+| 4 | `Graph.annotate` O(N+E) per call | B1 |
+| 5 | no timestamp unit check; float64 precision at epoch-ns; strings → missing | C1, C2, C3 |
+| 6 | history-echo `data` edges O(turns²) | D1, D2 |
+| minor | BOM loses first record | A2, A8 |
+| minor | missing `trace_id` silent | A4, A9 |
+| minor | OTLP JSON envelope refused | F1, F2 |
+| minor | agent/chain/retriever identity | H1, H2 |
+| roadmap | "real outside users" undefined; announcement not a task | G1, G3, G5 |
+
+The reproduction scripts are `tests/audit/probe1.py` and `tests/audit/probe2.py`.
+Each fixing batch converted its case into a pytest regression test and deleted
+it from the probe, so what remains in the probes is what no batch has closed.
+
+### Cold review of run 1 — 2026-09-10
+
+An independent cold read of the 27 commits in `02e9f6e..911c8c1`, one
+sub-agent per commit, each testing the new tests against a `git worktree` on
+the parent. The full text was `patches/REVIEW-2026-09-10.md` (untracked); its
+summary and its two blockers are preserved here because both blockers became
+batches and the shape table is the only per-commit protocol evidence the
+series kept.
+
+| Kind | Count | Files touched |
+|---|---|---|
+| Code batches | 6 | A1 `4d7bb32`, A2 `817951e`, A4 `e25ab29`, A3 `b44c3a5`, B1 `cee10fb`, C1 `467ff97` |
+| Memo batches | 6 | `OPEN_QUESTIONS.md` only (§10–§15) |
+| Plan commits | 14 | `WORKPLAN.md` only |
+| Registry (G2) | 1 | `TASKS.md` + `ROADMAP.md` |
+
+Protocol checks that passed across the board: every plan commit was
+`WORKPLAN.md`-only and one concern; every memo commit was
+`OPEN_QUESTIONS.md`-only with a decision line; every code batch changed
+`SPEC.md` in the same commit as the behaviour; every code batch's new tests
+were shown to fail on the parent (A1 4 failed; A2 8 of 16; A4 5; A3 16; B1 10
+of 12; C1 25 plus 5 conformance failures); `tests/serialized_shape.json` moved
+only in A4 (+2), A3 (+1) and C1 (+2), each additive-only and regenerated rather
+than hand-edited; no `hash()`, clock, randomness or network entered
+`spanweave/`.
+
+**Blocker 1 — shuffled-input determinism is violated for records with no
+`span_id`.** `openinference.py:199` and `otel_genai.py:290` both read
+`source_key = span_id if span_id is not None else str(index)`. Reproduced at
+HEAD with two span-id-less records, input order reversed:
+
+    forward : [('sw_cde39f998fc177dc', 'beta'), ('sw_f3adffe8eba5ff98', 'alpha')]
+    reversed: [('sw_cde39f998fc177dc', 'alpha'), ('sw_f3adffe8eba5ff98', 'beta')]
+
+The id *set* is stable; the id-to-record *binding* is not — a direct violation
+of CLAUDE.md invariant 4. Nothing caught it because the shuffle tests ran only
+over `WORKED_RECORDS` and **0 of 117** corpus records lacked a span id: the
+gate was correctly shaped and blind to this input class. **Pre-existing**,
+dating to Phase 0/1; A3 neither introduced nor worsened it but *removed the
+obstacle* to fixing it. Answered by batch **A5**, which also added the
+id-to-record binding assertion, since byte-identity alone cannot see this
+defect.
+
+**Blocker 2 — audit finding 3 was not closed on the path a user touches.** A1
+fixed the reader and both adapters; `spanweave inspect` and `spanweave
+validate` still died with `RecursionError`, because `cli.py:178` caught
+`(ValueError, OSError)` and `cli.py:208` caught `ValueError`, and
+`_read_document` sniffed the file with its own `json.loads` before the fixed
+reader was reached. `spanweave build` degraded honestly throughout. Strictly
+outside A1's row, so not a defect *of that commit* — but the finding was not
+closed. Answered by batch **A6**, which found the write half as well.
+
+The review's five other concerns were assigned: the spec/code digest formula
+and the stale doc-truth lines to **A7**, the three overclaims to **A8** and
+**C3**, and A4's unstated scope limit to **A9**.
+
+### Open threads the series did not close
+
+Recorded as open rather than swept up, because a series that declares itself
+clean is the one nobody rereads.
+
+1. **Two adapter docstrings still promise a name no dialect states.**
+   `spanweave/adapters/openinference.py:433` and `otel_genai.py:569` still say
+   *"tool / model / retriever name"*, which H2 proved unrealizable against both
+   adapters; and `otel_genai.py:569`, `SPEC.md:474` and
+   `tests/test_otel_genai.py:375` cite `operation` as §3.2 when §3.1 defines
+   it. H2 could not fix them: its row said *"No code"*, and these are under
+   `spanweave/`. No behaviour impact — stale cross-references only.
+2. **`ROADMAP.md` Phase 2's shareable note is stale.** It says *"16 of the 17
+   both-dialect scenarios"* declare `Node.name` varying; it is now **21 of
+   21**. G5's new text states the true form; the old line was left untouched
+   because G5's row named the Phase 4 text, not Phase 2's.
+3. **Seven test sweeps still glob `dialects/*.jsonl`.** F2 added `.json`
+   renderings, and the census it maintains was widened to read every rendering
+   through the library (52 trace files / 151 records). Seven other sweeps were
+   not, so they do not see the new renderings. Stated in
+   `fixtures/conformance/README.md` rather than left to be found.
+4. **C3 relaxed a gate, and a relaxed gate should be visible in the record.**
+   `tests/test_contracts.py` now treats a closed union of number types as
+   non-permissive, so `int | float | None` needs no `CONTRACTS.md` inventory
+   row; without it the gate demanded rows typed
+   `UnionType[int, float, NoneType] | None`. The relaxation is stated in
+   `CONTRACTS.md`'s *Scope* section, and this is the note that says it was a
+   gate change rather than a data change.
+5. **`auto` is reserved by a test, not by a registry check.**
+   `tests/test_cli.py` is what stops an adapter being named `auto`
+   (`--adapter auto` is the default's explicit spelling, E4). A future third
+   adapter must not be named `auto`, and nothing in the registry will say so.
+6. **B2 is a measured negative result, not undone work.** The numbers are in
+   its bullet above. They are the reason not to redo it, and they name the real
+   target if reader speed ever matters: the dedup digest, not line splitting.
+7. **The corpus census figure the G3 decision was taken on does not
+   recompute.** "57 files / 177 records" was measured on a working tree that
+   included the git-ignored `capture/_scratch/`: 57 = 43 committed `*.jsonl` +
+   14 scratch, and 177 = 117 + 60. `ROADMAP.md` therefore asserts the
+   recomputable pair and cites 57/177 with that provenance, and
+   `OPEN_QUESTIONS.md` §12(c) and §14 now say the same. The **decision is
+   unaffected**: 0 records carry both markers either way. A separate corpus —
+   `fixtures/captured/`, 3 traces / 17 records / 4 agent spans / 0
+   instrumentor-emitted — carries the agent-span absence, and the two are
+   labelled as such wherever they appear.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

@@ -13,6 +13,15 @@ reader to trip over. Touching one is a halt point (`AGENT.md`).
 For each: **(a)** the question, **(b)** why it matters, **(c)** what evidence
 would settle it, **(d)** the provisional stance the seed specs take.
 
+**Entries §10–§16 were written as memos during the September 2026 audit-fix
+series** and refer throughout to `WORKPLAN.md`, that series' execution state.
+`WORKPLAN.md` was written to be deleted at series close and was deleted by
+batch G4 on 2026-09-10; everything of it that outlives the series — the batch
+list with final statuses, the decisions log, the run-1 review and the threads
+the series left open — is in `TASKS.md` under *September 2026 audit*. Those
+references are kept as written, because a memo that is re-edited after the fact
+stops being evidence of what was known when it was taken.
+
 ---
 
 ## 1. Should `unknown` nodes be promotable?
@@ -581,7 +590,8 @@ false sentence has to be fixed under it too. Option 3 is recommended against
 for the reason above: it buys precision by asserting a unit the library has
 just finished saying it cannot know.
 
-**Decision: option 2**, logged in `WORKPLAN.md` §3 (2026-09-10) and implemented
+**Decision: option 2**, taken 2026-09-10 (logged in `TASKS.md`, *September
+2026 audit*) and implemented
 by batch C3. `started_at`/`ended_at` are `int | float | None`, an integer
 literal — quoted or bare — is carried as an `int`, the ceiling constant is
 `100_000_000_000`, and C1's *"kept exactly as reported"* sentence is true by
@@ -839,11 +849,15 @@ honestly — at which point it still needs the diagnostic, the `Meta` field and
 the §5.1 clause listed above. One capture settles it; the same capture is D2's
 fixture material either way.
 
-**Decision:**
-
-*Not taken.* This entry is a `WORKPLAN.md` D1 halt; no code changed with it,
-and `tests/audit/probe2.py` case B stays in the probe until D2 converts it.
-Record the decision in `WORKPLAN.md` §3.
+**Decision: option (a), no flag**, taken 2026-09-10 and implemented by batch
+D2. Every declared receipt stays an edge; the three builder-owned `basis`
+strings of **(d)**'s table say which receipt came first (earliest / earliest
+tied, broken by `node_id` / not the earliest receiving span). `DESIGN.md` §6's
+*"no quadratic edge construction"* gains the per-turn qualifier. No `data_echo`
+flag: a `first` mode would drop true edges for a 34.7% saving on a curve that
+stays quadratic. `tests/audit/probe2.py` case B was converted to a test and
+removed by D2. The decision is logged in `TASKS.md`, *September 2026 audit*.
+What **(a)**-**(e)** describe is the state **before** D2.
 
 ---
 
@@ -951,6 +965,15 @@ What the corpus shows, scanned end to end (57 `*.jsonl` files, 177 records):
 - **0 files** carry both markers. 37 are `openinference`-only, 20 are
   `otel_genai`-only.
 - **0 records** carry both markers. **0 records** carry neither.
+
+*Provenance of the pair, added by batch G4 (2026-09-10) because it does not
+recompute: the scan was of a **working tree**, not of a checkout. It exceeds the
+then-committed 43 files and 117 records by exactly the 14 files and 60 records
+of local capture output under `capture/_scratch/`, which git ignores. A
+stranger checking it out measures the smaller pair; `ROADMAP.md` therefore
+asserts a recomputable pair and cites 57/177 as the measurement the decision
+was taken on. **The 0 is unchanged either way**, so nothing that rests on this
+finding moves.*
 
 So the shape has never been captured here. What makes it more than a thought
 experiment is three things:
@@ -1417,11 +1440,20 @@ itself is unchanged by this memo.
    record's id depend on its file position, so shuffling a trace with no span
    ids changes the graph. Not caused by dispatch; widened by it. Its own batch.
 
-**Decision:**
-
-*Not taken.* This entry is a `WORKPLAN.md` E1 halt; no code changed with it,
-and `tests/audit/probe1.py`'s mixed-instrumentation case stays in the probe
-until E2/E3 convert it. Record the decision in `WORKPLAN.md` §3.
+**Decision: option (a), always**, taken 2026-09-10 and implemented by batches
+E2, E3 and E4. Dialect is classified **per record** in the registry via each
+adapter's existing `detect([record])`; there is no `mixed` mode, and
+`--adapter auto` is the explicit spelling of the existing default. A record two
+adapters claim is a hard error reusing `adapter_ambiguous`, naming the line,
+the span id and both claimants. A record no adapter claims becomes an `unknown`
+node plus a new `unclaimed_record` warning, which requires
+`Provenance.adapter_id: str | None` — a model change taken deliberately while
+the schema is unfrozen. `Edge.adapter` is `None` when the two ends came from
+different adapters, and `SPEC.md` §3.8 says so. E3 landed only after A5, which
+fixed the defect at item 6 of the summary above. `tests/audit/probe1.py`'s
+mixed-instrumentation case was converted by E2/E3. The decision is logged in
+`TASKS.md`, *September 2026 audit*. What **(a)**-**(k)** describe is the state
+**before** E2.
 
 ---
 
@@ -1777,11 +1809,13 @@ that in one direction worth having in front of G3:
   A1 is worth, and it is an argument about ordering E before breadth rather
   than about the freeze. G3's to weigh.
 
-**Decision:**
-
-*Not taken.* This entry is a `WORKPLAN.md` G1 halt; no code changed with it and
-`ROADMAP.md` is untouched — the text in **(f)** and **(g)** lands only when the
-decision is taken. Record the decision in `WORKPLAN.md` §3.
+**Decision: adopt (f)'s replacement text**, taken 2026-09-10 and landed in
+`ROADMAP.md` by batch G5. The gate is **one agreement event** (condition 1 or
+2) **and one exposure event** (condition 3 or 4), plus a 30-day floor running
+from the later of 2026-08-30 and the announcement — and the floor is never
+itself evidence. The announcement becomes an owned task per **(g)**. The
+decision is logged in `TASKS.md`, *September 2026 audit*. What **(a)**-**(e)**
+describe is the state **before** G5.
 
 ---
 
@@ -2003,6 +2037,12 @@ it.
    markers, with the `capture/backends.py` comment as the strongest first-party
    evidence and the honest note that it is a prediction about the world.
 
+   *Batch G4 (2026-09-10): the 57/177 pair is §12(c)'s working-tree scan and
+   does not recompute from a checkout — it exceeds the then-committed 43 files
+   and 117 records by the git-ignored `capture/_scratch/`. `ROADMAP.md` states
+   both pairs and which one a stranger can check; the **0** this item rests on
+   is the same in either.*
+
    A **second measured absence** belongs beside it, recorded here by batch H2
    from §15(j). Across the three captured traces — `openai_tool_call.jsonl`,
    `genai_tool_call.jsonl`, `genai_workflow.jsonl`, 17 records — there are 4
@@ -2120,6 +2160,13 @@ series — five of them now — ends with *"Record the decision in `WORKPLAN.md`
 sign-offs here**, re-pointed at `TASKS.md`. That is a one-line addition to a
 batch that has not run, not an edit to G2's work, and this memo makes none.
 
+*Adopted: G4's scope gained it, and on 2026-09-10 G4 re-pointed the
+`ROADMAP.md` parenthetical at the `TASKS.md` audit section (and recorded that
+F1 and F2 answered the question the sentence poses), re-pointed the six memo
+sign-offs in this file, and replaced the sixteen registry lines' "tracked in
+`WORKPLAN.md`" with each batch's final status. The block quoted above is G2's
+text as committed at `ad77259`, not the sentence in `ROADMAP.md` today.*
+
 **(k) What this memo hands forward.**
 
 1. **E is a freeze precondition on schema grounds**, and the roadmap sentence
@@ -2139,12 +2186,17 @@ batch that has not run, not an edit to G2's work, and this memo makes none.
 6. **G4 needs one more line of scope**: `ROADMAP.md`'s pointer and this file's
    memo sign-offs outlive `WORKPLAN.md` — **(j)**.
 
-**Decision:**
-
-*Not taken.* This entry is a `WORKPLAN.md` G3 halt; no code changed with it and
-`ROADMAP.md` is untouched — the text in **(i)** lands only when the decision is
-taken, and the three lines judged in **(j)** are left exactly as G2 wrote them.
-Record the decision in `WORKPLAN.md` §3.
+**Decision: all five items of (h)**, taken 2026-09-10 and landed in
+`ROADMAP.md` by batch G5. E is a freeze precondition **on schema grounds**,
+stated as a general rule — *no freeze while any batch that moves a serialized
+field is open* — rather than as a claim about evidence. There is no "mixed
+trace observed" condition; the absences are recorded as measurements instead.
+The freeze conditions are sharpened now and the Phase 4 PR breakdown is held.
+G2's three `ROADMAP.md` lines are kept, and **(j)** widened G4's scope: that
+pointer and the memo sign-offs in this file were re-pointed at `TASKS.md` when
+`WORKPLAN.md` was deleted at series close. The decision is logged in
+`TASKS.md`, *September 2026 audit*. What **(a)**-**(k)** describe is the state
+**before** G5.
 
 ---
 
@@ -2464,8 +2516,8 @@ zero marginal cost. Recommend scheduling it there. It is **not** a gate:
    `capture/backends.py`. Whatever is decided, that absence should be recorded
    beside §14(h) item 4's other measured absence (**j**).
 
-**Decision: option C**, logged in `WORKPLAN.md` §3 (2026-09-10) and
-implemented by batch H2. `operation` stays `None` for `agent`, `chain` and
+**Decision: option C**, taken 2026-09-10 (logged in `TASKS.md`, *September
+2026 audit*) and implemented by batch H2. `operation` stays `None` for `agent`, `chain` and
 `retriever` wherever no dialect states a tool or model name, and the
 non-mapping is now a **stated rule in `SPEC.md` §3.1** — with the note that the
 value survives verbatim in `raw.source` and that `unmapped_attributes` names the
@@ -2515,7 +2567,8 @@ document is a line that is not JSON, and the reader says so 46 times.
 
 Neither outcome is wrong under any rule the library states. Both are the
 library failing to read a file that contains exactly the spans it exists to
-read, and the audit logged it as a minor finding (`WORKPLAN.md` §5) because it
+read, and the audit logged it as a minor finding (the finding-to-batch map,
+now in `TASKS.md`) because it
 is a gap in reach, not a defect in behaviour.
 
 **(b) The decisive argument: an OTLP JSON document has no dialect.** This is

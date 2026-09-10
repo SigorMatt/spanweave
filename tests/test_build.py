@@ -420,7 +420,8 @@ def test_the_rank_is_per_call_id_not_per_span():
 
 
 def test_every_declaration_is_still_an_edge():
-    # The point of the decision (`WORKPLAN.md` §3, D1): nothing is dropped.
+    # The point of the decision (`TASKS.md`, September 2026 audit, D1):
+    # nothing is dropped.
     # Ten spans declaring one receipt are ten declarations and ten edges.
     graph = build(a_receipt_loop(*((f"r{i}", float(i)) for i in range(1, 11))))
     assert len(edges_of(graph, EdgeKind.DATA)) == 10

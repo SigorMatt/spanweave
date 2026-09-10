@@ -255,7 +255,9 @@ run one command, see whether your adapter agrees with the canonical graph.
 
 *Raw OTLP JSON is pulled forward by the September 2026 audit as batches F1–F2,
 which ask whether the envelope is a container format for the reader rather than
-a dialect for an adapter (registered in `TASKS.md`, tracked in `WORKPLAN.md`).*
+a dialect for an adapter (registered in the `TASKS.md` audit section). F1 and
+F2 answered it on 2026-09-10: a container format in the reader, not an
+adapter.*
 
 The flywheel is deliberate: the contribution surface is *"add your
 instrumentor"*, backed by a corpus that makes a correct contribution obvious and
