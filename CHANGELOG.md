@@ -435,6 +435,23 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An unreadable `role` is reported again, because it decided nothing.** The
+  previous fix marked a tool-result message's `...message.role` consumed the
+  moment the key was *present*, so a `role` the adapter could not read as a
+  string -- a number, a null, an object -- vanished from
+  `unmapped_attributes` while the id beside it stayed reported. That inverted
+  the sentence the same fix wrote into `SPEC.md` §3.7: a key read and **not
+  usable** stays reported, and an unreadable role is exactly that. It is also
+  the one key where reporting is the only trace left, since a `role` never
+  becomes a field of its own -- consuming it let the fact that one arrived
+  unreadable disappear between the raw record and a decision that was never
+  made. A readable role is still consumed, whether it says `tool` or not: that
+  one really did decide. No conformance or corpus expectation moved -- no
+  trace in the tree carries a non-string `...message.role` -- and the
+  quadratic-diagnostics fix is untouched, since a resent history states its
+  roles as strings.
+  (audit finding 6, follow-up; `SPEC.md` §3.7, `ADAPTERS.md` §3)
+
 - **A timestamp is finite and within the interpreter's reach, or it is not
   read at all.** Three JSON numbers used to leave the library by three
   different wrong doors. A **quoted** integer of more than 4300 digits --

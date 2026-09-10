@@ -510,6 +510,15 @@ quadratic in the length of the conversation. A key the adapter read and could
 whose value is not a number is a real gap, and so is an id whose sibling role
 said it was not a result.
 
+**A key that decided nothing was not acted on**, however it was read. A
+tool-result `role` the adapter cannot read as a string — a number, a null, an
+object — decides nothing: the id beside it is left reported by the *default*
+rather than by a decision, and the unreadable `role` is reported too. It is the
+`llm.token_count.*` case again, and reporting is the only trace it leaves,
+because a `role` never becomes a field of its own — consuming it would let the
+fact that one arrived unreadable vanish between the raw record and a decision
+that was never made.
+
 #### `source`, per code
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated

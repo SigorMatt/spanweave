@@ -271,7 +271,9 @@ being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
   field, but the decision is the mapping, and reporting it says you failed to
   understand a key you used. Mark it where you read it, and make sure that
   runs **before** `unmapped` is tallied. A key you read and could not use is
-  the other case: leave that one reported.
+  the other case: leave that one reported — including a deciding key whose
+  value you could not read at all, since a key that decided nothing was not
+  acted on (`SPEC.md` §3.7).
 - `raw` — the source record, verbatim and unmodified, plus its line number:
   1-based over the records you were handed, per §2.
 

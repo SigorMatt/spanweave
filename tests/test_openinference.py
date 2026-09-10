@@ -730,6 +730,39 @@ def test_a_role_that_is_not_tool_leaves_the_id_it_decided_about_reported():
     assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
 
 
+@pytest.mark.parametrize("role", [7, None, {"role": "tool"}, [], True])
+def test_a_role_the_adapter_cannot_read_decides_nothing_and_stays_reported(role):
+    # The rule's floor: `unmapped` names what the adapter did not map, and a
+    # role it cannot read as a string mapped nothing. The id beside it is left
+    # reported by the DEFAULT, not by a decision -- so the role is reported
+    # too. A `role` never becomes a field, so the report is the only trace
+    # that an unreadable one arrived (SPEC.md 3.7).
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.role": role,
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == (
+        "llm.input_messages.1.message.role",
+        "llm.input_messages.1.message.tool_call_id",
+    )
+
+
+def test_an_id_with_no_role_beside_it_reports_only_the_id():
+    # No role key, nothing read, nothing to consume: unchanged by the above.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
+
+
 def _echo_loop(turns):
     """The agent loop of `tests/audit/probe2.py` case B, in miniature.
 

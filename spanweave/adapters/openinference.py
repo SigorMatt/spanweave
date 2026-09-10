@@ -546,21 +546,32 @@ def _received_results(
     (`tool_call_history_echo`). Reading either as the other is a mistake in
     opposite directions.
 
-    The role key is consumed along with the id, because it was read and acted
-    on and `unmapped` names what the adapter did **not** map (`SPEC.md` §3.7).
-    Reporting it said the adapter had failed to understand the key it decided
-    with -- once per echoed message per turn, which is quadratic in a resent
-    conversation: at 400 turns the September 2026 audit measured 13.19 MB of
-    `unmapped_attributes` diagnostics, nearly all of them these two keys.
+    A role the adapter could READ is consumed along with the id it decided
+    about, because it was read and acted on and `unmapped` names what the
+    adapter did **not** map (`SPEC.md` §3.7). Reporting it said the adapter had
+    failed to understand the key it decided with -- once per echoed message per
+    turn, which is quadratic in a resent conversation: at 400 turns the
+    September 2026 audit measured 13.19 MB of `unmapped_attributes`
+    diagnostics, nearly all of them these two keys.
+
+    A role it could not read decided nothing, and stays reported: the id below
+    it is then left reported by the default rather than by a decision, and a
+    `role` never becomes a field, so the report is the only trace that an
+    unreadable one arrived.
     """
     received: list[str] = []
     for key in sorted(str(k) for k in attributes):
         if not (key.startswith(INPUT_MESSAGES) and key.endswith(RESULT_ID_SUFFIX)):
             continue
         role_key = key[: -len(RESULT_ID_SUFFIX)] + ROLE_SUFFIX
-        if role_key in attributes:
-            consumed.add(role_key)
-        if _as_str(attributes.get(role_key)) != TOOL_ROLE:
+        role = _as_str(attributes.get(role_key))
+        if role is None:
+            # No role, or one that is not a string: nothing was decided here,
+            # so nothing is consumed. An absent key is not reported; a present
+            # but unreadable one is, like any key read and not usable.
+            continue
+        consumed.add(role_key)
+        if role != TOOL_ROLE:
             # The id was not mapped, so it stays reported. The role that
             # decided so was.
             continue
