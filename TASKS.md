@@ -10647,10 +10647,19 @@ it from the probe, so what remains in the probes is what no batch has closed.
 
 An independent cold read of the 27 commits in `02e9f6e..911c8c1`, one
 sub-agent per commit, each testing the new tests against a `git worktree` on
-the parent. The full text was `patches/REVIEW-2026-09-10.md` (untracked); its
-summary and its two blockers are preserved here because both blockers became
-batches and the shape table is the only per-commit protocol evidence the
-series kept.
+the parent. The full text is `reviews/2026-09-10-run1.md`; its summary and its
+two blockers are also preserved here because both blockers became batches and
+the shape table is the only per-commit protocol evidence the series kept. The
+later cold read of run 2 — the one that reopened this section — is
+`reviews/2026-09-10-run2.md`.
+
+Both are in the repository because for a day they were not: they were written
+to `patches/`, which is untracked, and cited from here as if a reader could
+open them. A clean checkout had the citation and not the review, and the two
+concerns that existed only inside the run-1 file were lost with it (threads 8
+and 9 below). `tests/test_doc_truth.py` now fails if a document written to
+outlive a series cites a `patches/` path, or cites a `reviews/` file that is
+not in the tree.
 
 | Kind | Count | Files touched |
 |---|---|---|
@@ -10695,9 +10704,14 @@ reader was reached. `spanweave build` degraded honestly throughout. Strictly
 outside A1's row, so not a defect *of that commit* — but the finding was not
 closed. Answered by batch **A6**, which found the write half as well.
 
-The review's five other concerns were assigned: the spec/code digest formula
-and the stale doc-truth lines to **A7**, the three overclaims to **A8** and
-**C3**, and A4's unstated scope limit to **A9**.
+**Three** of the review's five other concerns were assigned: the spec/code
+digest formula and the stale doc-truth lines to **A7**, the three overclaims to
+**A8** and **C3**, and A4's unstated scope limit to **A9**. That enumerates
+concerns 3, 4 and 5. Concerns **6** and **7** were assigned to no batch and
+named in no thread; until run 3 they appeared nowhere in the tree, because the
+only copy was the untracked review. They are threads 8 and 9 below, and the
+sentence that used to stand here — "the review's five other concerns were
+assigned" — was the closing commit's one false claim.
 
 ### Open threads the series did not close
 
@@ -10744,6 +10758,34 @@ clean is the one nobody rereads.
    `fixtures/captured/`, 3 traces / 17 records / 4 agent spans / 0
    instrumentor-emitted — carries the agent-span absence, and the two are
    labelled as such wherever they appear.
+8. **B1's field test cannot catch the failure mode its design invites.**
+   Run-1 review concern 6 (`reviews/2026-09-10-run1.md` §6), recovered in run
+   3 and open. `test_an_annotated_graph_carries_every_field_a_built_one_has`
+   asserts that every non-`annotations` field equals the **parent's**;
+   `_with_annotations` bypasses `__post_init__`, so a future `Graph` field
+   *derived from* `annotations` would carry a stale value and the test would
+   assert stale == parent's and pass. It proves "no field goes missing"; the
+   risk B1's design invites is "a field goes stale". The remedy the review
+   names: compare against a fully rebuilt graph, not the parent. B1's sharing
+   itself was reviewed as sound — every write to `_index`/`_out`/`_in` is an
+   `object.__setattr__` in `__post_init__` over freshly built locals, the
+   fields are typed `Mapping` so `mypy --strict` rejects in-place writes, the
+   "nodes unchanged" precondition holds by construction because
+   `_with_annotations` takes only an `AnnotationStore`, and all-or-nothing
+   behaviour across an exception raised inside the caller's iterable was
+   probed. So this is a test-strength thread, not a correctness one.
+9. **A3's content dedup can collapse two real spans, and `SPEC.md` argues one
+   side.** Run-1 review concern 7 (`reviews/2026-09-10-run1.md` §7), recovered
+   in run 3 and open. `read.py` collapses on parsed content *before* adapters
+   run, so two genuinely distinct operations that emit identical records with
+   no `span_id` become one node. The spec's argument — "an invented span is
+   worse than a missing one" — holds only when the copies *are* one operation,
+   which the reader cannot know without a span id. A diagnostic fires, so
+   invariant 2 is arguably met, but the direction of the trade is not
+   acknowledged in the spec and there is no escape hatch. Interacts with run-1
+   blocker 1, which A5 answered by keying a span-id-less record on its content
+   digest — the same content-equality assumption, now load-bearing for
+   identity as well as for dedup.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

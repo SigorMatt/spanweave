@@ -339,6 +339,74 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
     )
 
 
+# -- The durable record, held to the tracked tree --------------------------
+#
+# `TASKS.md`'s September 2026 audit section cited its cold review as
+# `patches/REVIEW-2026-09-10.md`, and `patches/` is untracked scratch: a clean
+# checkout had the citation and not the review, and the two concerns that
+# lived only in that file were lost with it. The general rule is the one this
+# encodes -- a document written to outlive a work series may only point at
+# files the repository actually carries.
+
+#: Directories that archive text verbatim, and so quote paths as they stood.
+VERBATIM_PARTS = frozenset({"patches", "reviews"})
+
+
+def durable_documents() -> list[pathlib.Path]:
+    """Documents that outlive a series, so their citations must resolve later.
+
+    Two exclusions, both because the excluded text is a record of a moment
+    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
+    copied verbatim; a review that says a file was untracked *when it was
+    read* is reporting, not citing. `WORKPLAN.md` is a series' own execution
+    state: it owns `patches/` as its scratch drop and is deleted at series
+    close, which is why nothing durable may depend on it.
+    """
+    return [
+        path
+        for path in documents()
+        if path.name != "WORKPLAN.md"
+        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+    ]
+
+
+def test_a_durable_document_cites_no_untracked_scratch_path():
+    """A *file* under `patches/`, not the directory's name.
+
+    Saying that a review was written to `patches/` and is therefore absent
+    from a clean checkout is the explanation; `patches/REVIEW-2026-09-10.md`
+    offered as the full text is the citation that does not resolve.
+    """
+    scratch: dict[str, set[str]] = {}
+    for path in durable_documents():
+        for span in code_spans(path.read_text(encoding="utf-8")):
+            for match in re.finditer(r"\bpatches/\S+", span):
+                scratch.setdefault(match.group(0), set()).add(
+                    str(path.relative_to(ROOT))
+                )
+    assert not scratch, (
+        "a document meant to outlive its work series points into `patches/`, "
+        "which is untracked scratch and absent from a clean checkout. Copy "
+        "the file into `reviews/` and cite it there.\n"
+        f"  {scratch}"
+    )
+
+
+def test_every_review_a_document_cites_is_in_the_repository():
+    cited: dict[str, set[str]] = {}
+    for path in durable_documents():
+        for span in code_spans(path.read_text(encoding="utf-8")):
+            for match in re.finditer(r"\breviews/[A-Za-z0-9._-]+\.md\b", span):
+                cited.setdefault(match.group(0), set()).add(str(path.relative_to(ROOT)))
+    assert cited, "no document cites a review; the scan found nothing"
+    missing = {
+        review: sorted(where)
+        for review, where in cited.items()
+        if not (ROOT / review).is_file()
+    }
+    assert not missing, f"documents cite reviews that are not in the tree: {missing}"
+
+
 # -- Status: what ships, in the present tense ------------------------------
 
 

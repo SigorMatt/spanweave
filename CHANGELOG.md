@@ -286,6 +286,26 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The cold reviews are in the repository, and the two concerns that were
+  lost with them are open threads again.** Both reviews of the September 2026
+  audit-fix series were written to `patches/`, which is untracked, and cited
+  from `TASKS.md` as the full text: a clean checkout had the citation and not
+  the review. They are now `reviews/2026-09-10-run1.md` and
+  `reviews/2026-09-10-run2.md`, copied verbatim -- a directory rather than
+  root documents, so the README's document table stays a map of the root.
+  Two of run 1's concerns had existed only inside that untracked file:
+  **6**, that B1's field test asserts against the *parent* graph, so a future
+  `Graph` field derived from `annotations` would go stale and the test would
+  still pass, and **7**, that the reader's pre-adapter content dedup can
+  collapse two genuinely distinct span-id-less spans while `SPEC.md` argues
+  only the other side. Both are now threads 8 and 9 of *Open threads the
+  series did not close*, with the review's own text. The sentence that said
+  "the review's five other concerns were assigned" -- it enumerated three --
+  now says which three, and which two were not. Two `tests/test_doc_truth.py`
+  checks keep it that way: a document written to outlive a work series may
+  not cite a `patches/` path, and every `reviews/` file a document cites must
+  be in the tree. Documentation and tracking only; no behaviour change.
+
 - **The September 2026 audit-fix series is closed, and `WORKPLAN.md` is
   gone.** That file was the series' execution state -- protocol, live batch
   status, decisions log, resume note, finding-to-batch map -- and was written
@@ -294,7 +314,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   outlives the series is now in `TASKS.md` under *September 2026 audit*: every
   batch with its final status and commit, the decisions taken on 2026-09-10,
   the cold review of run 1 with both of its blockers, the finding-to-batch map,
-  and -- deliberately kept -- the seven threads the series did **not** close.
+  and -- deliberately kept -- the threads the series did **not** close
+  (seven at the close; nine since run 3 recovered two lost concerns, below).
   Its README row is removed with it, the six memo sign-offs in
   `OPEN_QUESTIONS.md` and the `ROADMAP.md` pointer now name `TASKS.md`, and
   `OPEN_QUESTIONS.md` §12(c) and §14 state the provenance of the corpus census
