@@ -209,7 +209,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | G1 | **"Real outside users" gate definition.** ROADMAP.md Phase 4: replace the hope with a condition. Proposed definition (for decision, not mine to make): at least two of — an adapter contribution merged from outside; a consumer built on 0.9.x that filed a model-level issue (a falsification consumer, CONTRIBUTING #4); a captured trace with provenance contributed from outside; 30 days on PyPI with ≥1 issue reproducing on a non-fixture trace. Add "Announcement" as an explicit task with owner. | done | 6 |
 | G2 | **Track the audit in TASKS.md.** Append section "September 2026 audit" to TASKS.md: one line per batch A1–H1 with its one-sentence purpose and "tracked in WORKPLAN.md". Do not edit earlier sections. Add a one-line pointer under the relevant ROADMAP.md Phase 4 bullet only if a bullet already covers the item (OTLP JSON); otherwise nothing in ROADMAP.md. | done | 6 |
 | G3 | **Roadmap review.** Phase 4 is coarse by design (sharpen when Phase 3 exit is met). Check: is the audit's E (mixed instrumentation) a freeze precondition? Argument that it is: the freeze measures whether adapter-supplied fields agree across adapters; a single trace exercising two adapters at once is the strongest form of that measurement. Propose text; decision is the maintainer's. | done | 6 |
-| G5 | **Roadmap text, per G1 and G3 decisions.** Land §13(f) and §14(i) text in ROADMAP.md: the outside-users condition (A and B and floor), the announcement task with owner and "what it must not claim", the general schema-movement rule for the freeze, the recorded absences (57 files / 177 records / 0 mixed; no instrumentor-emitted agent span in the corpus). Keep G2's three lines. No code. | todo | 10 |
+| G5 | **Roadmap text, per G1 and G3 decisions.** Land §13(f) and §14(i) text in ROADMAP.md: the outside-users condition (A and B and floor), the announcement task with owner and "what it must not claim", the general schema-movement rule for the freeze, the recorded absences (57 files / 177 records / 0 mixed; no instrumentor-emitted agent span in the corpus). Keep G2's three lines. No code. | done | 10 |
 | G4 | **Series close:** record final statuses in TASKS.md, move §3 decisions there, remove WORKPLAN.md and its README row, run make check. Also: the ROADMAP.md line and memo cross-references per §14(j); CONTRACTS.md rows; confirm every OPEN_QUESTIONS §10–§15 decision line reads the §3 decision verbatim. | todo | 4 |
 
 ### Phase H — agent identity (from the earlier review)
@@ -538,6 +538,20 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   `tests/test_otel_genai.py:375` cite `operation` as §3.2 when §3.1 defines it.
   H2 left them because fixing them means touching `spanweave/` and its row says
   "No code." No behaviour impact; stale cross-references only.
+- G5 done (`4774496`), landing the G1 and G3 decisions in ROADMAP.md. No code.
+  G2's three lines are kept and now pinned verbatim by a doc-truth test.
+- **The row's "57 files / 177 records" does not recompute, and G5 said so rather
+  than restating it.** §12(c) had scanned a working tree: 57 = 43 committed
+  `*.jsonl` + 14 in the git-ignored `capture/_scratch/`; 177 = 117 + 60 (exact on
+  both). ROADMAP.md therefore asserts the recomputable pair — **49 files / 139
+  records / 0 both-claimed today** — and cites 57/177 as the measurement the
+  decision was taken on, with that provenance stated. **G4 should note this back
+  into OPEN_QUESTIONS §12(c) and §14.** Separately confirmed: the agent-span
+  absence is a *different* corpus (`fixtures/captured/`: 3 traces, 17 records, 4
+  agent spans, 0 instrumentor-emitted) and the two are labelled as such.
+- **Third unowned staleness:** ROADMAP Phase 2's shareable note says "16 of the 17
+  both-dialect scenarios" declare `Node.name` varying; it is now 21 of 21. G5's
+  new text states the true form; the old line is untouched.
 
 ---
 
