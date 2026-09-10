@@ -6,7 +6,12 @@ architecture per `DESIGN.md`.
 
 The through-line: **earn the right to be depended on before asking to be
 depended on.** The schema does not freeze until a consumer the model was not
-designed for has used it unchanged.
+designed for has used it unchanged. That is the motto, not the test: what
+counts as such a consumer, and when the clock starts, is stated once as a
+checkable condition in Phase 4's *"Real outside users" is a stated gate, not a
+hope*. This sentence points there rather than restating it, because one
+condition written three times at three strengths is three conditions that
+drift.
 
 ## Phase 0 — Skeleton & contract
 
@@ -166,7 +171,9 @@ feedback before making it.
 
 **Freeze later, on evidence.** `schema_version` `1` and `1.0.0` land when the
 predictions are resolved, the adversarial finding is absorbed, and real users
-have exercised the schema — not when the calendar says launch.
+have exercised the schema — not when the calendar says launch. **"Real users"
+is not left to judgement**: the condition is Phase 4's *"Real outside users" is
+a stated gate, not a hope*, and this paragraph states no version of its own.
 
 **And `1` is a fresh start, not the next term in a sequence** (`TASKS.md` 3.7,
 `SPEC.md` §3.9). `0.x` is a single unfrozen bucket that never tracked changes —
@@ -259,9 +266,10 @@ Also here, because both want a real merged adapter to exist first:
 - **The `CONTRIBUTING.md` adapter walkthrough**, written against an actual
   merged contribution rather than a hypothetical one.
 - **The freeze.** `schema_version` `1` and `1.0.0`, once the predictions are
-  resolved, the Phase 2 adversarial finding is absorbed, real users have
-  exercised the schema at `0.9.x`, **and a third dialect is rendered in the
-  conformance corpus** — see the gate below. Plus the compatibility policy:
+  resolved, the Phase 2 adversarial finding is absorbed, **the outside-use gate
+  below is met**, **a third dialect is rendered in the conformance corpus**,
+  and **every open model question in `OPEN_QUESTIONS.md` is decided** — see the
+  three gates below. Plus the compatibility policy:
   additive-only thereafter, version bump for anything breaking (`CLAUDE.md` 7).
   `1` is a **fresh start**: `0.x` never tracked changes, so nothing about it
   carries forward (`SPEC.md` §3.9). The freeze is also the first time
@@ -466,6 +474,184 @@ no second implementation has had to agree with is the same defect inverted, and
 that is why the enumeration (`CONTRACTS.md`, `TASKS.md` 3.2) states no contracts
 and this section states no vocabulary. What is recorded here is what the
 instrument would have to be.
+
+### "Real outside users" is a stated gate, not a hope
+
+`0.9.x` is on PyPI so that someone whose interests differ from the author's can
+live with the schema before it becomes a promise. That is the only thing this
+gate measures, and this is the only place it is stated: the through-line at the
+top of this file and Phase 3's *Freeze later, on evidence* now point here. It is
+met when **all three** of the following hold.
+
+Two rules govern all of them. **No condition may be satisfied by the
+maintainer, or by an agent working to the maintainer's instruction** — that is
+the entire point of the word *outside*. And **nothing counts until it is in this
+repository**: a merged commit, a committed fixture, or an issue linked from
+`TASKS.md`. Everything else in this project is measured from the repo, cold, by
+anyone; this gate is checkable the same way or it is not checkable at all.
+
+**A. One agreement event** — a second party had to live with the model:
+
+1. **An adapter merged from outside.** `CONTRIBUTING.md`'s bar already makes
+   this the strong form: a mergeable adapter renders the corpus and passes
+   equivalence against the **unmodified** expected graphs, so its author had to
+   agree with the model's fields or open an issue instead. This also satisfies
+   the third-dialect precondition above — one contribution closing both is
+   intended, and is stated here so it is not discovered. If the contribution was
+   solicited, the record says so; solicited is weaker evidence and still counts.
+2. **A named outside consumer, and what it needed.** A consumer built on
+   `0.9.x` by someone else, identifiable from the repo (a repository, a post, or
+   an issue), with a recorded answer to *did the model have to change?* If it
+   did, the change is made **before** the freeze and is classified under
+   `PREDICTIONS.md`'s shape/operational test, naming the surface — a field,
+   `NodeKind`, `EdgeKind`, warrant, `Payload` state, `Diagnostic` code, or query
+   primitive (`CONTRIBUTING.md` #4, *a falsification consumer*). If it did not,
+   that is this file's own through-line satisfied — *a consumer the model was
+   not designed for used it unchanged* — and the record says so.
+
+**B. One exposure event** — someone else's telemetry met this code:
+
+3. **A captured trace contributed from outside** (`CONTRIBUTING.md` #2), from an
+   instrumentor `fixtures/captured/` does not already hold, **compared field by
+   field against the existing captured pair on the nine strictly-compared node
+   fields** — the comparison run and recorded, not the file merged. That narrow
+   form is the one named above under *what would be sufficient for the nine
+   strictly-compared node fields*. A capture of a dialect already captured here
+   re-measures what is already measured and does not satisfy this.
+4. **An issue that reproduces on a trace not in `fixtures/`**, from telemetry
+   this project did not produce, landed in the corpus as a scenario
+   (`CONTRIBUTING.md`, *Reporting a bug*).
+
+**C. The floor.** **30 days** since the later of the first `0.9.x` publish
+(`2026-08-30`) and the announcement below. A later `0.9.z` does not restart it —
+the clock is on the line being installable, not on a version. The floor is **not
+evidence** and never satisfies a condition on its own; it exists so that A and B
+are given time to arrive rather than declared absent.
+
+**If the floor passes with A unmet, that is a finding and it gets written
+down** — *published, announced, and no second party engaged with the model in N
+days* — and then a deliberate choice between waiting, going and asking for one,
+and freezing on the third-dialect gate alone with the absence stated in the
+compatibility policy. What is not permitted is a freeze that happens while this
+sentence still reads as satisfied.
+
+### Announcement *(owner: the maintainer, personally — human-run, `ENVIRONMENT.md` zone 4)*
+
+One author on every commit, so *owner* cannot mean delegation. It means what it
+means at `ENVIRONMENT.md` **network zone 4**: outward-facing, credentialed,
+human-run, and **not an agent's to perform**. An agent may draft the text and
+assemble the links; posting is a halt point (`AGENT.md`).
+
+**When:** before the floor above is meaningful. Thirty days of an unannounced
+package measures silence, not adoption.
+
+**Where** — at most three places, each recorded in `TASKS.md` with its date: a
+release note on the `v0.9.1` tag; one thread where people who own agent
+telemetry are (the OpenTelemetry GenAI community; the instrumentor communities
+whose dialects this reads); one general post if wanted. More venues do not make
+a bigger measurement.
+
+**What it may claim: nothing the README does not.** The README is truth-gated
+(`tests/test_readme_quickstart.py`, `tests/test_doc_truth.py`), so the cheapest
+honest rule is that every claim in the announcement is one a test in this
+repository already holds the README to — the adapters it names, the scenario
+counts it states, the equivalence it claims, and the empty dependency list. The
+counts are deliberately **not** copied into this section: a copied count is a
+count that rots, and the README's are recomputed. Plus the actual ask, which is
+the invitation Phase 4 is built around — *your instrumentor, in one PR*.
+
+**What it must not claim.** An announcement that overclaims is the failure mode,
+and each of these is a claim the repo can already prove false:
+
+- **Not stable, not `1.0`, not "the schema".** It is `0.1` and UNFROZEN and
+  `spanweave --version` says so. This gate exists *because* it is unfrozen;
+  announcing it as settled makes the freeze a formality and destroys the
+  evidence the announcement was posted to collect.
+- **No dialect it does not read.** Langfuse, LangSmith, Logfire, Vercel and OTLP
+  protobuf are Phase 4 wants. "Supports OpenTelemetry" reads as all of them.
+- **No unqualified equivalence claim.** `Node.name` is declared dialect-varying
+  in **every** scenario compared across both dialects, so "one graph from two
+  instrumentors" is a claim about everything `canonical()` compares *except*
+  that field. The README carries the qualifier; the announcement does not get to
+  drop it for being long.
+- **No security, cost, evaluation, or quality framing** (`CLAUDE.md` 1). The
+  audiences most likely to pick this up are the ones that want exactly that, and
+  a neutral library announced as a security tool has acquired an opinion in the
+  only place it finally matters — the reader's.
+- **Not "production-ready", not "battle-tested".** Zero outside users is the
+  measurement this gate exists to change; claiming otherwise falsifies it.
+- **Not `pip install` followed by a `fixtures/` path.** The corpus is
+  deliberately not in the wheel — the finding `0.9.1` shipped C1 for. Any
+  example in the announcement runs from a checkout or reads the reader's own
+  trace.
+
+### No open model question survives the freeze
+
+The freeze is a promise about the **schema**, so what binds it is anything that
+would move the schema afterwards. Until it is taken, a shape change costs a
+minor release; after it, the same change costs a version bump and a migration
+note (`CLAUDE.md` 7). **That asymmetry, and not the strength of the evidence
+behind any one question, is what makes an open question a precondition.**
+
+Stated as a general rule rather than as a list of the questions open on any
+given day: **no freeze while any question whose answer could move a serialized
+field is undecided, and no freeze while any batch that moves one is open.**
+**Deciding an entry to change nothing is a resolution; leaving it open is not**
+— and neither is deciding to move a field and not having moved it yet, because
+until the change lands the freeze would price it at a migration.
+
+**Mixed instrumentation is a precondition on exactly these grounds and no
+others.** Every option its memo leaves live adds a `Diagnostic` code, and the
+option taken also widens `Provenance.adapter_id` to `str | None` — a serialized
+field changing type, which `PREDICTIONS.md`'s binding test as amended at 2.10
+costs as shape. Deciding *against* per-record dispatch would have been equally a
+resolution and would equally have had to happen first: freezing `adapter_id` as
+`str` prices the change at a migration rather than at a minor release.
+
+**What it is not: evidence that adapters agree.** Under per-record dispatch each
+record is parsed by exactly one adapter, so no adapter-supplied field is
+contested by mixing, and the two fields dispatch introduces — a node's
+`provenance` and an edge's `adapter` — are erased by `canonical()` before the
+comparison runs. A mixed trace tests **composition**, which is worth having and
+is not the measurement the gates above ask for. The one value two adapters must
+genuinely agree on is the **join key** of an edge that crosses them, and a
+constructed mixed fixture cannot measure it for the reason given above about the
+nine node fields: both renderings descend from one `scenario.md`, so they agree
+where their author made them agree. Only a **captured** mixed trace measures it
+— an outside event, counted once, under the gate above. **There is deliberately
+no "a mixed trace has been observed" condition**: no one here can cause one, its
+only instruments are the two outside events above, and a gate that can be closed
+once and counted twice is not a gate.
+
+**The shape has never been observed here, and that is recorded as a measurement
+rather than assumed away.** Over the fixture corpus this repository carries —
+**49** `*.jsonl` files, **139** records — **0** records carry both dialects'
+markers and every record carries exactly one. `tests/test_doc_truth.py`
+recomputes all three numbers, so a corpus that grows fails this sentence instead
+of outliving it. The measurement the freeze decision was taken on is
+`OPEN_QUESTIONS.md` §12(c)'s scan of **57 files and 177 records** on
+`2026-09-10`, which found the same **0**; that scan was of a working tree rather
+than of a checkout — it exceeds the then-committed 43 files and 117 records by
+exactly the 14 files and 60 records of local capture output under
+`capture/_scratch/`, which git ignores — so the smaller pair above is the one a
+stranger can check, and the **0** is the claim either of them makes. The shape
+is constructible and structurally motivated — two instrumentors share one
+`TracerProvider`, and this repo's own capture harness steers around it by hand
+— so it is predicted rather than seen, and the capture that would settle it is a
+human act, schedulable alongside the dialect-three capture above.
+
+**A second absence, measured the same way, over a different corpus.** Not the
+files counted above: this one is the three captured traces in
+`fixtures/captured/`, **17** records, which carry **4** `agent` spans — and
+**0** of the four came from an instrumentor. All four are written by this
+project's own harness (`capture/backends.py`), for the reason that file states:
+executing an agent turn is not an SDK call, so there is nothing for an
+instrumentor to wrap. It bears on the freeze the way the first one does —
+`OPEN_QUESTIONS.md` §15's option B would normalize an attribute whose
+cross-dialect behaviour nobody here has observed — and it stays a prediction
+about the world until an agent-framework instrumentation package is run through
+`capture/` (`OPEN_QUESTIONS.md` §15(j)). `tests/test_doc_truth.py` recomputes
+these three numbers too.
 
 - **Exit:** three or more community-contributable adapters passing conformance;
   schema frozen at `1`; `1.0.0` published.

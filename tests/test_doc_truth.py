@@ -41,7 +41,7 @@ import re
 import shlex
 
 import spanweave
-from spanweave.adapters import registered
+from spanweave.adapters import MINIMUM_CONFIDENCE, registered
 from tests.conformance import CORPUS, adapter_backed, scenarios
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -1248,3 +1248,215 @@ def test_the_rule_is_about_name_attributes_not_about_the_kind(tmp_path):
         f"precision is wrong, and if it became `None` the field was "
         f"suppressed by kind, which §3.1 does not say"
     )
+
+
+# -- The freeze gates ROADMAP.md states, held to what they count ------------
+#
+# Batch G5 landed three subsections in `ROADMAP.md` Phase 4: the outside-use
+# gate, the announcement task, and the rule that no question or batch which
+# moves a serialized field may be open at the freeze. Two of them record
+# **measured absences**, and an absence is the most perishable claim a document
+# can make -- it is true until the corpus grows, and nothing about growing a
+# corpus reminds anyone to reread a roadmap. So both are recomputed here.
+
+
+#: The pointer batch G2 added under Phase 4's raw-OTLP-JSON bullet, verbatim.
+#: G3 judged it and kept it (`OPEN_QUESTIONS.md` §14(j)); this is what "kept"
+#: means to a later editor who never read that memo.
+G2_POINTER = (
+    "Raw OTLP JSON is pulled forward by the September 2026 audit as batches "
+    # The en dash is the document's; escaped so this stays a verbatim
+    # quotation without tripping the ambiguous-character lint.
+    "F1\u2013F2, which ask whether the envelope is a container format for the "
+    "reader rather than a dialect for an adapter"
+)
+
+
+def flat(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_the_roadmap_still_carries_the_pointer_g2_added():
+    """A sentence three later batches were told to preserve, held rather than
+    remembered. It is the only place `ROADMAP.md` says its own raw-OTLP-JSON
+    bullet is being reinterpreted elsewhere.
+    """
+    assert G2_POINTER in flat(read("ROADMAP.md")), (
+        "ROADMAP.md no longer carries G2's pointer under the raw OTLP JSON "
+        "bullet. If F1 has since decided the question, the sentence should be "
+        "replaced by what was decided -- not dropped, which leaves the bullet "
+        "silent about work that changes what it means"
+    )
+
+
+def test_the_freeze_bullet_names_three_gates_and_each_one_has_a_section():
+    """`ROADMAP.md`'s freeze bullet promises "the three gates below"."""
+    phase_four = flat(section(read("ROADMAP.md"), "\n## Phase 4"))
+    for clause in (
+        "**the outside-use gate below is met**",
+        "**a third dialect is rendered in the conformance corpus**",
+        "**every open model question in `OPEN_QUESTIONS.md` is decided**",
+        "see the three gates below",
+    ):
+        assert clause in phase_four, (
+            f"the freeze bullet no longer says {clause!r}. The three "
+            f"conditions and the pointer to them move together or the bullet "
+            f"promises a gate the file does not state"
+        )
+    for heading in (
+        "### The third dialect is a freeze precondition",
+        '### "Real outside users" is a stated gate, not a hope',
+        "### No open model question survives the freeze",
+    ):
+        assert flat(heading) in phase_four, (
+            f"Phase 4 has no {heading!r} section, but the freeze bullet sends "
+            f"a reader to three gates"
+        )
+    assert "The floor is **not evidence**" in phase_four, (
+        "the outside-use gate no longer says its 30-day floor is not "
+        "evidence. That clause is the whole reason the floor sits outside the "
+        "count of conditions rather than inside it"
+    )
+
+
+def test_the_two_weaker_statements_of_the_outside_use_gate_point_at_it():
+    """The through-line and Phase 3's *Freeze later, on evidence* each stated
+    this condition in their own words, at their own strength. G1 found three
+    statements of one gate and no way to tell which one bound. They now point.
+    """
+    roadmap = flat(read("ROADMAP.md"))
+    name = '*"Real outside users" is a stated gate, not a hope*'
+    assert roadmap.count(name) >= 2, (
+        "the through-line and Phase 3's *Freeze later, on evidence* are "
+        "supposed to point at the outside-use gate by name rather than "
+        "restate it; fewer than two pointers means one of them has grown its "
+        "own version of the condition again"
+    )
+
+
+def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]]:
+    """Files, records, and how many adapters claim each record.
+
+    The claim is made with `detect([record])`, which `OPEN_QUESTIONS.md`
+    §12(d) measured against a direct marker scan over the whole corpus with
+    zero disagreements -- so this counts what an adapter would actually do,
+    not what a regex over attribute keys says it would.
+    """
+    files = sorted((ROOT / "fixtures").rglob("*.jsonl"))
+    adapters = registered()
+    records = 0
+    claims: dict[int, int] = {}
+    unreadable: list[str] = []
+    for path in files:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            records += 1
+            try:
+                record = json.loads(line)
+            except ValueError:
+                unreadable.append(f"{path.relative_to(ROOT)}:{number}")
+                continue
+            claimed = sum(
+                1
+                for adapter in adapters
+                if adapter.detect([record]) >= MINIMUM_CONFIDENCE
+            )
+            claims[claimed] = claims.get(claimed, 0) + 1
+    assert not unreadable, (
+        "these corpus lines are not JSON, so no adapter can be asked about "
+        "them and this sweep cannot say what they carry: " + ", ".join(unreadable)
+    )
+    return len(files), records, claims
+
+
+def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
+    """The measurement the mixed-instrumentation precondition rests on.
+
+    `ROADMAP.md` states it over the corpus **this repository carries**, on
+    purpose: `OPEN_QUESTIONS.md` §12(c)'s wider 57/177 was a scan of a working
+    tree that included local capture output git ignores, and a number nobody
+    can recompute from a checkout is the kind of claim this file exists to
+    stop. The zero is the same in both.
+    """
+    files, records, claims = dialect_claims_over_the_committed_corpus()
+    stated = re.search(
+        r"\*\*(\d+)\*\* `\*\.jsonl` files, \*\*(\d+)\*\* records",
+        flat(read("ROADMAP.md")),
+    )
+    assert stated is not None, (
+        "ROADMAP.md no longer states the size of the corpus its "
+        "mixed-dialect absence was measured over, so the absence is a claim "
+        "about nothing in particular"
+    )
+    assert (int(stated.group(1)), int(stated.group(2))) == (files, records), (
+        f"ROADMAP.md says the corpus is {stated.group(1)} files and "
+        f"{stated.group(2)} records; it is {files} files and {records} "
+        f"records. The sentence is stale, which for an absence means the "
+        f"absence was never re-measured over what was added"
+    )
+    assert claims.get(2, 0) == 0, (
+        f"{claims[2]} corpus records are now claimed by both adapters. That "
+        f"is the mixed-dialect shape ROADMAP.md and OPEN_QUESTIONS.md §12(c) "
+        f"both record as never observed here -- the roadmap sentence is now "
+        f"false and E's precondition has a fixture behind it"
+    )
+    assert claims.get(1, 0) == records, (
+        f"only {claims.get(1, 0)} of {records} corpus records are claimed by "
+        f"exactly one adapter; ROADMAP.md says every record is"
+    )
+    assert "**0** records carry both dialects' markers" in flat(read("ROADMAP.md")), (
+        "ROADMAP.md no longer states the zero itself, which is the half of "
+        "the measurement the freeze rule turns on"
+    )
+
+
+def test_the_roadmap_records_the_agent_span_absence_the_captures_show():
+    """The second measured absence, over a **different** corpus.
+
+    Not the fixture corpus counted above: the three captured traces. Recorded
+    beside the first one at `OPEN_QUESTIONS.md` §14(h) item 4 by batch H2, and
+    it bears on the freeze because §15's option B would normalize an attribute
+    whose cross-dialect behaviour nobody here has observed.
+    """
+    captured = sorted((ROOT / "fixtures/captured").glob("*.jsonl"))
+    records = sum(
+        1
+        for path in captured
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
+    agents = sum(
+        1
+        for path in captured
+        for node in spanweave.build(path).nodes()
+        if node.kind is spanweave.NodeKind.AGENT
+    )
+    stated = re.search(
+        r"the three captured traces in `fixtures/captured/`, \*\*(\d+)\*\* "
+        r"records, which carry \*\*(\d+)\*\* `agent` spans",
+        flat(read("ROADMAP.md")),
+    )
+    assert stated is not None, (
+        "ROADMAP.md no longer states the captured corpus its agent-span "
+        "absence was measured over"
+    )
+    assert len(captured) == 3, (
+        f"ROADMAP.md says three captured traces; there are {len(captured)}. A "
+        f"fourth capture is exactly the event that could overturn the "
+        f"absence, so the sentence has to be re-measured rather than reworded"
+    )
+    assert (int(stated.group(1)), int(stated.group(2))) == (records, agents), (
+        f"ROADMAP.md says {stated.group(1)} captured records carrying "
+        f"{stated.group(2)} agent spans; the captures hold {records} and "
+        f"{agents}"
+    )
+    harness = read("capture/backends.py")
+    for builder in ("def agent_span_attributes", "def genai_agent_span_attributes"):
+        assert builder in harness, (
+            f"`capture/backends.py` no longer defines `{builder}`, which is "
+            f"the whole evidence for ROADMAP.md's claim that none of the "
+            f"captured agent spans came from an instrumentor. If an "
+            f"instrumentor emits them now, the absence has ended and the "
+            f"roadmap says so"
+        )
