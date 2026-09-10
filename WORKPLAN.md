@@ -199,8 +199,8 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. **F1 may proceed directly into F2 in the same run** if its design needs no model or schema change and no new default; if it needs any, it halts as `awaiting decision` and F2 waits for run 3. | todo | 8 |
-| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. Timestamps land as `int` per C3; `startTimeUnixNano` strings arrive intact. | todo | 25 |
+| F1 | **Design memo.** OTLP JSON as a *container format* in `read.py` (like the array form), not an adapter: `resourceSpans[].scopeSpans[].spans[]` → flat records; attribute arrays → dict; `startTimeUnixNano` strings → numbers (depends on C1/C2); `kind` int, `status.code` mapping; resource/scope attributes preserved under a reserved key or dropped with a diagnostic (losslessness says preserved). Memo + SPEC §7 draft. **F1 may proceed directly into F2 in the same run** if its design needs no model or schema change and no new default; if it needs any, it halts as `awaiting decision` and F2 waits for run 3. | done | 8 |
+| F2 | **Implementation.** Reader support, fixtures: OTLP-JSON rendering of `llm_tool_llm` in both dialects → same canonical graph. Tests, SPEC §7, ADAPTERS.md note, CHANGELOG. Timestamps land as `int` per C3; `startTimeUnixNano` strings arrive intact. | done | 25 |
 
 ### Phase G — roadmap and governance
 
@@ -593,6 +593,24 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
 - Small carry-forward: `auto` is reserved by a test in `tests/test_cli.py`, not by
   a registry check. F1/F2 need no adapter id, but a future third adapter must not
   be named `auto`.
+- F1 (`c943543`) and F2 (`ff05b2d`) both done — F1's continuation rule applied and
+  judged **no halt**: no model change, no schema change, no new default, and no new
+  diagnostic code. Every new branch is gated on `resourceSpans`, which 0 files in
+  the tree carry (64 of 64 `*.jsonl` open with `trace_id`). The memo's decisive
+  argument is worth keeping: an OTLP export's spans are in whatever dialect their
+  instrumentor speaks, so an `otlp_json` **adapter** would re-create audit finding
+  1 one level below where it can be answered — hence a container format, not an
+  adapter.
+- No existing input changed, proven E2-style across all 64 traces against a
+  worktree at `c943543`. `serialized_shape.json` did not move. `otlp_container`
+  shares `llm_tool_llm/expected/graph.json` byte for byte.
+- **F2 found a real gap in the census G5 and E3 had been maintaining:** it globbed
+  `*.jsonl`, so a corpus growing by two `.json` renderings would not have failed
+  the paragraph promising it would. Now widened to read every rendering through the
+  library: 50/143 → **52 trace files / 151 records** (0 both-claimed, 1 mixed,
+  unchanged). Seven other test sweeps still glob `dialects/*.jsonl` and did not see
+  the new scenario — stated in `fixtures/conformance/README.md` rather than left to
+  be found. **G4 should treat that as an open thread, not a closed one.**
 
 ---
 
