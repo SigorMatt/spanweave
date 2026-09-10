@@ -2620,6 +2620,17 @@ indented export a checkout carries today (tracked files only).
 so the number recomputed from nothing. What was being reported is per line,
 and per line recomputes — against the fixture F2 added for this feature.*
 
+*Provenance, the refusal line above (added by batch R17, 2026-09-11). It is
+what a checkout printed when F1 was written, and it is twice out of date, in
+both cases because this memo's design was taken. **(m)**'s F2 made the envelope
+a container, so neither refusal happens today — both the compact and the
+indented export build their spans (measured on this tree; the indented one is
+the fixture named above). And batch R16 (2026-09-11) put every raised error's
+stable `code` in brackets, so a refusal that still happens — an input no
+adapter claims — now begins `spanweave build: [adapter_unconfident] no adapter
+is confident enough about this input …` (`README.md`, `SPEC.md` §7). The block
+is kept as the measurement that motivated the design, not as current output.*
+
 Neither outcome is wrong under any rule the library states. Both are the
 library failing to read a file that contains exactly the spans it exists to
 read, and the audit logged it as a minor finding (the finding-to-batch map,
@@ -2713,7 +2724,7 @@ the first key), and it is entered by nothing that exists — see **(k)**.
 |---|---|---|
 | `traceId` | `trace_id` | verbatim |
 | `spanId` | `span_id` | verbatim |
-| `parentSpanId` | `parent_id` | verbatim; `""` is OTLP's "no parent" and is carried as `""`, which `_as_str` reads and the builder treats as no parent |
+| `parentSpanId` | `parent_id` | verbatim; `""` is OTLP's "no parent" and is carried as `""`, which `spanweave.seam.parent_ref` reads as *no parent* at the seam, so the builder never sees a reference to normalize — see the note below |
 | `name` | `name` | verbatim |
 | `startTimeUnixNano` | `start_time` | **verbatim, string and all** — see **(g)** |
 | `endTimeUnixNano` | `end_time` | verbatim |
@@ -2726,6 +2737,20 @@ the first key), and it is entered by nothing that exists — see **(k)**.
 | the `ScopeSpans` entry minus `spans` | `scope_spans` | see **(i)** |
 
 Nine renamed, one folded, everything else carried. No key is dropped.
+
+*Provenance, `parentSpanId`. From batch F1 (2026-09-10) until batch R17
+(2026-09-11) this row read "carried as `""`, which `_as_str` reads and the
+builder treats as no parent". The outcome it claimed is true today; the
+mechanism it named was never the one in the tree, and when the row was written
+the outcome was false too. `_as_str` returned the empty string unchanged and
+`build.py`'s parent edge tested `is None` only, so an OTLP root drew
+`orphan_parent` — the diagnostic for a trace exported mid-run, on the one span
+that proves it was not. Batch R10 (2026-09-11, `7480ac3`) made the outcome
+true, at the seam rather than in the reader or the builder: one shared
+`spanweave.seam.parent_ref` maps exactly `""` to `None` and both adapters call
+it (`SPEC.md` §4.0, §6 rule 1). R3 knew the row was false when it wrote §17
+below it and registered R10 instead of correcting the prose; R17 corrects the
+record.*
 
 **(f) Folding an attribute list, and the one type tag the reader honours.**
 `[{"key": k, "value": <AnyValue>}]` becomes `{k: v}`, with `AnyValue` unwrapped
@@ -3004,6 +3029,41 @@ by **absence among noise** rather than by presence. It was first measured in
 the run-2 cold review (`reviews/2026-09-10-run2.md` §(3)); the numbers above are
 a fresh measurement, not that one restated.
 
+**The envelope that measurement used, disclosed — and what it gives now (batch
+R17, 2026-09-11).** The 201-span export above carries **no `parentSpanId` at
+all**. A real exporter writes one on a root: `parentSpanId: ""`, proto3's
+default for an unset `bytes` field, which is also what R1's own `NS_OTLP_SPAN`
+(`tests/test_read.py`) carries. When this memo was written that shape produced
+a **second** mass diagnostic, and the memo did not say so. Re-measured for R17
+on R3's own commit (`5697313`) and on R10's parent (`0ad7382`) alike, which
+give the same pair:
+
+```
+201-span export, parentSpanId: ""       {'orphan_parent': 201, 'timestamp_unit_suspect': 200}
+201-span export, parentSpanId omitted   {'timestamp_unit_suspect': 200}
+```
+
+So *"the whole diagnostic channel is one sentence repeated 200 times"* was
+true of the export as measured and understated the case for a conformant one:
+on the shape a real exporter writes, the channel was one sentence 200 times
+**plus** another 201 times, and the span whose unit differs was still the only
+one unreported. The inversion claim — the thing (a)–(h) turn on — is unaffected
+by either shape.
+
+That second diagnostic is **history, not current behaviour**. Batch R10
+(`7480ac3`, 2026-09-11) normalized the empty reference at the seam (§16(e),
+`SPEC.md` §4.0), so on the tree as it now stands the two envelope shapes agree,
+re-measured rather than reasoned:
+
+```
+201-span export, parentSpanId: ""       {'timestamp_unit_suspect': 200}
+201-span export, parentSpanId omitted   {'timestamp_unit_suspect': 200}
+nodes: 201   warned: 200   seconds span warned: False   orphan_parent: 0
+```
+
+The headline therefore holds today as written, and now holds for the envelope a
+real exporter writes rather than only for the one the memo built.
+
 Two facts about the corpus complete the picture, and both are why nothing
 caught this:
 
@@ -3072,6 +3132,21 @@ Then the fork that decides the price:
   the OTLP rendering would carry a field the JSONL renderings do not. F2's
   claim is that *a container is not a dialect*; (a2) makes the container
   visible in the graph, which is that claim conceded in one field.
+
+  *One fact a decider is owed here, and the memo did not state it (added by
+  batch R17, 2026-09-11): **the schema is not frozen today.**
+  `spanweave/version.py` has `SCHEMA_FROZEN = False` and `SCHEMA_VERSION =
+  "0.1"`, and the freeze is deliberately held until after the `0.9.x` launch
+  (`CLAUDE.md` 7; Phase 4 in `ROADMAP.md`, and flipping it early is a halt in
+  `AGENT.md`). So (a2) would **not** move the schema version number and owes no
+  migration note — while it is unfrozen, changes need not be additive-only, and
+  this is the cheap moment to add a serialized field. What (a2) costs is the
+  tripwires named above (`serialized_shape.json`, a `CONTRACTS.md` row, and
+  `ROADMAP.md`'s "no freeze while any batch that moves a serialized field is
+  open", which is a delay to the freeze rather than a version bump) and the
+  byte-identity — which is the part of the price the recommendation turns on.
+  Cheap is not free, and the decision below does not rest on the version
+  number.*
 
 **The honest limit of option (a), either variant: it removes the noise and does
 not restore the signal.** In the 201-span measurement the container states `ns`
@@ -3153,7 +3228,8 @@ What (a) buys is one diagnostic behaving better on one container. What it
 costs is an invented record key against a rule F2 stated in the same run, a
 field on a frozen seam type, and — in the (a2) form the row proposes — a
 serialized field, a `CONTRACTS.md` row, a `schema_version` conversation under a
-stated freeze gate, and the end of the byte-identity that is F2's whole
+stated freeze gate (which the schema being *unfrozen* today makes cheaper than
+this sentence sounds — **(d)**), and the end of the byte-identity that is F2's whole
 demonstration that a container is not a dialect. Trading that claim for a
 better warning is a bad trade at this price, and it is the *claim* that is load
 bearing.
