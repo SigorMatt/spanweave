@@ -125,7 +125,7 @@ def _renumbered(
 ) -> tuple[NormalizedSpan, ...]:
     """Put each span's `line_number` back where its record was in the input.
 
-    An adapter numbers what it is given (`ADAPTERS.md` §3), and under
+    An adapter numbers what it is given (`ADAPTERS.md` §2), and under
     per-record dispatch it is given a subset -- so its numbering counts that
     subset. `RawRecord.line_number` is what a diagnostic points a human at,
     and a number that counts a partition nobody can see points at nothing

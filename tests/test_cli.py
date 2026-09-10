@@ -9,6 +9,7 @@ from spanweave.cli import main
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
 TRACE = str(FIXTURES / "llm_tool_llm/dialects/openinference.jsonl")
+MIXED = str(FIXTURES / "mixed_instrumentation/dialects/openinference+otel_genai.jsonl")
 
 
 def test_version_exits_zero_and_names_the_schema(capsys):
@@ -78,6 +79,55 @@ def test_naming_the_adapter_skips_detection(capsysbinary):
     assert document["meta"]["adapters"][0]["declared_confidence"] is None
 
 
+def test_adapter_auto_is_the_default_spelled_out(capsysbinary):
+    """`SPEC.md` §6.1: `auto` names the classification that already happens.
+
+    The spelling exists so a caller can *say* what they are relying on -- in a
+    script, in a Makefile, in a pasted command -- without the reader having to
+    know that the absent flag means per-record classification. It therefore has
+    to be the same build, byte for byte, and not merely a similar one.
+    """
+    main(["build", TRACE])
+    without = capsysbinary.readouterr().out
+    main(["build", TRACE, "--adapter", "auto"])
+    assert capsysbinary.readouterr().out == without
+
+
+def test_adapter_auto_classifies_per_record_rather_than_forcing_one_adapter(
+    capsysbinary,
+):
+    """The spelling must not collapse to "pick one": the mixed trace proves it.
+
+    A forced adapter over this input builds two `unknown` nodes and loses the
+    relations that join the dialects (`SPEC.md` §6.1). `auto` is the path that
+    does not, so it names both contributors.
+    """
+    main(["build", MIXED, "--adapter", "auto"])
+    document = json.loads(capsysbinary.readouterr().out)
+    assert [a["id"] for a in document["meta"]["adapters"]] == [
+        "openinference",
+        "otel_genai",
+    ]
+    assert [node["kind"] for node in document["nodes"]] == [
+        "agent",
+        "llm",
+        "tool",
+        "llm",
+    ]
+
+
+def test_auto_is_not_a_name_an_adapter_can_take():
+    """The reserved word, guarded where it would otherwise be shadowed.
+
+    `--adapter auto` is resolved by the CLI before the registry sees it, so an
+    adapter registering that id would become unreachable through the flag --
+    silently, and only for that one adapter (`ADAPTERS.md` §4).
+    """
+    from spanweave.adapters import registered
+
+    assert "auto" not in {adapter.id for adapter in registered()}
+
+
 def test_naming_an_unknown_adapter_fails_with_a_message_not_a_traceback(capsys):
     assert main(["build", TRACE, "--adapter", "nope"]) == 1
     assert "no adapter with id" in capsys.readouterr().err
@@ -113,6 +163,58 @@ def test_inspect_counts_nodes_edges_and_diagnostics(capsys):
     # normalize, and reports them rather than dropping them.
     assert "diagnostics: 2" in printed
     assert "unmapped_attributes: 2" in printed
+
+
+def test_inspect_counts_nodes_by_the_adapter_that_produced_them(capsys):
+    """`SPEC.md` §7, *Human summary*. One dialect: every node, one name."""
+    main(["inspect", TRACE])
+    printed = capsys.readouterr().out
+    assert "nodes by adapter:" in printed
+    assert "  openinference: 4" in printed
+
+
+def test_inspect_says_which_adapter_produced_which_nodes_in_a_mixed_trace(capsys):
+    """The count `meta.adapters` cannot give: who contributed how much.
+
+    `adapters:` names both contributors for a mixed input and has named both
+    since E3, but it says nothing about the split -- an adapter that claimed
+    one record of four reads exactly like one that claimed three. That is the
+    question the summary was missing, and it is a count of something the graph
+    already says (`provenance.adapter_id`), never a judgement about it.
+    """
+    main(["inspect", MIXED])
+    printed = capsys.readouterr().out
+    assert "nodes by adapter:" in printed
+    assert "  openinference: 2" in printed
+    assert "  otel_genai: 2" in printed
+
+
+def test_inspect_counts_a_node_no_adapter_produced_under_its_own_label(
+    tmp_path, capsys
+):
+    """An unclaimed record's node is not filed under somebody else's dialect.
+
+    `provenance.adapter_id` is `None` there on purpose (`SPEC.md` §3.5), and
+    the summary has to keep saying so rather than rounding it into the adapter
+    that read the rest of the input.
+    """
+    trace = tmp_path / "mixed_with_a_stranger.jsonl"
+    records = [
+        {
+            "span_id": "s0",
+            "name": "chat",
+            "attributes": {"openinference.span.kind": "LLM"},
+        },
+        {"span_id": "s9", "attributes": {"service.name": "whatever"}},
+    ]
+    trace.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+    assert main(["inspect", str(trace)]) == 0
+    printed = capsys.readouterr().out
+    assert "  openinference: 1" in printed
+    assert "  (no adapter): 1" in printed
 
 
 def test_inspect_reports_payload_availability(capsys):

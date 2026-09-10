@@ -96,6 +96,36 @@ the model is wrong and that is a spec conversation, not a patch.
 two schemas would double the versioning burden for no consumer benefit, and the
 seam exists to be refactored.
 
+### 3.2 Dispatch is per record, and it happens above the seam
+
+A dialect is a property of a **record**, not of a file. One process can run a
+framework instrumentor and an SDK instrumentor at once; they share a
+`TracerProvider` and their spans share an export. Choosing one adapter per file
+was an approximation of the common case, and where it fails it fails silently:
+the losing dialect's spans become `unknown`, their payloads report `absent`,
+and every relation that joined the two dialects disappears while the graph
+still looks complete.
+
+So the registry classifies each record and each adapter parses only the records
+it claims. This does not move the seam — it *narrows* what crosses it. Nothing
+changes below:
+
+- **The builder still never learns a dialect name.** It receives spans and an
+  opaque `AdapterInfo` per span, copies it into `Provenance`, and sorts the
+  distinct ones into `Meta.adapters`. It never branches on one.
+  `no_dialect_outside_adapters` (`tests/gates.py`) is unchanged and stays
+  green.
+- **Classification stays inside `adapters/`.** The registry asks each adapter
+  `detect([record])`; no marker table lives outside the adapter that owns the
+  marker.
+- **The partition happens in `api.py`**, one of the two modules
+  `no_adapter_imports_below_the_top` already permits to reach the registry.
+
+Consequence, and it is the same one as §3: a new dialect is still a new file
+under `adapters/` plus fixtures. It now also composes with every existing
+dialect in one trace, for free, because composition is a property of the
+dispatcher rather than of any adapter.
+
 ## 4. Identity and ordering
 
 Determinism is not a nice property here; it is the reason a downstream tool can

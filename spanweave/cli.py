@@ -41,6 +41,23 @@ _SCHEMA_NOTICE = (
     else f"Graph schema version {SCHEMA_VERSION}."
 )
 
+# The default spelled out. Per-record classification is what happens with no
+# flag, and has since batch E2; this is the name for it, so a script can say
+# what it relies on rather than rely on an absent flag meaning something
+# (`SPEC.md` §6.1). It is resolved here, above the library, because the library
+# takes an adapter id and `auto` is not one -- which also makes it a reserved
+# id no adapter may register, guarded in `tests/test_cli.py`.
+#
+# There is deliberately no `mixed`: a mixed input is what `auto` does, not a
+# mode a caller selects. Nobody can know before reading a file whether it is
+# one, so a flag that had to be right about it would be a trap.
+AUTO = "auto"
+
+#: The label for nodes no adapter produced, in the per-adapter tally below. A
+#: word rather than a blank, because `provenance.adapter_id` is `None` there on
+#: purpose (`SPEC.md` §3.5) and an empty cell reads like a missing count.
+_NO_ADAPTER = "(no adapter)"
+
 _DESCRIPTION = (
     "Normalize agentic-system execution telemetry into one deterministic, "
     "semantically neutral graph."
@@ -118,8 +135,13 @@ def _build_parser() -> argparse.ArgumentParser:
     build.add_argument("trace", help="path to a trace file, or '-' for stdin")
     build.add_argument(
         "--adapter",
-        metavar="ID",
-        help="skip detection and use this adapter (see 'spanweave adapters')",
+        metavar="auto|ID",
+        default=AUTO,
+        help=(
+            f"{AUTO} (the default) classifies every record; naming an adapter "
+            "skips classification and hands it the whole input "
+            "(see 'spanweave adapters')"
+        ),
     )
     build.add_argument(
         "-o",
@@ -137,16 +159,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "inspect",
         help="summarize a trace or a built graph",
         description=(
-            "Print a human summary: counts by node kind, edges by kind and "
-            "warrant, diagnostics grouped by code. Informational; not a "
-            "stable contract."
+            "Print a human summary: counts by node kind, nodes by the adapter "
+            "that produced them, edges by kind and warrant, diagnostics "
+            "grouped by code. Informational; not a stable contract."
         ),
     )
     inspect.add_argument("path", help="a trace file or a built graph.json")
     inspect.add_argument(
         "--adapter",
-        metavar="ID",
-        help="skip detection and use this adapter (traces only)",
+        metavar="auto|ID",
+        default=AUTO,
+        help=f"as for 'build'; {AUTO} is the default (traces only)",
     )
 
     validate = subcommands.add_parser(
@@ -163,6 +186,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def _named(adapter: str | None) -> str | None:
+    """The adapter the caller named, or ``None`` when they named ``auto``.
+
+    ``None`` is what the library reads as *classify every record*, so this is
+    a spelling translated at the edge and nowhere else: nothing below the CLI
+    learns that the word exists (`SPEC.md` §6.1).
+    """
+    return None if adapter == AUTO else adapter
 
 
 def _read_document(path: str) -> JsonValue | None:
@@ -191,7 +224,9 @@ def _read_document(path: str) -> JsonValue | None:
 
 
 def _do_build(args: argparse.Namespace) -> int:
-    graph = api.build(args.trace, adapter=args.adapter, temporal=not args.no_temporal)
+    graph = api.build(
+        args.trace, adapter=_named(args.adapter), temporal=not args.no_temporal
+    )
     if args.output:
         serialize.dump(graph, pathlib.Path(args.output))
         print(f"wrote {args.output}", file=sys.stderr)
@@ -203,7 +238,7 @@ def _do_build(args: argparse.Namespace) -> int:
 def _do_inspect(args: argparse.Namespace) -> int:
     document = _read_document(args.path)
     if document is None:
-        graph = api.build(args.path, adapter=args.adapter)
+        graph = api.build(args.path, adapter=_named(args.adapter))
         document = serialize.to_document(graph)
     for line in _summarize(document):
         print(line)
@@ -258,6 +293,12 @@ def _summarize(document: JsonValue) -> list[str]:
     ]
     lines.extend(_tally("  ", (str(node.get("kind")) for node in nodes)))
 
+    # Which adapter produced which nodes -- the one thing `adapters:` above
+    # cannot say. It names every contributor but not the split, so an adapter
+    # that read one record of four looks exactly like one that read three.
+    lines.append("nodes by adapter:")
+    lines.extend(_tally("  ", (_producer(node) for node in nodes)))
+
     lines.append(f"edges: {len(edges)}")
     lines.extend(
         _tally(
@@ -281,6 +322,18 @@ def _summarize(document: JsonValue) -> list[str]:
     lines.append(f"diagnostics: {len(diagnostics)}")
     lines.extend(_tally("  ", (str(item.get("code")) for item in diagnostics)))
     return lines
+
+
+def _producer(node: JsonValue) -> str:
+    """The adapter named on a node, or the label for none.
+
+    Read off `provenance.adapter_id`, which is `None` on a node no adapter
+    produced -- a record no registered adapter claimed (`SPEC.md` §3.5, §6.1).
+    Filing that under the adapter that read the rest of the input would say a
+    dialect read a record it declined.
+    """
+    named = (node.get("provenance") or {}).get("adapter_id")
+    return str(named) if isinstance(named, str) else _NO_ADAPTER
 
 
 def _tally(indent: str, values: Iterable[str]) -> list[str]:

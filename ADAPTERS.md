@@ -65,6 +65,15 @@ defend to someone reading a graph that came out wrong.
 
 ### `parse(records) -> Iterator[NormalizedSpan]`
 
+**You are handed the records you claimed, and only those** — a subset of the
+input, in input order, because a dialect is a property of a record rather than
+of a file (`SPEC.md` §6.1). So number what you were *given*: `raw.line_number`
+counts the sequence you received, and the library puts each span's number back
+where its record sat in the whole input, so a diagnostic points a human at the
+file they have. Never try to guess the input position yourself, and never read
+anything into a gap in what you were handed — the records between yours belong
+to another adapter, and they are not yours to interpret or to count.
+
 - **Pure.** No network, no filesystem, no clock, no randomness, no `eval`.
 - **Never raises on malformed input.** Emit what you can and attach a
   diagnostic; skip only when there is genuinely nothing to emit, and say why.
@@ -252,13 +261,19 @@ being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
   understand a key you used. Mark it where you read it, and make sure that
   runs **before** `unmapped` is tallied. A key you read and could not use is
   the other case: leave that one reported.
-- `raw` — the source record, verbatim and unmodified, plus its line number.
+- `raw` — the source record, verbatim and unmodified, plus its line number:
+  1-based over the records you were handed, per §2.
 
 ## 4. Registering
 
 Add to the registry in `spanweave/adapters/__init__.py`. Registration order must
 not affect selection: ties are a hard error, not a first-wins race
 (`SPEC.md` §6.1).
+
+**`auto` is a reserved id.** `--adapter auto` is the default spelled out and is
+resolved at the CLI before the registry is asked, so an adapter registering that
+id would be unreachable through the flag that names it — silently, and only for
+that one adapter. Pick a dialect name.
 
 ## 5. Fixtures — not optional
 

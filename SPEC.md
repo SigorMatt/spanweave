@@ -1125,6 +1125,14 @@ declares reaches `0.5`.
 - `--adapter <id>` bypasses classification entirely: the named adapter parses
   every record, whatever the markers say. It is the escape hatch, and it is the
   remedy both refusals name.
+- **`--adapter auto` is the default, spelled out.** It names the classification
+  above and is byte-for-byte the same build as passing no flag at all; it
+  exists so a script, a Makefile or a pasted command can *say* what it relies
+  on instead of relying on an absent flag meaning something. `auto` is
+  therefore a **reserved adapter id**: no adapter may register it, because one
+  that did would be unreachable through the flag that names it. There is no
+  `mixed` spelling — a mixed input is what `auto` does, not a mode a caller
+  selects, and a caller cannot know before reading a file whether it is one.
 - **Ambiguity is refused where a guess would be required, and nowhere else.**
   Two adapters claiming one record is unresolvable — they disagree about that
   span's kind, its payloads and its call ids; publishing both parses would
@@ -1261,8 +1269,10 @@ declares reaches `0.5`.
   because publishing is reversible and freezing is not (`ROADMAP.md`).
   Additive-only once frozen, with a version bump for any breaking change
   (`CLAUDE.md` 7).
-- **Human summary** (`spanweave inspect`): counts by node kind, edge counts by
-  kind and warrant, diagnostics grouped by code, payload-availability tallies.
+- **Human summary** (`spanweave inspect`): counts by node kind, node counts by
+  the adapter that produced them (`provenance.adapter_id`, §3.5, with the nodes
+  no adapter produced counted under their own label), edge counts by kind and
+  warrant, diagnostics grouped by code, payload-availability tallies.
   Informational; not a stable contract.
 - **Failures** (stderr): a command that fails prints one line,
   `spanweave <command>: <the failure>`. When the file it could not open does
@@ -1278,8 +1288,8 @@ declares reaches `0.5`.
 ### Invocation
 
 ```
-spanweave build <trace> [--adapter ID] [-o graph.json] [--no-temporal]
-spanweave inspect <trace|graph.json>
+spanweave build <trace> [--adapter auto|ID] [-o graph.json] [--no-temporal]
+spanweave inspect <trace|graph.json> [--adapter auto|ID]
 spanweave validate <graph.json>
 spanweave adapters
 spanweave --version

@@ -15,6 +15,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`--adapter auto` names the default, and `spanweave inspect` says which
+  adapter produced which nodes.** `auto` is the classification that already
+  happens with no flag -- byte for byte the same build -- so a script or a
+  pasted command can state what it relies on instead of relying on an absent
+  flag meaning something. It is resolved at the CLI, which makes `auto` a
+  reserved adapter id (`ADAPTERS.md` §4). There is deliberately **no `mixed`
+  mode**: a mixed input is what `auto` does, not a mode a caller selects, and
+  nobody can know before reading a file whether it is one. `inspect` gains a
+  `nodes by adapter:` tally, reading `provenance.adapter_id` -- the one thing
+  the `adapters:` line could not say, since it named every contributor but
+  never the split -- with the nodes no adapter produced counted under
+  `(no adapter)` rather than folded into the dialect that read the rest.
+  (audit finding 1, the surface half; `SPEC.md` §6.1, §7)
+
 - **A trace whose records come from two instrumentors now builds as one
   graph.** The builder takes spans from several adapters at once: each adapter
   parses the records it claimed, an `AdapterInfo` travels beside each span,

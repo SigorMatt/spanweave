@@ -23,6 +23,8 @@ nodes: 4
   agent: 1
   llm: 2
   tool: 1
+nodes by adapter:
+  openinference: 4
 edges: 7
   call_result (explicit): 1
   data (explicit): 1
@@ -49,6 +51,13 @@ writing any code against it:
 - **Two attributes could not be mapped, and they are diagnostics, not
   discards.** "We didn't understand it" is a reportable outcome here. Nothing
   vanishes quietly.
+- **Every node says which adapter produced it.** Here one adapter read
+  everything, so the tally is a single line. It stops being one when a trace
+  carries two instrumentors' spans: a dialect is a property of a *record*, not
+  of a file, so one file can hold both and each node still names its own
+  reader (`SPEC.md` §6.1). Nothing about that is a mode you select — it is what
+  `spanweave` does when you name no adapter, and `--adapter auto` is that
+  default spelled out.
 - **The schema is not frozen**, and it says so on every run until `1.0.0`.
 
 Then build one and query it:
