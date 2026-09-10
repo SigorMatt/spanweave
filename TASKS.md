@@ -10770,6 +10770,20 @@ clean is the one nobody rereads.
    `fixtures/captured/`, 3 traces / 17 records / 4 agent spans / 0
    instrumentor-emitted — carries the agent-span absence, and the two are
    labelled as such wherever they appear.
+   **Extended by batch R9** (2026-09-11): four more figures had the same
+   defect and were outside R5's grep — C3's *154 timestamp values*, D2's
+   *15 captured files / 24 `data` edges*, and F1's *64 of 64 `*.jsonl`* and
+   *46 `malformed_record`*. The first two named `capture/_scratch/fleet/` as
+   half their own scope; the third counted 14 scratch captures into a
+   `*.jsonl` sweep; the fourth counted lines of an export `probe1.py` wrote
+   to a temporary directory. All four recompute from `git ls-files` now, in
+   the same module, and the documents state **34** timestamp values over
+   **3** captured files, **4** `data` edges over the same three, **50 of 50**
+   tracked `*.jsonl`, and **one `malformed_record` per line** (**327** for
+   the indented export F2's fixture carries). One claim moved rather than its
+   arithmetic: C3's *"it bit no fixture"* was measured over a scope holding
+   no fixtures, and the widened scan finds the **10** integer literals
+   `timestamp_units` was written to carry.
 8. **B1's field test cannot catch the failure mode its design invites.**
    Run-1 review concern 6 (`reviews/2026-09-10-run1.md` §6), recovered in run
    3 and open. `test_an_annotated_graph_carries_every_field_a_built_one_has`

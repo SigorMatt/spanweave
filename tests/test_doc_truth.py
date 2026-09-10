@@ -1664,19 +1664,211 @@ def test_the_open_questions_census_is_the_tracked_census():
     )
 
 
-#: A census pair no reader can reproduce, and the words that mark a mention of
-#: it as history rather than as a claim. `57 files / 177 records` was measured
-#: on a working tree holding git-ignored capture output; it reached five commit
-#: bodies, which cannot be rewritten, so the durable documents say what it was
-#: and what it recomputes to instead.
-WORKING_TREE_CENSUS = re.compile(r"\b177\b|\b57 files\b|\b57 corpus files\b")
+#: Every census figure no reader can reproduce, and the words that mark a
+#: mention of one as history rather than as a claim. `57 files / 177 records`
+#: was measured on a working tree holding git-ignored capture output; it
+#: reached five commit bodies, which cannot be rewritten, so the durable
+#: documents say what it was and what it recomputes to instead (batch R5).
+#:
+#: The rest of the family, added by batch R9, was found the same way and is
+#: wrong the same way: C3's timestamp sweep and D2's `data`-edge sweep both
+#: named `capture/_scratch/fleet/` as half their scope, F1's `64 of 64` counted
+#: `*.jsonl` files a checkout does not have, and F1's `46 malformed_record`
+#: counted an OTLP export `probe1.py` wrote to a temporary directory.
+#:
+#: `capture/_scratch` is deliberately **not** a history marker. Naming the
+#: git-ignored directory is what these paragraphs did while asserting the
+#: figure -- it was the defect, not the disclaimer.
+WORKING_TREE_CENSUS = re.compile(
+    r"\b177\b"
+    r"|\b57 (?:files|corpus files)\b"
+    r"|\b154 (?:timestamp|values|corpus literals)\b"
+    r"|\b17 captured\b"
+    r"|\b41 sibling pairs\b"
+    r"|\b15 captured files\b"
+    r"|\b24 data edges\b"
+    r"|\b24 of them\b"
+    r"|\b64 of 64\b"
+    r"|\b46 malformed"
+)
+
+
+def unemphasized(text: str) -> str:
+    """The text with markdown emphasis removed, so a figure is one token.
+
+    `**24** \\`data\\` edges` and `24 data edges` are the same claim, and a
+    guard that only catches the second spelling catches nothing: every one of
+    these figures is written bold in at least one of the places it appears.
+    """
+    return text.replace("**", "").replace("*", "").replace("`", "")
+
+
 CENSUS_HISTORY_MARKERS = (
     "working tree",
     "working-tree",
-    "capture/_scratch",
     "checkout",
     "batch R5",
+    "batch R9",
 )
+
+
+def test_the_cited_corpus_figures_are_the_tracked_census():
+    """R5's rule, applied to the four figures its own grep did not name.
+
+    R5 searched for the `57 files / 177 records` family and fixed it. The rest
+    of the durable documents carried four more figures with the same defect and
+    batch R9 recomputes them here: C3's timestamp sweep and D2's `data`-edge
+    sweep both named `capture/_scratch/fleet/` as half their scope, F1's
+    `64 of 64` counted `*.jsonl` files a checkout does not have, and F1's
+    `46 malformed_record` counted lines of an export `probe1.py` wrote to a
+    temporary directory.
+
+    Every figure below is asserted with the same "(tracked files only)"
+    qualifier G5 and R5 used, and every one is recomputed from `git ls-files`
+    rather than believed.
+    """
+    counted = census()
+    captured = counted.captured_timestamps
+    whole = counted.timestamps
+    edges = counted.captured_receipts
+    exports = {export.path: export for export in counted.indented_exports}
+    indented = exports.get(
+        "fixtures/conformance/otlp_container/dialects/openinference.json"
+    )
+    assert indented is not None, (
+        "no tracked OTLP JSON document opens on `resourceSpans` any more, so "
+        "§16(a)'s per-line diagnostic count is measured over nothing again -- "
+        "which is exactly the state batch R9 found it in"
+    )
+    scan = counted.head_scan
+    questions = flat(read("OPEN_QUESTIONS.md"))
+    changelog = flat(read("CHANGELOG.md"))
+    scenario = flat(read("fixtures/conformance/receipt_redeclared/scenario.md"))
+    notes = flat(read("fixtures/conformance/receipt_redeclared/otel_genai.notes.md"))
+
+    cited: tuple[tuple[str, str, str, tuple[int, ...]], ...] = (
+        (
+            "OPEN_QUESTIONS.md §2, C3's captured sweep",
+            questions,
+            r"Across the \*\*(\d+)\*\* captured trace files a checkout carries "
+            r"\(`fixtures/captured/`, tracked files only\): \*\*(\d+)\*\* "
+            r"timestamp values, \*\*(\d+)\*\* above 1e11",
+            (len(counted.captured), captured.literals, captured.above_ceiling),
+        ),
+        (
+            "OPEN_QUESTIONS.md §2, the sibling gap",
+            questions,
+            r"\*\*(\d+)\*\* sibling pairs, minimum gap \*\*(\d+) µs\*\*",
+            (captured.sibling_pairs, captured.minimum_sibling_gap_us or 0),
+        ),
+        (
+            "OPEN_QUESTIONS.md §2, the widened sweep",
+            questions,
+            r"\*\*(\d+)\*\* of the tracked corpus's \*\*(\d+)\*\* timestamp "
+            r"literals sit above the line",
+            (whole.above_ceiling, whole.literals),
+        ),
+        (
+            "OPEN_QUESTIONS.md §2, round-tripping",
+            questions,
+            r"the \*\*(\d+)\*\* literals that differ from it, of \*\*(\d+)\*\* "
+            r"in the tracked corpus",
+            (whole.differing_from_shortest_repr, whole.literals),
+        ),
+        (
+            "OPEN_QUESTIONS.md §2(c), the falsifying scan",
+            questions,
+            r"The captured traces today, tracked files only: \*\*(\d+)\*\* "
+            r"values, \*\*0\*\* hits; \*\*(\d+)\*\* sibling pairs",
+            (captured.literals, captured.sibling_pairs),
+        ),
+        (
+            "OPEN_QUESTIONS.md §11, D2's `data` edges",
+            questions,
+            r"across the \*\*(\d+)\*\* captured files a checkout carries "
+            r"\(`fixtures/captured/`, tracked files only\), every one of which "
+            r"produces `data` edges, there are \*\*(\d+)\*\* `data` edges",
+            (edges.files, edges.data_edges),
+        ),
+        (
+            "OPEN_QUESTIONS.md §16(a), the per-line diagnostic count",
+            questions,
+            r"\*\*(\d+)\*\* times for "
+            r"`fixtures/conformance/otlp_container/dialects/openinference\.json`",
+            (indented.lines_that_are_not_json,),
+        ),
+        (
+            "OPEN_QUESTIONS.md §16(k), the head scan",
+            questions,
+            r"\*\*(\d+) of (\d+)\*\* tracked `\*\.jsonl` files begin with",
+            (scan.beginning_with_brace, scan.files),
+        ),
+        (
+            "OPEN_QUESTIONS.md §16(k), the first member key",
+            questions,
+            r"first record is `trace_id` in \*\*(\d+) of (\d+)\*\*",
+            (scan.first_member_key_trace_id, scan.files),
+        ),
+        (
+            "CHANGELOG.md, C3's entry",
+            changelog,
+            r"\*\*(\d+)\*\* timestamp values across the \*\*(\d+)\*\* captured "
+            r"files a checkout carries",
+            (captured.literals, len(counted.captured)),
+        ),
+        (
+            "CHANGELOG.md, D2's entry",
+            changelog,
+            r"first receipt -- \*\*(\d+)\*\* across the \*\*(\d+)\*\* captured "
+            r"files a checkout carries \(tracked files only\)",
+            (edges.data_edges, edges.files),
+        ),
+        (
+            "CHANGELOG.md, F2's entry",
+            changelog,
+            r"\*\*(\d+)\*\* of them for the indented export",
+            (indented.lines_that_are_not_json,),
+        ),
+        (
+            "receipt_redeclared/scenario.md",
+            scenario,
+            r"across the (\d+) captured files a checkout carries \(tracked files "
+            r"only\) there are (\d+) `data` edges",
+            (edges.files, edges.data_edges),
+        ),
+        (
+            "receipt_redeclared/otel_genai.notes.md",
+            notes,
+            r"§11: (\d+) captured files, (\d+) `data` edges",
+            (edges.files, edges.data_edges),
+        ),
+    )
+
+    for where, text, pattern, expected in cited:
+        found = re.search(pattern, text)
+        assert found is not None, (
+            f"{where} no longer states its figure in the shape this test "
+            f"recomputes ({pattern!r}). The sentence is only evidence while a "
+            f"stranger can check it, so a rewording that hides it from the "
+            f"census is a rewording that has to change this test too"
+        )
+        assert tuple(int(group) for group in found.groups()) == expected, (
+            f"{where} states {found.groups()}; `tests/corpus_census.py` counts "
+            f"{expected} over the tracked tree"
+        )
+
+    assert edges.files_with_data_edges == edges.files, (
+        "OPEN_QUESTIONS.md §11 and receipt_redeclared/scenario.md say every "
+        "captured file a checkout carries produces a `data` edge; the census "
+        f"finds {edges.files_with_data_edges} of {edges.files} that do"
+    )
+    assert edges.redeclared_receipts == 0, (
+        "a captured trace now carries a call id received by more than one "
+        "span. That is the shape `SPEC.md` §4.2.1's rank exists for, and "
+        "§11, its scenario and its notes all say it has only ever been "
+        "constructed -- so this is an observation, and those three sentences "
+        "are now wrong in a way no arithmetic fixes"
+    )
 
 
 def test_no_durable_document_states_the_working_tree_census_as_a_fact():
@@ -1694,7 +1886,7 @@ def test_no_durable_document_states_the_working_tree_census_as_a_fact():
         for paragraph in path.read_text(encoding="utf-8").split("\n\n"):
             if any(line.lstrip().startswith(">") for line in paragraph.splitlines()):
                 continue
-            if not WORKING_TREE_CENSUS.search(paragraph):
+            if not WORKING_TREE_CENSUS.search(unemphasized(paragraph)):
                 continue
             if any(marker in paragraph for marker in CENSUS_HISTORY_MARKERS):
                 continue

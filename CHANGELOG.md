@@ -24,8 +24,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   one level below the place that can answer it (`OPEN_QUESTIONS.md` §16).
   Until now a compact export built **one `unknown` node** holding the entire
   file under a forced adapter and was refused by detection, and an indented
-  one -- what a file receiver writes -- produced **46 `malformed_record`
-  diagnostics and no nodes**. Nine span keys are renamed, `attributes` is
+  one -- what a file receiver writes -- produced **one `malformed_record`
+  diagnostic per line and no nodes** -- **327** of them for the indented export
+  a checkout now carries as `otlp_container/dialects/openinference.json`
+  (tracked files only). Nine span keys are renamed, `attributes` is
   folded from OTLP's `KeyValue` list into an object, and **every other key is
   carried under its own OTLP name**, where `unmapped_attributes` reports it:
   the reader never drops an OTLP key and never invents one. `kind` is one of
@@ -170,8 +172,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   consumer that does not care matches on `kind`.
 
   **No stored expectation moved.** Every `data` edge in the corpus and in every
-  captured trace was a first receipt -- 24 across 15 captured files, each call
-  id received by exactly one span -- so keeping today's string for the earliest
+  captured trace was a first receipt -- **4** across the **3** captured files a
+  checkout carries (tracked files only), each call id received by exactly one
+  span -- so keeping today's string for the earliest
   case leaves all four scenarios that carry one byte-identical. The ranking is a
   function of a *set* of spans, so input order cannot reach it. (audit finding 6,
   the edge half)
@@ -293,6 +296,31 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **The four remaining corpus figures recompute from a checkout too.** R5 made
+  `57 files / 177 records` counted rather than remembered; its grep named only
+  that pair, and four more figures in the durable documents had the same defect.
+  C3's timestamp sweep (*154 values, 41 sibling pairs, 81 µs*) and D2's
+  `data`-edge sweep (*15 captured files, 24 edges*) both named the git-ignored
+  `capture/_scratch/fleet/` as **half of their own scope**; F1's *64 of 64
+  `*.jsonl`* counted 14 scratch captures a checkout does not have (the same 14
+  R5 found); and F1's *46 `malformed_record`* counted the lines of an OTLP
+  export `probe1.py` wrote into a temporary directory, so it recomputed from
+  nothing at all. `tests/corpus_census.py` now counts each from `git ls-files`
+  -- `Timestamps`, `Receipts`, `HeadScan` and `IndentedExport` -- and the
+  documents state **34** timestamp literals over the **3** captured traces a
+  checkout carries, **4** `data` edges over the same three, **50 of 50** tracked
+  `*.jsonl` opening on `trace_id`, and **one `malformed_record` per line**
+  (**327** for the indented export `otlp_container` carries), each with the
+  *(tracked files only)* qualifier and each cited as history where the old
+  figure is quoted. **One claim moved rather than only its arithmetic**: C3's
+  *"it bit no fixture"* was measured over a scope that held no fixtures, and the
+  widened scan finds **10** literals above the ceiling and **10** whose float
+  differs from the digits in the file -- all of them the values C1 wrote into
+  `timestamp_units` on purpose, five per dialect. §16(k)'s neighbouring *0 files
+  contain `resourceSpans`* is now dated to F1 as well: the two that carry it are
+  F2's own fixtures. **No behavior changed**; nothing under `spanweave/` moved.
+  (`OPEN_QUESTIONS.md` §2, §11, §16; `TASKS.md` audit note 7)
 
 - **A conformant OTLP JSON export draws one `timestamp_unit_suspect` per span,
   and the documents now say so and say why.** The envelope states its unit in a
@@ -427,8 +455,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   demonstrably did. That is not a losslessness bug (the literal was always
   verbatim in `raw.source`) and not a determinism bug; it is the normalized
   field failing §3.1's own promise, and an edge whose premise was wrong. It
-  bit no fixture and no captured trace -- 154 timestamp values, none above
-  1e11, none whose float differs from the literal -- but `startTimeUnixNano`
+  bit no captured trace -- **34** timestamp values across the **3** captured
+  files a checkout carries, none above 1e11, none whose float differs from the
+  literal (tracked files only) -- and the one fixture it bit is the one C1
+  wrote to sit over the ceiling: `timestamp_units`' ten integer literals are
+  the only ten in the tracked corpus whose float differs from the digits in the
+  file. But `startTimeUnixNano`
   in OTLP JSON is an integer nanosecond count, so it is the next input rather
   than a hypothetical one.
 

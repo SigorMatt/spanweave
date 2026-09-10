@@ -16,8 +16,8 @@ the observed encodings.
 
 **What is not observed is the multi-receipt shape itself.** No trace in this
 repo carries a call id received by more than one span, in either dialect
-(`OPEN_QUESTIONS.md` §11: 15 captured files, 24 `data` edges, 0
-re-declarations). Every capture is a single tool round. The falsifying
+(`OPEN_QUESTIONS.md` §11: 3 captured files, 4 `data` edges, 0
+re-declarations, tracked files only). Every capture is a single tool round. The falsifying
 experiment is named in §11(e) — one capture with ≥5 tool-calling turns — and
 until it exists this scenario is a construction and says so.
 

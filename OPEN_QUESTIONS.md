@@ -473,13 +473,25 @@ suggests, and worth stating exactly, because it changes the urgency:
   carries the same lossy value. The diagnostic's own sentence is falsified in
   exactly the case the diagnostic exists to report.
 
-**How much of this bites today: none of it.** Across the 17 captured trace
-files (`fixtures/captured/`, `capture/_scratch/fleet/`): **154** timestamp
-values, **0** above 1e11, **0** whose shortest float repr differs from the
-literal in the file, **0** pairs of distinct literals collapsing onto one
-float. **41** sibling pairs, minimum gap **81 µs** — 317x the ULP at that
-magnitude. Only one fixture, `timestamp_units`, carries a value over the line,
-and it was written by C1 to exercise the ceiling.
+**How much of this bites today: none of it.** Across the **3** captured trace
+files a checkout carries (`fixtures/captured/`, tracked files only): **34**
+timestamp values, **0** above 1e11, **0** whose shortest float repr differs
+from the literal in the file, **0** pairs of distinct literals collapsing onto
+one float. **13** sibling pairs, minimum gap **136 µs** — over 500x the ULP at
+that magnitude. Widen the scan to every trace file the repository carries and
+**10** of the tracked corpus's **300** timestamp literals sit above the line —
+five per dialect in `timestamp_units`, which C1 wrote to exercise the ceiling,
+and they are exactly the ten whose float differs from the digits in the file.
+
+*Provenance of these figures. This paragraph asserted 154 timestamp values, 41
+sibling pairs and a minimum gap of 81 µs over "the 17 captured trace files",
+from batch C3 (2026-09-10) until batch R9 (2026-09-11). That scan named
+`capture/_scratch/fleet/` as half of its own scope, and git ignores all of it,
+so no reader could recompute it from a checkout. The figures above are what
+`tests/corpus_census.py` counts from `git ls-files`. One claim moved rather
+than only its arithmetic: the sweep found no value over the ceiling because it
+looked at no fixture, and the widened scan above finds the ten that C1 put
+there on purpose.*
 
 **What would trigger it:** any exporter writing epoch nanoseconds or
 milliseconds as an integer. That is precisely `startTimeUnixNano` in OTLP JSON,
@@ -541,9 +553,10 @@ but not to the input literal — `1.7000000001e+18` against `1700000000100000100
 is both a different spelling and a different number, and recovering the
 original means re-reading `raw.source`. Option 2: integer in, identical integer
 out; fractional seconds are unaffected, since Python's repr is
-shortest-round-trip and 0 of the 154 corpus literals differ from it. Option 3:
-nothing round-trips — every value is rescaled twice and comes back out as a
-float. Option 4: exact in both directions, at the price of a custom encoder.
+shortest-round-trip and the **10** literals that differ from it, of **300** in
+the tracked corpus, are the integer nanosecond values in `timestamp_units` that
+option 2 keeps exactly. Option 3: nothing round-trips — every value is rescaled
+twice and comes back out as a float. Option 4: exact in both directions, at the price of a custom encoder.
 
 **C1's two handoffs, answered.**
 
@@ -574,9 +587,10 @@ recommendation below.** Find one real exporter emitting a timestamp finer than
 exports for a literal whose shortest float repr differs from the literal, or
 for two sibling spans whose literals differ while their floats do not. One hit
 means option 2 is insufficient and option 4's blast radius is bought
-honestly. The corpus today: 154 values, 0 hits; 41 sibling pairs, 0 under
-256 ns. The same scan is one loop over `start_time`/`end_time` literals and can
-run against every trace the project captures from here on.
+honestly. The captured traces today, tracked files only: **34** values, **0**
+hits; **13** sibling pairs, **0** under 256 ns. The same scan is one loop over
+`start_time`/`end_time` literals and can run against every trace the project
+captures from here on.
 
 **(d) Provisional — recommendation: option 2.** Keep the reported integer;
 never rescale; leave fractional seconds on `float`. It fixes the case that
@@ -765,10 +779,11 @@ Of 22 conformance scenarios, **4** have a `data` edge in
   `shuffled_order` (s2→s3), `tool_call_history_echo` (s2→s3).
 
 **Every one is a first receipt. Not one scenario in the corpus carries a
-re-declaration edge**, and neither does any captured trace: across the 15
-captured files that produce `data` edges (`fixtures/captured/`,
-`capture/_scratch/fleet/`) there are **24** `data` edges, every call id
-received by exactly one span, **0** re-declarations and **0** ties. Every
+re-declaration edge**, and neither does any captured trace: across the **3**
+captured files a checkout carries (`fixtures/captured/`, tracked files only),
+every one of which produces `data` edges, there are **4** `data` edges, every
+call id received by exactly one span, **0** re-declarations and **0** ties.
+Every
 capture is a single tool round, so the shape this memo is about has never been
 observed in this repo's own material — only constructed. Under the table above
 all 4 expectations keep their current basis byte-for-byte, and D2's fixture
@@ -2593,8 +2608,17 @@ Forced with `--adapter otel_genai`, the same file builds **one node**: kind
 every span — sitting in that one node's `raw.source`. Lossless, and useless.
 
 *Pretty-printed*, which is what a file receiver and every `curl | jq` writes:
-**46 `malformed_record` diagnostics and 0 nodes.** Each line of the indented
-document is a line that is not JSON, and the reader says so 46 times.
+**one `malformed_record` diagnostic per line and 0 nodes.** Each line of the
+indented document is a line that is not JSON, and the reader says so once for
+each — **327** times for
+`fixtures/conformance/otlp_container/dialects/openinference.json`, the
+indented export a checkout carries today (tracked files only).
+
+*Provenance. This said 46 `malformed_record` diagnostics from batch F1
+(2026-09-10) until batch R9 (2026-09-11). 46 was the line count of an export
+`probe1.py` wrote into a temporary directory and no checkout has ever carried,
+so the number recomputed from nothing. What was being reported is per line,
+and per line recomputes — against the fixture F2 added for this feature.*
 
 Neither outcome is wrong under any rule the library states. Both are the
 library failing to read a file that contains exactly the spans it exists to
@@ -2658,7 +2682,7 @@ undone.
 |---|---|---|
 | JSONL of spans | records | unchanged: no `resourceSpans` anywhere |
 | JSON array of spans | records | unchanged |
-| One OTLP document, compact or indented | 1 unknown node / 46 malformed | buffered, parsed once, expanded |
+| One OTLP document, compact or indented | 1 unknown node / one malformed per line | buffered, parsed once, expanded |
 | **JSONL or array of OTLP documents** | malformed / N unknown nodes | each element expanded |
 
 The last row is the one that makes a naive rule wrong. A file of
@@ -2824,11 +2848,18 @@ reason.** Both new branches are gated on the single key `resourceSpans`:
 expansion needs it list-valued on a record, buffering needs it as the input's
 first member key. Measured over the whole tree today:
 
-- **0** files under `fixtures/`, `capture/` or `examples/` contain the string
-  `resourceSpans` (the only two occurrences in the repo are `WORKPLAN.md`'s own
-  F1 row and `probe1.py`'s reproduction case).
-- **64 of 64** `*.jsonl` files begin with `{`, and the first member key of the
-  first record is `trace_id` in **64 of 64**.
+- **0** files under `fixtures/`, `capture/` or `examples/` contained the
+  string `resourceSpans` when F1 was written. The two that carry it now are the
+  `otlp_container` fixtures F2 added for this feature, which is the feature
+  reaching its own input rather than an existing input moving.
+- **50 of 50** tracked `*.jsonl` files begin with `{`, and the first member key
+  of the first record is `trace_id` in **50 of 50** (tracked files only).
+
+*Provenance. The second bullet said 64 of 64 from batch F1 (2026-09-10) until
+batch R9 (2026-09-11). A checkout carries 50 `*.jsonl` files; the extra 14 were
+the fleet captures under the git-ignored `capture/_scratch/`, which is the same
+14 files batch R5 found in the 57/177 pair. Both counts are all-of-them, which
+is the only part the argument uses.*
 
 So no input in the tree can reach either branch, and the head scan reaches its
 verdict without consuming a byte more than the format-sniff already consumes.

@@ -14,8 +14,9 @@ rule (§4.4): an id a span merely echoes is not a request. The receipt echo is
 the mirror property and a different rule — a result id in a resent history
 *is* mapped, so the second turn to be shown it gets a `data` edge too. Nothing
 in the corpus carried a call id received by more than one span, and neither
-does any captured trace: across the 15 captured files that produce `data`
-edges there are 24 of them, every call id received exactly once. The rank was
+does any captured trace: across the 3 captured files a checkout carries
+(tracked files only) there are 4 `data` edges, every call id received exactly
+once. The rank was
 therefore exercised by nothing (`OPEN_QUESTIONS.md` §11).
 
 Isolated deliberately, by the same argument that created
