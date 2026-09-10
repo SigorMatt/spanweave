@@ -845,7 +845,9 @@ def _as_time(value: JsonValue) -> int | float | None:
                 int(value) if _JSON_INTEGER.fullmatch(value) else float(value)
             )
         except ValueError:
-            # The interpreter's integer-string digit limit (4300 by default).
+            # The interpreter's integer-string digit limit: a runtime
+            # setting, 4300 digits by default, which `SPEC.md` §5.3 states as
+            # an input to the graph rather than a constant.
             # An unquoted literal that long never gets here -- `json.loads`
             # refuses the line and the reader reports it -- but a *quoted* one
             # is an ordinary JSON string until this call, and this call used

@@ -298,6 +298,45 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The interpreter's integer-string digit limit is named as an input to the
+  graph, and no test hard-codes it any more.** `CLAUDE.md` 4 promises the same
+  graph from the same bytes *on any machine*; batch R1's rule made a legal
+  per-interpreter setting decide graph content, and nothing in the repository
+  said so -- the limit appeared exactly once, in a parenthesis in `SPEC.md`
+  §3.1, and `ENVIRONMENT.md` did not mention it at all. Measured for this
+  batch on CPython 3.12.3: one trace whose `start_time` is a quoted
+  5000-digit integer builds `missing_timestamp` + `unmapped_attributes` at the
+  default limit and `nonmonotonic_time` + `timestamp_unit_suspect` under
+  `PYTHONINTMAXSTRDIGITS=0` -- two different graphs, same bytes. **The library
+  does not pin the limit**, and that is the decision rather than an omission:
+  `sys.set_int_max_str_digits()` at import is a process-wide mutation of a
+  denial-of-service mitigation the host may have set deliberately, done as a
+  side effect of `import spanweave`, and it would not even settle the question
+  since any code may move the limit again afterwards. A library that sits
+  underneath other people's tools does the minimum and surprises nobody. So
+  the dependency is **stated**: new `SPEC.md` **§5.3** says which behaviours
+  turn on the limit, why the library reads it rather than sets it, and how a
+  caller pins it (`PYTHONINTMAXSTRDIGITS=4300`, the interpreter default);
+  §3.1's bullet and §7 point at it; `ENVIRONMENT.md`'s Runtime section carries
+  it as part of the runtime contract. It is a **measured** condition, not a
+  declared one: a test builds one trace under two limits and asserts the
+  graphs differ, and another asserts byte-identity is unaffected *within* one
+  limit.
+
+  The seven tests R1 wrote about the limit each described one configuration.
+  Five failed under `PYTHONINTMAXSTRDIGITS=0` (a 5000-digit literal is one
+  that interpreter reads, so the refusals they assert do not happen) and two
+  raised `ValueError` inside their own bodies under `PYTHONINTMAXSTRDIGITS=640`
+  -- both settings legal, the second the lowest the interpreter accepts. Every
+  digit-limit test now derives both sides of the boundary from
+  `sys.get_int_max_str_digits()` through the new `tests/digit_limit.py`, which
+  also **installs** a limit where the interpreter has none, so no such test is
+  skipped in the one configuration where the rule it pins does not hold. Green
+  under the default, `=0` and `=640`. A `tests/test_doc_truth.py` gate keeps
+  both halves: the two documents must name the setting, and no test file may
+  write the boundary down or move the limit by hand.
+  (run-3 review finding F2, batch R14; `SPEC.md` §3.1, §5.3, §7)
+
 - **The four remaining corpus figures recompute from a checkout too.** R5 made
   `57 files / 177 records` counted rather than remembered; its grep named only
   that pair, and four more figures in the durable documents had the same defect.

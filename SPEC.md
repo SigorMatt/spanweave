@@ -182,9 +182,18 @@ time:
   `NaN` / `Infinity` / `-Infinity` tokens, and produces `inf` for a literal
   whose magnitude no float can hold — `1e400` is a well-formed JSON number that
   has no float64.
-- An integer literal longer than the interpreter's integer-string digit limit
-  (4300 digits by default, `sys.set_int_max_str_digits`). The interpreter does
-  not convert it at all; it raises.
+- An integer literal longer than the interpreter's **integer-string digit
+  limit**. The interpreter does not convert it at all; it raises.
+  **Which literals that covers is a fact about the interpreter, not about
+  this library**, and the limit is a runtime setting rather than a property
+  of the language: 4300 digits by default, any value from
+  `sys.int_info.str_digits_check_threshold` (640) upward, or none at all.
+  `PYTHONINTMAXSTRDIGITS`, `-X int_max_str_digits` and
+  `sys.set_int_max_str_digits` each move it. The library **reads** the limit
+  (`sys.get_int_max_str_digits`) and never sets it, so the same trace file
+  can produce two different graphs on two differently configured
+  interpreters — which is a documented condition on §5.1's guarantee rather
+  than a hidden one, stated in full in **§5.3**.
 
 Each used to leave by a door of its own. `inf` reached the output as a bare
 `Infinity`, which is not JSON and which a strict parser on the other end
@@ -1143,6 +1152,59 @@ graph, byte-for-byte** on serialization, on any machine.
 - No clocks, no randomness, no `hash()`, no set iteration order, no
   dict-insertion-order dependence in any output-affecting path.
 
+### 5.3 The one input that is not the input bytes
+
+§5.1's guarantee has a condition, and it is written here rather than left for
+a reader to discover: **the interpreter's integer-string digit limit is an
+input to the graph.** Same bytes, same adapter version, same `spanweave`
+version, two differently configured interpreters → two different graphs.
+
+The library asks the interpreter what the limit is
+(`sys.get_int_max_str_digits`) and never sets it.
+
+The dependency is not incidental. §3.1 declines to read a timestamp whose
+integer literal is longer than the limit, and §7's OTLP `intValue` fold
+carries such a string verbatim for the same reason; both decide by asking the
+interpreter. On a trace whose `start_time` is a quoted 5000-digit integer,
+a default interpreter (limit 4300) produces `started_at: null`, the digits
+verbatim in `raw.source`, `unmapped_attributes` and `missing_timestamp` —
+while the same file under `PYTHONINTMAXSTRDIGITS=0` produces the integer as
+`started_at`, no `unmapped_attributes`, the `timestamp_unit_suspect` its
+magnitude earns, and — where the record also reports an ordinary end time —
+the `nonmonotonic_time` that follows from reading it. Measured, both ways: a
+test builds one trace under two limits and asserts the two graphs differ, so
+this paragraph cannot quietly stop being true. Within one setting the
+guarantee is unaffected, and that is asserted alongside it.
+
+**Why the library does not pin the limit itself.** Calling
+`sys.set_int_max_str_digits()` at import would make the guarantee
+unconditional in this document and would be the wrong thing to do. The limit
+is process-wide and it is a denial-of-service mitigation the host may have
+set deliberately; a library that lowers or raises it on import changes the
+behaviour of every unrelated line of code in that process, silently, as a
+side effect of `import spanweave`. This library is meant to sit *underneath*
+other people's tools, which means it does the minimum and surprises nobody
+(`CLAUDE.md` invariants 5 and the purity rule). It would not even settle the
+question: any code may move the limit again after the import, so what the
+setting is at the moment a trace is read remains the caller's fact. The
+honest form is therefore to name the dependency, not to hide it behind an
+import-time mutation.
+
+**How a caller pins it.** Set it explicitly in the environment the build runs
+in, and the graph is a function of the input bytes again:
+
+```
+PYTHONINTMAXSTRDIGITS=4300 spanweave build trace.jsonl -o graph.json
+python -X int_max_str_digits=4300 -m ...          # equivalently
+sys.set_int_max_str_digits(4300)                  # from an embedding caller
+```
+
+4300 is the interpreter default, so pinning it changes nothing on a stock
+interpreter and makes a non-stock one agree with it. A caller who has raised
+or disabled the limit for reasons of their own keeps that setting and keeps
+this consequence with it: spanweave will read integers it would otherwise
+refuse, and say so through different diagnostics.
+
 ## 6. Adapter contract
 
 Full authoring guide in `ADAPTERS.md`. The normative contract:
@@ -1362,6 +1424,16 @@ declares reaches `0.5`.
     appeared.
   - Two records that differ **anywhere**, including two that share a span id,
     are both kept. That is §3.6 rule 3's case, not this one.
+- **One interpreter setting is load-bearing for what a graph says, and it is
+  named here rather than left to be found.** The integer-string digit limit
+  decides whether an integer literal past it is read as a timestamp or
+  refused (§3.1), and whether an OTLP `intValue` that long is folded to an
+  integer or carried verbatim as its decimal string (below). It is a runtime
+  setting with a default, not a constant, so two interpreters configured
+  differently build two different graphs from one file. **§5.3** states the
+  dependency in full, and how to pin it: run with `PYTHONINTMAXSTRDIGITS=4300`
+  — the interpreter default — and every machine reads what a stock
+  interpreter reads. The library reads the limit and never sets it.
 - **Input that will not parse never raises out of the reader or an adapter**
   (`SECURITY.md`): a record that is malformed *or nested deeper than the JSON
   parser will recurse* becomes a `malformed_record` diagnostic carrying its
@@ -1474,7 +1546,7 @@ declares reaches `0.5`.
     field set as `null`. `intValue` arrives as a decimal string, as proto3 JSON
     encodes every `int64`, and is read as the integer it declares itself to
     be — unless that string is longer than the interpreter's integer-string
-    digit limit, which no `int64` is and which the interpreter will not
+    digit limit (§5.3), which no `int64` is and which the interpreter will not
     convert, in which case it is carried verbatim as the string it arrived as
     rather than raised out of the reader:
     **where the format states a type, the reader honours it; where the format

@@ -33,6 +33,7 @@ from spanweave.model import (
 )
 from spanweave.read import record_digest
 from spanweave.seam import CallRole, SpanLink
+from tests import digit_limit
 
 
 class StubAdapter:
@@ -297,8 +298,10 @@ TIMESTAMP_RENDERINGS = (
     # Finite, or not read (batch R1). Each of these parses -- as a number,
     # even -- and none of them is a time (`SPEC.md` §3.1).
     ("1e400", None),  # a JSON number literal with no float64: it is `inf`
-    # The digit-limit rendering is not in this table because its `repr` is its
-    # 5000 digits and that becomes the test's id; it has its own test below.
+    # The digit-limit rendering is not in this table: its `repr` is thousands
+    # of digits and that becomes the test's id, and its length is derived from
+    # the interpreter rather than written down (§5.3). It has its own pair of
+    # tests below, one for each side of the line.
     (float("inf"), None),  # what an unquoted `Infinity` or `1e400` parses to
     (float("-inf"), None),
     (float("nan"), None),  # what an unquoted `NaN` parses to
@@ -362,20 +365,8 @@ def test_a_timestamp_in_a_rendering_we_refuse_is_never_silently_absent(adapter):
     assert span.raw.source["start_time"] == "2026-09-05T10:00:00Z"
 
 
-@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
-@pytest.mark.parametrize(
-    "rendered",
-    ("1e400", "9" * 5000, float("inf"), float("nan")),
-    ids=("quoted-1e400", "quoted-5000-digits", "inf", "nan"),
-)
-def test_a_non_finite_timestamp_is_refused_the_way_any_other_rendering_is(
-    adapter, rendered
-):
-    # Batch R1. Both of these used to leave by a door of their own: the digit
-    # limit as an interpreter `ValueError` raised straight out of `parse`, and
-    # `inf` as a value that reached the output as a bare `Infinity` token.
-    # They are refused renderings like any other -- `None`, verbatim in `raw`,
-    # and named in `unmapped_attributes` (`SPEC.md` §3.1).
+def assert_the_rendering_is_refused(adapter, rendered):
+    """`None`, verbatim in `raw`, named in `unmapped_attributes` (§3.1)."""
     span = next(iter(adapter.parse([a_record(adapter, start_time=rendered)])))
     assert span.started_at is None
     assert "<record>.start_time" in span.unmapped
@@ -387,14 +378,46 @@ def test_a_non_finite_timestamp_is_refused_the_way_any_other_rendering_is(
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize(
+    "rendered",
+    ("1e400", float("inf"), float("nan")),
+    ids=("quoted-1e400", "inf", "nan"),
+)
+def test_a_non_finite_timestamp_is_refused_the_way_any_other_rendering_is(
+    adapter, rendered
+):
+    # Batch R1. Each of these used to leave by a door of its own -- `inf` as a
+    # value that reached the output as a bare `Infinity` token. They are
+    # refused renderings like any other (`SPEC.md` §3.1).
+    assert_the_rendering_is_refused(adapter, rendered)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_timestamp_past_the_digit_limit_is_refused_the_same_way(adapter):
+    # The other side of the boundary below, and the same refusal: this one
+    # used to leave as an interpreter `ValueError` raised straight out of
+    # `parse` (batch R1).
+    with digit_limit.enforced() as limit:
+        assert_the_rendering_is_refused(adapter, digit_limit.past(limit))
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
 def test_a_timestamp_just_inside_the_digit_limit_is_still_read(adapter):
-    # The line is the interpreter's, and the test states which side of it is
-    # which: 4300 digits convert, 4301 do not. Without this the fix could be
-    # "refuse any long integer" and still pass everything above.
-    inside = "9" * 4300
-    span = next(iter(adapter.parse([a_record(adapter, start_time=inside)])))
-    assert span.started_at == int(inside)
-    assert type(span.started_at) is int
+    # The line is the interpreter's, and the pair of tests states which side
+    # of it is which. Without this the fix could be "refuse any long integer"
+    # and still pass everything above.
+    #
+    # Both sides are DERIVED from `sys.get_int_max_str_digits()` rather than
+    # written as 4300 and 5000 (batch R14, `SPEC.md` §5.3). The limit is a
+    # runtime setting: written as constants, this test raised `ValueError`
+    # inside its own body converting 4300 digits under
+    # `PYTHONINTMAXSTRDIGITS=640`, and its sibling above asserted a refusal
+    # that does not happen under `PYTHONINTMAXSTRDIGITS=0`.
+    with digit_limit.enforced() as limit:
+        inside = digit_limit.inside(limit)
+        span = next(iter(adapter.parse([a_record(adapter, start_time=inside)])))
+        assert span.started_at == int(inside)
+        assert type(span.started_at) is int
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)

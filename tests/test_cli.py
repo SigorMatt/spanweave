@@ -6,6 +6,7 @@ import pathlib
 import pytest
 
 from spanweave.cli import main
+from tests import digit_limit
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
 TRACE = str(FIXTURES / "llm_tool_llm/dialects/openinference.jsonl")
@@ -440,8 +441,6 @@ def _parser_limit():
 # past its integer-string digit limit, quoted and unquoted, and a literal
 # with no float64 -- each through `build` and through `inspect`.
 
-DIGITS = "9" * 5000
-
 
 def _span(start):
     return (
@@ -451,12 +450,7 @@ def _span(start):
     )
 
 
-@pytest.mark.parametrize(
-    "start",
-    (f'"{DIGITS}"', '"1e400"', '"-1e400"'),
-    ids=("quoted-digit-limit", "quoted-1e400", "quoted-minus-1e400"),
-)
-def test_a_number_the_interpreter_cannot_read_still_builds(tmp_path, capsys, start):
+def _assert_the_timestamp_is_refused_and_the_graph_writes(tmp_path, capsys, start):
     # Quoted, so the record itself is ordinary JSON: only the timestamp is in
     # a rendering §3.1 does not read, and the graph writes normally.
     trace = tmp_path / "t.jsonl"
@@ -470,6 +464,26 @@ def test_a_number_the_interpreter_cannot_read_still_builds(tmp_path, capsys, sta
     assert "unmapped_attributes" in codes
     assert main(["inspect", str(trace)]) == 0
     capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "start",
+    ('"1e400"', '"-1e400"'),
+    ids=("quoted-1e400", "quoted-minus-1e400"),
+)
+def test_a_number_the_interpreter_cannot_read_still_builds(tmp_path, capsys, start):
+    _assert_the_timestamp_is_refused_and_the_graph_writes(tmp_path, capsys, start)
+
+
+def test_a_quoted_integer_past_the_digit_limit_still_builds(tmp_path, capsys):
+    # Same rule, but the length of "past the limit" is the interpreter's and
+    # is derived from it (batch R14, `SPEC.md` §5.3): under
+    # `PYTHONINTMAXSTRDIGITS=0` a 5000-digit literal IS read, and this case
+    # asserted a refusal that does not happen.
+    with digit_limit.enforced() as limit:
+        _assert_the_timestamp_is_refused_and_the_graph_writes(
+            tmp_path, capsys, f'"{digit_limit.past(limit)}"'
+        )
 
 
 @pytest.mark.parametrize(
@@ -497,16 +511,19 @@ def test_an_unquoted_integer_past_the_digit_limit_is_a_malformed_record(
 ):
     # This one never reaches an adapter: `json.loads` refuses the line, which
     # the reader already reports (`SPEC.md` §7).
-    trace = tmp_path / "t.jsonl"
-    trace.write_text(_span(DIGITS) + _span("1.0").replace('"s0"', '"s1"'))
-    assert main(["inspect", str(trace)]) == 0
-    printed = capsys.readouterr().out
-    assert "nodes: 1" in printed
-    assert "malformed_record: 1" in printed
+    with digit_limit.enforced() as limit:
+        trace = tmp_path / "t.jsonl"
+        trace.write_text(
+            _span(digit_limit.past(limit)) + _span("1.0").replace('"s0"', '"s1"')
+        )
+        assert main(["inspect", str(trace)]) == 0
+        printed = capsys.readouterr().out
+        assert "nodes: 1" in printed
+        assert "malformed_record: 1" in printed
 
 
-def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, capsys):
-    envelope = {
+def _otlp_envelope(digits):
+    return {
         "resourceSpans": [
             {
                 "scopeSpans": [
@@ -523,7 +540,7 @@ def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, cap
                                         "key": "gen_ai.operation.name",
                                         "value": {"stringValue": "chat"},
                                     },
-                                    {"key": "k", "value": {"intValue": DIGITS}},
+                                    {"key": "k", "value": {"intValue": digits}},
                                 ],
                             }
                         ]
@@ -532,10 +549,15 @@ def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, cap
             }
         ]
     }
-    trace = tmp_path / "otlp.json"
-    trace.write_text(json.dumps(envelope))
-    out = tmp_path / "g.json"
-    assert main(["build", str(trace), "-o", str(out)]) == 0
-    document = json.loads(out.read_text())
-    assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == DIGITS
-    capsys.readouterr()
+
+
+def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, capsys):
+    with digit_limit.enforced() as limit:
+        digits = digit_limit.past(limit)
+        trace = tmp_path / "otlp.json"
+        trace.write_text(json.dumps(_otlp_envelope(digits)))
+        out = tmp_path / "g.json"
+        assert main(["build", str(trace), "-o", str(out)]) == 0
+        document = json.loads(out.read_text())
+        assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == digits
+        capsys.readouterr()

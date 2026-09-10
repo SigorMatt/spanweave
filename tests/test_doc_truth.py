@@ -2136,3 +2136,73 @@ def test_the_corpus_figure_scan_reads_emphasis_tables_and_separators():
         "which scope it counted, which is how a worked example becomes a "
         "false failure"
     )
+
+
+# -- The interpreter setting the graph depends on, named where it is owed ---
+#
+# Batch R14. `CLAUDE.md` 4 promises one graph from one input on any machine,
+# and the integer-string digit limit is a legal per-interpreter setting that
+# changes the graph (`SPEC.md` §5.3, measured in `tests/test_determinism.py`).
+# A conditional guarantee whose condition is written down in only one of the
+# two documents a reader would consult is a condition that will be missed --
+# before R14 it was named exactly once in the whole repository, in a
+# parenthesis, and `ENVIRONMENT.md` did not mention it at all.
+
+#: The spellings a reader needs in order to act: read it, and set it.
+DIGIT_LIMIT_SPELLINGS = (
+    "sys.get_int_max_str_digits",
+    "sys.set_int_max_str_digits",
+    "PYTHONINTMAXSTRDIGITS",
+)
+
+
+def test_the_determinism_section_names_the_setting_its_guarantee_depends_on():
+    determinism = section(read("SPEC.md"), "\n## 5. Determinism")
+    for spelling in DIGIT_LIMIT_SPELLINGS:
+        assert spelling in determinism, (
+            f"SPEC.md §5 does not name {spelling!r}. §5.1 promises the same "
+            f"graph on any machine and the digit limit is a per-interpreter "
+            f"setting that changes it, so the determinism section is where "
+            f"the condition has to be readable -- not only §3.1's parenthesis"
+        )
+
+
+def test_the_environment_contract_names_the_setting_too():
+    runtime = section(read("ENVIRONMENT.md"), "\n## Runtime")
+    for spelling in DIGIT_LIMIT_SPELLINGS:
+        assert spelling in runtime, (
+            f"ENVIRONMENT.md's Runtime section does not name {spelling!r}. It "
+            f"is the runtime contract, and this setting is part of the runtime "
+            f"in the strongest sense: it decides what the graph says"
+        )
+
+
+def test_no_test_hard_codes_the_digit_limit_it_is_supposed_to_derive():
+    """The defect R14 fixed, kept fixed.
+
+    R1's seven digit-limit tests wrote 4300 and 5000 as constants and every
+    one of them went red on a legally configured interpreter. The rule is that
+    the boundary comes from the interpreter; a test that writes it down is a
+    test about one machine, and a test that moves the limit by hand is a test
+    that can leave the process changed for every test after it.
+    """
+    helper = "tests/digit_limit.py"
+    literal = re.compile(r"""["']9["']\s*\*\s*\d{3,}""")
+    # Spelled in halves so the gate does not match its own source: this file
+    # is a test file, and it is not exempt from the rule it enforces.
+    moves_it = "sys.set_int_max_str_" + "digits("
+    for path in sorted((ROOT / "tests").rglob("test_*.py")):
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            assert not literal.search(line), (
+                f"{path.name}:{number} hard-codes a digit-limit boundary: "
+                f"{line.strip()!r}. 4300 is only the default and 5000 is only "
+                f"past it on an interpreter that has a limit at all "
+                f"(`SPEC.md` §5.3); derive it through {helper}"
+            )
+            assert moves_it not in line, (
+                f"{path.name}:{number} moves the interpreter's digit limit "
+                f"directly: {line.strip()!r}. {helper} is where that happens, "
+                f"because it restores the ambient setting afterwards"
+            )

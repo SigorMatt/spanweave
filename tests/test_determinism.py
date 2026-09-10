@@ -355,3 +355,72 @@ def test_a_record_no_adapter_claims_is_accounted_for_too():
     document = spanweave.to_document(spanweave.build(_bytes_of(records)))
     determinism.assert_every_record_accounted_for(records, document)
     determinism.assert_order_independent(records, _document_of)
+
+
+# --------------------------------------------------------------------------
+# The one input that is not the input bytes (batch R14)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §5.3 states a CONDITION on §5.1's guarantee: the interpreter's
+# integer-string digit limit is an input to the graph, so the same bytes on
+# two differently configured interpreters produce two different graphs. That
+# is a claim this file is the right place to hold, and holding it is worth
+# more than the paragraph: measured here, it cannot quietly stop being true,
+# and a later change that removed the dependency would fail rather than leave
+# a stale paragraph behind (which is `tests/test_doc_truth.py`'s whole thesis).
+#
+# It is a documented condition, not a defect to fix: pinning the limit from
+# inside the library would be a process-wide side effect of `import spanweave`
+# on a setting the host may have chosen deliberately (§5.3).
+
+DIGIT_LIMIT_RECORD = {
+    "trace_id": "t1",
+    "span_id": "s0",
+    "name": "op",
+    "end_time": 1700000002,
+    "attributes": {"openinference.span.kind": "AGENT"},
+}
+
+
+def _graph_under_a_digit_limit(digits):
+    """One trace, built as whatever the ambient digit limit makes of it."""
+    records = [dict(DIGIT_LIMIT_RECORD, start_time=digits)]
+    document = spanweave.to_document(spanweave.build(_bytes_of(records)))
+    return document, {item["code"] for item in document["diagnostics"]}
+
+
+def test_the_digit_limit_changes_what_the_same_bytes_produce():
+    from tests import digit_limit
+
+    with digit_limit.enforced() as limit:
+        digits = digit_limit.past(limit)
+        refused, refused_codes = _graph_under_a_digit_limit(digits)
+    with digit_limit.disabled():
+        read, read_codes = _graph_under_a_digit_limit(digits)
+
+    # Same bytes, same version, two graphs -- which is the whole of §5.3.
+    assert refused["nodes"][0]["started_at"] is None
+    assert read["nodes"][0]["started_at"] is not None
+    assert refused_codes == {"missing_timestamp", "unmapped_attributes"}
+    # This span's `end_time` is an ordinary 2023 second, so reading the giant
+    # `start_time` also makes the span run backwards. Both codes are about
+    # the value the limit decided to read.
+    assert read_codes == {"nonmonotonic_time", "timestamp_unit_suspect"}
+
+    # Both are graphs. The dependency is in what they SAY, not in whether the
+    # library survives the setting: neither configuration raises, and the
+    # value is verbatim in `raw.source` either way (invariant 2).
+    for document in (refused, read):
+        assert document["nodes"][0]["raw"]["source"]["start_time"] == digits
+
+
+def test_the_guarantee_holds_within_one_digit_limit():
+    # The other half, and the reason §5.3 is a condition rather than a
+    # retraction: hold the setting still and byte-identity is unaffected.
+    from tests import digit_limit
+
+    with digit_limit.enforced() as limit:
+        records = [dict(DIGIT_LIMIT_RECORD, start_time=digit_limit.past(limit))]
+        determinism.assert_repeatable(
+            lambda: spanweave.dumps(spanweave.build(_bytes_of(records)))
+        )

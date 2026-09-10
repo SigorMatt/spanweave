@@ -15,6 +15,25 @@ fix one deliberately, don't let them drift.
   matrix that quietly stops short of the declared range is how that happens:
   3.14 is the only interpreter on which the JSON encoder and parser give out
   at different depths (`SPEC.md` §7), and it was the one version CI skipped.
+- **The integer-string digit limit is part of the runtime contract, because
+  the graph depends on it.** CPython refuses to convert an integer *string*
+  longer than `sys.get_int_max_str_digits()` — 4300 digits by default, moved
+  by `PYTHONINTMAXSTRDIGITS`, `-X int_max_str_digits` or
+  `sys.set_int_max_str_digits`, and disabled entirely by `0`. spanweave
+  **reads** that limit and never sets it (`SPEC.md` §5.3 says why an
+  import-time `set_int_max_str_digits` would be the wrong fix), so a trace
+  carrying an integer longer than the limit builds a *different graph* under a
+  different setting: the same file that yields `missing_timestamp` plus
+  `unmapped_attributes` on a stock interpreter yields a read timestamp and
+  `timestamp_unit_suspect` under `PYTHONINTMAXSTRDIGITS=0`. CI, `make check`
+  and `make conformance` all run at the interpreter default and this
+  repository sets the variable nowhere. A caller who needs `CLAUDE.md` 4's
+  byte-identity across machines pins it — `PYTHONINTMAXSTRDIGITS=4300` — and a
+  caller who has raised it deliberately keeps the consequence knowingly. No
+  test in this suite hard-codes 4300: the digit-limit tests derive both sides
+  of the boundary from `sys.get_int_max_str_digits()` and install a limit when
+  the ambient one is disabled, so the suite is green on any legal setting
+  without being vacuous on any of them (`tests/digit_limit.py`).
 
 ## Toolchain
 
