@@ -642,6 +642,37 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The sdist ships `reviews/`, and now proves it ships what its own documents
+  cite.** `[tool.hatch.build.targets.sdist].include` is an explicit allowlist
+  and had no `/reviews` line, so the published artifact carried `TASKS.md`
+  citing `reviews/2026-09-10-run1.md` as the full text of a review the artifact
+  did not contain — a citation with no referent, which is the same defect the
+  `reviews/` directory was created to fix, with "not in the allowlist" in place
+  of "untracked scratch". `make install-check` could not see it: both of its
+  sdist audits run outward — sdist ⊆ tracked, wheel ⊆ sdist — and this is the
+  inward direction. Adding the one line would have left the next omission just
+  as silent, so the inward direction is now a check, stated about the artifact
+  rather than about `reviews/`: **every repo-relative path a document the sdist
+  ships cites must resolve inside the sdist**. Both generations of the defect
+  fail it. Its reach is bounded and the bounds are written down beside it
+  (`install_check._audit_sdist_resolves_its_own_citations`): citations are read
+  from code spans only, because a path in prose cannot be told from a sentence;
+  a candidate counts as repo-relative only when its first segment is a
+  top-level entry of the repository, which is what separates
+  `reviews/2026-09-10-run1.md` from the 38 scenario-relative `expected/graph.json`
+  and package-relative `adapters/base.py` citations the corpus and the spec are
+  full of; only paths git tracks are required, so `dist/…`, `out/…` and
+  untracked scratch are out of scope here and stay with
+  `test_a_durable_document_cites_no_untracked_scratch_path`; and existence is
+  all that is asked, never whether the cited section says what the citing
+  document claims. Proven in both directions before landing: with `/reviews`
+  removed the check fails and names both missing files and all four documents
+  citing them; with it restored the built sdist carries 301 members, two of
+  them `reviews/`, read out of the tarball rather than inferred from the
+  config. `SPEC.md` does not move — the library's behaviour is unchanged and
+  the spec says nothing about packaging.
+  (audit batch R15, run-3 review finding F3; `TASKS.md` 3.6, amended)
+
 - **A root span's empty `parentSpanId` is no parent, and no longer an orphan.**
   OTLP's `parentSpanId` is a proto3 `bytes` field; an unset one is the empty
   string, and a marshaler that emits default-valued fields writes

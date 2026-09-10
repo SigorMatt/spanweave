@@ -49,6 +49,16 @@ scripts were in the artifact, and *which* files those were depended on the
 machine that built it. `pyproject.toml` now declares the sdist's contents
 rather than defaulting them.
 
+Declaring them moved the failure rather than removing it: an allowlist omits
+silently, and `/reviews` was omitted, so the artifact shipped `TASKS.md`
+citing `reviews/2026-09-10-run1.md` as the full text of a review it did not
+contain. Neither audit above could see it — both run sdist-outward
+(sdist ⊆ tracked, wheel ⊆ sdist) and this is the inward direction. A third
+check runs it, scoped to what a reader would actually reach for: **every
+repo-relative path a document the sdist ships cites must resolve inside the
+sdist.** Its exact reach, and what it deliberately does not cover, is in
+`_audit_sdist_resolves_its_own_citations`.
+
 ## Both directions (as tasks 0.4-0.6 did for the gates)
 
 `--plant NAME` rebuilds the distribution with a deliberate defect and requires
@@ -76,6 +86,7 @@ import email
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -229,6 +240,77 @@ def _sdist_members(sdist: pathlib.Path) -> set[str]:
         }
 
 
+def _sdist_documents(sdist: pathlib.Path) -> dict[str, str]:
+    """Every `.md` file the sdist ships, member path -> text.
+
+    Read out of the archive rather than off disk: the question is what a
+    stranger who unpacks the artifact can read, and the tree is not that.
+    """
+    documents: dict[str, str] = {}
+    with tarfile.open(sdist) as archive:
+        for member in archive.getmembers():
+            if not member.isfile() or not member.name.endswith(".md"):
+                continue
+            if "/" not in member.name:
+                continue
+            handle = archive.extractfile(member)
+            if handle is None:  # pragma: no cover - defensive
+                continue
+            documents[member.name.split("/", 1)[1]] = handle.read().decode(
+                "utf-8", "replace"
+            )
+    return documents
+
+
+# A repo-relative path as a document writes one: inside a code span, at least
+# two segments, ordinary path characters, optionally a trailing `/` for a
+# directory. Deliberately NOT anchored to an extension -- `reviews/` as a
+# whole missing directory must be visible too.
+CITED_PATH = re.compile(
+    r"(?<![\w./-])(\.?[A-Za-z0-9_][A-Za-z0-9._-]*(?:/[A-Za-z0-9_][A-Za-z0-9._-]*)+/?)"
+)
+
+
+def _code_spans(markdown: str) -> Iterator[str]:
+    """Fenced lines plus inline `code` — where a document names a path.
+
+    Prose is out of scope on purpose: `tests/test_doc_truth.py` made the same
+    call for the same reason. A path written without backticks cannot be told
+    from a sentence, and a scanner that has to be loosened to stay quiet is a
+    scanner on its way to being switched off.
+    """
+    inside = False
+    for line in markdown.splitlines():
+        if line.startswith("```"):
+            inside = not inside
+            continue
+        if inside:
+            yield line
+        else:
+            yield from re.findall(r"`([^`]+)`", line)
+
+
+def _cited_paths(documents: dict[str, str], roots: set[str]) -> dict[str, set[str]]:
+    """Repo-relative paths the shipped documents cite -> the documents citing.
+
+    `roots` is the set of first segments the repository actually has at its
+    top level, and it is what makes this precise rather than noisy. Fixture
+    notes cite `expected/graph.json` and `dialects/otel_genai.jsonl` relative
+    to their own scenario directory, and `SPEC.md` cites `adapters/base.py`
+    relative to the package; neither is a repo-relative path, and neither has
+    a first segment this repository carries at its root. 38 such candidates
+    were counted while writing this and every one of them is dropped here.
+    """
+    cited: dict[str, set[str]] = {}
+    for name, text in sorted(documents.items()):
+        for span in _code_spans(text):
+            for match in CITED_PATH.finditer(span):
+                candidate = match.group(1)
+                if candidate.split("/", 1)[0] in roots:
+                    cited.setdefault(candidate, set()).add(name)
+    return cited
+
+
 # --------------------------------------------------------------------------
 # 1. Does the wheel contain what pyproject.toml says it contains?
 # --------------------------------------------------------------------------
@@ -274,6 +356,11 @@ def audit_sdist(
             True,
             "",
         )
+        report.check(
+            "sdist: ships every tracked path its own documents cite",
+            True,
+            "",
+        )
         return
     tracked = _run(["git", "ls-files"], cwd=tree)
     known = set(_decode(tracked.stdout).splitlines())
@@ -285,6 +372,77 @@ def audit_sdist(
         "in the sdist, untracked by git — the artifact would depend on the "
         "builder's working directory; commit them or remove them:\n"
         + "\n".join(strays),
+    )
+    _audit_sdist_resolves_its_own_citations(sdist, members, known, report)
+
+
+def _audit_sdist_resolves_its_own_citations(
+    sdist: pathlib.Path,
+    members: set[str],
+    tracked: set[str],
+    report: Report,
+) -> None:
+    """The direction the other two audits do not cover: **tracked ⊆ sdist**.
+
+    `audit_sdist` above asserts sdist ⊆ tracked and wheel ⊆ sdist. Neither can
+    see a file the allowlist simply left out, and an allowlist's failure mode
+    is exactly that: `[tool.hatch.build.targets.sdist].include` had no
+    `/reviews` line, so the artifact shipped `TASKS.md` citing
+    `reviews/2026-09-10-run1.md` as the full text of a review it did not
+    contain. The generation before it was the same shape with `patches/` in
+    place of the missing include line.
+
+    So the rule is stated about the artifact rather than about any one
+    directory: **a repo-relative path a shipped document cites must resolve
+    inside the sdist.** Both generations of the defect fail it.
+
+    What it covers, said exactly, because a check that overstates its reach is
+    the thing this repository keeps finding:
+
+    - **Citers:** every `.md` file the sdist ships, read out of the archive.
+    - **Citations:** paths inside a code span (fenced or inline) whose first
+      segment is a top-level entry of the repository — that is what makes a
+      path repo-relative rather than relative to the document's own directory.
+    - **Resolution:** a file must be an sdist member; a path written with a
+      trailing `/` is a directory and needs some member beneath it.
+
+    What it does **not** cover:
+
+    - **Prose.** A path without backticks is indistinguishable from a
+      sentence (`tests/test_doc_truth.py` makes the same call).
+    - **Paths the repository does not track.** `dist/…`, `out/…`,
+      `capture/_scratch/…` and `patches/…` are build output, generated, or
+      untracked scratch: absent from the sdist because they are absent from a
+      clean checkout, which is not a packaging defect. A *durable* document
+      citing untracked scratch is a defect, and
+      `test_a_durable_document_cites_no_untracked_scratch_path` is where it
+      is caught.
+    - **Whether the citation is accurate.** That the file exists is all this
+      asks; whether the section it cites says what the citing document claims
+      is a human reading.
+    - **Non-markdown citers.** A docstring or comment naming a path is out of
+      scope; the shipped documents are the artifact's own front door.
+    """
+    roots = {path.split("/", 1)[0] for path in tracked}
+    cited = _cited_paths(_sdist_documents(sdist), roots)
+    missing: dict[str, list[str]] = {}
+    for path, citers in sorted(cited.items()):
+        if path.endswith("/"):
+            if any(name.startswith(path) for name in tracked) and not any(
+                name.startswith(path) for name in members
+            ):
+                missing[path] = sorted(citers)
+        elif path in tracked and path not in members:
+            missing[path] = sorted(citers)
+    report.check(
+        "sdist: ships every tracked path its own documents cite",
+        not missing,
+        "cited by a document the sdist ships, tracked by git, and absent from "
+        "the sdist — a stranger who unpacks it gets the citation without the "
+        "file. Add the path to `[tool.hatch.build.targets.sdist].include`:\n"
+        + "\n".join(
+            f"{path} — cited by {', '.join(where)}" for path, where in missing.items()
+        ),
     )
 
 

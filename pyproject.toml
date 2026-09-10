@@ -62,12 +62,22 @@ packages = ["spanweave"]
 # sdist carries more than the wheel on purpose: it is what someone rebuilds
 # and re-verifies this project from, so the corpus, the tests and the docs
 # belong in it.
+#
+# An allowlist has the opposite failure of a default: it omits silently.
+# `/reviews` was missing here, so the sdist shipped `TASKS.md` citing
+# `reviews/2026-09-10-run1.md` as the full text of a review the artifact did
+# not contain -- a citation with no referent, which is the same defect the
+# review directory exists to have fixed. Adding a directory here is not
+# enough on its own: `install_check.audit_sdist` now reads the documents the
+# sdist ships and requires every tracked repo-relative path they cite to be
+# inside it, so the next omission fails the build instead of shipping.
 include = [
     "/spanweave",
     "/tests",
     "/fixtures",
     "/examples",
     "/capture",
+    "/reviews",
     "/.github",
     "/*.md",
     "/LICENSE",

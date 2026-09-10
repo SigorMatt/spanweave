@@ -6955,6 +6955,17 @@ consumer's findings go in the exit record beside these and carry more weight.
   That is the intended reading — commit or remove before building a release —
   and it is why the check is run from a clean tree.
 
+  **Amended (audit batch R15).** Declaring the sdist moved the failure rather
+  than removing it. Both audits above run sdist-outward — sdist ⊆ tracked and
+  wheel ⊆ sdist — and an allowlist's own failure is the inward direction:
+  `/reviews` was simply not in the `include` list, so the artifact shipped
+  **this file** citing `reviews/2026-09-10-run1.md` as the full text of a
+  review it did not contain. A third check now runs the inward direction,
+  scoped to what a reader reaches for: every repo-relative path a document the
+  sdist ships cites must resolve inside the sdist. Its exact reach — code
+  spans only, tracked paths only, existence and not accuracy — is stated in
+  `install_check._audit_sdist_resolves_its_own_citations`.
+
   **What is checked, beyond the three commands the task names.** Both
   artifacts are audited (`uv build` builds the wheel *from* the sdist, so
   auditing only the wheel would leave half the publish unexamined): the sdist
