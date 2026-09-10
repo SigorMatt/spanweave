@@ -192,7 +192,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 |---|---|---|---|
 | E1 | **Design memo (HALT).** Per-record dialect dispatch. Today selection is per file; real traces mix OpenInference framework spans and OTel GenAI SDK spans, and forcing either adapter loses the `call_result` pairing. Options: (a) registry classifies each record by marker, each adapter parses only its records, `Meta.adapters` lists all used (already a tuple), `Provenance.adapter` per node; (b) explicit composite `--adapter openinference+otel_genai`; (c) both, with (a) as the auto path when file-level detection is ambiguous but every record is individually unambiguous. Also: what happens to a record no adapter claims. Memo to `OPEN_QUESTIONS.md` + `DESIGN.md` draft + `SPEC.md` §6.1 draft. | done | 8 |
 | E2 | Registry `classify(record)` from each adapter's existing `detect([record])`; per-record partition above the seam in `api.py`; single-dialect input byte-identical to today; a record two adapters claim → `adapter_ambiguous` naming line/span id/claimants; a record none claims → passed through as unclaimed for E3. Detection tests for all three cases. | done | 20 |
-| E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | todo | 25 |
+| E3 | Builder accepts spans from several adapters; unclaimed records → `unknown` node + `unclaimed_record` warning; `Provenance.adapter_id: str \| None` (regenerate `serialized_shape.json`, say so); `Edge.adapter = None` when ends differ (SPEC §3.8); `Meta.adapters` = all contributors with each one's `declared_confidence`; decide and document whether `duplicate_source_id` should report on `source_key` rather than `span_id` (§12(f)). Conformance scenario `mixed_instrumentation`: OpenInference agent+tool, OTel GenAI chat, expected graph identical to `llm_tool_llm`'s canonical graph; a shuffled rendering; a forced-single-adapter rendering whose `node_count` equals the mixed build's. Depends on A5. | done | 25 |
 | E4 | `--adapter auto\|<id>` (no `mixed`); `spanweave inspect` shows per-adapter node counts; README, ADAPTERS.md (the one-sentence per-record contract from §12(d)), SPEC §6.1 final text from §12, DESIGN.md §3 subsection from §12(k), CHANGELOG. | todo | 12 |
 
 ### Phase F — OTLP JSON container (ROADMAP Phase 4 item, pulled forward)
@@ -571,6 +571,22 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   record breaks `test_doc_truth.py`'s census against the ROADMAP numbers G5 just
   landed, so `mixed_instrumentation` is where that measurement moves — **E3 must
   update the ROADMAP census and expect D2's five hard-coded counts to move.**
+- E3 done (`696bffb`). **The series' acceptance test passes:**
+  `mixed_instrumentation`'s canonical graph equals `llm_tool_llm`'s — the expected
+  `graph.json` is shared byte for byte — plus a shuffled rendering with id binding
+  and forced-adapter builds of equal `node_count`. `make install-check` was run and
+  is green. `serialized_shape.json` moved for two specced reasons: the two
+  `Provenance` types and `unclaimed_record` joining the vocabulary.
+- §12(f) decided by E3: `duplicate_source_id` keeps reporting on the **span id**,
+  because after A5 a `source_key` collision without a span-id collision is
+  unreachable and a `source_key` is the library's own construct.
+- ROADMAP census moved 49→50 files, 139→143 records; "0 records carry both
+  markers" is unchanged and still recomputed; a fourth number was added — 1 file
+  carries records of both — with "Constructed is not observed" now asserted by
+  `test_doc_truth.py`. D2's five counts all moved as predicted.
+- **Correction to the E2 note above:** `mixed_instrumentation` is *not* a third
+  shape reaching `trajectory_dump`'s transcript. `transcript_moved == 4` is
+  unchanged and green, because `llm_tool_llm`'s shape never reached it either.
 
 ---
 
