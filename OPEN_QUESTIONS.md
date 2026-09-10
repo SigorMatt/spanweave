@@ -2489,3 +2489,372 @@ taken it arrives as a version bump's worth of announcement, not quietly: it
 changes what `canonical()` compares and what every consumer written against `1`
 sees (**h**), and it adds a key to all 22 stored `expected/graph.json` files and
 a line to `FIXTURES.md` §4's test-enforced Compared list (**g**).
+
+## 16. F1: Is OTLP JSON a dialect, or a way of packing records?
+
+**(a) What happens today, measured.** An OTLP/JSON export
+(`ExportTraceServiceRequest`, the body every OTLP-HTTP exporter POSTs and every
+`--set=exporter=otlp/json` file receiver writes) is refused twice over, and the
+two refusals are different failures wearing the same word.
+
+*Compact*, one line — `spanweave build otlp.json`:
+
+```
+spanweave build: no adapter is confident enough about this input (highest 0.00,
+minimum 0.50). Confidence declared by each adapter: openinference 0.00,
+otel_genai 0.00.
+```
+
+Forced with `--adapter otel_genai`, the same file builds **one node**: kind
+`unknown`, no trace id, no timestamps, and the entire export — resource, scope,
+every span — sitting in that one node's `raw.source`. Lossless, and useless.
+
+*Pretty-printed*, which is what a file receiver and every `curl | jq` writes:
+**46 `malformed_record` diagnostics and 0 nodes.** Each line of the indented
+document is a line that is not JSON, and the reader says so 46 times.
+
+Neither outcome is wrong under any rule the library states. Both are the
+library failing to read a file that contains exactly the spans it exists to
+read, and the audit logged it as a minor finding (`WORKPLAN.md` §5) because it
+is a gap in reach, not a defect in behaviour.
+
+**(b) The decisive argument: an OTLP JSON document has no dialect.** This is
+the whole memo, and everything after it is detail.
+
+`resourceSpans[].scopeSpans[].spans[]` is the OTLP *transport envelope*. What
+those spans say — `openinference.span.kind`, or `gen_ai.operation.name`, or
+both in one export because a framework instrumentor and an SDK instrumentor
+share a `TracerProvider` — is a property of the spans, not of the envelope.
+An `otlp_json` **adapter** would therefore have to answer "which dialect are
+these spans in?" one level too low to know, and would have to answer it for
+the whole file at once. That is precisely audit finding 1 — the finding Phase E
+of this series spent four batches removing (`§12`, decided 2026-09-10: dialect
+is a property of a **record**, never of a file). Adding an OTLP adapter would
+re-create it in a new place and, worse, make it unfixable: the per-record
+registry classifies records, and an adapter that owns the file never produces
+separable records for it to classify.
+
+As a **container format**, the envelope is unpacked below the seam, the spans
+that come out are records like any others, and E2's per-record classification
+does the rest — including the mixed case, for free and without knowing OTLP
+exists. The two features compose because neither knows about the other. That
+is the test that a seam is in the right place.
+
+Corollary, worth stating because it will be asked: this is also why the
+fixture in **(m)** is one scenario rendered in *both* dialects as OTLP JSON. If
+OTLP were a dialect, that sentence would not parse.
+
+**(c) What "the record" is for an OTLP input, and why losslessness survives.**
+
+`read.py` already owns the question "what is one record?" and already answers
+it differently per container: for JSONL a record is a line, for a JSON array a
+record is an element — and an array element has no bytes of its own, which
+`SPEC.md` §7 already had to say out loud when it defined duplicate detection on
+the *parsed* record rather than on bytes. For OTLP JSON a record is **one span,
+carried together with the envelope levels above it**.
+
+That is a rename and a fold, not a copy, so losslessness needs an argument it
+does not need for the other two containers. The argument is: **every key of the
+OTLP document is reachable from the flat record**, either under the flat
+shape's own name (the nine the adapters read) or under its own OTLP name
+(everything else), so the OTLP span is *reconstructible* from `raw.source`.
+What is not reconstructible is member order and the nesting — and member order
+never reaches a node anywhere in this library, which is the same fact §7
+already relies on when it collapses two lines that parse equal.
+
+The rule that keeps this true is one line, and it is the invariant F2 must
+test: **the reader never drops an OTLP key and never invents one.** Anything it
+cannot fold is carried, and carried things are named by the adapters'
+`unmapped_attributes` — keys only, so B3's diagnostic-volume result is not
+undone.
+
+**(d) Recognition: four shapes, one rule each.** The reader must not confuse:
+
+| Input | Today | Rule |
+|---|---|---|
+| JSONL of spans | records | unchanged: no `resourceSpans` anywhere |
+| JSON array of spans | records | unchanged |
+| One OTLP document, compact or indented | 1 unknown node / 46 malformed | buffered, parsed once, expanded |
+| **JSONL or array of OTLP documents** | malformed / N unknown nodes | each element expanded |
+
+The last row is the one that makes a naive rule wrong. A file of
+`ExportTraceServiceRequest` bodies, one per line, is a real artefact — it is
+what a collector's file exporter writes and what `probe1.py` would produce if
+it looped — and it begins with the same bytes as a single compact document.
+No head-scan can tell them apart. So recognition is **two rules, not one**:
+
+1. **Expansion, per record, above both existing branches.** A record that is a
+   JSON object whose `resourceSpans` is a **list** is replaced by the span
+   records it carries. This runs on lines and on array elements alike, before
+   deduplication, so duplicate spans across two envelopes still collapse.
+2. **Whole-input buffering, only when forced.** If the first non-whitespace
+   byte after the BOM is `{` *and* the object's first member key is
+   `resourceSpans`, the input is buffered and parsed as a single JSON document
+   — the array branch's own trade-off, taken for the array branch's own reason:
+   the format, not the design, forbids streaming here. **If that parse fails,
+   the buffered bytes are read line by line as before**, which is what makes
+   row 4 work and what makes the rule safe: the fallback's output is the output
+   today, byte for byte.
+
+Rule 2 costs a head scan of at most one member key (bounded, and it stops at
+the first key), and it is entered by nothing that exists — see **(k)**.
+
+**(e) The flattening, key by key.** OTLP span → flat record:
+
+| OTLP | flat record | note |
+|---|---|---|
+| `traceId` | `trace_id` | verbatim |
+| `spanId` | `span_id` | verbatim |
+| `parentSpanId` | `parent_id` | verbatim; `""` is OTLP's "no parent" and is carried as `""`, which `_as_str` reads and the builder treats as no parent |
+| `name` | `name` | verbatim |
+| `startTimeUnixNano` | `start_time` | **verbatim, string and all** — see **(g)** |
+| `endTimeUnixNano` | `end_time` | verbatim |
+| `status.code` | `status` | mapped — see **(h)** |
+| `status.message` | `status_message` | verbatim |
+| `attributes` (KeyValue list) | `attributes` (object) | folded — see **(f)** |
+| `links` | `links` | each link flattened the same way: `traceId`/`spanId` renamed, its `attributes` folded, everything else carried |
+| `kind`, `events`, `flags`, `traceState`, `droppedAttributesCount`, … | *the same key, verbatim* | see **(h)** |
+| the `ResourceSpans` entry minus `scopeSpans` | `resource_spans` | see **(i)** |
+| the `ScopeSpans` entry minus `spans` | `scope_spans` | see **(i)** |
+
+Nine renamed, one folded, everything else carried. No key is dropped.
+
+**(f) Folding an attribute list, and the one type tag the reader honours.**
+`[{"key": k, "value": <AnyValue>}]` becomes `{k: v}`, with `AnyValue` unwrapped
+by its tag: `stringValue`/`boolValue`/`doubleValue` to the JSON value,
+`arrayValue.values` to a list of unwrapped values, `kvlistValue.values` to an
+object folded by this same rule, `bytesValue` to the base64 **string** it
+already is (JSON has no bytes; decoding would produce a value the output cannot
+hold), an `AnyValue` with no field set to `null`.
+
+`intValue` is the interesting one. proto3 JSON encodes `int64` as a **decimal
+string**, so a token count arrives as `{"intValue": "42"}`. The reader decodes
+it to the integer `42`. The reason is not convenience — it is that
+**`intValue` is a type tag: the format states the type, and honouring a stated
+type is decoding, not interpreting.** A reader that left `"42"` there would be
+declining to read the one thing the encoding went out of its way to say, and
+`_as_int` would refuse the count, and the same run exported two ways would
+produce two different graphs — which is the library's central claim, failing.
+A string that is not an integer literal is carried verbatim rather than forced;
+nothing is dropped and nothing is guessed.
+
+Two entries can claim one key. OTLP forbids it and files do it anyway. The
+fold takes them in order, **last wins**, and every entry that could not be
+folded — a non-object entry, a missing or non-string `key`, an unrecognized
+`value` tag, and *both* copies of a repeated key — is kept in a list under the
+reserved key `attributes_unfolded`, **omitted when the list is empty**, so the
+ordinary case never carries it and the extraordinary case never loses anything.
+It is named by `unmapped_attributes` like any other unknown record key.
+
+**(g) Why `startTimeUnixNano` is *not* decoded, when `intValue` is.** These
+look like the same case — an int64 as a decimal string — and they are not, and
+the difference is the principle the whole flattening runs on:
+
+> Where the format states a **type**, the reader honours it. Where the format
+> states only a **name**, the reader hands the value to the layer that owns
+> the field.
+
+`{"intValue": "42"}` states a type. `"startTimeUnixNano": "1700000000000000000"`
+states a name; its type comes from the OTLP schema, and the field it lands in
+is `SPEC.md` §3.1's, whose rule for a numeric string was written in batch C1
+**for this exact encoding** — `_JSON_NUMBER` in both adapters cites OTLP by
+name — and typed by C3's decision (`§10`, 2026-09-10): an integer literal
+becomes an `int`, quoted or bare. Decoding it in the reader too would put one
+rule in two layers, and the layer that would lose the argument later is the one
+that does not own the field. So the string arrives intact and lands as an `int`,
+which is exactly what `WORKPLAN.md`'s F2 row already requires of it.
+
+**(h) `status.code` maps; `kind` does not; the asymmetry is the model's, not a
+preference.** The flat record shape **has** a `status` field, a string, which
+both adapters read through `STATUSES` (and whose `_status` already accepts the
+`{"code", "message"}` object shape). So `status.code` is decoded into it:
+`0`/`STATUS_CODE_UNSET` → `"UNSET"`, `1`/`STATUS_CODE_OK` → `"OK"`,
+`2`/`STATUS_CODE_ERROR` → `"ERROR"`, both spellings because proto3 JSON permits
+the enum name or its number. A code in neither spelling is carried verbatim,
+where `_status` reads it as `UNSET` and the value survives in `raw.source`.
+
+The flat record shape has **no** field for OTLP `SpanKind` (`0`–`5`,
+`SPAN_KIND_SERVER`, …), and neither adapter reads one: both derive `NodeKind`
+from attributes, in both dialects. So `kind` is carried under its own name and
+reported as `<record>.kind`. Mapping it would mean either inventing a flat-record
+field nothing reads, or — much worse — mapping `SPAN_KIND_CLIENT` onto a
+`NodeKind`, which is a dialect interpretation performed in the container, below
+the seam, by the one layer that is forbidden to have one. **That would be the
+halt this design exists to avoid**, and it is worth naming as the near miss it
+is: `kind` looks like the most mappable field in the envelope and is the least.
+
+**(i) Resource and scope: preserved, and preserved where a consumer can find
+them.** `WORKPLAN.md`'s F1 row offered "reserved key or dropped with a
+diagnostic (losslessness says preserved)". It does; the only question is where.
+
+Rejected: **merging resource attributes into the span's `attributes`.** It
+fabricates span attributes that no instrumentor wrote; it changes every
+`unmapped_attributes` tally; and — decisively — a resource attribute whose key
+began `openinference.` or `gen_ai.` would change **detection**, which after E2
+is per record and reads exactly that dict. A container format that can change
+which adapter claims a span is not a container format.
+
+Taken: two reserved top-level keys carrying the envelope levels verbatim minus
+their span-bearing children — `resource_spans` (the `ResourceSpans` entry
+without `scopeSpans`: its `resource`, its `schemaUrl`, anything OTLP adds
+later) and `scope_spans` (the `ScopeSpans` entry without `spans`: its `scope`,
+its `schemaUrl`). Every sub-key is OTLP's own; nothing is invented but the two
+names, which are snake_case precisely so they cannot be mistaken for the
+camelCase key that triggers expansion. `service.name` is at
+`raw.source.resource_spans.resource.attributes`, and the two keys are named in
+`unmapped_attributes` — one name each, values excluded as always — so a
+consumer is *told* they are there rather than left to find them.
+
+Their attribute lists are **not** folded: the fold exists to fill a dict that
+the flat shape defines and an adapter reads, and there is no such dict here.
+Folding them would be inventing a representation nothing has agreed on, which
+is what "the reader never invents a key" forbids.
+
+Both keys are **omitted when the envelope level carries nothing but its
+children** — a minimal export with no `resource` and no `scope`, which OTLP
+permits and `probe1.py` already writes. That is the same rule as everywhere
+else in this library (`absent`, not empty), and it is what lets **(m)**'s
+fixture produce llm_tool_llm's canonical graph byte for byte rather than
+approximately.
+
+**(j) The degenerate cases, and why not one of them needs a new diagnostic
+code.** This was the design's most likely halt and it did not fire.
+
+| Input | Outcome |
+|---|---|
+| `resourceSpans: []` | no records; empty graph, `missing_trace_id` as today for any empty input |
+| a `ResourceSpans` with no `scopeSpans`, or a `ScopeSpans` with no `spans` | the level is yielded as a record of its own — `{"resource_spans": …, "scope_spans": …}` and nothing else — which becomes an `unknown` node carrying it, and `unknown_span_kind` fires. Never a discard |
+| a non-object where a `ResourceSpans`/`ScopeSpans`/span was expected | yielded verbatim as a record; the adapters' existing "not a span-shaped thing" path makes it an `unknown` node |
+| an unfoldable attribute entry, a repeated key | `attributes_unfolded`, **(f)** |
+| a `status.code` in neither spelling | carried verbatim, read as `UNSET`, **(h)** |
+| the whole-input parse fails after the head scan said `resourceSpans` | read line by line; today's output exactly, **(d)** |
+| nesting deeper than the parser will descend | `RecursionError` is already caught with `ValueError` in `_read_array` and `_read_line` (A1, A6); the new branch uses the same guard |
+
+Every one of them lands in a code that already exists. Nothing here needed a
+new one — which matters, because a new code is cheap (A6 added
+`graph_not_serializable`) but a new code invented to paper over a lossy fold
+would not have been.
+
+**(k) Proving no existing input moves — the E2 method, plus a structural
+reason.** Both new branches are gated on the single key `resourceSpans`:
+expansion needs it list-valued on a record, buffering needs it as the input's
+first member key. Measured over the whole tree today:
+
+- **0** files under `fixtures/`, `capture/` or `examples/` contain the string
+  `resourceSpans` (the only two occurrences in the repo are `WORKPLAN.md`'s own
+  F1 row and `probe1.py`'s reproduction case).
+- **64 of 64** `*.jsonl` files begin with `{`, and the first member key of the
+  first record is `trace_id` in **64 of 64**.
+
+So no input in the tree can reach either branch, and the head scan reaches its
+verdict without consuming a byte more than the format-sniff already consumes.
+On top of that argument, F2 owes the same *evidence* E2 produced and E2's note
+records: serialize every `*.jsonl` in the tree before and after, `diff` clean,
+with the per-trace form kept in the suite so the claim stays true later.
+
+**(l) The three-way test in F1's own row, answered.**
+
+1. **Model change?** **No.** No `NodeKind`, no `EdgeKind`, no new field on
+   `Node`, `Edge`, `Provenance`, `RawRecord` or `Meta`. Everything lands in the
+   flat record shape the adapters already read, which is not a model type at
+   all — it is the shape `read.py` hands across the seam.
+2. **Schema change?** **No.** `tests/serialized_shape.json` should not move; no
+   serialized field is added, removed or retyped. F2 verifies rather than
+   assumes it, and if it moves, that is a finding, not a regeneration.
+3. **New default for an existing input?** **No**, by **(k)**: every branch is
+   gated on a key no existing input carries, and the one branch that can be
+   entered wrongly falls back to today's reading.
+
+**F1 therefore does not halt, and F2 proceeds in the same run.**
+
+The honest asterisk, stated rather than buried: **one hypothetical input does
+change.** A JSONL record that is an object with a list-valued `resourceSpans`
+is today an `unknown` node and would become the spans it carries. There are
+zero such records in the corpus, in the captures, and in the examples; the
+change is the feature, and a rule that excluded it would be a rule with no
+content. It is not a *default* changing under an existing input; it is the new
+container reaching the input it was written for.
+
+**(m) What F2 owes.**
+
+1. `read.py`: the expansion, the head scan, the fold, the flatten. Below the
+   seam, no dialect named, docstring's "two container formats" becomes three.
+2. `SPEC.md` §7 Inputs: the draft in **(n)**.
+3. Conformance scenario `otlp_container/`, in mixed_instrumentation's idiom:
+   `dialects/openinference.json` and `dialects/otel_genai.json` — llm_tool_llm's
+   run, packed as OTLP JSON, once per dialect — with `expected/graph.json`
+   llm_tool_llm's file **byte for byte**. It is the same claim in a third
+   direction: one run, two dialects, two containers, one graph.
+   The renderings carry the scenario's own timestamps as `startTimeUnixNano`
+   strings, and the notes file says why in one sentence: the library reads no
+   unit from a field name (§3.1), so changing the numbers would change the
+   scenario rather than the encoding — `timestamp_units` is where encoding is
+   the claim.
+4. Degenerate coverage in `tests/test_read.py`, one test per row of **(j)**,
+   plus resource/scope/`kind`/`status`/`intValue`/duplicate-key folding, which
+   the conformance scenario deliberately does **not** carry (its envelope is
+   minimal so the graph can be byte-identical).
+5. `probe1.py`'s `otlp_json_envelope` case converted to a test and removed, per
+   the batch brief.
+6. `ADAPTERS.md`: one sentence saying an OTLP JSON document is not a dialect
+   and no adapter is being written for it — **(b)** in a line.
+7. The corpus census. Adding renderings moves the hard-coded counts in
+   `test_example_cost_latency.py`, `test_example_trajectory_dump.py`,
+   `test_prediction_evidence.py`, `tests/test_doc_truth.py` and README, exactly
+   as E3's note warned D2's five counts would move. Note the trap E3 did not
+   have: the census globs `*.jsonl`, and these renderings are `.json`. If the
+   numbers do **not** move, the census is under-reporting the corpus, and F2
+   says so rather than enjoying the quiet.
+8. CHANGELOG.
+
+**(n) `SPEC.md` §7 draft text.** To be inserted in Inputs, after the JSONL /
+array bullet:
+
+> - **OTLP JSON** (`ExportTraceServiceRequest`: an object whose `resourceSpans`
+>   is a list) is a third **container**, not a dialect. The spans inside it are
+>   in whatever dialect their instrumentor speaks — possibly two dialects in
+>   one export — so the envelope is unpacked here and the records that come out
+>   are classified per record like any others (§6.1). No adapter is written for
+>   OTLP JSON, and one would re-create the failure §6.1 exists to prevent.
+>   - **One span, plus the envelope above it, is one record.** Nine keys are
+>     renamed to the record shape the adapters read — `traceId`, `spanId`,
+>     `parentSpanId`, `name`, `startTimeUnixNano`, `endTimeUnixNano`,
+>     `status.code`, `status.message`, `attributes` — one is folded, and
+>     **every other key of the span is carried under its own OTLP name**, where
+>     `unmapped_attributes` names it. `kind` is one of those: no dialect reads
+>     an OTLP `SpanKind`, and mapping one to a `NodeKind` would be an
+>     interpretation made below the adapter seam.
+>   - **`attributes` is folded** from OTLP's `[{"key", "value"}]` list to an
+>     object, unwrapping each `AnyValue` by its tag. `intValue` arrives as a
+>     decimal string, as proto3 JSON encodes every `int64`, and is read as the
+>     integer it declares itself to be: **where the format states a type, the
+>     reader honours it.** `startTimeUnixNano` states only a name, so it is
+>     carried verbatim and read by §3.1's rule for a numeric string — the rule
+>     written for this encoding. A repeated key keeps the last, and every entry
+>     the fold could not take, both copies of a repeated key included, is kept
+>     in `attributes_unfolded`.
+>   - **`status.code`** becomes `"UNSET"` / `"OK"` / `"ERROR"`, from the enum
+>     name or its number; any other value is carried verbatim and read as
+>     `UNSET`.
+>   - **Resource and scope are preserved, not dropped.** Each record carries
+>     `resource_spans` (its `ResourceSpans` entry without `scopeSpans`) and
+>     `scope_spans` (its `ScopeSpans` entry without `spans`), verbatim, omitted
+>     when the level carries nothing but its children. They are **not** merged
+>     into the span's attributes: that would fabricate attributes no
+>     instrumentor wrote, and a resource attribute could change which adapter
+>     claims the span.
+>   - **An envelope level with no spans is not a discard**: it is yielded as a
+>     record of its own and becomes an `unknown` node carrying it.
+>   - **Reading it needs the whole input**, as the array form does and for the
+>     same reason: a document is not a record until its closing brace. The
+>     reader buffers only when the input's first member key is `resourceSpans`;
+>     if what it buffered is not one document — a file of one export per line
+>     is a real artefact — it is read line by line, and each line that is an
+>     envelope is unpacked the same way.
+
+**No decision is required.** F1's design needs no model change, no schema
+change, and no new default (**l**); per its row in `WORKPLAN.md`, F2 follows it
+in the same run as a separate commit. What would reopen this memo is a fourth
+shape it has not seen — an exporter that writes something other than
+`resourceSpans` first, or an `AnyValue` tag this list does not name — and both
+are additive to **(e)** and **(f)** rather than reversals of **(b)**.
