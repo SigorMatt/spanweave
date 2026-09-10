@@ -42,6 +42,8 @@ import shlex
 
 import spanweave
 from spanweave.adapters import MINIMUM_CONFIDENCE, registered
+from spanweave.diagnostics import MALFORMED_RECORD
+from spanweave.read import read_trace
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -1362,7 +1364,18 @@ def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]
     zero disagreements -- so this counts what an adapter would actually do,
     not what a regex over attribute keys says it would.
     """
-    files = sorted((ROOT / "fixtures").rglob("*.jsonl"))
+    # Every rendering the corpus holds, whatever container it is in, read the
+    # way the library reads it. It was a `*.jsonl` glob and a `splitlines()`
+    # until batch F2 put an OTLP export in the corpus -- at which point the
+    # sweep would have gone on reporting the old numbers, and the promise two
+    # paragraphs of `ROADMAP.md` make ("a corpus that grows fails this
+    # sentence") would have quietly stopped being true (`SPEC.md` §7).
+    files = sorted(
+        {
+            *(ROOT / "fixtures").rglob("*.jsonl"),
+            *(ROOT / "fixtures/conformance").glob("*/dialects/*.json"),
+        }
+    )
     adapters = registered()
     records = 0
     claims: dict[int, int] = {}
@@ -1370,15 +1383,15 @@ def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]
     mixed_files = 0
     for path in files:
         per_file: set[str] = set()
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
+        stream = read_trace(path)
+        found = list(stream)
+        unreadable.extend(
+            f"{path.relative_to(ROOT)}: {diagnostic.message}"
+            for diagnostic in stream.diagnostics.collected()
+            if diagnostic.code == MALFORMED_RECORD
+        )
+        for record in found:
             records += 1
-            try:
-                record = json.loads(line)
-            except ValueError:
-                unreadable.append(f"{path.relative_to(ROOT)}:{number}")
-                continue
             claiming = [
                 adapter.id
                 for adapter in adapters
@@ -1392,7 +1405,7 @@ def dialect_claims_over_the_committed_corpus() -> tuple[int, int, dict[int, int]
         # is NOT (`SPEC.md` §6.1).
         mixed_files += len(per_file) > 1
     assert not unreadable, (
-        "these corpus lines are not JSON, so no adapter can be asked about "
+        "these corpus records are not JSON, so no adapter can be asked about "
         "them and this sweep cannot say what they carry: " + ", ".join(unreadable)
     )
     return len(files), records, claims, mixed_files
@@ -1409,7 +1422,7 @@ def test_the_roadmap_records_the_mixed_dialect_absence_the_corpus_shows():
     """
     files, records, claims, mixed_files = dialect_claims_over_the_committed_corpus()
     stated = re.search(
-        r"\*\*(\d+)\*\* `\*\.jsonl` files, \*\*(\d+)\*\* records",
+        r"\*\*(\d+)\*\* trace files, \*\*(\d+)\*\* records",
         flat(read("ROADMAP.md")),
     )
     assert stated is not None, (

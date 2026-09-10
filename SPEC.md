@@ -1180,8 +1180,10 @@ declares reaches `0.5`.
 
 ### Inputs
 
-- **JSONL** (one record per line) or a **JSON array** of records. Detected by
-  first non-whitespace byte.
+- **JSONL** (one record per line), a **JSON array** of records, or an **OTLP
+  JSON** document. The first two are told apart by the first non-whitespace
+  byte; the third is told apart by its first member key, and is specified in
+  its own bullet below.
 - A **UTF-8 BOM** (`EF BB BF`) at the very start of the input is an encoding
   artifact, not content: it is skipped before the format is detected, so the
   first record reads like any other. Only at the start — the same bytes
@@ -1257,6 +1259,59 @@ declares reaches `0.5`.
     record (§3.3). Where nothing can be — a node's verbatim source record is
     verbatim or it is nothing — the library **refuses**, with
     `graph_not_serializable` (§3.10). It never writes a partial graph.
+- **OTLP JSON** (`ExportTraceServiceRequest`: an object whose `resourceSpans`
+  is a list) is a third **container**, not a dialect. The spans inside it are
+  in whatever dialect their instrumentor speaks — possibly two dialects in one
+  export — so the envelope is unpacked here and the records that come out are
+  classified per record like any others (§6.1). No adapter is written for OTLP
+  JSON, and one would re-create the failure §6.1 exists to prevent: it would
+  have to answer the dialect question for a whole file, one level below the
+  place that can answer it at all.
+  - **One span, plus the envelope above it, is one record.** Nine keys are
+    renamed to the record shape the adapters read — `traceId`, `spanId`,
+    `parentSpanId`, `name`, `startTimeUnixNano`, `endTimeUnixNano`,
+    `status.code`, `status.message`, `attributes` — one of those is folded, and
+    **every other key of the span is carried under its own OTLP name**, where
+    `unmapped_attributes` names it. `kind` is one of those: no dialect reads an
+    OTLP `SpanKind`, and mapping one onto a `NodeKind` would be an
+    interpretation made below the adapter seam, by the one layer forbidden to
+    have one.
+  - **`attributes` is folded** from OTLP's `[{"key", "value"}]` list to an
+    object, unwrapping each `AnyValue` by its tag: `stringValue`, `boolValue`,
+    `doubleValue`, `arrayValue`, `kvlistValue` (folded by this same rule),
+    `bytesValue` as the base64 string it already is, and an `AnyValue` with no
+    field set as `null`. `intValue` arrives as a decimal string, as proto3 JSON
+    encodes every `int64`, and is read as the integer it declares itself to be:
+    **where the format states a type, the reader honours it; where the format
+    states only a name, the value goes to the layer that owns the field.**
+    `startTimeUnixNano` states only a name, so it is carried verbatim and read
+    by §3.1's rule for a numeric string — the rule written for this encoding.
+    A repeated key keeps the last, and every entry the fold could not take —
+    a non-object entry, a missing or non-string `key`, an unrecognized `value`
+    tag, and **both** copies of a repeated key — is kept in a list under
+    `attributes_unfolded`, which is omitted when there is nothing to put in it.
+  - **`status.code`** becomes `"UNSET"`, `"OK"` or `"ERROR"`, read from the
+    proto enum name (`STATUS_CODE_OK`) or its number (`0`, `1`, `2`), because
+    proto3 JSON permits either. Any other value is carried verbatim, read as
+    `UNSET`, and survives in the record.
+  - **Resource and scope are preserved, not dropped.** Each record carries
+    `resource_spans` — its `ResourceSpans` entry without `scopeSpans` — and
+    `scope_spans` — its `ScopeSpans` entry without `spans` — verbatim, and each
+    is omitted when that level carries nothing but its children. They are
+    **not** merged into the span's `attributes`: that would fabricate
+    attributes no instrumentor wrote, and a resource attribute could change
+    which adapter claims the span (§6.1).
+  - **An envelope level with no spans is not a discard**: it is yielded as a
+    record of its own and becomes an `unknown` node carrying it, exactly as any
+    other record the library cannot read as a span does.
+  - **Reading it needs the whole input**, as the JSON array form does and for
+    the same reason: a document is not a record until its closing brace. The
+    reader buffers only when the input's first member key is `resourceSpans`;
+    if what it buffered is not a single document — a file of one export per
+    line is a real artefact, and it begins with the same bytes — it is read
+    line by line as before, and each line that is an envelope is unpacked the
+    same way. A JSON array of envelopes is unpacked element by element for the
+    same reason.
 - A dialect-specific binary form (OTLP protobuf) is Phase 4 and lives behind an
   optional extra — never in core (`ENVIRONMENT.md`).
 

@@ -21,6 +21,7 @@ import pytest
 
 import spanweave
 from spanweave.errors import ERROR_CODES, SpanweaveError
+from spanweave.read import read_trace
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
 from tests.conformance import (
@@ -99,6 +100,13 @@ DEGENERATE = (
     # nothing (audit finding 1, `OPEN_QUESTIONS.md` §12). It is the same run as
     # `llm_tool_llm` and shares that scenario's expected graph.
     "mixed_instrumentation",
+    # Added at the September 2026 audit's batch F2, not seeded: every rendering
+    # in the corpus was JSONL, so `SPEC.md` §7's third container -- an OTLP
+    # JSON export, which is what an exporter actually POSTs -- was exercised by
+    # nothing (audit finding "minor: OTLP JSON envelope refused",
+    # `OPEN_QUESTIONS.md` §16). It is `llm_tool_llm`'s run repacked and shares
+    # that scenario's expected graph: a container is not a dialect.
+    "otlp_container",
 )
 
 
@@ -848,12 +856,14 @@ def test_every_rendering_is_byte_identical_on_a_rebuild(rendering):
 )
 def test_every_rendering_accounts_for_every_record(rendering):
     graph = built(rendering)
-    records = [
-        json.loads(line)
-        for line in rendering.path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    determinism.assert_every_record_accounted_for(records, to_document(graph))
+    # Records come from the reader rather than from `splitlines()`, because
+    # what counts as one record is the *container's* answer and not this
+    # test's (`SPEC.md` §7). A line was the only answer until the corpus held
+    # an OTLP export, where one document carries every span in the scenario
+    # and a line-splitting check would have had nothing to account for.
+    determinism.assert_every_record_accounted_for(
+        list(read_trace(rendering.path)), to_document(graph)
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1057,6 +1067,51 @@ def test_the_mixed_scenario_expects_llm_tool_llm_s_graph_byte_for_byte():
     assert (CORPUS / "mixed_instrumentation/expected/graph.json").read_bytes() == (
         CORPUS / "llm_tool_llm/expected/graph.json"
     ).read_bytes()
+
+
+def test_the_otlp_scenario_expects_llm_tool_llm_s_graph_byte_for_byte():
+    # The same rule as the line above, applied to the other axis: repacking a
+    # trace into a different container must not move the graph one byte.
+    assert (CORPUS / "otlp_container/expected/graph.json").read_bytes() == (
+        CORPUS / "llm_tool_llm/expected/graph.json"
+    ).read_bytes()
+
+
+def test_an_otlp_export_produces_the_same_canonical_graph_as_its_jsonl_twin():
+    """CLAIM 2 across containers -- batch F2's acceptance (`SPEC.md` §7).
+
+    A container is not a dialect. `otlp_container` is `llm_tool_llm`'s run
+    packed into an `ExportTraceServiceRequest` once per dialect, so each
+    rendering must produce the canonical graph its JSONL twin produces --
+    under the *reference scenario's own* declarations, because the only thing
+    the two scenarios may disagree about is what the two dialects already
+    disagree about.
+    """
+    reference = _llm_tool_llm()
+    packed = next(s for s in SCENARIOS if s.name == "otlp_container")
+    compared = 0
+    for path in reference.dialects:
+        if path.stem not in adapter_backed():
+            continue
+        export = packed.rendering(path.stem)
+        assert export is not None, f"otlp_container does not render {path.stem}"
+        assert export.suffix == ".json", "an OTLP export is one document"
+        loose = canonical(
+            to_document(spanweave.build(path)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        wrapped = canonical(
+            to_document(spanweave.build(export)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        assert wrapped == loose, (
+            f"{path.stem}'s OTLP export disagrees with its JSONL rendering. "
+            f"The reader unpacks an envelope; it does not interpret one"
+        )
+        compared += 1
+    assert compared > 1, "vacuous: fewer than two dialects were compared"
 
 
 def test_a_mixed_trace_produces_the_same_canonical_graph_as_each_pure_one():

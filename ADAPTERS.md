@@ -22,6 +22,17 @@ sort anything, or know that a `Graph` type exists.
 vocabularies. Every time you are tempted to infer something the dialect didn't
 say, the answer is a `Diagnostic` or a `None`.
 
+**A file format is not a dialect, so it is never an adapter.** JSONL, a JSON
+array and an **OTLP JSON export** are containers, and `spanweave/read.py`
+unpacks all three before an adapter sees anything (`SPEC.md` §7). Writing an
+`otlp_json` adapter would look natural and would be wrong: the spans inside an
+export are in whatever dialect their instrumentor speaks — possibly two
+dialects in one export — so the adapter would have to answer the dialect
+question for a whole file, one level below the place that can answer it per
+record (`SPEC.md` §6.1, `OPEN_QUESTIONS.md` §16). If the input you want to
+support differs from a supported one only in how the spans are *packed*, you
+want a container, not an adapter, and that is a `SPEC.md` §7 conversation.
+
 ## 2. The protocol
 
 ```python

@@ -105,7 +105,12 @@ run("whitespace", None, raw=b"\n\n   \n")
 # `missing_trace_id`. Fixed in batch A4.
 run("missing_span_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "span_id"}, oi("s1", None, "TOOL", "t", 1.0, 2.0, {"tool.name": "t"})])
 run("attributes_not_dict", [dict(oi("s0", None, "AGENT", "a", 1.0, 2.0), attributes=["openinference.span.kind"])])
-run("otlp_json_envelope", None, raw=json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": [{"traceId": "t1", "spanId": "s0", "name": "chat", "startTimeUnixNano": "1", "endTimeUnixNano": "2", "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}]}]}]}]}).encode())
+# An OTLP JSON envelope (audit finding: minor) is now a regression test,
+# not a probe: tests/test_read.py, under "OTLP JSON as a container", and the
+# conformance scenario fixtures/conformance/otlp_container. Fixed in batch F2
+# -- the export is unpacked into one record per span, and the compact form
+# that built one `unknown` node and the indented form that produced 46
+# `malformed_record` diagnostics now build the same graph as the JSONL twin.
 
 # 7. call_result to a span of another kind, and result before request in time
 run("call_result_to_llm", [oi("s0", None, "AGENT", "a", 1.0, 3.0),

@@ -1,0 +1,27 @@
+{
+  "_note": "Node fields this scenario declares dialect-varying in scenario.md, erased by canonical() (FIXTURES.md 4).",
+  "dialect_varying_payloads": {
+    "payloads": {
+      "s0.inputs": [
+        "mime",
+        "value"
+      ],
+      "s1.inputs": [
+        "value"
+      ],
+      "s1.outputs": [
+        "value"
+      ],
+      "s3.inputs": [
+        "value"
+      ],
+      "s3.outputs": [
+        "value"
+      ]
+    },
+    "reason": "The same declaration llm_tool_llm carries, for the same reason and over the same five payloads: this scenario IS llm_tool_llm, packed into an OTLP JSON export once per dialect, so what disagrees between its two renderings is what disagrees between that scenario's two renderings and nothing else. OpenInference records an LLM span's whole request envelope in input.value and the whole provider response in output.value; OTel GenAI records the normalized conversation in gen_ai.input.messages / gen_ai.output.messages. One strictly contains the other plus more, so neither is a re-encoding of the other and SPEC.md 3.3 constrains neither (FIXTURES.md 4.4). That the list is unchanged is itself the assertion: a container is not a dialect, so repacking a trace must not add one field to what the dialects disagree about."
+  },
+  "erase": [
+    "name"
+  ]
+}

@@ -95,6 +95,28 @@ Added since, each for a reason recorded at its task:
   it, `openinference+otel_genai.jsonl`; `+` is not a dialect and nothing is
   obliged to render a mix.
 
+- **`otlp_container`** (September 2026 audit, batch F2). Every rendering in the
+  corpus was JSONL, so `SPEC.md` §7's third container — an **OTLP JSON export**,
+  which is the body an exporter actually POSTs and a file receiver actually
+  writes — was exercised by nothing. Until F2 a compact export built one
+  `unknown` node holding the whole file and an indented one produced 46
+  `malformed_record` diagnostics and no nodes (audit finding "minor: OTLP JSON
+  envelope refused", `OPEN_QUESTIONS.md` §16). This scenario is `llm_tool_llm`'s
+  own run packed into an export once per dialect, and its `expected/graph.json`
+  is that scenario's file byte for byte: **a container is not a dialect.** Its
+  envelope is deliberately minimal — no `resource`, `scope` or `kind` — so that
+  claim can be exact; what a fuller envelope carries, and the diagnostics it
+  honestly adds, is pinned in `tests/test_read.py` instead, and its
+  `scenario.md` says so.
+  **It is also the first rendering in the corpus that several sweeps do not
+  see**: `tests/test_prediction_evidence.py`, `tests/test_example_*.py`,
+  `tests/test_contracts.py`, `tests/test_detection.py`, `tests/test_docs.py`
+  and `tests/test_doc_truth.py:617` all glob `dialects/*.jsonl`, so their
+  hard-coded corpus sizes did not move when this landed. That is stated rather
+  than left to be discovered; the one sweep whose numbers `ROADMAP.md`
+  publishes was widened to read every rendering through the library, and the
+  rest sample rather than claim.
+
 ## Three things this README used to get wrong, kept as a warning
 
 - **`declared_data_edge` "has no rendering."** It did not, on the stated

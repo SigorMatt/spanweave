@@ -15,6 +15,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **An OTLP JSON export is now read, as a third container format rather than
+  as a dialect.** `resourceSpans[].scopeSpans[].spans[]` is unpacked in the
+  reader into one flat record per span, so the spans inside it are classified
+  per record like any others -- which is the point: an export carries whatever
+  its instrumentors emitted, possibly two dialects at once, and an `otlp_json`
+  *adapter* would have had to answer the dialect question for a whole file,
+  one level below the place that can answer it (`OPEN_QUESTIONS.md` §16).
+  Until now a compact export built **one `unknown` node** holding the entire
+  file under a forced adapter and was refused by detection, and an indented
+  one -- what a file receiver writes -- produced **46 `malformed_record`
+  diagnostics and no nodes**. Nine span keys are renamed, `attributes` is
+  folded from OTLP's `KeyValue` list into an object, and **every other key is
+  carried under its own OTLP name**, where `unmapped_attributes` reports it:
+  the reader never drops an OTLP key and never invents one. `kind` is one of
+  those carried keys and deliberately so -- no dialect reads an OTLP
+  `SpanKind`, and mapping one onto a `NodeKind` would be an interpretation
+  made below the adapter seam. Resource and scope are preserved beside the
+  span under `resource_spans` / `scope_spans` rather than merged into its
+  attributes, because a merged resource attribute could change which adapter
+  claims the span. `intValue` is decoded from the decimal string proto3 JSON
+  writes it as, because the format states a *type* there; `startTimeUnixNano`
+  is **not**, because it states only a *name* and `SPEC.md` §3.1's rule for a
+  numeric string -- written for this encoding -- owns that field. New
+  conformance scenario `otlp_container`: `llm_tool_llm`'s run packed as an
+  export once per dialect, sharing that scenario's `expected/graph.json`
+  **byte for byte**. **No existing input changed**: both new branches are
+  gated on the key `resourceSpans`, which no trace in this tree carries, and
+  all 64 traces in the tree serialize byte-identically across the change.
+  (audit finding "minor: OTLP JSON envelope refused"; `SPEC.md` §7)
+
 - **`--adapter auto` names the default, and `spanweave inspect` says which
   adapter produced which nodes.** `auto` is the classification that already
   happens with no flag -- byte for byte the same build -- so a script or a

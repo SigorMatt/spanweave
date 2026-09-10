@@ -447,3 +447,495 @@ def test_a_duplicated_record_costs_a_trace_no_span_end_to_end():
     )
     assert len(graph) == 2
     assert [d.code for d in graph.diagnostics if d.code == codes.DUPLICATE_RECORD]
+
+
+# --- OTLP JSON as a container (audit "minor: OTLP JSON envelope refused") ----
+#
+# `SPEC.md` §7: an `ExportTraceServiceRequest` is a third container, not a
+# dialect. The spans inside it are in whatever dialect their instrumentor
+# speaks -- possibly two dialects in one export -- so it is unpacked here and
+# the records that come out are classified per record like any others (§6.1).
+# `OPEN_QUESTIONS.md` §16(b) is why an adapter would have been the wrong shape.
+
+
+def envelope(*spans, resource=None, scope=None):
+    """One `ExportTraceServiceRequest` carrying the given OTLP spans."""
+    resource_spans: dict = {"scopeSpans": [{"spans": list(spans)}]}
+    if resource is not None:
+        resource_spans["resource"] = resource
+    if scope is not None:
+        resource_spans["scopeSpans"][0]["scope"] = scope
+    return {"resourceSpans": [resource_spans]}
+
+
+OTLP_SPAN = {
+    "traceId": "t1",
+    "spanId": "s0",
+    "parentSpanId": "",
+    "name": "chat",
+    "startTimeUnixNano": "1700000000000000000",
+    "endTimeUnixNano": "1700000000500000000",
+    "status": {"code": 1},
+    "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}],
+}
+
+
+def only(source):
+    stream = read_trace(source)
+    records = list(stream)
+    assert len(records) == 1, records
+    return records[0]
+
+
+def test_an_otlp_json_document_is_unpacked_into_flat_records():
+    record = only(json.dumps(envelope(OTLP_SPAN)).encode("utf-8"))
+    assert record == {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": "",
+        "name": "chat",
+        "start_time": "1700000000000000000",
+        "end_time": "1700000000500000000",
+        "status": "OK",
+        "attributes": {"gen_ai.operation.name": "chat"},
+    }
+
+
+def test_a_pretty_printed_otlp_document_reads_the_same_as_a_compact_one():
+    # 46 `malformed_record` diagnostics and 0 nodes was the audit's finding;
+    # indentation is how every file receiver and every `curl | jq` writes it.
+    document = envelope(OTLP_SPAN)
+    compact = read_trace(json.dumps(document).encode("utf-8"))
+    indented = read_trace(json.dumps(document, indent=2).encode("utf-8"))
+    assert list(compact) == list(indented)
+    assert len(indented.diagnostics) == 0
+
+
+def test_a_file_of_one_export_per_line_is_unpacked_line_by_line():
+    # The shape that makes a whole-input rule wrong on its own: this begins
+    # with the same bytes as a single compact document (`SPEC.md` §7).
+    first = dict(OTLP_SPAN, spanId="s0")
+    second = dict(OTLP_SPAN, spanId="s1")
+    lines = b"".join(
+        json.dumps(envelope(span)).encode("utf-8") + b"\n" for span in (first, second)
+    )
+    stream = read_trace(lines)
+    assert [record["span_id"] for record in stream] == ["s0", "s1"]
+    assert len(stream.diagnostics) == 0
+
+
+def test_a_json_array_of_exports_is_unpacked_element_by_element():
+    first = dict(OTLP_SPAN, spanId="s0")
+    second = dict(OTLP_SPAN, spanId="s1")
+    array = json.dumps([envelope(first), envelope(second)]).encode("utf-8")
+    assert [record["span_id"] for record in read_trace(array)] == ["s0", "s1"]
+
+
+def test_a_bom_does_not_hide_the_otlp_form():
+    data = b"\xef\xbb\xbf" + json.dumps(envelope(OTLP_SPAN)).encode("utf-8")
+    assert only(data)["span_id"] == "s0"
+
+
+def test_every_other_span_key_is_carried_under_its_own_otlp_name():
+    # Losslessness (`CLAUDE.md` 2): the reader never drops an OTLP key and
+    # never invents one, so the span is reconstructible from the record.
+    span = dict(
+        OTLP_SPAN,
+        kind=3,
+        flags=256,
+        traceState="a=1",
+        droppedAttributesCount=2,
+        events=[{"name": "e", "timeUnixNano": "1"}],
+    )
+    record = only(json.dumps(envelope(span)).encode("utf-8"))
+    assert record["kind"] == 3
+    assert record["flags"] == 256
+    assert record["traceState"] == "a=1"
+    assert record["droppedAttributesCount"] == 2
+    assert record["events"] == [{"name": "e", "timeUnixNano": "1"}]
+
+
+def test_span_kind_is_never_mapped_to_a_node_kind():
+    # §16(h): the flat record has no field for an OTLP SpanKind, no dialect
+    # reads one, and mapping it would be an interpretation below the seam.
+    for reported in (0, 1, 2, 3, 4, 5, "SPAN_KIND_SERVER"):
+        record = only(json.dumps(envelope(dict(OTLP_SPAN, kind=reported))).encode())
+        assert record["kind"] == reported
+        assert "openinference.span.kind" not in record["attributes"]
+
+
+def test_status_code_is_read_from_the_enum_name_or_its_number():
+    for reported, expected in (
+        (0, "UNSET"),
+        (1, "OK"),
+        (2, "ERROR"),
+        ("STATUS_CODE_UNSET", "UNSET"),
+        ("STATUS_CODE_OK", "OK"),
+        ("STATUS_CODE_ERROR", "ERROR"),
+    ):
+        span = dict(OTLP_SPAN, status={"code": reported})
+        assert only(json.dumps(envelope(span)).encode())["status"] == expected
+
+
+def test_an_unrecognized_status_code_is_carried_verbatim():
+    span = dict(OTLP_SPAN, status={"code": 9, "message": "boom"})
+    record = only(json.dumps(envelope(span)).encode())
+    assert record["status"] == 9
+    assert record["status_message"] == "boom"
+
+
+def test_a_status_with_no_code_is_absent_rather_than_invented():
+    span = dict(OTLP_SPAN, status={"message": "boom"})
+    record = only(json.dumps(envelope(span)).encode())
+    assert "status" not in record
+    assert record["status_message"] == "boom"
+
+
+def test_an_any_value_is_unwrapped_by_its_tag():
+    attributes = [
+        {"key": "s", "value": {"stringValue": "a"}},
+        {"key": "b", "value": {"boolValue": True}},
+        {"key": "d", "value": {"doubleValue": 1.5}},
+        {"key": "i", "value": {"intValue": "42"}},
+        {"key": "bytes", "value": {"bytesValue": "3q2+7w=="}},
+        {"key": "empty", "value": {}},
+        {"key": "arr", "value": {"arrayValue": {"values": [{"intValue": "1"}]}}},
+        {
+            "key": "kv",
+            "value": {
+                "kvlistValue": {"values": [{"key": "n", "value": {"intValue": "7"}}]}
+            },
+        },
+    ]
+    record = only(json.dumps(envelope(dict(OTLP_SPAN, attributes=attributes))).encode())
+    assert record["attributes"] == {
+        "s": "a",
+        "b": True,
+        "d": 1.5,
+        "i": 42,
+        "bytes": "3q2+7w==",
+        "empty": None,
+        "arr": [1],
+        "kv": {"n": 7},
+    }
+
+
+def test_an_int_value_is_decoded_because_the_format_states_its_type():
+    # §16(f)/(g): `intValue` is a type tag, so the reader honours it;
+    # `startTimeUnixNano` states only a name, so §3.1 reads it instead.
+    span = dict(
+        OTLP_SPAN,
+        attributes=[{"key": "gen_ai.usage.input_tokens", "value": {"intValue": "42"}}],
+    )
+    record = only(json.dumps(envelope(span)).encode())
+    assert record["attributes"]["gen_ai.usage.input_tokens"] == 42
+    assert record["start_time"] == "1700000000000000000"
+
+
+def test_an_int_value_that_is_not_an_integer_literal_is_carried_verbatim():
+    span = dict(OTLP_SPAN, attributes=[{"key": "k", "value": {"intValue": "twelve"}}])
+    assert only(json.dumps(envelope(span)).encode())["attributes"]["k"] == "twelve"
+
+
+def test_an_unfoldable_attribute_entry_is_kept_rather_than_dropped():
+    attributes = [
+        {"key": "good", "value": {"stringValue": "a"}},
+        "not an object",
+        {"value": {"stringValue": "no key"}},
+        {"key": 7, "value": {"stringValue": "key is not a string"}},
+    ]
+    record = only(json.dumps(envelope(dict(OTLP_SPAN, attributes=attributes))).encode())
+    assert record["attributes"] == {"good": "a"}
+    assert record["attributes_unfolded"] == attributes[1:]
+
+
+def test_a_repeated_attribute_key_keeps_the_last_and_keeps_both_copies():
+    attributes = [
+        {"key": "k", "value": {"stringValue": "first"}},
+        {"key": "k", "value": {"stringValue": "second"}},
+    ]
+    record = only(json.dumps(envelope(dict(OTLP_SPAN, attributes=attributes))).encode())
+    assert record["attributes"] == {"k": "second"}
+    assert record["attributes_unfolded"] == attributes
+
+
+def test_attributes_unfolded_is_omitted_when_there_is_nothing_to_put_in_it():
+    assert "attributes_unfolded" not in only(json.dumps(envelope(OTLP_SPAN)).encode())
+
+
+def test_resource_and_scope_are_preserved_beside_the_span():
+    resource = {"attributes": [{"key": "service.name", "value": {"stringValue": "d"}}]}
+    scope = {"name": "opentelemetry.instrumentation.openai", "version": "0.1.0"}
+    record = only(
+        json.dumps(envelope(OTLP_SPAN, resource=resource, scope=scope)).encode()
+    )
+    # Verbatim: nothing reads these, so folding them would invent a
+    # representation nothing has agreed on (§16(i)).
+    assert record["resource_spans"] == {"resource": resource}
+    assert record["scope_spans"] == {"scope": scope}
+    # And never merged into the span's attributes, where they could change
+    # which adapter claims the span.
+    assert record["attributes"] == {"gen_ai.operation.name": "chat"}
+
+
+def test_resource_and_scope_are_omitted_when_the_level_carries_only_children():
+    record = only(json.dumps(envelope(OTLP_SPAN)).encode())
+    assert "resource_spans" not in record
+    assert "scope_spans" not in record
+
+
+def test_an_envelope_level_with_no_spans_is_yielded_rather_than_discarded():
+    document = {
+        "resourceSpans": [
+            {"resource": {"attributes": []}, "schemaUrl": "https://example/1"}
+        ]
+    }
+    record = only(json.dumps(document).encode())
+    assert record == {
+        "resource_spans": {
+            "resource": {"attributes": []},
+            "schemaUrl": "https://example/1",
+        }
+    }
+
+
+def test_a_scope_level_with_no_spans_is_yielded_rather_than_discarded():
+    document = {"resourceSpans": [{"scopeSpans": [{"scope": {"name": "n"}}]}]}
+    record = only(json.dumps(document).encode())
+    assert record == {"scope_spans": {"scope": {"name": "n"}}}
+
+
+def test_an_empty_export_reads_as_empty():
+    stream = read_trace(b'{"resourceSpans":[]}')
+    assert list(stream) == []
+    assert len(stream.diagnostics) == 0
+
+
+def test_a_non_object_where_a_span_was_expected_is_kept_verbatim():
+    document = {"resourceSpans": [{"scopeSpans": [{"spans": ["not a span"]}]}]}
+    assert only(json.dumps(document).encode()) == "not a span"
+
+
+def test_a_non_object_where_an_envelope_level_was_expected_is_kept_verbatim():
+    assert only(b'{"resourceSpans":["not a resource"]}') == "not a resource"
+
+
+def test_an_input_whose_first_key_is_resource_spans_but_will_not_parse_falls_back():
+    # The safety net under the head scan: what was buffered is read line by
+    # line, which is exactly today's output for it (`SPEC.md` §7).
+    data = b'{"resourceSpans": oops}\n{"span_id":"s0"}\n'
+    stream = read_trace(data)
+    assert list(stream) == [{"span_id": "s0"}]
+    assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
+
+
+def test_a_record_whose_resource_spans_is_not_a_list_is_not_an_envelope():
+    # The trigger is the *list*, which is what keeps `resource_spans` -- an
+    # object -- from being mistaken for one on a second pass.
+    record = {"resourceSpans": {"not": "a list"}}
+    assert only(json.dumps(record).encode()) == record
+
+
+def test_an_object_with_a_second_top_level_key_is_not_an_export():
+    # `ExportTraceServiceRequest` has exactly one field, so an object with a
+    # second is not one -- and unpacking it would have to decide where that
+    # second key went, which is how a reader starts dropping things.
+    record = {"resourceSpans": [], "somethingElse": 1}
+    assert only(json.dumps(record).encode()) == record
+
+
+def test_two_copies_of_one_span_in_two_envelopes_are_still_one_record():
+    # Expansion happens above deduplication, so an at-least-once export that
+    # repeated a whole envelope still produces one node (`SPEC.md` §7).
+    data = json.dumps([envelope(OTLP_SPAN), envelope(OTLP_SPAN)]).encode()
+    stream = read_trace(data)
+    assert len(list(stream)) == 1
+    assert [d.code for d in stream.diagnostics.collected()] == [codes.DUPLICATE_RECORD]
+
+
+def test_links_are_flattened_the_same_way_the_span_is():
+    link = {
+        "traceId": "t2",
+        "spanId": "s9",
+        "traceState": "a=1",
+        "attributes": [{"key": "why", "value": {"stringValue": "because"}}],
+    }
+    span = dict(OTLP_SPAN, links=[link])
+    record = only(json.dumps(envelope(span)).encode())
+    assert record["links"] == [
+        {
+            "trace_id": "t2",
+            "span_id": "s9",
+            "traceState": "a=1",
+            "attributes": {"why": "because"},
+        }
+    ]
+
+
+def test_a_deeply_nested_otlp_document_is_diagnosed_rather_than_raised():
+    depth = 100_000
+    data = b'{"resourceSpans":' + b"[" * depth + b"]" * depth + b"}"
+    stream = read_trace(data)
+    assert list(stream) == []
+    assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
+
+
+def test_an_otlp_export_builds_the_spans_it_carries_end_to_end():
+    # The audit case as it was reported (probe1, "otlp_json_envelope"): one
+    # unknown node under a forced adapter, and nothing at all under auto.
+    import spanweave
+
+    def span(span_id, parent, name, operation, extra):
+        return {
+            "traceId": "t1",
+            "spanId": span_id,
+            "parentSpanId": parent,
+            "name": name,
+            "startTimeUnixNano": "1000",
+            "endTimeUnixNano": "2000",
+            "status": {"code": 1},
+            "attributes": [
+                {"key": "gen_ai.operation.name", "value": {"stringValue": operation}},
+                *extra,
+            ],
+        }
+
+    document = envelope(
+        span("s0", "", "invoke_agent", "invoke_agent", []),
+        span(
+            "s1",
+            "s0",
+            "chat demo-model",
+            "chat",
+            [
+                {"key": "gen_ai.request.model", "value": {"stringValue": "demo-model"}},
+                {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "42"}},
+            ],
+        ),
+        resource={
+            "attributes": [{"key": "service.name", "value": {"stringValue": "d"}}]
+        },
+    )
+    graph = spanweave.build(json.dumps(document).encode("utf-8"))
+    assert graph.trace_id == "t1"
+    assert [node.kind.value for node in graph.nodes()] == ["agent", "llm"]
+    llm = graph.nodes()[1]
+    # C3's decision, reached through the reader without the reader applying it.
+    assert llm.started_at == 1000 and isinstance(llm.started_at, int)
+    assert llm.usage is not None and llm.usage.input_tokens == 42
+
+
+def test_no_trace_in_the_tree_reaches_the_otlp_branches():
+    """The durable form of "no existing input changed" (`SPEC.md` §7).
+
+    The byte-identity of all 64 traces before and after this branch landed was
+    measured once, out of band, and a measurement taken once is a claim with a
+    date on it. This is the structural reason underneath it, and it stays
+    checkable: both new branches are gated on a single key, and no JSONL input
+    in this tree carries it -- at the head, where it would trigger buffering,
+    or on a record, where it would trigger expansion.
+    """
+    import pathlib
+
+    from spanweave.read import _is_an_export, _scan_for_export_key
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    traces = sorted(p for p in root.rglob("*.jsonl") if ".git" not in p.parts)
+    assert len(traces) > 40, "vacuous: the corpus was not found"
+    for path in traces:
+        data = path.read_bytes()
+        assert _scan_for_export_key(data) is False, path
+        assert not any(_is_an_export(record) for record in read_trace(data)), path
+
+
+def test_what_a_fuller_envelope_costs_is_diagnostics_and_nothing_else():
+    """The half `fixtures/conformance/otlp_container` deliberately leaves out.
+
+    That scenario's envelope is minimal so its expected graph can be
+    `llm_tool_llm`'s byte for byte. This adds the three things a real export
+    carries and it does not, and pins the whole of the difference: the same
+    nodes, the same edges, and one `unmapped_attributes` key per span for each
+    thing carried -- which is losslessness being *reported* rather than being
+    quiet about it.
+    """
+    import pathlib
+
+    import spanweave
+    from spanweave.serialize import to_document
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    path = root / "fixtures/conformance/otlp_container/dialects/openinference.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    minimal = to_document(spanweave.build(json.dumps(document).encode("utf-8")))
+
+    resource_spans = document["resourceSpans"][0]
+    resource_spans["resource"] = {
+        "attributes": [{"key": "service.name", "value": {"stringValue": "demo"}}]
+    }
+    resource_spans["scopeSpans"][0]["scope"] = {
+        "name": "an.instrumentation",
+        "version": "1",
+    }
+    for span in resource_spans["scopeSpans"][0]["spans"]:
+        span["kind"] = 1
+    fuller = to_document(spanweave.build(json.dumps(document).encode("utf-8")))
+
+    def without_raw(graph):
+        return [
+            {key: value for key, value in node.items() if key != "raw"}
+            for node in graph["nodes"]
+        ]
+
+    assert without_raw(fuller) == without_raw(minimal)
+    assert fuller["edges"] == minimal["edges"]
+
+    def unmapped(graph):
+        return sorted(
+            key
+            for diagnostic in graph["diagnostics"]
+            if diagnostic["code"] == codes.UNMAPPED_ATTRIBUTES
+            for key in diagnostic["source"]
+        )
+
+    added = sorted(set(unmapped(fuller)) - set(unmapped(minimal)))
+    assert added == ["<record>.kind", "<record>.resource_spans", "<record>.scope_spans"]
+    # Every span reports all three, so the fuller export gains a diagnostic on
+    # each of the four spans that had none.
+    assert len(fuller["diagnostics"]) == len(minimal["diagnostics"]) + 2
+
+
+def test_shuffling_the_spans_inside_an_export_changes_nothing():
+    """Determinism (`CLAUDE.md` 4) at the level the new container introduces.
+
+    Input order must not reach the result, and an export gives order a new
+    place to hide: the spans sit in a list inside a document rather than on
+    lines, and they are unpacked in the order the list holds them.
+    """
+    import pathlib
+
+    import spanweave
+    from spanweave.serialize import canonical_bytes, to_document
+
+    def without_the_input_fingerprint(graph):
+        # `meta.source_digest` fingerprints the input BYTES as given
+        # (`SPEC.md` §3.9), so it is *supposed* to move when the bytes move.
+        # Everything else is the result, and none of it may.
+        document = to_document(graph)
+        document["meta"] = {
+            key: value
+            for key, value in document["meta"].items()
+            if key != "source_digest"
+        }
+        return canonical_bytes(document)
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    path = root / "fixtures/conformance/otlp_container/dialects/otel_genai.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    spans = document["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    ordered = without_the_input_fingerprint(spanweave.build(path))
+    for rotation in range(1, len(spans)):
+        document["resourceSpans"][0]["scopeSpans"][0]["spans"] = (
+            spans[rotation:] + spans[:rotation]
+        )
+        shuffled = spanweave.build(json.dumps(document).encode("utf-8"))
+        assert without_the_input_fingerprint(shuffled) == ordered
