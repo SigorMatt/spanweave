@@ -13,7 +13,7 @@ reader to trip over. Touching one is a halt point (`AGENT.md`).
 For each: **(a)** the question, **(b)** why it matters, **(c)** what evidence
 would settle it, **(d)** the provisional stance the seed specs take.
 
-**Entries §10–§16 were written as memos during the September 2026 audit-fix
+**Entries §10–§17 were written as memos during the September 2026 audit-fix
 series** and refer throughout to `WORKPLAN.md`, that series' execution state.
 `WORKPLAN.md` was written to be deleted at series close and was deleted by
 batch G4 on 2026-09-10; everything of it that outlives the series — the batch
@@ -2942,3 +2942,218 @@ in the same run as a separate commit. What would reopen this memo is a fourth
 shape it has not seen — an exporter that writes something other than
 `resourceSpans` first, or an `AnyValue` tag this list does not name — and both
 are additive to **(e)** and **(f)** rather than reversals of **(b)**.
+
+## 17. R3: Should a stated timestamp unit reach the seam?
+
+**(a)** An OTLP JSON export states the unit of its timestamps **in the field
+name** — `startTimeUnixNano`, `endTimeUnixNano`. Batch F2 made that envelope a
+container the reader unpacks (`§16`), and the reader carries the value verbatim
+under the flat name `start_time`, because `§16(g)`'s rule is that a format
+stating a *type* is decoded while a format stating a *name* is handed to the
+layer that owns the field. The unit is stated, read, and then dropped on the
+floor: nothing downstream knows it, so `SPEC.md` §3.1's ceiling fires on every
+span of every conformant OTLP file. Should the reader be allowed to say what
+the container told it, and if so, where does that fact live?
+
+**(b) The measurement, re-taken on this tree** (after R1 and F2; CPython
+3.12.3). One envelope, 201 spans: 200 with `startTimeUnixNano` as OTLP writes
+it, one span genuinely encoded in seconds.
+
+```
+201-span export: {'timestamp_unit_suspect': 200}
+nodes: 201   warned: 200   seconds span warned: False
+```
+
+The whole diagnostic channel is one sentence repeated 200 times, and the single
+span whose unit differs from its neighbours' is the only one it is silent
+about. That is the inversion: on an OTLP input the diagnostic reports the
+*format*, and the thing it was built to report — `SPEC.md` §3.1's "an input
+carrying seconds from one exporter and nanoseconds from another" — is signalled
+by **absence among noise** rather than by presence. It was first measured in
+the run-2 cold review (`reviews/2026-09-10-run2.md` §(3)); the numbers above are
+a fresh measurement, not that one restated.
+
+Two facts about the corpus complete the picture, and both are why nothing
+caught this:
+
+- The two committed OTLP renderings,
+  `fixtures/conformance/otlp_container/dialects/*.json`, carry **16** timestamp
+  values and **0** over the ceiling: they are `llm_tool_llm`'s *seconds*
+  (`"1000.0"`, `"1000.2"`, …) written into a field named `…UnixNano`, disclosed
+  as such in that scenario's `scenario.md`. That is what lets
+  `otlp_container/expected/graph.json` be `llm_tool_llm`'s **byte for byte** —
+  F2's central claim — and it means the corpus holds no realistic OTLP
+  timestamp at all. Exactly one fixture in the tree expects the diagnostic:
+  `timestamp_units`, 3 occurrences, hand-authored by C1 to exercise the ceiling.
+- R1 pinned the live behaviour rather than leaving it to be rediscovered:
+  `tests/test_read.py`,
+  `test_a_nanosecond_otlp_export_builds_and_warns_once_per_span` and
+  `test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about`.
+
+**(c) One correction to how the problem is usually stated: the adapters do not
+emit this.** `timestamp_unit_suspect` is the **builder's**, in
+`spanweave/build.py:_report_timestamp_unit_suspect`, one per node, tested on
+`NormalizedSpan.started_at` / `ended_at` against `TIMESTAMP_UNIT_CEILING =
+100_000_000_000`. The adapters only normalize the literal (C3: an integer
+literal stays an `int`). This matters for the options, because the fact "the
+container said nanoseconds" is discovered in `read.py`, three layers below the
+code that would use it, and **the seam between them carries records, not
+metadata**. A flat record is a plain object; there is nowhere for the reader to
+put an out-of-band statement except *in* the record.
+
+**(d) Option (a) — a stated unit at the seam.**
+`NormalizedSpan.timestamp_unit: str | None`: the container states `"ns"`, a
+flat JSONL record states nothing, and the builder's check becomes *fires only
+when no unit is stated and the value exceeds the ceiling*. `started_at` still
+holds the reported value — nothing is rescaled, so the C2 decision stands
+untouched.
+
+What it costs, in the order the fact has to travel:
+
+1. **A reserved record key.** The reader must write the unit into the flat
+   record (say `start_time_unit`), which is the one thing `§16(c)` told F2 not
+   to do: *the reader never drops an OTLP key and never invents one*. It would
+   now invent one — defensibly, since the key restates something the envelope
+   said, but the invariant as written would have to be amended, and
+   `tests/test_read.py`'s
+   `test_an_otlp_json_document_is_unpacked_into_flat_records` asserts the
+   record's key set exactly.
+2. **Both adapters read it and consume it**, under R4's rule (a key that
+   decided something is consumed; one that did not is reported).
+3. **A model field on a frozen seam type**, plus `SPEC.md` §3.1 and §3.7.
+
+Then the fork that decides the price:
+
+- **(a1) seam only.** The unit gates the diagnostic and never reaches `Node`.
+  `tests/serialized_shape.json` does not move, no `CONTRACTS.md` row is needed,
+  and — because no committed OTLP fixture carries a value over the ceiling —
+  **0 stored expectations move**. It is a behaviour change with an empty
+  fixture diff, which is itself worth noticing: the corpus cannot see this
+  option working, so it would need a fixture written for it.
+- **(a2) the graph carries the unit**, as `WORKPLAN.md`'s R3 row proposes. This
+  is a **schema move** and therefore the halt class `CLAUDE.md` names: a new
+  serialized `Node` field, a line in `tests/serialized_shape.json` and a
+  `$.nodes[]` path beside it, a `CONTRACTS.md` row (a bare `str | None` is
+  permissively typed; a closed `TimestampUnit` enum avoids the row and adds a
+  model type instead), `schema_version` under `ROADMAP.md`'s "no freeze while
+  any batch that moves a serialized field is open" (G3), and — the sharp
+  one — **`otlp_container` stops being `llm_tool_llm` byte for byte**, because
+  the OTLP rendering would carry a field the JSONL renderings do not. F2's
+  claim is that *a container is not a dialect*; (a2) makes the container
+  visible in the graph, which is that claim conceded in one field.
+
+**The honest limit of option (a), either variant: it removes the noise and does
+not restore the signal.** In the 201-span measurement the container states `ns`
+for *every* span, the seconds-encoded one included — the envelope's field name
+is a property of the file, not of the value — so under (a) the warning count
+goes from 200 to **0** and the odd span out is still not reported. Naming the
+inversion and then silencing both sides of it is not the same as fixing it.
+
+**(a′)** is the variant that does fix it, and it should be judged separately: a
+stated unit makes the *converse* check possible for the first time — a value
+declared `ns` that is **below** the ceiling cannot be a wall-clock nanosecond
+count (10^11 ns is 1970-01-01T00:01:40), so it contradicts its own declared
+unit and is exactly the span the diagnostic exists to find. Symmetric with the
+existing bound, still a statement about the encoding rather than about the run,
+and it turns 200-warnings-and-a-silence into one warning on the one span. Its
+cost is that it fires on the committed fixtures: `otlp_container` writes
+seconds into `…UnixNano` deliberately, so every span of both its renderings
+would be reported and that scenario's expected diagnostics — hence its byte-identity with
+`llm_tool_llm` — would move. The fixture would have to be re-rendered with real
+nanosecond timestamps, and then it is no longer `llm_tool_llm`'s run repacked.
+
+**(e) Option (b) — rescale OTLP nanoseconds to seconds in the reader.** This
+contradicts the C2 decision (`§10`, 2026-09-10) directly, and not on a
+technicality. C2 rejected rescaling twice over: option 3 there ("integer
+nanoseconds with a unit assumed") was recommended against because it requires
+the library to know a unit C1 had just finished establishing it cannot know,
+and the decision that was taken — keep the reported integer, never rescale —
+exists because `float(value)` is where digits die. Measured:
+
+```
+1700000000100000000 / 1e9 == 1700000000100000100 / 1e9   ->  True
+ULP at 1.7e9 seconds: 238.42 ns
+```
+
+Two spans 100 ns apart collapse onto one number and their `temporal` edge is
+emitted as tied — C2 (b)'s case G, reintroduced in the reader after C3 removed
+it in the adapters. And because the rescale would be unconditional on the
+container, `otlp_container`'s `"1000.0"` becomes `1e-06`, so F2's byte-identity
+ends here too, in a worse way than under (a2): the graph would disagree with
+the JSONL renderings about the *values*, not merely carry an extra field. It is
+also the one option that makes `raw.source` and the normalized field disagree
+in a way no diagnostic reports. Recommended against, in C2's own terms.
+
+**(f) Option (c) — leave it, and document the warning as expected on OTLP
+input.** `SPEC.md` §3.1 and §7 gain a sentence saying that a conformant OTLP
+export draws one `timestamp_unit_suspect` per span, and the CHANGELOG says so
+too. Nothing moves: not the model, not the schema, not one stored expectation,
+not R1's two pin tests. What it costs is paid by consumers, and it is worth
+stating without softening:
+
+- On an OTLP input the diagnostic **carries no information** — its output is a
+  function of the file's format, which the consumer already knows. A consumer
+  cannot use it to find a genuinely suspect span in an OTLP file, because the
+  genuinely suspect span is the one without it.
+- The volume is unbounded and per node, so on a large export the channel that
+  also carries `unmapped_attributes`, `orphan_parent` and `missing_timestamp`
+  is dominated by one repeated sentence. B3 spent a batch on exactly this
+  failure mode for `unmapped_attributes`.
+- It is stable and honest. The value really is above the ceiling; the sentence
+  really is true of it; nothing is rescaled, and `raw.source` still holds the
+  digits. Documenting it is not a lie, only a shrug.
+
+**(g) What each option moves.**
+
+| | model / schema | stored expectations | R1's pin tests |
+|---|---|---|---|
+| (a1) seam only | `NormalizedSpan` + a reserved record key | 0 | both: `…warns_once_per_span` → no warning; `…the_one_not_warned_about` → nothing warned |
+| (a2) graph carries it | + `Node`, `serialized_shape.json`, `CONTRACTS.md`, `schema_version` | `otlp_container` (byte-identity with `llm_tool_llm` ends) | both, as (a1) |
+| (a′) + converse check | as (a1) or (a2) | `otlp_container` expected diagnostics; the fixture wants re-rendering in real ns | both: the second inverts to warning **on** the seconds span, which is the outcome its name asks for |
+| (b) rescale in reader | none, but `started_at` values change everywhere | every OTLP rendering; `otlp_container` byte-identity ends | both, plus the `started_at == 1700000000000000000` assertion |
+| (c) document it | none | 0 | neither |
+
+**(h) Recommendation: (c) now, (a1) + (a′) when a second thing needs the unit —
+and not (a2), and never (b).**
+
+The argument for holding is not that (a) is wrong. It is that the fact being
+purchased is worth less than it looks, and the receipt is longer than it looks.
+What (a) buys is one diagnostic behaving better on one container. What it
+costs is an invented record key against a rule F2 stated in the same run, a
+field on a frozen seam type, and — in the (a2) form the row proposes — a
+serialized field, a `CONTRACTS.md` row, a `schema_version` conversation under a
+stated freeze gate, and the end of the byte-identity that is F2's whole
+demonstration that a container is not a dialect. Trading that claim for a
+better warning is a bad trade at this price, and it is the *claim* that is load
+bearing.
+
+Against that: (c) is cheap, honest and reversible, and the thing it leaves
+broken is a `warning`, not a graph. No node is wrong, no edge is wrong, no
+value is lost; a consumer reading an OTLP file can filter one code and lose
+nothing it could have used. Every option here stays available afterwards,
+because none of them is foreclosed by having documented the current behaviour.
+
+Two conditions would change the recommendation, and they should be watched
+rather than guessed:
+
+1. **A second consumer of the unit appears.** Today exactly one thing would
+   read `timestamp_unit`, and a model field with one reader is a field with a
+   weak case. If a duration, a `temporal` rule, or an OTLP protobuf reader
+   (Phase 4) also needs it, the field earns its keep and (a1) is the right
+   shape — seam only, with (a′)'s converse check, which is the half that
+   actually repays the work.
+2. **A real mixed-unit export is observed** — one file where a seconds span
+   and a nanosecond span genuinely coexist. That is the case §3.1's per-node
+   design exists for, and the case where "signalled by absence" stops being a
+   tidiness complaint and becomes a consumer reading the wrong span. The scan
+   is one loop over `start_time`/`end_time` literals per captured file, and it
+   is the same scan `§10(c)` already asks the project to run on every incoming
+   capture.
+
+If (c) is taken, the two pin tests stay as they are and gain a comment saying
+the behaviour is documented rather than merely current, and R7 closes the
+series. If (a) is taken in any form, it is a code batch that moves both pin
+tests and needs a fixture the corpus does not have: an OTLP rendering with real
+nanosecond timestamps, which no committed file is.
+
+**Decision: pending.** Batch R3 halts here.

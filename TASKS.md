@@ -10441,7 +10441,8 @@ place to read a stale one); they land here once, at the close. Batches marked
 ### The batches, with final status
 
 Legend: **done** · **done (decided)** — a memo batch whose decision was taken
-and logged below · **dropped** — measured and deliberately not implemented.
+and logged below · **dropped** — measured and deliberately not implemented ·
+**awaiting decision** — a memo batch whose decision has not been taken yet.
 
 - **A1 — RecursionError containment.** Deeply nested JSON in a record line or
   in a payload becomes a diagnostic instead of an escaping `RecursionError`.
@@ -10606,6 +10607,10 @@ and logged below · **dropped** — measured and deliberately not implemented.
   with the `raw.source` / `unmapped_attributes` note; delete the "retriever
   name" promise no dialect states (it appeared verbatim in `ADAPTERS.md` and
   `CONTRACTS.md` too). Docs only. — **done** (`df0ba2c`).
+- **R3 — Stated timestamp units memo** *(halt)*. An OTLP JSON envelope
+  states its unit in the field name, so after F2 the ceiling fires on every
+  span of a conformant export and on no genuinely seconds-encoded one; the
+  options went to `OPEN_QUESTIONS.md` §17. — **awaiting decision**.
 
 ### Decisions taken 2026-09-10  *(moved here from `WORKPLAN.md` §3)*
 
