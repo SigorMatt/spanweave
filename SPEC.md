@@ -481,7 +481,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
-| `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported |
+| `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported. On a conformant OTLP JSON export every span is over the line, so **one per span is the expected output** and reports the encoding, not the run (§7) |
 | `duplicate_source_id` | two records claimed the same source id |
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
@@ -1360,6 +1360,24 @@ declares reaches `0.5`.
     a non-object entry, a missing or non-string `key`, an unrecognized `value`
     tag, and **both** copies of a repeated key — is kept in a list under
     `attributes_unfolded`, which is omitted when there is nothing to put in it.
+  - **A conformant export draws one `timestamp_unit_suspect` per span** (§3.7),
+    and that is the expected output rather than a defect report.
+    `startTimeUnixNano` states a unit, but it states it in a *name*, so the
+    value is carried verbatim and §3.1's ceiling is over the line on every
+    span. The warning is a statement about the **model's field contract** —
+    `started_at` is unix seconds — and not about the telemetry, which is as
+    conformant as its field name says. **Nothing is rescaled**: the reported
+    number is kept exactly (§3.1), so no digit is lost and every edge is still
+    built from what the export wrote. A rescale here is refused outright, and
+    not on a technicality — `float()` at epoch-nanosecond magnitude has a
+    spacing of ~238 ns, so it would merge spans the record kept apart and make
+    the normalized field disagree with `raw.source` with nothing to report it.
+    The cost of leaving it is stated rather than softened: on such a file the
+    diagnostic is a function of a format the consumer already knows, and a span
+    genuinely encoded in seconds among nanosecond neighbours is the one span it
+    is *silent* about. A consumer that does not want it filters one code and
+    loses nothing it could have used. Stating a unit at the seam was weighed
+    against that and held (`OPEN_QUESTIONS.md` §17).
   - **`status.code`** becomes `"UNSET"`, `"OK"` or `"ERROR"`, read from the
     proto enum name (`STATUS_CODE_OK`) or its number (`0`, `1`, `2`), because
     proto3 JSON permits either. Any other value is carried verbatim, read as

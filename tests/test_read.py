@@ -986,15 +986,21 @@ def test_a_quoted_integer_past_the_digit_limit_is_a_record_like_any_other():
     assert len(stream.diagnostics) == 0
 
 
-# --- What a real OTLP export's timestamps produce today (batch R1, pinned) ---
+# --- What a real OTLP export's timestamps produce (batch R1, pinned) ---
 #
 # An OTLP JSON envelope states its unit in the field name -- `startTimeUnixNano`
 # -- and the reader carries the value verbatim because §7's rule is that a
 # format's *name* is not a type. §3.1's ceiling then fires on every span, and
 # on nothing else: a span that really is in seconds is the only one in the file
-# NOT warned about. That inversion is the measurement, not the intent, and
-# `WORKPLAN.md` R3 is the halt where it is decided. These tests pin what the
-# library does today so that the decision moves a test rather than a surprise.
+# NOT warned about.
+#
+# This is DOCUMENTED behaviour, not merely current behaviour: `SPEC.md` §3.7's
+# `timestamp_unit_suspect` row and §7's OTLP container section both state that
+# a conformant export draws one warning per span, that it reports the model's
+# field contract rather than the telemetry, and that nothing is rescaled. The
+# alternatives were weighed and held (`OPEN_QUESTIONS.md` §17, decided (c)).
+# So these tests are a contract, not a snapshot: a change that moves them is
+# changing what the spec promises, and the spec moves with it.
 
 NS_OTLP_SPAN = {
     "traceId": "t1",
@@ -1018,14 +1024,17 @@ def test_a_nanosecond_otlp_export_builds_and_warns_once_per_span(tmp_path):
     graph = _built(envelope(*spans), tmp_path)
     suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
     assert [d.node_id for d in suspect] == ["s0", "s1", "s2"]
-    # Nothing is rescaled, and every digit the export wrote is still there.
+    # Nothing is rescaled, and every digit the export wrote is still there --
+    # `SPEC.md` §7 states the refusal to rescale and why (float64's spacing at
+    # this magnitude would merge spans the record kept apart).
     assert graph.nodes()[0].started_at == 1700000000000000000
 
 
 def test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about(tmp_path):
     # The signal inversion, stated as a test: on an all-nanosecond export the
     # warning is on every span, so the one span it is silent about is the one
-    # whose unit differs from its neighbours'. R3 decides whether that stays.
+    # whose unit differs from its neighbours'. `SPEC.md` §7 states this cost in
+    # those terms, so the silence is documented rather than merely observed.
     seconds = dict(
         NS_OTLP_SPAN,
         spanId="s9",

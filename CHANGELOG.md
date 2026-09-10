@@ -294,6 +294,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A conformant OTLP JSON export draws one `timestamp_unit_suspect` per span,
+  and the documents now say so and say why.** The envelope states its unit in a
+  field *name* -- `startTimeUnixNano` -- and §7's rule is that a name is not a
+  type, so the value is carried verbatim and §3.1's 1e11 ceiling is over the
+  line on every span. Measured on this tree, one 201-span export: **200
+  warnings on 200 nanosecond spans, and the single span genuinely encoded in
+  seconds is the one the channel is silent about.** That inversion is the
+  finding, and the decision is to document it rather than paper over it
+  (`OPEN_QUESTIONS.md` §17, option (c)): the warning is a statement about the
+  **model's field contract** -- `started_at` is unix seconds -- and not about
+  the telemetry, which is exactly as conformant as its field name says.
+  **Nothing is rescaled.** A rescale in the reader was refused on C2's own
+  grounds rather than on taste: `float()` at epoch-nanosecond magnitude has a
+  spacing of ~238 ns, so two spans 100 ns apart would collapse onto one number
+  and their `temporal` edge would be emitted as tied. The cost of leaving it is
+  stated unsoftened in `SPEC.md` §7 -- on such a file the diagnostic is a
+  function of a format the consumer already knows, and a consumer that does not
+  want it filters one code and loses nothing it could have used. Stating the
+  unit at the seam (a `NormalizedSpan.timestamp_unit`, with the converse check
+  that would restore the signal) is held, not rejected, against two conditions
+  named in the memo: a second consumer of the unit, or a real mixed-unit export
+  observed. **Nothing else moved**: no model field, no schema, no serialized
+  default, no stored expectation, no fixture, and `otlp_container` keeps its
+  byte-identity with `llm_tool_llm`, which is F2's whole demonstration that a
+  container is not a dialect. R1's two pin tests in `tests/test_read.py` keep
+  every assertion and gain a comment saying the behaviour is **documented**,
+  not merely current, so a change that moves them is a change to what the spec
+  promises. (`SPEC.md` §3.7, §7; `ADAPTERS.md`)
+
 - **Every corpus figure this repository states is now counted from `git
   ls-files`, and states that it is.** `57 files / 177 records` was measured on
   a **working tree** holding local capture output under `capture/_scratch/`,

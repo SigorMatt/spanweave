@@ -154,6 +154,9 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 - Never rescale and never infer a unit, whatever the dialect calls its field.
   A value too large to be seconds is the builder's business: it emits
   `timestamp_unit_suspect` and the number is kept untouched (`SPEC.md` §3.1).
+  A conformant OTLP JSON export therefore draws that warning on **every** span,
+  which is documented expected output rather than a defect: it reports the
+  field contract, not the run (`SPEC.md` §7, `OPEN_QUESTIONS.md` §17).
 - Read a JSON number, and a **string that is exactly a JSON number literal** —
   OTLP JSON encodes 64-bit integers as decimal strings. Read nothing else: not
   a trimmed string, not a leading `+`, not a date. The rule is one sentence,

@@ -3156,4 +3156,28 @@ series. If (a) is taken in any form, it is a code batch that moves both pin
 tests and needs a fixture the corpus does not have: an OTLP rendering with real
 nanosecond timestamps, which no committed file is.
 
-**Decision: pending.** Batch R3 halts here.
+**Decision: option (c)**, taken 2026-09-11 by the maintainer on this memo and
+implemented by batch R11. The decision, in the words it was recorded in:
+
+> Option (c): document that a conformant OTLP JSON export draws one
+> `timestamp_unit_suspect` per span, and that the warning is a statement about
+> the model's field contract, not about the telemetry. No unit is stated at the
+> seam or in the graph; nothing is rescaled; `otlp_container` keeps its
+> byte-identity with `llm_tool_llm`. Hold (a1)+(a′) as the memo describes until
+> a second consumer of the unit exists or a real mixed-unit export is observed.
+> When either arrives, evaluate first — as a new memo — a within-file
+> consistency rule: one diagnostic per graph when every timestamp value is on
+> the same side of the ceiling, per-span only for the minority side when they
+> are not; it removes the volume and restores the signal without a stated unit
+> or an invented key. Implemented by R11.
+
+Where it landed: `SPEC.md` §3.7's `timestamp_unit_suspect` row and §7's OTLP
+container section state the per-span warning, that it reports the field
+contract rather than the run, and why nothing is rescaled — including the cost
+in **(f)**, unsoftened; `ADAPTERS.md` says it in one sentence beside the
+"never rescale" rule. R1's two pin tests keep every assertion and gain a
+comment saying the behaviour is **documented**, not merely current, so a change
+that moves them is a change to what the spec promises. Nothing else moved: no
+model field, no schema, no stored expectation, no fixture. What **(a)**–**(h)**
+describe stays live as the memo for the reopening conditions in **(h)**, which
+are conditions to watch rather than work to schedule.
