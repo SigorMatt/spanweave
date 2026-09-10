@@ -217,7 +217,7 @@ Legend: `todo` · `in progress` · `awaiting decision` · `done` · `dropped`
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | H1 | **Identity memo (HALT).** `operation` is `None` for agent/chain/retriever in both dialects. Options: map `gen_ai.agent.name` into `operation` (dialect-asymmetric); a new `identity` field carrying value + provenance (mirrors `warrant`); leave as is and document. Memo in `OPEN_QUESTIONS.md`. Model change → decision required. | done | 6 |
-| H2 | **Identity non-mapping, per H1 decision.** SPEC §3.1: state the rule that `operation` is not populated for agent/chain/retriever from any dialect's name attribute, with the `raw.source`/`unmapped_attributes` note; fix §3.1's "retriever name" promise no dialect states; record the measured absence of instrumentor-emitted agent spans beside §14(h) item 4. OPEN_QUESTIONS §15: mark option B as the additive 1.1 path. No code. | todo | 8 |
+| H2 | **Identity non-mapping, per H1 decision.** SPEC §3.1: state the rule that `operation` is not populated for agent/chain/retriever from any dialect's name attribute, with the `raw.source`/`unmapped_attributes` note; fix §3.1's "retriever name" promise no dialect states; record the measured absence of instrumentor-emitted agent spans beside §14(h) item 4. OPEN_QUESTIONS §15: mark option B as the additive 1.1 path. No code. | done | 8 |
 
 ---
 
@@ -522,6 +522,22 @@ Run 1 in progress on branch `audit-fixes` (base `02e9f6e`). G2 done (`ad77259`).
   `trajectory_dump`'s transcript, so that test's "only `parallel_tool_calls`"
   claim is now a two-shape claim. `mixed_instrumentation` will ripple the same
   way.
+- H2 done (`df0ba2c`), implementing the H1 decision. Docs only, held. The doc test
+  was red; the two behaviour tests passed before the change and were meant to.
+  §3.1's "retriever name" promise verified **unrealizable** against both adapters:
+  `openinference._operation` reads only `tool.name` / `llm.model_name` /
+  `embedding.model_name`, `otel_genai._operation` only `gen_ai.tool.name` /
+  `gen_ai.request.model`; neither dialect defines a retriever-name attribute. The
+  same promise appeared verbatim in `ADAPTERS.md:117` and `CONTRACTS.md:258`, so
+  H2 fixed those too rather than leave them contradicting the new rule. Absence
+  re-measured, not copied: 3 captured traces, 17 records, 4 agent spans, 0
+  instrumentor-emitted.
+- **Unowned finding, needs an owner:** the same "tool / model / retriever name"
+  wording survives in two adapter docstrings (`openinference.py:433`,
+  `otel_genai.py:569`), and `otel_genai.py:569`, `SPEC.md:474` and
+  `tests/test_otel_genai.py:375` cite `operation` as §3.2 when §3.1 defines it.
+  H2 left them because fixing them means touching `spanweave/` and its row says
+  "No code." No behaviour impact; stale cross-references only.
 
 ---
 
