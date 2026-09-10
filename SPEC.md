@@ -1054,21 +1054,55 @@ Rules binding on every adapter:
 
 ### 6.1 Adapter selection
 
-`spanweave build` runs `detect()` on a bounded sample (the first 50 records) of
-every registered adapter and picks the highest confidence.
+**A dialect is a property of a record, not of a file.** One process can run a
+framework instrumentor and an SDK instrumentor at once; they share a tracer
+provider, and their spans share an export. So `spanweave build` asks every
+registered adapter about **every** record — `detect([record])`, the same
+declaration §6 defines — and an adapter **claims** a record when what it
+declares reaches `0.5`.
 
-- Ties, or a top score below `0.5`, are a **hard error** with an actionable
-  message listing the scores — never a silent fallback to a default adapter.
-- `--adapter <id>` bypasses detection entirely and is the escape hatch.
-- The chosen adapter and the confidence it **declared** are recorded in `meta`
-  as `declared_confidence` (§3.9) — the adapter's own claim, not a measurement,
-  and named so that it cannot be mistaken for one.
+| Input | Result |
+|---|---|
+| every record claimed by the same one adapter | that adapter parses the input, and `meta.adapters` carries its one entry — the single-dialect case, unchanged |
+| a record claimed by **two** adapters | a **hard error** (`adapter_ambiguous`), naming the record's position, its span id where it has one, and both claimants |
+| no record claimed by any adapter | a **hard error** (`adapter_unconfident`), listing every declared confidence |
+| a record claimed by **no** adapter, in an input another adapter claims | the claiming adapter parses the input whole, so the record still becomes a node — an `unknown` one, the way any unmappable record does (§3.2) |
+| several adapters each claiming records, none claiming a record another claims | **not yet built as one graph.** The records sort themselves cleanly, and the builder does not yet accept spans from more than one adapter, so the input is refused by whole-input selection (`adapter_ambiguous`) as it was before classification existed |
+
+- `--adapter <id>` bypasses classification entirely: the named adapter parses
+  every record, whatever the markers say. It is the escape hatch, and it is the
+  remedy both refusals name.
+- **Ambiguity is refused where a guess would be required, and nowhere else.**
+  Two adapters claiming one record is unresolvable — they disagree about that
+  span's kind, its payloads and its call ids; publishing both parses would
+  invent a second span for one operation (§7); and picking one is the
+  plausible-but-wrong graph this section exists to prevent. Two adapters
+  claiming *different* records is not ambiguity at all: each record has exactly
+  one answer.
+- **Nothing is claimed by proximity.** A record's classification is a function
+  of that record alone, so it cannot depend on input order, on registration
+  order, or on how many neighbours matched (§5).
+- **Both refusals are decided over the whole input, not over a sample.** A
+  record carrying two dialects' markers is refused wherever it sits, and an
+  input whose first 50 records carry no marker but whose hundredth does is
+  built rather than refused. A record's *position* in a refusal message counts
+  the records the reader yielded — blank lines skipped and repeats collapsed
+  (§7) — which is what `RawRecord.line_number` counts (§3.5).
+- The confidence the chosen adapter **declared** is recorded in `meta` as
+  `declared_confidence` (§3.9), declared over the first 50 records **it
+  claimed** — the adapter's own claim about the input it was given, not a
+  measurement, and named so that it cannot be mistaken for one. An adapter that
+  claims every record therefore reports the number it reported before this rule
+  existed.
 
 > Auto-selection is ergonomics, not evidence: it is the first thing cut if
 > Phase 2 slips, in which case `--adapter` becomes required and detection moves
 > to Phase 4 (`ROADMAP.md`). The hard-error behavior above is what makes that
 > deferral safe — an ambiguous input never silently produces a plausible graph
-> from the wrong adapter.
+> from the wrong adapter. What per-record classification changes is the *scope*
+> of that refusal: refusing a whole file because one record is ambiguous was
+> never its honest scope, and a sample that never reached the ambiguous record
+> was never a reason to build.
 
 ## 7. Input/output contracts
 

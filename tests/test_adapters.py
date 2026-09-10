@@ -18,7 +18,13 @@ from spanweave.adapters.base import Adapter, NormalizedSpan
 from spanweave.adapters.openinference import OpenInferenceAdapter
 from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.build import build_graph
-from spanweave.errors import AdapterSelectionError, UnknownAdapterError
+from spanweave.errors import (
+    ADAPTER_AMBIGUOUS,
+    ADAPTER_DETECT_FAILED,
+    NO_ADAPTERS_REGISTERED,
+    AdapterSelectionError,
+    UnknownAdapterError,
+)
 from spanweave.model import (
     AdapterInfo,
     EdgeKind,
@@ -481,3 +487,138 @@ def test_a_span_id_still_wins_over_the_record_digest(adapter):
     # is the key, and the node id is the id itself (`SPEC.md` §3.6 rule 1).
     span = next(iter(adapter.parse([a_record(adapter, span_id="s7")])))
     assert span.source_key == "s7"
+
+
+# --------------------------------------------------------------------------
+# Classification is per record (batch E2)
+# --------------------------------------------------------------------------
+
+# A dialect is a property of a **record**, not of a file (`SPEC.md` §6.1): one
+# process can run a framework instrumentor and an SDK instrumentor at once and
+# their spans share one export. So the registry asks each adapter about each
+# record, using the declaration the protocol already has -- `detect([record])`
+# -- and no marker table lives outside the adapter that owns the marker.
+#
+# With stubs here, and over the two real dialects in `tests/test_detection.py`.
+
+
+def test_a_record_is_classified_by_the_adapters_that_claim_it():
+    registry = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    assert registry.classify(ONE[0]) == ("one",)
+    assert registry.classify(TWO[0]) == ("two",)
+    assert registry.classify(NEITHER[0]) == ()
+
+
+def test_classification_is_ordered_by_adapter_id_not_by_arrival():
+    both = {"one.marker": True, "two.marker": True}
+    forwards = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    backwards = a_registry(
+        StubAdapter("two", "two.marker"), StubAdapter("one", "one.marker")
+    )
+    assert forwards.classify(both) == backwards.classify(both) == ("one", "two")
+
+
+def test_the_partition_sorts_every_record_into_the_adapter_that_claimed_it():
+    registry = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    records = [ONE[0], TWO[0], ONE[0]]
+    partition = registry.partition(records)
+    assert [claim.adapter_id for claim in partition.claims] == ["one", "two"]
+    assert partition.contributors == ("one", "two")
+    # Input order within an adapter, because `parse()` numbers what it is
+    # given and `RawRecord.line_number` is that number (`SPEC.md` §3.5).
+    assert partition.claims[0].records == (ONE[0], ONE[0])
+    assert partition.claims[1].records == (TWO[0],)
+    assert partition.unclaimed == ()
+
+
+def test_a_record_no_adapter_claims_is_carried_rather_than_dropped():
+    registry = a_registry(StubAdapter("one", "one.marker"))
+    partition = registry.partition([ONE[0], NEITHER[0]])
+    assert partition.contributors == ("one",)
+    assert partition.claims[0].records == (ONE[0],)
+    assert partition.unclaimed == (NEITHER[0],)
+
+
+def test_a_record_two_adapters_claim_is_a_hard_error_naming_both():
+    registry = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    records = [ONE[0], {"span_id": "s7", "one.marker": True, "two.marker": True}]
+    with pytest.raises(AdapterSelectionError) as failure:
+        registry.partition(records)
+    message = str(failure.value)
+    assert failure.value.code == ADAPTER_AMBIGUOUS
+    # Locatable: which record, which span, who claimed it, and the way out.
+    for expected in ("record 2", "s7", "one", "two", "--adapter"):
+        assert expected in message
+
+
+def test_the_ambiguous_record_error_survives_a_record_with_no_span_id():
+    registry = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    with pytest.raises(AdapterSelectionError) as failure:
+        registry.partition([{"one.marker": True, "two.marker": True}])
+    assert "record 1" in str(failure.value)
+
+
+def test_the_partition_refuses_when_nothing_is_registered():
+    with pytest.raises(AdapterSelectionError) as failure:
+        AdapterRegistry().partition(ONE)
+    assert failure.value.code == NO_ADAPTERS_REGISTERED
+
+
+def test_classification_cannot_depend_on_where_a_record_sat():
+    """One record, no context: proximity has nowhere to enter (`SPEC.md` §5)."""
+    registry = a_registry(
+        StubAdapter("one", "one.marker"), StubAdapter("two", "two.marker")
+    )
+    records = [ONE[0], TWO[0], NEITHER[0]]
+    forwards = registry.partition(records)
+    backwards = registry.partition(list(reversed(records)))
+    assert [c.adapter_id for c in forwards.claims] == [
+        c.adapter_id for c in backwards.claims
+    ]
+    assert forwards.unclaimed == backwards.unclaimed
+    for ahead, behind in zip(forwards.claims, backwards.claims, strict=True):
+        assert sorted(map(repr, ahead.records)) == sorted(map(repr, behind.records))
+
+
+def test_the_declared_confidence_is_measured_over_the_records_it_claimed():
+    """Per record to classify, over a bounded sample to declare.
+
+    The number in `meta` keeps its meaning from `SPEC.md` §3.9 -- the adapter's
+    own claim about the input it was given -- and stays bounded, so an adapter
+    that claims every record reports what it reported before classification
+    existed.
+    """
+    seen = []
+    registry = a_registry(StubAdapter("one", "one.marker", seen=seen))
+    partition = registry.partition([{"one.marker": True}] * 500)
+    assert partition.claims[0].declared_confidence == 0.9
+    assert seen[:500] == [1] * 500
+    assert seen[500:] == [DETECTION_SAMPLE_SIZE]
+
+
+def test_an_adapter_that_raises_while_classifying_is_named():
+    class Raiser:
+        id = "raiser"
+        version = "0.1.0"
+
+        def detect(self, sample):
+            raise RuntimeError("boom")
+
+        def parse(self, records):
+            return iter(())
+
+    registry = a_registry(StubAdapter("one", "one.marker"), Raiser())
+    with pytest.raises(AdapterSelectionError) as failure:
+        registry.partition(ONE)
+    assert failure.value.code == ADAPTER_DETECT_FAILED
+    assert "raiser" in str(failure.value)

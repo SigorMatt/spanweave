@@ -15,6 +15,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A dialect is now decided per record, not per file.** The registry gained
+  `classify(record)` -- which adapters claim this one record -- and
+  `partition(records)`, which sorts a whole input into them; `spanweave.build`
+  partitions above the seam before it parses. Nothing new is asked of an
+  adapter: a record is claimed when `detect([record])` reaches the same `0.5`
+  floor selection always used, so no marker table lives outside the adapter
+  that owns the marker and the builder still never learns a dialect name.
+
+  **A single-dialect input is byte-identical to what it was.** Proven rather
+  than asserted: every `*.jsonl` trace in the tree -- 49 committed fixtures and
+  14 uncommitted captures -- was serialized before and after and the two
+  documents diffed clean, and `tests/test_detection.py` now asserts for every
+  corpus and captured trace that the detected path builds exactly what
+  `--adapter <id>` builds, which is the path classification does not touch.
+
+  Two things do change, both refusals, and both where a sample used to decide:
+  a record carrying **two** dialects' markers is a hard error (`adapter_ambiguous`)
+  wherever it sits in the file, naming the record's position, its span id and
+  both claimants -- before, a record past the 50-record detection sample was
+  parsed by whichever adapter won and the other dialect's meaning went quietly
+  into an `unknown` node; and an input whose first 50 records carry no marker
+  but whose hundredth does is now built rather than refused. `--adapter <id>`
+  still bypasses classification entirely. (audit finding 1, the classification
+  half; `SPEC.md` §6.1)
+
+- `ADAPTERS.md` §2: `detect()` must be **decomposable over records** -- a
+  sample reaches `0.5` iff one record in it does alone. Both shipped adapters
+  already were, to the character; what was missing was the sentence saying an
+  adapter may not need a record's neighbours to answer for it.
+
 - **Two `basis` strings that say which declaration of a receipt came first.**
   A conversational protocol resends the whole history, so the tool-result
   message `SPEC.md` §4.2.1 reads as a declaration is re-sent by every later

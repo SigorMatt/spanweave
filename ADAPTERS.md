@@ -35,8 +35,10 @@ class Adapter(Protocol):
 
 ### `detect(sample) -> float`
 
-Confidence in `[0.0, 1.0]` that this adapter handles the input. Called with up
-to the first 50 records (`SPEC.md` §6.1).
+Confidence in `[0.0, 1.0]` that this adapter handles the input. Called two ways
+(`SPEC.md` §6.1): with **one record** at a time, to decide whose record it is,
+and with up to the first 50 records you claimed, for the number the graph
+records.
 
 It is a **declaration, not a measurement** — nothing in the trace computes it,
 you are asserting it — and the graph records it under that name
@@ -51,6 +53,15 @@ defend to someone reading a graph that came out wrong.
   yours. **Do not return `1.0` defensively** — inflated confidence turns
   detection into a race, and a wrong adapter silently producing a plausible
   graph is far worse than an honest "ambiguous input" error.
+- **Must be decomposable over records.** A sample must reach `0.5` **iff at
+  least one record in it reaches `0.5` on its own**. A per-record scan that
+  returns as soon as it sees its marker — what both shipped adapters do — has
+  this property already. What does not: a rule that wants to see three matching
+  records before it commits, or one that reads a record's neighbours. Neither
+  is a legal adapter, because a dialect is a property of a record and an
+  adapter that needs context to answer cannot say which records are its own.
+  This is a contract, not a new method: the library asks the question it always
+  asked, one record at a time.
 
 ### `parse(records) -> Iterator[NormalizedSpan]`
 
@@ -319,6 +330,8 @@ neither is a payload spelling.
 
 - [ ] Single file under `spanweave/adapters/`; nothing else in the package touched.
 - [ ] `detect()` pure, non-raising, keyed on distinctive markers, honestly scored.
+- [ ] `detect()` decomposable over records: a sample reaches `0.5` iff one
+      record in it does alone (§2). Classification asks it one record at a time.
 - [ ] `parse()` pure, lazy, non-raising, order-independent.
 - [ ] All five payload states distinguished; absent ≠ empty.
 - [ ] No inferred pairings, no inferred data edges, no invented ids.
