@@ -584,6 +584,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   with `llm_tool_llm`'s graph unchanged.
   (audit batch R10, found by R3; `SPEC.md` §4.0, §6, §7, §3.7)
 
+- **A record's identity fields report themselves too.** `unmapped_attributes`
+  names record fields as well as attribute keys, written `<record>.<field>`,
+  and until now only the two timestamps used it: `span_id`, `parent_id`,
+  `trace_id` and `name` were consumed by a static `KNOWN_RECORD_KEYS` set
+  before anything read them, so a `"name": 42` became `""` and a
+  `"parent_id": 42` became no parent -- each as silently as if the record had
+  carried neither, with the value surviving only in `raw`. That is the same
+  defect as the attribute keys above, one level up. The four are now reported
+  when they arrive in a rendering neither dialect reads, by one rule at the
+  seam (`spanweave/seam.py`) rather than a copy in each adapter, because two
+  dialects reporting one unreadable id differently is a cross-dialect
+  difference. Three readings are still **not** reports, because each is
+  something the adapter read: an omitted field, a `null` one -- how a record
+  says "no parent" and "no name" -- and `parent_id: ""`, which is *no parent*
+  rather than an unreadable one. Nothing moved: across every tracked `.json` /
+  `.jsonl`, these four field names and their OTLP spellings occur 660 times in
+  89 files and every one is a string or `null`.
+  (audit finding 6, follow-up; `SPEC.md` §3.7)
+
 - **The rule now holds at every deciding key in both dialects, and the
   diagnostic stops saying "no attribute" of a key that was sent.** Three more
   OpenInference keys and three OTel GenAI ones were still marked consumed

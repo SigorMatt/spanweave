@@ -498,6 +498,15 @@ recognizes but cannot read — a `start_time` in a rendering §3.1 does not
 accept — is *not* normalized, and saying so here is what keeps it from
 vanishing between the raw record and a `None`.
 
+The timestamps are not the only fields that holds for. A record's **identity
+fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain
+strings, so one stated in any other rendering (`"name": 42`) is a field
+recognized and not read: it falls to its default and is reported. Three
+readings are *not* reports, because each is something the adapter read rather
+than failed to: a field the record omits, a field reported as `null` — which
+is how a record says "no parent" and "no name" — and `parent_id: ""`, which is
+*no parent* rather than an unreadable one (§4.0).
+
 **A key an adapter read and acted on is mapped, and is not reported here.**
 Not every mapped key becomes a field. Some are read to *decide*: a tool-result
 message's `role` is what tells the adapter that the id beside it is a result

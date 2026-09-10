@@ -474,6 +474,78 @@ def test_two_spans_a_hundred_nanoseconds_apart_stay_apart(adapter):
 
 
 # --------------------------------------------------------------------------
+# A record field stated in a rendering neither adapter reads (batch R12)
+# --------------------------------------------------------------------------
+#
+# The same rule as the attribute keys above, one level up. `unmapped` names
+# record fields too, written `<record>.<field>` (`SPEC.md` §3.7), and until
+# this batch only the two timestamps used it: the identity fields were
+# consumed by a static `KNOWN_RECORD_KEYS` set, so a `name` or a `parent_id`
+# reported as `42` fell to its default -- `""`, `None` -- and left no trace
+# anywhere but `raw`. Here rather than in either adapter's own file because
+# both dialects read these four fields the same way, and one reporting an
+# unreadable id that the other swallows is a cross-dialect difference.
+
+IDENTITY_FIELDS = ("span_id", "parent_id", "trace_id", "name")
+
+#: Renderings neither dialect reads as a string. `None` is deliberately not
+#: here: it is an absence, and the test below says so.
+UNREADABLE = (42, 4.5, True, [], {}, ["s0"])
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("field", IDENTITY_FIELDS)
+@pytest.mark.parametrize("rendered", UNREADABLE, ids=repr)
+def test_an_identity_field_the_adapter_cannot_read_is_reported(
+    adapter, field, rendered
+):
+    span = next(iter(adapter.parse([a_record(adapter, **{field: rendered})])))
+    assert f"<record>.{field}" in span.unmapped
+    assert codes.UNMAPPED_ATTRIBUTES in [d.code for d in span.diagnostics]
+    # It still fell to its default, which is the reason reporting it is the
+    # only trace: nothing on the node says a value was stated here.
+    assert getattr(span, field, None) is None or field == "name"
+    # And the value itself is still in `raw`, verbatim.
+    assert span.raw.source[field] == rendered
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("field", IDENTITY_FIELDS)
+def test_an_identity_field_the_dialect_omits_is_not_reported(adapter, field):
+    # Nothing was stated, so there is nothing the adapter failed to read.
+    record = a_record(adapter)
+    record.pop(field, None)
+    span = next(iter(adapter.parse([record])))
+    assert f"<record>.{field}" not in span.unmapped
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("field", IDENTITY_FIELDS)
+def test_a_null_identity_field_is_absence_not_a_refused_rendering(adapter, field):
+    # `null` is how a record says "no parent", "no name" -- the same reading
+    # `start_time: null` already gets (`SPEC.md` §3.1, §3.7).
+    span = next(iter(adapter.parse([a_record(adapter, **{field: None})])))
+    assert f"<record>.{field}" not in span.unmapped
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_an_empty_parent_reference_was_read_and_is_not_reported(adapter):
+    # The one string that means something other than itself: `""` is *read*
+    # as "no parent" (`SPEC.md` §4.0, batch R10), so it decided something and
+    # is not a rendering the adapter refused.
+    span = next(iter(adapter.parse([a_record(adapter, parent_id="")])))
+    assert span.parent_id is None
+    assert "<record>.parent_id" not in span.unmapped
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_readable_identity_field_is_not_reported(adapter):
+    # The pin on the other side: the ordinary record reports no field at all.
+    span = next(iter(adapter.parse([a_record(adapter)])))
+    assert not [key for key in span.unmapped if key.startswith("<record>.")]
+
+
+# --------------------------------------------------------------------------
 # The fallback source key, in every adapter at once (batch A5)
 # --------------------------------------------------------------------------
 #

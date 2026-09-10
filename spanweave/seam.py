@@ -183,6 +183,43 @@ def parent_ref(value: JsonValue) -> str | None:
     return value
 
 
+#: The record fields every adapter reads as a plain string: the three ids and
+#: the span's name. The timestamps are read by `SPEC.md` §3.1's own rule and
+#: report themselves; `status`, `links` and `attributes` are read through
+#: compound logic and are not held to this here.
+IDENTITY_FIELDS = ("span_id", "parent_id", "trace_id", "name")
+
+
+def unreadable_fields(record: Mapping[str, JsonValue]) -> list[str]:
+    """`<record>.<field>` for each identity field stated unreadably.
+
+    The `unmapped_attributes` rule for record fields (`SPEC.md` §3.7), applied
+    where `_timestamps` already applies it: a field the adapter recognizes but
+    cannot read is **not** normalized, and saying so is what keeps it from
+    vanishing between the raw record and a `None`. A `name` reported as `42`
+    became `""` and a `parent_id` reported as `42` became no parent, each as
+    silently as if the record had carried neither.
+
+    Two renderings are read rather than refused, and both are absences rather
+    than exceptions: a field the record omits, and one reported as `null` --
+    which is how a record says "no parent" and "no name". The third is
+    `parent_id: ""`, which `parent_ref` reads as *no parent* (§4.0) rather
+    than failing to read: it is a string, so it never reaches here.
+
+    It lives at the seam rather than in each adapter for `parent_ref`'s
+    reason: two dialects reporting one unreadable id differently is a
+    cross-dialect equivalence claim, and a rule copied into two modules is a
+    rule that can drift in one of them.
+    """
+    return [
+        f"<record>.{field}"
+        for field in IDENTITY_FIELDS
+        if field in record
+        and record[field] is not None
+        and not isinstance(record[field], str)
+    ]
+
+
 def unclaimed_span(record: JsonValue, line_number: int | None = None) -> NormalizedSpan:
     """The seam value for a record **no adapter claimed** (`SPEC.md` §6.1).
 

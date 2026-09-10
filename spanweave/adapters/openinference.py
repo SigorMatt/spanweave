@@ -44,7 +44,13 @@ from spanweave.model import (
     Usage,
 )
 from spanweave.read import record_digest
-from spanweave.seam import CallRole, NormalizedSpan, SpanLink, parent_ref
+from spanweave.seam import (
+    CallRole,
+    NormalizedSpan,
+    SpanLink,
+    parent_ref,
+    unreadable_fields,
+)
 
 ADAPTER_ID = "openinference"
 ADAPTER_VERSION = "0.1.0"
@@ -224,6 +230,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         [str(key) for key in attributes if str(key) not in consumed]
         + [f"<record>.{key}" for key in record if key not in KNOWN_RECORD_KEYS]
         + unreadable_times
+        + unreadable_fields(record)
     )
     if unmapped:
         diagnostics.append(
