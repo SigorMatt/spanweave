@@ -83,7 +83,15 @@ run("orphan_parent", [oi("s0", "nope", "AGENT", "a", 1.0, 2.0)])
 # numeric string is read as the number it spells; a string that is not a
 # number is named in `unmapped_attributes` instead of vanishing. Fixed in
 # batch C1. The float64 precision half is probe2's case G and is C2's.
-run("nan_timestamps", None, raw=b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n","start_time":NaN,"end_time":Infinity,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}\n')
+#
+# `nan_timestamps` -- a record whose times are the unquoted `NaN` and
+# `Infinity` tokens -- is now a regression test too: tests/test_adapters.py
+# under "Finite, or not read", tests/test_serialize.py under "The encoder
+# writes JSON, and a non-finite number is not JSON", and tests/test_cli.py
+# under "Numbers no interpreter can hold". The field is refused like any
+# other rendering, and the record -- which is verbatim, `inf` and all -- is a
+# `graph_not_serializable` refusal rather than a bare `Infinity` in the
+# output. Fixed in batch R1, which also took the digit-limit `ValueError`.
 run("end_before_start", [oi("s0", None, "AGENT", "a", 5.0, 1.0)])
 run("equal_starts", [oi("s0", None, "AGENT", "a", 1.0, 3.0), oi("s1", "s0", "TOOL", "t", 1.5, 1.6, {"tool.name": "t"}), oi("s2", "s0", "TOOL", "u", 1.5, 1.7, {"tool.name": "u"})])
 

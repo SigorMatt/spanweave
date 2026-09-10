@@ -294,6 +294,14 @@ TIMESTAMP_RENDERINGS = (
     (True, None),  # a boolean is not a time, and Python would read it as 1
     (None, None),
     ([1700000000], None),
+    # Finite, or not read (batch R1). Each of these parses -- as a number,
+    # even -- and none of them is a time (`SPEC.md` §3.1).
+    ("1e400", None),  # a JSON number literal with no float64: it is `inf`
+    # The digit-limit rendering is not in this table because its `repr` is its
+    # 5000 digits and that becomes the test's id; it has its own test below.
+    (float("inf"), None),  # what an unquoted `Infinity` or `1e400` parses to
+    (float("-inf"), None),
+    (float("nan"), None),  # what an unquoted `NaN` parses to
 )
 
 
@@ -352,6 +360,41 @@ def test_a_timestamp_in_a_rendering_we_refuse_is_never_silently_absent(adapter):
     assert "<record>.start_time" in span.unmapped
     assert codes.UNMAPPED_ATTRIBUTES in [d.code for d in span.diagnostics]
     assert span.raw.source["start_time"] == "2026-09-05T10:00:00Z"
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize(
+    "rendered",
+    ("1e400", "9" * 5000, float("inf"), float("nan")),
+    ids=("quoted-1e400", "quoted-5000-digits", "inf", "nan"),
+)
+def test_a_non_finite_timestamp_is_refused_the_way_any_other_rendering_is(
+    adapter, rendered
+):
+    # Batch R1. Both of these used to leave by a door of their own: the digit
+    # limit as an interpreter `ValueError` raised straight out of `parse`, and
+    # `inf` as a value that reached the output as a bare `Infinity` token.
+    # They are refused renderings like any other -- `None`, verbatim in `raw`,
+    # and named in `unmapped_attributes` (`SPEC.md` §3.1).
+    span = next(iter(adapter.parse([a_record(adapter, start_time=rendered)])))
+    assert span.started_at is None
+    assert "<record>.start_time" in span.unmapped
+    assert codes.UNMAPPED_ATTRIBUTES in [d.code for d in span.diagnostics]
+    source = span.raw.source
+    assert isinstance(source, dict)
+    reported = source["start_time"]
+    assert reported is rendered or reported == rendered
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_timestamp_just_inside_the_digit_limit_is_still_read(adapter):
+    # The line is the interpreter's, and the test states which side of it is
+    # which: 4300 digits convert, 4301 do not. Without this the fix could be
+    # "refuse any long integer" and still pass everything above.
+    inside = "9" * 4300
+    span = next(iter(adapter.parse([a_record(adapter, start_time=inside)])))
+    assert span.started_at == int(inside)
+    assert type(span.started_at) is int
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)

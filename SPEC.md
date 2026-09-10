@@ -142,6 +142,9 @@ graph. Nothing else is a rendering. Concretely, and deliberately narrow:
 | `"01"`, `".5"`, `"1."` | no | — | JSON forbids each of these, so no exporter emits them |
 | `"2026-09-05T10:00:00Z"`, `"NaN"`, `"0x1"`, `""` | no | — | not a number in any reading |
 | `true` / `false` | no | — | a boolean is not a time, and Python would read it as `1` / `0` |
+| `1e400`, `"1e400"` | no | — | a well-formed JSON number with no float64: it parses to `inf`, and `inf` is not a time |
+| `NaN`, `Infinity`, `-Infinity` (unquoted) | no | — | Python's parser reads these as an extension; RFC 8259 does not write them, and none is a number |
+| an integer literal of more than 4300 digits | no | — | the interpreter refuses to convert it at all (below) |
 
 The rule is one sentence — *the string, unquoted, would be a valid JSON
 number* — rather than a list of tolerated spellings, because every tolerated
@@ -171,12 +174,38 @@ round-trip, since an integer in serializes as the identical integer out. A
 consumer that wants one numeric type coerces it, in the same way a consumer
 that wants one unit converts it.
 
+**Finite, or not read.** A rendering the table accepts is read only when what
+it parses to is a **finite number**. Two things are not, and neither is a
+time:
+
+- `inf` and `nan`. Python's JSON parser produces them for the non-standard
+  `NaN` / `Infinity` / `-Infinity` tokens, and produces `inf` for a literal
+  whose magnitude no float can hold — `1e400` is a well-formed JSON number that
+  has no float64.
+- An integer literal longer than the interpreter's integer-string digit limit
+  (4300 digits by default, `sys.set_int_max_str_digits`). The interpreter does
+  not convert it at all; it raises.
+
+Each used to leave by a door of its own. `inf` reached the output as a bare
+`Infinity`, which is not JSON and which a strict parser on the other end
+rejects. A quoted integer past the digit limit reached the caller as the
+interpreter's `ValueError`, raised out of `build` and printed by the CLI as a
+traceback. Neither is a special case now: both take the door every other
+rendering the library does not read takes, described next.
+
 **A value in a rendering the library does not read is never silently
 absent.** The field becomes `None`, the value stays verbatim in `raw.source`
 (§3.5), and the adapter names the record field in `unmapped_attributes` (§3.7)
 — keys only, as that code always is. A node that loses its `started_at` this
 way then also gets `missing_timestamp` from the builder, which is the honest
 pair: *we did not normalize this field*, and *so this node has no start time*.
+
+Refusing the *field* does not make the record writable. `raw.source` is
+verbatim, so an **unquoted** `NaN` or `1e400` is still in the graph as a
+Python `nan` or `inf`, and the encoder — which writes RFC 8259 and nothing
+else — refuses the whole graph rather than write a token JSON has no word for
+(§7, `graph_not_serializable`). A **quoted** `"1e400"` is a string in the
+record and writes back as the string it was.
 
 **Unit suspicion.** A `started_at` or `ended_at` strictly greater than
 **1e11** gets a `timestamp_unit_suspect` diagnostic (§3.7, level `warning`).
@@ -764,7 +793,7 @@ SpanweaveError:
 | `adapter_detect_failed` | `AdapterSelectionError` | an adapter raised from `detect()`, which §6 forbids |
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
-| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend (§7) |
+| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend, or is a non-finite number RFC 8259 cannot write (§7) |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -1259,6 +1288,16 @@ declares reaches `0.5`.
     record (§3.3). Where nothing can be — a node's verbatim source record is
     verbatim or it is nothing — the library **refuses**, with
     `graph_not_serializable` (§3.10). It never writes a partial graph.
+  - **What it writes is RFC 8259 JSON, so a non-finite number is not
+    writable at all.** The encoder runs with `allow_nan=False`. `Infinity`,
+    `-Infinity` and `NaN` are Python's extension to JSON rather than JSON, and
+    a strict parser on the other end rejects a document carrying one — which
+    makes writing it the worst outcome available, because the graph is
+    produced, looks written, and cannot be read back. No field the library
+    normalizes can hold one (§3.1 does not read a non-finite timestamp), so
+    the only way one reaches the encoder is inside a node's verbatim source
+    record — the case just above, where nothing can be dropped — and it is the
+    same refusal for the same reason.
 - **OTLP JSON** (`ExportTraceServiceRequest`: an object whose `resourceSpans`
   is a list) is a third **container**, not a dialect. The spans inside it are
   in whatever dialect their instrumentor speaks — possibly two dialects in one
@@ -1281,7 +1320,11 @@ declares reaches `0.5`.
     `doubleValue`, `arrayValue`, `kvlistValue` (folded by this same rule),
     `bytesValue` as the base64 string it already is, and an `AnyValue` with no
     field set as `null`. `intValue` arrives as a decimal string, as proto3 JSON
-    encodes every `int64`, and is read as the integer it declares itself to be:
+    encodes every `int64`, and is read as the integer it declares itself to
+    be — unless that string is longer than the interpreter's integer-string
+    digit limit, which no `int64` is and which the interpreter will not
+    convert, in which case it is carried verbatim as the string it arrived as
+    rather than raised out of the reader:
     **where the format states a type, the reader honours it; where the format
     states only a name, the value goes to the layer that owns the field.**
     `startTimeUnixNano` states only a name, so it is carried verbatim and read

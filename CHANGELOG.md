@@ -414,6 +414,51 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A timestamp is finite and within the interpreter's reach, or it is not
+  read at all.** Three JSON numbers used to leave the library by three
+  different wrong doors. A **quoted** integer of more than 4300 digits --
+  ordinary JSON as far as the reader is concerned -- reached `int()` in each
+  adapter's `_as_time`, which answers a string that long by raising: the
+  interpreter's digit-limit `ValueError` came out of `spanweave.build`, and
+  `spanweave build` / `spanweave inspect` printed it as a traceback. `1e400`,
+  quoted or not, parses to `inf`, was carried as a timestamp, and reached the
+  output as a bare `Infinity` -- which is Python's extension to JSON, not
+  JSON, and which a strict parser on the other end rejects; the unquoted
+  `NaN` and `Infinity` tokens did the same. And an OTLP `intValue` of more
+  than 4300 digits raised the same `ValueError` out of the *reader*, one
+  layer earlier.
+
+  `SPEC.md` §3.1 now says the rule once, as a property rather than a list:
+  **a rendering the table accepts is read only when what it parses to is a
+  finite number.** `inf`, `-inf`, `nan` and an integer past the interpreter's
+  integer-string digit limit are not, so each becomes the refused rendering
+  every other unread spelling already is -- the field is `None`, the value
+  stays verbatim in `raw.source`, the field is named in
+  `unmapped_attributes`, and the builder adds `missing_timestamp`. Nothing
+  new was added to the model or to the diagnostic set to do it. An OTLP
+  `intValue` past the limit is carried verbatim as the decimal string it
+  arrived as (`SPEC.md` §7), the same as any other value the reader cannot
+  decode.
+
+  Refusing the *field* does not make an unquoted `NaN` writable, because
+  `raw.source` is verbatim and still holds it. So the encoder -- the single
+  one every byte this library writes goes through -- now runs with
+  `allow_nan=False`, and a graph holding a non-finite number is a
+  `graph_not_serializable` refusal (`SPEC.md` §7, §3.10) for exactly the
+  reason a graph nesting too deep to encode already was: a node's source
+  record is verbatim or it is nothing, and a document that is produced, looks
+  written and cannot be read back is the worst of the outcomes available.
+  `spanweave build` on such a trace now exits 1 with one line on stderr;
+  `spanweave inspect`, which writes no graph, still works.
+
+  Tests: the cross-adapter rendering table gains the non-finite rows, with
+  the digit limit tested either side of the line (4300 digits read, 4301
+  refused); `tests/test_serialize.py` proves no bare `Infinity` or `NaN` can
+  be written; `tests/test_read.py` and `tests/test_cli.py` cover the reader
+  path, the OTLP `intValue` path, and every case through both CLI commands.
+  `tests/audit/probe1.py`'s `nan_timestamps` case is now those regression
+  tests rather than a probe.
+
 - **`SPEC.md` §3.1 promised a retriever name no dialect states, and stated no
   rule for the names it declines.** `operation` was documented as *"tool name /
   model name / retriever name"*. Neither adapter has ever read a retriever's

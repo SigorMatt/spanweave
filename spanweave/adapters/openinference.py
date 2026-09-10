@@ -23,6 +23,7 @@ Two things it deliberately does **not** do:
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
@@ -605,6 +606,23 @@ _JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?
 _JSON_INTEGER = re.compile(r"-?(?:0|[1-9][0-9]*)")
 
 
+def _finite(value: int | float) -> int | float | None:
+    """`value`, unless it is `inf` or `nan` -- neither of which is a time.
+
+    Python's JSON parser produces those for the non-standard `NaN` /
+    `Infinity` tokens and for a literal no float64 can hold (`1e400`), and a
+    library that carried one would write it back out as a bare `Infinity`
+    that no strict JSON parser will read (`SPEC.md` §3.1, §7).
+
+    The `isinstance` is the guard rather than a style choice: an `int` is
+    always finite, and `math.isfinite` on one too large for a float raises
+    `OverflowError` instead of answering.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def _as_time(value: JsonValue) -> int | float | None:
     """Unix seconds, as reported. Never rescaled, never guessed at.
 
@@ -623,12 +641,23 @@ def _as_time(value: JsonValue) -> int | float | None:
     if isinstance(value, (int, float)):
         # `json.loads` already draws §3.1's line: an `int` for an integer
         # literal, a `float` for one with a fraction or an exponent.
-        return value
+        return _finite(value)
     if isinstance(value, str) and _JSON_NUMBER.fullmatch(value):
         # Read as the identical value the same literal would have produced
         # unquoted: `"1700000000"` and `1700000000` are one timestamp, and
         # `"1e9"` is the same float `1e9` is.
-        return int(value) if _JSON_INTEGER.fullmatch(value) else float(value)
+        try:
+            parsed: int | float = (
+                int(value) if _JSON_INTEGER.fullmatch(value) else float(value)
+            )
+        except ValueError:
+            # The interpreter's integer-string digit limit (4300 by default).
+            # An unquoted literal that long never gets here -- `json.loads`
+            # refuses the line and the reader reports it -- but a *quoted* one
+            # is an ordinary JSON string until this call, and this call used
+            # to raise `ValueError` straight out of `build` (`SPEC.md` §3.1).
+            return None
+        return _finite(parsed)
     return None
 
 

@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+import spanweave
 from spanweave import diagnostics as codes
 from spanweave.read import read_trace
 
@@ -632,6 +633,19 @@ def test_an_int_value_is_decoded_because_the_format_states_its_type():
     assert record["start_time"] == "1700000000000000000"
 
 
+def test_an_int_value_past_the_interpreter_digit_limit_is_carried_verbatim():
+    # Batch R1. No `int64` is 5000 digits long, but a trace file can say one
+    # is, and `int()` answers a string that long by raising -- which used to
+    # come out of `spanweave build` as an interpreter traceback. The reader
+    # carries the decimal string it could not convert (`SPEC.md` §7).
+    digits = "9" * 5000
+    span = dict(OTLP_SPAN, attributes=[{"key": "k", "value": {"intValue": digits}}])
+    stream = read_trace(json.dumps(envelope(span)).encode())
+    records = list(stream)
+    assert records[0]["attributes"]["k"] == digits
+    assert len(stream.diagnostics) == 0
+
+
 def test_an_int_value_that_is_not_an_integer_literal_is_carried_verbatim():
     span = dict(OTLP_SPAN, attributes=[{"key": "k", "value": {"intValue": "twelve"}}])
     assert only(json.dumps(envelope(span)).encode())["attributes"]["k"] == "twelve"
@@ -939,3 +953,85 @@ def test_shuffling_the_spans_inside_an_export_changes_nothing():
         )
         shuffled = spanweave.build(json.dumps(document).encode("utf-8"))
         assert without_the_input_fingerprint(shuffled) == ordered
+
+
+# --- Numbers no interpreter can hold (batch R1) -----------------------------
+#
+# `SPEC.md` §3.1 and §7. A JSON number can be written that Python cannot
+# read (an integer past the interpreter's integer-string digit limit) or can
+# read only as `inf` (`1e400`). Neither may raise out of the reader, and
+# neither may reach the output as a token JSON has no word for.
+
+
+def test_a_bare_integer_past_the_digit_limit_is_a_malformed_record():
+    # `json.loads` raises `ValueError` on it, which is already how the reader
+    # reports an unreadable line -- pinned here because the *quoted* form of
+    # the same number reaches a different layer, and this states which is
+    # which.
+    line = b'{"span_id":"s0","start_time":' + b"9" * 5000 + b"}\n"
+    stream = read_trace(line)
+    assert list(stream) == []
+    reported = stream.diagnostics.collected()
+    assert [d.code for d in reported] == [codes.MALFORMED_RECORD]
+    assert "9" * 5000 in reported[0].source
+
+
+def test_a_quoted_integer_past_the_digit_limit_is_a_record_like_any_other():
+    # The reader has no opinion about a string: it is the adapter that must
+    # decline to read it as a timestamp (`SPEC.md` §3.1, tests/test_adapters).
+    digits = "9" * 5000
+    line = f'{{"span_id":"s0","start_time":"{digits}"}}\n'.encode()
+    stream = read_trace(line)
+    assert list(stream) == [{"span_id": "s0", "start_time": digits}]
+    assert len(stream.diagnostics) == 0
+
+
+# --- What a real OTLP export's timestamps produce today (batch R1, pinned) ---
+#
+# An OTLP JSON envelope states its unit in the field name -- `startTimeUnixNano`
+# -- and the reader carries the value verbatim because §7's rule is that a
+# format's *name* is not a type. §3.1's ceiling then fires on every span, and
+# on nothing else: a span that really is in seconds is the only one in the file
+# NOT warned about. That inversion is the measurement, not the intent, and
+# `WORKPLAN.md` R3 is the halt where it is decided. These tests pin what the
+# library does today so that the decision moves a test rather than a surprise.
+
+NS_OTLP_SPAN = {
+    "traceId": "t1",
+    "spanId": "s0",
+    "parentSpanId": "",
+    "name": "chat",
+    "startTimeUnixNano": "1700000000000000000",
+    "endTimeUnixNano": "1700000000500000000",
+    "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}],
+}
+
+
+def _built(document, tmp_path, name="otlp.json"):
+    path = tmp_path / name
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return spanweave.build(path)
+
+
+def test_a_nanosecond_otlp_export_builds_and_warns_once_per_span(tmp_path):
+    spans = [dict(NS_OTLP_SPAN, spanId=f"s{n}") for n in range(3)]
+    graph = _built(envelope(*spans), tmp_path)
+    suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
+    assert [d.node_id for d in suspect] == ["s0", "s1", "s2"]
+    # Nothing is rescaled, and every digit the export wrote is still there.
+    assert graph.nodes()[0].started_at == 1700000000000000000
+
+
+def test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about(tmp_path):
+    # The signal inversion, stated as a test: on an all-nanosecond export the
+    # warning is on every span, so the one span it is silent about is the one
+    # whose unit differs from its neighbours'. R3 decides whether that stays.
+    seconds = dict(
+        NS_OTLP_SPAN,
+        spanId="s9",
+        startTimeUnixNano="1700000000",
+        endTimeUnixNano="1700000001",
+    )
+    graph = _built(envelope(NS_OTLP_SPAN, seconds), tmp_path)
+    suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
+    assert [d.node_id for d in suspect] == ["s0"]

@@ -428,3 +428,114 @@ def _parser_limit():
         else:
             low = middle
     return low
+
+
+# --------------------------------------------------------------------------
+# Numbers no interpreter can hold (September 2026 run-2 review, batch R1)
+# --------------------------------------------------------------------------
+#
+# The same shape as the section above and the same rule: whatever a trace
+# file says, the command ends in an exit code and a line on stderr, never a
+# traceback. Three ways a JSON number defeats the interpreter -- an integer
+# past its integer-string digit limit, quoted and unquoted, and a literal
+# with no float64 -- each through `build` and through `inspect`.
+
+DIGITS = "9" * 5000
+
+
+def _span(start):
+    return (
+        '{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
+        f'"start_time":{start},"end_time":2.0,"status":"OK",'
+        '"attributes":{"openinference.span.kind":"AGENT"}}\n'
+    )
+
+
+@pytest.mark.parametrize(
+    "start",
+    (f'"{DIGITS}"', '"1e400"', '"-1e400"'),
+    ids=("quoted-digit-limit", "quoted-1e400", "quoted-minus-1e400"),
+)
+def test_a_number_the_interpreter_cannot_read_still_builds(tmp_path, capsys, start):
+    # Quoted, so the record itself is ordinary JSON: only the timestamp is in
+    # a rendering §3.1 does not read, and the graph writes normally.
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_span(start))
+    out = tmp_path / "g.json"
+    assert main(["build", str(trace), "-o", str(out)]) == 0
+    document = json.loads(out.read_text())
+    assert document["nodes"][0]["started_at"] is None
+    codes = {item["code"] for item in document["diagnostics"]}
+    assert "missing_timestamp" in codes
+    assert "unmapped_attributes" in codes
+    assert main(["inspect", str(trace)]) == 0
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "start",
+    ("1e400", "-1e400", "NaN", "Infinity"),
+    ids=("1e400", "-1e400", "NaN", "Infinity"),
+)
+def test_an_unquoted_non_finite_number_is_a_refusal_not_a_traceback(
+    tmp_path, capsys, start
+):
+    # Unquoted, the value is in the record itself, and `raw.source` is
+    # verbatim -- so the graph builds and cannot be written (`SPEC.md` §7).
+    # One line on stderr, exit 1, no traceback.
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_span(start))
+    assert main(["build", str(trace), "-o", str(tmp_path / "g.json")]) == 1
+    assert capsys.readouterr().err.startswith("spanweave build: ")
+    # `inspect` writes no graph, so it has nothing to refuse and still works.
+    assert main(["inspect", str(trace)]) == 0
+    assert "nodes: 1" in capsys.readouterr().out
+
+
+def test_an_unquoted_integer_past_the_digit_limit_is_a_malformed_record(
+    tmp_path, capsys
+):
+    # This one never reaches an adapter: `json.loads` refuses the line, which
+    # the reader already reports (`SPEC.md` §7).
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_span(DIGITS) + _span("1.0").replace('"s0"', '"s1"'))
+    assert main(["inspect", str(trace)]) == 0
+    printed = capsys.readouterr().out
+    assert "nodes: 1" in printed
+    assert "malformed_record: 1" in printed
+
+
+def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, capsys):
+    envelope = {
+        "resourceSpans": [
+            {
+                "scopeSpans": [
+                    {
+                        "spans": [
+                            {
+                                "traceId": "t1",
+                                "spanId": "s0",
+                                "name": "chat",
+                                "startTimeUnixNano": "1700000000000000000",
+                                "endTimeUnixNano": "1700000000500000000",
+                                "attributes": [
+                                    {
+                                        "key": "gen_ai.operation.name",
+                                        "value": {"stringValue": "chat"},
+                                    },
+                                    {"key": "k", "value": {"intValue": DIGITS}},
+                                ],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    trace = tmp_path / "otlp.json"
+    trace.write_text(json.dumps(envelope))
+    out = tmp_path / "g.json"
+    assert main(["build", str(trace), "-o", str(out)]) == 0
+    document = json.loads(out.read_text())
+    assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == DIGITS
+    capsys.readouterr()

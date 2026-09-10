@@ -627,7 +627,16 @@ def _any_value(value: JsonValue) -> JsonValue | _Unfoldable:
 
 def _int_value(reported: JsonValue) -> JsonValue:
     if isinstance(reported, str) and _INTEGER.fullmatch(reported):
-        return int(reported)
+        try:
+            return int(reported)
+        except ValueError:
+            # Past the interpreter's integer-string digit limit (4300 by
+            # default). No `int64` is that long, but a file can say one is,
+            # and `int()` answers by raising -- which used to come out of
+            # `spanweave build` as a traceback. The decimal string is carried
+            # verbatim instead, which is what every value the reader cannot
+            # decode does (`SPEC.md` §7).
+            return reported
     return reported
 
 

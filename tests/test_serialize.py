@@ -219,3 +219,64 @@ def test_the_refusal_is_the_librarys_own_error_type():
     # in the consumer's own recursion.
     with pytest.raises(spanweave.GraphNotSerializableError):
         canonical_bytes(_nest(100_000))
+
+
+# --------------------------------------------------------------------------
+# The encoder writes JSON, and a non-finite number is not JSON (batch R1)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §7: `Infinity`, `-Infinity` and `NaN` are Python's extension to
+# JSON rather than JSON, and a strict parser on the other end rejects a
+# document carrying one. Writing it is the worst outcome available -- the
+# graph is produced, looks written, and cannot be read back -- so the encoder
+# runs with `allow_nan=False` and the refusal is the library's own.
+
+NON_FINITE = (float("inf"), float("-inf"), float("nan"))
+
+
+@pytest.mark.parametrize("value", NON_FINITE, ids=repr)
+def test_a_non_finite_number_is_a_refusal_not_a_bare_infinity_token(value):
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {"source": {"start_time": value}}})
+    assert failure.value.code == "graph_not_serializable"
+
+
+@pytest.mark.parametrize("value", NON_FINITE, ids=repr)
+def test_nothing_this_library_writes_can_contain_infinity_or_nan(value):
+    # The gate, stated as the property rather than as the call: whatever
+    # reaches the one encoder, the bytes that come out parse under a strict
+    # JSON parser or there are no bytes at all.
+    try:
+        written = canonical_bytes({"v": value})
+    except spanweave.GraphNotSerializableError:
+        return
+    json.loads(written, parse_constant=_no_constants)  # pragma: no cover
+    raise AssertionError("a non-finite value was written")  # pragma: no cover
+
+
+def _no_constants(token):
+    raise AssertionError(f"the output carried a bare {token} token")
+
+
+def test_a_trace_carrying_an_unquoted_infinity_refuses_rather_than_writing_it(
+    tmp_path,
+):
+    # End to end, because this is how it reaches the encoder in practice: the
+    # timestamp field itself is refused (`SPEC.md` §3.1), but `raw.source` is
+    # verbatim and still holds the `inf` the parser produced.
+    trace = tmp_path / "infinite.jsonl"
+    trace.write_bytes(
+        b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
+        b'"start_time":1e400,"end_time":2.0,"status":"OK",'
+        b'"attributes":{"openinference.span.kind":"AGENT"}}\n'
+    )
+    graph = spanweave.build(trace)
+    node = next(iter(graph.nodes()))
+    assert node.started_at is None
+    assert with_code(graph, "missing_timestamp")
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        dumps(graph)
+
+
+def with_code(graph, code):
+    return [item for item in graph.diagnostics if item.code == code]

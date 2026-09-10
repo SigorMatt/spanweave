@@ -66,8 +66,25 @@ def canonical_bytes(value: JsonValue) -> bytes:
     """
     try:
         text = json.dumps(
-            value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            # RFC 8259 has no `Infinity` and no `NaN`; Python's encoder writes
+            # them anyway unless told not to. A document carrying one is the
+            # worst outcome available -- it is produced, it looks written, and
+            # a strict parser on the other end refuses it -- so it is a
+            # refusal here instead (`SPEC.md` §7).
+            allow_nan=False,
         )
+    except ValueError as failure:
+        raise GraphNotSerializableError(
+            f"the graph could not be encoded: it holds a number JSON has no "
+            f"way to write ({failure}). A timestamp is never carried in that "
+            f"state (`SPEC.md` §3.1), so this is a value inside a node's "
+            f"verbatim source record -- and that record is verbatim or it is "
+            f"nothing. Nothing was written"
+        ) from failure
     except RecursionError as failure:
         raise GraphNotSerializableError(
             f"the graph could not be encoded: a value nests deeper than this "
