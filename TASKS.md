@@ -10860,11 +10860,19 @@ clean is the one nobody rereads.
     37,260 raises `RecursionError` from `spanweave.build`, and above ~40,100
     the parser refuses first and the record becomes a `malformed_record` as it
     should. On 3.11-3.13 the band does not exist and the reader refuses
-    cleanly at every depth. The deviation is stated in `SPEC.md` §7 as a
-    defect against the rule rather than an exception to it. Fixing it is a
-    behaviour change -- a record that cannot be digested has to degrade to
-    something, and the spec does not say to what -- so it is a batch of its
-    own, not a patch.
+    cleanly at every depth. The deviation was stated in `SPEC.md` §7 as a
+    defect against the rule rather than an exception to it. **Fixed by R19**,
+    which answered the open behavioural question the way `SPEC.md` §7 already
+    answers it for the write side: a record that cannot be digested is refused
+    with `graph_not_serializable` -- the code the encoder already raises for
+    the same value -- because a record with no digest has no identity (§3.6),
+    could not have been written either, and may not be dropped to get past it.
+    The bands are now a graph, that refusal, and a `malformed_record`, never a
+    traceback, on every interpreter in the matrix; the depth at which each
+    begins is the interpreter's and §7 says so rather than promising a number.
+    `SPEC.md` §3.6, §3.10 and §7 carry the rule, and `tests/json_depth.py` now
+    holds the measurement machinery R13 wrote, shared by the write-side pin
+    and the reader's.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

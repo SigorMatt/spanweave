@@ -403,6 +403,17 @@ digest existed (batch A3), so it was the spec that was wrong.
 `tests/test_ids.py` derives an id from this text and compares it against the
 library's, and pins two `sw_` literals so neither side can drift quietly.
 
+**A record the digest cannot be taken over is refused, not given an identity
+some other way.** The formula is an encode, and an encoder has a ceiling
+(§7): a record nested deeper than it will descend has no digest, and the only
+alternatives would be to invent an id the formula does not produce — which
+breaks the reimplementation claim above — or to drop the record, which
+losslessness forbids. So it raises `graph_not_serializable` (§3.10), the same
+refusal the write side gives for the same value, which could not have been
+written either. This is a property of the interpreter's recursion budget and
+not of any trace worth reading: the ceiling measured on CPython 3.11–3.14 is
+between ~990 and ~37,000 levels of nesting inside one record.
+
 **`adapter_id` is the adapter that read *that record*, not the adapter that
 read the input.** A dialect is a property of a record (§6.1), so under a mixed
 input the material of rule 2 and rule 3 differs per record, and it is the
@@ -852,7 +863,7 @@ SpanweaveError:
 | `adapter_detect_failed` | `AdapterSelectionError` | an adapter raised from `detect()`, which §6 forbids |
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
-| `graph_not_serializable` | `GraphNotSerializableError` | the graph is held but cannot be encoded: a value nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7) |
+| `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -1520,17 +1531,33 @@ declares reaches `0.5`.
     node's verbatim source record is verbatim or it is nothing — the library
     **refuses**, with `graph_not_serializable` (§3.10). It never writes a
     partial graph.
-    - **Known deviation, on an interpreter whose encoder is the shallower of
-      the two.** The bullet above says input that will not parse never raises
-      out of the reader. Where the encoder gives out first, the *reader*
-      meets the encoder before the parser refuses anything: duplicate
-      detection digests each record with `json.dumps` (§3.6) and that call is
-      not contained, so on CPython 3.14.6 a record nesting beyond about
-      37,250 raises `RecursionError` out of `spanweave.build` instead of
-      becoming a `malformed_record`. On 3.11, 3.12 and 3.13 no such band
-      exists and the reader refuses cleanly. This is a defect against the
-      rule, not an exception to it; it is recorded as an open thread in
-      `TASKS.md` rather than left to be found.
+    - **The reader meets the encoder too, and it is the same refusal.** The
+      bullet above says input that will not *parse* never raises out of the
+      reader. Some of what the reader does is an **encode**: duplicate
+      detection digests every record with `json.dumps` (§3.6), and where the
+      encoder is the shallower of the two ceilings that call meets a record
+      the parser was willing to read. So a record can be readable and still
+      have no digest — and a record with no digest has no identity (§3.6) and
+      could not have been written either, which makes it the case §3.10
+      already names: nothing can be dropped to get past it, so the library
+      **refuses**, with `graph_not_serializable`. It is the same code the
+      write side raises for the same value, because it is the same fact about
+      the same record.
+      **The depth at which this begins belongs to the interpreter; the
+      outcome does not.** Measured 2026-09-11 on CPython 3.14.6, attribute
+      nesting, end to end through `spanweave.build`, against a digest
+      ceiling bisected at ~37,230 and a parser ceiling at ~40,100 in the same
+      process: 36,840 builds and writes, 37,640 and 38,670 are the
+      `graph_not_serializable` refusal, and 40,500 is the `malformed_record`
+      this bullet promises. On 3.11, 3.12 and 3.13 the two
+      ceilings coincide, so the middle band is empty and every depth past the
+      ceiling is a `malformed_record`. **No depth here is a promise**; what
+      is promised is that every depth on every interpreter is one of those
+      three outcomes and none of them is a `RecursionError`. Until R19 the
+      middle band raised a bare one out of `spanweave.build` — an
+      interpreter's traceback where §3.10 promises a routable code — and it
+      was stated here as a defect against this rule rather than an exception
+      to it.
   - **What it writes is RFC 8259 JSON, so a non-finite number is not
     writable at all.** The encoder runs with `allow_nan=False`. `Infinity`,
     `-Infinity` and `NaN` are Python's extension to JSON rather than JSON, and

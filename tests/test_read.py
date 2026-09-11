@@ -12,8 +12,15 @@ import pytest
 import spanweave
 from spanweave import diagnostics as codes
 from spanweave.model import EdgeKind
-from spanweave.read import read_trace
+from spanweave.read import read_trace, record_digest
+from spanweave.serialize import canonical_bytes
 from tests import digit_limit
+from tests.json_depth import (
+    MEASUREMENT_NOISE,
+    deepest_accepted,
+    dicts_text,
+    nested_dicts,
+)
 
 JSONL = b'{"span_id":"s0"}\n{"span_id":"s1"}\n'
 ARRAY = b'[{"span_id":"s0"},{"span_id":"s1"}]'
@@ -93,6 +100,93 @@ def test_a_deeply_nested_array_container_is_diagnosed_rather_than_raised():
     stream = read_trace(DEEP)
     assert list(stream) == []
     assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
+
+
+def test_a_record_too_deep_to_digest_is_the_librarys_refusal_not_a_traceback():
+    # R19. Every record is digested for the duplicate check (`SPEC.md` §3.6),
+    # and a digest is an *encode*. The reader's other guards contain what the
+    # parser will not descend; this one contains the encoder, whose ceiling is
+    # its own and, on CPython 3.14, the lower of the two -- so the reader met
+    # it on a record the parser had been willing to read and `spanweave.build`
+    # raised a bare `RecursionError`. A consumer routes on the code (§3.10);
+    # an interpreter's traceback is not routable and is indistinguishable from
+    # a bug in the consumer's own recursion.
+    #
+    # Built in memory rather than parsed, so this is red on **every**
+    # interpreter and not only on one where the band exists: the value never
+    # goes near `json.loads`, so the parser's ceiling cannot hide the
+    # encoder's.
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        record_digest(nested_dicts(100_000))
+    assert failure.value.code == "graph_not_serializable"
+    assert "digested" in str(failure.value)
+
+
+def test_the_digest_refusal_is_the_one_the_write_side_already_raises():
+    # Same value, same fact, one code. A record too deep to digest is a record
+    # too deep to write, so no graph carrying it was ever publishable, and
+    # naming the two failures differently would invent a distinction the
+    # interpreter does not make and a consumer would have to learn twice.
+    value = nested_dicts(100_000)
+    with pytest.raises(spanweave.SpanweaveError) as digesting:
+        record_digest(value)
+    with pytest.raises(spanweave.SpanweaveError) as writing:
+        canonical_bytes(value)
+    assert digesting.value.code == writing.value.code == "graph_not_serializable"
+
+
+def test_the_reader_never_raises_a_bare_recursion_error_at_any_depth(
+    record_property,
+):
+    """The band collapses: one outcome per depth, and never a traceback.
+
+    Three bands existed on CPython 3.14.6 and the middle one was a defect:
+    a record nesting to ~37,240 built and wrote, one nesting to ~37,260 raised
+    a bare `RecursionError` out of `spanweave.build`, and only above ~40,100
+    did the parser refuse first and make it the `malformed_record` `SPEC.md`
+    §7 promises. On 3.11-3.13 the two ceilings coincide and the middle band
+    does not exist at all.
+
+    So this test asserts **no direction and no depth**. It measures where this
+    interpreter's parser and encoder give out, walks the depths either side of
+    each, and asserts only what the library controls: at every depth the
+    outcome is a graph, a `malformed_record`, or the library's named refusal —
+    and never a `RecursionError`. Where the band exists it is walked; where it
+    does not, that is recorded rather than asserted away.
+    """
+    parser = deepest_accepted(lambda depth: json.loads(dicts_text(depth)))
+    digest = deepest_accepted(lambda depth: record_digest(nested_dicts(depth)))
+    record_property("json_depth_reader", f"parser={parser} digest={digest}")
+    record_property("readable_but_undigestible_levels", parser - digest)
+
+    probes = [
+        digest - MEASUREMENT_NOISE,
+        digest + MEASUREMENT_NOISE,
+        parser + MEASUREMENT_NOISE,
+    ]
+    if parser - digest > 2 * MEASUREMENT_NOISE:
+        probes.append((digest + parser) // 2)
+
+    for depth in sorted(probes):
+        line = (
+            b'{"span_id":"s9","attributes":{"deep":'
+            + dicts_text(depth).encode()
+            + b"}}"
+        )
+        source = b'{"span_id":"s0"}\n' + line + b"\n"
+        try:
+            stream = read_trace(source)
+            records = list(stream)
+        except spanweave.GraphNotSerializableError as refusal:
+            # The library's own, named. This is the band the defect lived in.
+            assert refusal.code == "graph_not_serializable"
+            continue
+        # Otherwise the record either came through or was diagnosed -- both
+        # are outcomes `SPEC.md` §7 already promises.
+        assert len(records) in (1, 2)
+        assert all(
+            d.code == codes.MALFORMED_RECORD for d in stream.diagnostics.collected()
+        )
 
 
 def test_a_json_document_that_is_not_an_array_is_diagnosed():

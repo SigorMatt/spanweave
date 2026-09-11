@@ -14,7 +14,12 @@ Two things this layer must get right:
   than useless in a pipeline. "Malformed" includes *nested deeper than the
   parser will recurse*, which ``json`` reports as a ``RecursionError`` rather
   than a ``ValueError`` -- a different exception for the same fact, and one
-  that escaped this guard until ``SPEC.md`` §7 said so out loud.
+  that escaped this guard until ``SPEC.md`` §7 said so out loud. The
+  *encoder* has a ceiling of its own, and this layer meets it too: every
+  record is digested for the duplicate check (`record_digest`), so where the
+  encoder is the shallower of the two the reader meets it first. That is the
+  library's own named refusal, ``graph_not_serializable`` -- never a bare
+  ``RecursionError``.
 * **It is tolerant about the wrapping, never about the content.** A UTF-8 BOM
   at the head of the stream is skipped (``SPEC.md`` §7): that is a fact about
   how the file was written, not about what it says, and the tolerance reaches
@@ -60,6 +65,7 @@ from collections.abc import Iterator
 
 from spanweave import diagnostics as codes
 from spanweave.diagnostics import DiagnosticCollector
+from spanweave.errors import GraphNotSerializableError
 from spanweave.model import DiagnosticLevel, JsonValue
 
 #: A path, a path-like, ``"-"`` for stdin, or the bytes themselves.
@@ -290,6 +296,16 @@ class RecordStream:
             )
 
 
+def _canonical_text(record: JsonValue) -> str:
+    """The exact canonicalization `SPEC.md` §3.6 states, and nothing else.
+
+    Its own function so that the call stays on one line at one indent: a
+    reimplementation has to land on the same bytes, so `tests/test_doc_truth.py`
+    checks this spelling against the spec's character for character.
+    """
+    return json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def record_digest(record: JsonValue) -> str:
     """The canonical digest of a parsed record (`SPEC.md` §3.6).
 
@@ -302,8 +318,37 @@ def record_digest(record: JsonValue) -> str:
     written: sorted keys and compact separators, over the parsed value rather
     than the bytes. `hash()` is forbidden here for the usual reason
     (`CLAUDE.md` 4); SHA-256 is stable across processes and versions.
+
+    **This is an encode, and it is contained like every other one.** The
+    reader's guards contain what the *parser* will not descend; this call is
+    the one place the reader meets the **encoder**, which has a ceiling of its
+    own and, on an interpreter where that ceiling is the lower of the two,
+    meets a record the parser was willing to read (`SPEC.md` §7 measures
+    both). Uncontained it escaped `spanweave.build` as a bare
+    ``RecursionError`` -- an interpreter's traceback where §3.10 promises a
+    routable code.
+
+    It is the *same* refusal the write side raises, because it is the same
+    fact about the same value: a record too deep to digest is too deep to
+    write, so no graph carrying it was ever publishable, and nothing may be
+    dropped to get past it -- a record with no digest has no identity (§3.6),
+    and the record is the input rather than a rendering of it (`CLAUDE.md` 2).
+    Which depth this begins at belongs to the interpreter; that the outcome is
+    `graph_not_serializable` and never a traceback does not.
     """
-    text = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    try:
+        text = _canonical_text(record)
+    # `json` answers nesting it will not descend with `RecursionError` rather
+    # than `ValueError` -- a different exception for the same fact, and the
+    # one this guard exists for (`SPEC.md` §7).
+    except RecursionError as failure:
+        raise GraphNotSerializableError(
+            f"a record could not be digested: it nests deeper than this "
+            f"interpreter's JSON encoder will descend ({failure}). The digest "
+            f"is the record's identity and its duplicate check (`SPEC.md` "
+            f"§3.6), so there is no graph to publish; nothing was dropped to "
+            f"try, and the same record could not have been written either"
+        ) from failure
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 

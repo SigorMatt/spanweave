@@ -683,6 +683,39 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A record too deep to digest is the library's named refusal, not a bare
+  `RecursionError` out of `spanweave.build`.** Every record is digested for
+  the duplicate check (`SPEC.md` §3.6), and a digest is an **encode**. The
+  reader's guards contained what the *parser* will not descend; that one call
+  was uncontained, so on an interpreter whose encoder ceiling is the lower of
+  the two — CPython 3.14, for the nested **dicts** a trace record actually is
+  — the reader met the encoder on a record the parser had been willing to
+  read, and an interpreter's traceback escaped a documented entry point where
+  §3.10 promises a routable code. Measured end to end on 3.14.6 before the
+  fix, attribute nesting through `spanweave.build`, against a digest ceiling
+  bisected at ~37,230 and a parser ceiling at ~40,100 in the same process:
+  **36,840 built and wrote, 37,640 and 38,670 raised `RecursionError`, 40,500
+  was the `malformed_record` §7 promises** — three bands, the middle one a
+  defect. On 3.11.15, 3.12.3 and 3.13.14 the two ceilings coincide (991/989,
+  9997/9996, 9998/9997) and the middle band does not exist: every depth past
+  the ceiling is a `malformed_record` there, measured the same way.
+  The middle band is now `graph_not_serializable` — **the code the write side
+  already raises for the same value**, rather than a second code or a new
+  diagnostic, because it is one fact about one record: a record with no digest
+  has no identity (§3.6) and could not have been written either, and nothing
+  may be dropped to get past it (`CLAUDE.md` 2). So the outcome is now one of
+  three on every interpreter — a graph, a `malformed_record`, or the named
+  refusal — and never a traceback. **The depth at which each band begins
+  belongs to the interpreter; the outcome does not**, and `SPEC.md` §7 says
+  exactly that rather than promising a number.
+  Found by R13 while measuring for the depth table, outside its row, and
+  carried as `TASKS.md` open thread 11 until now. Two of the three new tests
+  are red on **every** interpreter before the fix — they digest a value built
+  in memory, so the parser's ceiling cannot hide the encoder's, which is how
+  the band-only test that could not fail on 3.12 was avoided; the third walks
+  the depths either side of both measured ceilings and asserts no direction
+  and no number. (`SPEC.md` §3.6, §3.10, §7)
+
 - **The sdist ships `reviews/`, and now proves it ships what its own documents
   cite.** `[tool.hatch.build.targets.sdist].include` is an explicit allowlist
   and had no `/reviews` line, so the published artifact carried `TASKS.md`
