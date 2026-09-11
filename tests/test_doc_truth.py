@@ -365,23 +365,24 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    Two exclusions, both because the excluded text is a record of a moment
-    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
-    copied verbatim, and a review that says a file was untracked *when it was
-    read* is reporting, not citing.
+    One exclusion, because the excluded text is a record of a moment rather
+    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
+    verbatim, and a review that says a file was untracked *when it was read*
+    is reporting, not citing.
 
-    `WORKPLAN.md` is the second: the execution state of the September 2026
-    audit-fix series, which owns `patches/` as its scratch drop and is
-    written to be deleted at series close. That is exactly why nothing
-    durable may depend on it. The file comes and goes with a series -- it was
-    removed at the first close and is back for run 5 (`TASKS.md`, *September
-    2026 audit*) -- and the exclusion travels with it.
+    A second exclusion stood here while the September 2026 audit-fix series
+    ran -- `WORKPLAN.md`, a series' own execution state, which owned
+    `patches/` as its scratch drop and was written to be deleted at series
+    close. That is exactly why nothing durable was allowed to depend on it,
+    and it is gone: the series closed and the file went with it (`TASKS.md`,
+    *September 2026 audit*). It has gone three times now, coming back for
+    each reopening, so the exclusion is a fixture of a **series**, not of a
+    file: a future series' plan file needs it back.
     """
     return [
         path
         for path in documents()
-        if path.name != "WORKPLAN.md"
-        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 

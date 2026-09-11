@@ -10446,17 +10446,17 @@ may want to reverse.**
 touched, no `canonical()` weakened, `PREDICTIONS.md` untouched, schema not
 frozen, Phase 4 not started. `make check` green; `make shape` produces no diff.
 
-## September 2026 audit — the fix series  *(closed 2026-09-11)*
+## September 2026 audit — the fix series  *(closed 2026-09-12)*
 
 A cold audit of the shipped `0.9.1` tree in September 2026 produced six
 findings plus five minor or roadmap-level ones. The fixes ran as a series of
 batches — one batch per commit, one concern per batch — on branch
-`audit-fixes` from base `02e9f6e`, in **four runs**. Runs 1 and 2 were
+`audit-fixes` from base `02e9f6e`, in **five runs**. Runs 1 and 2 were
 separated by a decision point and closed by batch G4 on 2026-09-10. A cold
-read of run 2 then reopened the series, and a cold read of run 3 reopened it
-again. The two later runs exist because **the close is the thing the reviews
-kept finding defects in**, not because the audit grew, and the close that
-stands is this one.
+read of run 2 then reopened the series, a cold read of run 3 reopened it
+again, and a cold read of run 4 reopened it a third time. The three later runs
+exist because **the close is the thing the reviews kept finding defects in**,
+not because the audit grew, and the close that stands is this one.
 
 - **Run 3** (`30766fc..15cfab5`), in execution order: `audit-R1`, `audit-R2`,
   `audit-R4`, `audit-R6`, `audit-R5`, `audit-R3` — which halted the run on a
@@ -10466,12 +10466,21 @@ stands is this one.
   `audit-R16`, `audit-R17`, `audit-R19`, then `audit-R7`, this close. The
   order was fixed mid-run by the run-3 review, whose F1 was declared a
   blocker for closing at all.
+- **Run 5** (`0533951` to this commit), in execution order: `audit-S1`,
+  `audit-S2`, `audit-S3`, `audit-S4`, `audit-S5`, `audit-S6`, then
+  `audit-S7`, this close. Seven batches, no memo and no halt: the run-4
+  review's blocker was a guard advertised past its reach, and the rest were
+  sentences that were checkable and wrong.
 
 `WORKPLAN.md` was the series' execution state: protocol, live status, run
 grouping, the decisions log, the resume note, and the finding-to-batch map. It
 was written to be **deleted at series close**, and G4 deleted it; the
 reopening brought it back for runs 3 and 4 (`30766fc`, "the execution-state
-file G4 deliberately deleted comes back"), and `audit-R7` deletes it again.
+file G4 deliberately deleted comes back"), `audit-R7` deleted it again, the
+run-4 review brought it back for run 5 (`0533951`), and `audit-S7` deletes it
+a third time. **A file that comes back three times is a fact about the
+series, not about the file**: each reopening needed execution state, and each
+close had to carry it here.
 Everything of it that outlives the series is here: the batch list with each
 batch's final status and commit, the decisions taken, the cold reviews, the
 finding-to-batch maps, and — kept apart on purpose — the threads the series
@@ -10479,8 +10488,9 @@ did **not** close. What is deliberately *not* carried here is the operating
 protocol (§0: the builder/aux loop, the batch and recovery briefs, the watch
 conventions). It is execution machinery for a series that has ended, it would
 go stale unread, and a future series can read it verbatim at
-`git show fcc842d^:WORKPLAN.md` or at `git show b742177:WORKPLAN.md` for the
-run-3/4 form.
+`git show fcc842d^:WORKPLAN.md`, at `git show b742177:WORKPLAN.md` for the
+run-3/4 form, or at `git show 64b4f57:WORKPLAN.md` for run 5's — whose §0 is
+byte-identical to the run-3/4 form, because the protocol did not change.
 
 This section is the **item registry**. **Statuses were deliberately not
 duplicated here while the series ran** (two places to read a status is one
@@ -10495,7 +10505,11 @@ cannot resolve (run-3 review F5). The series' `R<n>` ids are therefore written
 `SPEC.md` and `OPEN_QUESTIONS.md` cite them bare (`batch R13`) and are left
 alone: outside this file there is no launch checklist to collide with, and
 rewriting a commit body is not available anyway. The `A1`–`H2` ids of runs 1
-and 2 collide with nothing and keep their spelling.
+and 2 collide with nothing and keep their spelling. Run 5's `S1`–`S7` are
+written `audit-S<n>` here for the same reason the policy exists rather than
+because they collide: checked at this close, no `S<n>` appears anywhere else
+in this file, so the prefix is a convention held in advance of the collision
+instead of after it.
 
 ### The batches, with final status
 
@@ -10830,7 +10844,101 @@ declared a blocker for closing again.
 - **audit-R7 — Series close, again.** As G4: final statuses here, the decisions
   log moved here, the run-3 review archived and accounted for finding by
   finding, the `R<n>` id collision resolved, `WORKPLAN.md` and its README row
-  removed. — **done** (this commit).
+  removed. — **done** (`b091904`). It did not hold either: the cold read of run
+  4 reopened the series the same day, on a blocker that was **written into that
+  close** — `audit-R9`'s widening recorded here as having closed a class it had
+  not. `audit-S7` below is the close that stands.
+
+### Run 5 — the third close, with final status
+
+Run 5 answers the cold read of run 4 (`reviews/2026-09-11-run4.md`). Its
+shape is the review's own verdict: run 4 was the strongest of the four on the
+mechanical checks, and it still repeated the series' two defect classes — a
+sentence that is checkable and wrong, and a guard advertised more broadly than
+it holds — in new places, one of them inside the close itself.
+
+- **audit-S1 — Every census figure is guarded, and this file says only what is
+  true.** The run-4 review's blocker (F1): `CENSUS_FIGURE_PATTERNS` was a
+  hand-written list of **eight** regex families, `tests/corpus_census.py`
+  computed figures no family matched, and eighteen planted figures left
+  **five** green with the whole suite passing. The list is now derived from the
+  census's own result type — `figure_names()` walks `Census` and returns a
+  dotted name for every whole number it can produce — and a test fails if any
+  of them has no family (16 families added, 24 total). A second new test makes
+  each family read its own planted example, because a regex gone dead is
+  otherwise invisible: the scan reports what it finds, never what it failed to
+  find. Two residues are stated in the tests' own docstrings rather than
+  hidden: the scan checks the **spellings** the families carry, not every
+  number in every sentence, and where a slot names several figures the family
+  accepts any of their values (the named-site tests still pin those exactly).
+  The `audit-R9` bullet above carries the corrected headline. — **done**
+  (`aed32a9`).
+- **audit-S2 — The bracket a caller matches is a spanweave code, not any
+  bracket.** F2: `README.md`, `SPEC.md` §7 and `audit-R16`'s own `CHANGELOG.md`
+  entry all said a failure the library did not raise *"prints no bracket"*,
+  while `tests/test_cli.py` asserted `[Errno 2]`. The three sites now state
+  `audit-R16`'s real intent as a positive rule — the CLI adds no bracket of its
+  own; the code, if any, is the bracket immediately after
+  `spanweave <command>: `, and its contents are one of `SPEC.md` §3.10's values
+  — and say that `[Errno N]` is the operating system's text. No test assertion
+  moved: the suite already encoded the true behaviour. — **done** (`bed0ce2`).
+- **audit-S3 — An empty span id is no identity, so an empty parent loses
+  nothing.** F3, per the decision logged below. `span_ref()` joins
+  `audit-R10`'s `parent_ref()` at the seam, so an identity rule and a reference
+  rule that could drift apart now share a body and neither adapter branches. Two
+  things the plan did not anticipate, both recorded rather than smoothed over:
+  A5 emits **no** diagnostic for a missing span id by explicit design, so "the
+  same diagnostic" is *none* and the new `empty_ids` fixture asserts
+  losslessness instead; and adding a scenario **moved the corpus census**, so
+  ~14 present-tense citations across five documents were recomputed and four
+  corpus-size pins bumped. The `('', 'c')` edge the review showed being lost is
+  now unstatable, which is the decision's point. — **done** (`5e8a40f`).
+- **audit-S4 — The citation guard sees a directory, and says what it cannot
+  see.** F4: `install_check`'s `CITED_PATH` required two segments and a
+  trailing slash, so `reviews/` and `.github/` — the citation form the check
+  was written for — matched nothing. Widened to any cited path resolving to a
+  tracked file or directory. It also **isolated its own claim**, which is the
+  part worth keeping: in today's tree the `.github/` plant is red under the old
+  pattern too, because a tracked review cites `.github/workflows/ci.yml` by full
+  path, so the review's "caught by zero citations" no longer holds literally;
+  with that one citation reworded out of the sandbox the old pattern passes an
+  sdist carrying no `.github` at all and the widened one still fails. What the
+  widened guard still misses is planted and stated: a root name with no slash,
+  a cited directory resolving if *anything* ships beneath it, prose, untracked
+  paths, citation accuracy, non-markdown citers. — **done** (`51da70e`).
+- **audit-S5 — The figure names the magnitude it was measured at, and the
+  counts recount.** F5 (`~238 ns` was the ULP at 1.7e9 *seconds*, not at
+  epoch-nanosecond magnitude, where `SPEC.md` §3.1 and `ADAPTERS.md` already
+  said **256 ns**), F6 (`OPEN_QUESTIONS.md` §16(a)'s present-tense behaviour,
+  dated in place rather than rewritten), F7 (`tests/digit_limit.py`'s "five
+  tests" is seven functions / nine ids), and the review's counting nits. Its
+  transferable finding: **four of its six items had a second site the review
+  did not name**, every one of them in the `CHANGELOG.md` entry of the batch
+  that first wrote the figure. A wrong number in a durable document is copied
+  into the record of the batch that wrote it, so correcting the cited line
+  alone leaves the figure standing — grep the figure, not the line. It also
+  **sharpened F6 rather than accepting it** (the §16(a) behaviour never went
+  stale; it turned at `ff05b2d`, the commit that added the fixture) and
+  **dropped** the unreproducible "38 candidates" figure rather than restating
+  it, because the population is pattern-dependent and any restatement would rot
+  at the next pattern change. — **done** (`4727a46`).
+- **audit-S6 — A sentence about a guard gets the same adversarial read as the
+  guard.** The per-batch nits with a code or a spec surface: `audit-R8`'s
+  `SPEC.md` §3.7 over-statement (a claim about a *key*, written as a claim
+  about the span), `audit-R12`'s omitted seventh key and an ungrammatical
+  §3.7 line, `audit-R14`'s unqualified determinism sentence in `SPEC.md` §5.1
+  and `README.md` (both now point at §5.3, which states the condition), and the
+  `audit-R15` sentence `audit-S4` handed over. It caught its **own** over-claim
+  mid-batch — it wrote that each of the four named edges of the sdist rule is
+  planted, then found the fourth (citation *accuracy*) unplantable and corrected
+  the sentence before committing — which is the review's closing lesson applied
+  to the batch written to apply it. `audit-S5`'s second-site rule held again:
+  `audit-R12`'s wrong count was in its own `CHANGELOG.md` entry too. — **done**
+  (`02c79b4`).
+- **audit-S7 — Series close, a third time.** As `audit-R7`: final statuses
+  here, the decision moved here, the run-4 review archived and accounted for
+  finding by finding, five open threads registered, `WORKPLAN.md` and its
+  README row removed. — **done** (this commit).
 
 ### Decisions taken  *(moved here from `WORKPLAN.md` §3)*
 
@@ -10856,6 +10964,23 @@ own *Decision* line.
 | Date | Batch | Decision | By |
 |---|---|---|---|
 | 2026-09-11 | `audit-R3` | Option (c): document that a conformant OTLP JSON export draws one `timestamp_unit_suspect` per span, and that the warning is a statement about the model's field contract, not about the telemetry. No unit is stated at the seam or in the graph; nothing is rescaled; `otlp_container` keeps its byte-identity with `llm_tool_llm`. Hold (a1)+(a′) as the memo describes until a second consumer of the unit exists or a real mixed-unit export is observed. When either arrives, evaluate first — as a new memo — a within-file consistency rule: one diagnostic per graph when every timestamp value is on the same side of the ceiling, per-span only for the minority side when they are not; it removes the volume and restores the signal without a stated unit or an invented key. Implemented by `audit-R11`. | maintainer |
+
+**2026-09-12**
+
+| Date | Batch | Decision | By |
+|---|---|---|---|
+| 2026-09-12 | `audit-S3` | An empty string is not a span identity. A record whose `span_id` is `""` takes the same content-derived fallback as one with no `span_id` (A5's rule), with the same diagnostic; an empty `parent_id`/`parentSpanId` means "no parent" (`audit-R10`'s rule) and therefore loses nothing, because no node can be named `""`. SPEC §3.6 states both halves together and the sentence at §893 becomes true. | maintainer |
+
+Run 5's single decision, moved from `WORKPLAN.md` §3 and verified against the
+deleted file by `diff` at this close: the two texts are equal after
+normalising exactly two id spellings — `S3` → `audit-S3` and `R10` →
+`audit-R10` — which this file's id policy above requires and which is
+disclosed here rather than left for a reader to notice. Two halves of it came
+back qualified by the batch and are recorded in `audit-S3`'s bullet, not
+smuggled into the decision text: "the same diagnostic" turned out to be
+**none**, because A5 deliberately emits none, and the `('', 'c')` edge the
+review showed being lost is unstatable under the decision rather than restored
+by it.
 
 `OPEN_QUESTIONS.md` §17's decision line dates the decision rather than citing
 `WORKPLAN.md`, because a durable document may not depend on a file deleted at
@@ -10938,6 +11063,88 @@ quoting a document is not the place to apply this file's `audit-` prefix.
 | 7 | R3 finding 5 — R10 is genuinely out of R3's scope | not a defect; `audit-R10` closed the behaviour |
 | 8 | Three sub-agent findings the reviewer checked and rejected; the survivor — the memo never says the schema is currently unfrozen | `audit-R17` |
 | 9 | "What run 4 should do with this", items 1–7 | the ordering the run followed; every item appears above |
+
+### The run-4 cold review, finding by finding
+
+`reviews/2026-09-11-run4.md`, archived by this batch from the untracked
+scratch drop and verified byte-for-byte by `sha256` — the same archival
+`audit-R2`, `audit-R15` and `audit-R7` each had to do, and the fourth review
+put **in** the tree rather than cited from a scratch drop a clean checkout
+does not carry. Every finding and sub-finding it raised is below,
+including the four it recorded without filing: a review whose nits quietly
+evaporate at the close is the one nobody writes again. The `§` column is the
+review's own section, and inside the table the review's spelling of a batch id
+is kept as it wrote it — quoting a document is not the place to apply this
+file's `audit-` prefix.
+
+Where a row names a batch, the closure was spot-checked at this close rather
+than read off the batch's own report; the rows say what was re-run.
+
+| § | Finding | Outcome |
+|---|---|---|
+| 2 | **F1** *(blocker)* — five cited census figures survive a wrong value with the whole suite green; the guard reads a hand-written list of eight families, and this file had already recorded the class as closed | `audit-S1`, which derives the family list from the census's own result type, and corrects the `audit-R9` headline in the same commit. Re-run here: planting a wrong value for one of the review's five zero-valued figures (`OPEN_QUESTIONS.md` §10's "float repr differs") turns `test_every_corpus_figure_a_durable_document_asserts_is_the_census` red, and reverts clean |
+| 2 | **F2** — *"an `OSError` prints no bracket"* is false in three durable documents, and the repo's own test asserts the opposite | `audit-S2`. Re-read here: `README.md` and `SPEC.md` §7 now show the `[Errno 2]` line and say it is the OS's `errno`, not a spanweave code |
+| 2 | **F3** — an empty parent reference to an empty span id silently loses an explicit edge, and `SPEC.md`'s justifying sentence is false | `audit-S3`, per the 2026-09-12 decision above. Re-run here: the `empty_ids` fixture builds a content-derived id for the empty `span_id`, no parent edge, no diagnostic, nothing dropped |
+| 2 | **F4** — the sdist citation guard cannot see the citation form it was written for | `audit-S4`. Re-run here: `CITED_PATH` now matches a bare `reviews/` and `.github/` |
+| 2 | **F5** — the new "~238 ns" figure is attached to the wrong magnitude and contradicts `SPEC.md`'s own number | `audit-S5`, at the cited site **and** at the `audit-R11` `CHANGELOG.md` entry the review did not name |
+| 2 | **F6** — `OPEN_QUESTIONS.md` §16(a) restates a present-tense behaviour that is false today | `audit-S5`, dated in place rather than rewritten — and sharpened: the behaviour never went stale, it turned at `ff05b2d`, the commit that added the fixture |
+| 2 | **F7** — `tests/digit_limit.py`'s "five tests" is the one measured number in `audit-R14` that is wrong | `audit-S5`: seven functions, nine ids across the two non-default configurations, stated with the tree they were counted on |
+| 3 | R11 — pass on every item; the batch's own finding is F5 | `audit-S5` (= F5). No nit |
+| 4 | R8 **[nit]** — `SPEC.md` §3.7 says an unreadable name *"leaves `operation` and `model` `None`"*, which is a claim about a key written as a claim about the span | `audit-S6`, which re-probed both adapters before rewording |
+| 5 | R9 **[nit]** — §16(k)'s "the two that carry it now" undercounts by one | `audit-S5`, at the prose site and at its `CHANGELOG.md` second site |
+| 5 | R9 **[nit]** — the body's *"Re-run against HEAD first … 40 passed, 0 failed"* over-generalises; one of the six sites was already on a named-site list | **moot**: the claim is in a commit body, which cannot be rewritten. Grepped at this close under `audit-S5`'s rule — it has no durable copy, so nothing outlives the body |
+| 6 | R10 — pass on every item; the batch's own finding is F3 | `audit-S3` (= F3) |
+| 6 | R10 — *worth recording as a thread*: `parent_ref` is a convention, not an enforcement; `NormalizedSpan.__post_init__` normalizes neither reference, so a third adapter that forgets the helper regresses silently | **thread 19** |
+| 7 | R12 **[nit]** — the "six keys / three per dialect" count omits `gen_ai.operation.name`, which the same commit changed | `audit-S6`, which reproduced `f03de6b`'s own corpus figures before trusting its recount, and fixed the `CHANGELOG.md` second site |
+| 7 | R12 **[nit]** — `SPEC.md` §3.7 is ungrammatical in a durable document | `audit-S6` |
+| 7 | R12 **[nit]** — `ADAPTERS.md` points a new adapter only at `_timestamps()` for the `<record>.<field>` rule; nothing names `unreadable_fields()` | **thread 19**, whose subject is exactly this: a convention a future adapter is held to by prose alone |
+| 7 | R12 — *recorded, not filed*: `status_message` alone is a plain `_as_str` read, so an unreadable one still falls silently to `None`; the weakest of the batch's four deferrals | **thread 13** (`audit-R18`), which already carries it by name at both adapters' line cites — verified here, not assumed |
+| 8 | R13 **[nit]** — *"CI's blind spot was structural and is closed structurally"* overstates the new test: it catches drift *between* the two lists and would not have caught the original blind spot, which the 3.14 CI row is what closes | **closed by this batch.** The over-claim had a durable second site — thread 10's own closing sentence — found by grepping the phrase rather than the line, per `audit-S5`'s rule. Thread 10 now says which half each mechanism closes, as `ci.yml`'s own comment already did |
+| 9 | R14 **[nit]** — `SPEC.md` §5.1 and `README.md` still carry the unconditional *"same input bytes → byte-identical graph"* with no pointer to §5.3 | `audit-S6`, which made both point at §5.3 by its title rather than restate the condition. The **third** site, `CLAUDE.md` invariant 4, is **thread 23** — a halt point, not a batch |
+| 10 | R15 **[nit]** — `TASKS.md` 3.6 states the sdist citation rule unqualified while the shipped file cites two paths that resolve nowhere | `audit-S6`, rewritten against `audit-S4`'s docstring with the limits inside the rule |
+| 10 | R15 **[nit]** — "38 such candidates were counted while writing this" does not reproduce | `audit-S4` (its docstring) and `audit-S5` (the `CHANGELOG.md` copy). **Dropped, not restated**: the population is pattern-dependent, so any replacement figure would rot at the next pattern change |
+| 10 | R15 — `tests/` is outside the `mypy` gate, so the new check code is not type-checked by `make check` | **thread 16(g)**, added by this close: true, measured, and no batch's row |
+| 11 | R16 **[nit]** — the README transcript shows a command that only prints the documented bracket if the file exists, which is F2's confusion in the one place a newcomer meets it | `audit-S2`, which renamed the transcript's file to one that exists and stated the precondition above the fence, leaving the fence guard untouched |
+| 12 | R17 **[nit]** — the §16(a) refusal-provenance note is an addition the row did not ask for | **not a defect**, and the review says so: disclosed in the body, same file, same defect class, every claim measured true. No action |
+| 12 | R17 — *recorded, not filed*: **no doc-truth test guards any §17 number**, and R17 adds four more. F1's class, one document over | **thread 20** |
+| 13 | R19 — pass on every item, clean, no findings | — |
+| 13 | R19 — *recorded, not filed*: the refusal message interpolates the interpreter's own `RecursionError` text, which on 3.14 carries a per-run kB figure beside the library's correct sentence | **thread 11**, which is where the batch's behaviour already lives |
+| 13 | R19 — *recorded, not filed*: `CHANGELOG.md`'s 3.11.15 pair "991/989" measured 992/991 on the reviewer's machine | **thread 10.** ±2 on a C-stack-dependent quantity, which is thread 10's standing rule rather than an exception to it; correcting it to a second machine's number would restate the defect the rule exists to prevent |
+| 14 | R7 **[nit]** — two bare `R3`s survive inside the registry, which is the collision F5 asked that batch to remove | `audit-S5` |
+| 14 | R7 **[nit]** — `CHANGELOG.md`'s "nineteen registered batches, seventeen of which ran" undercounts by one | `audit-S5` |
+| 15 | "What run 5 should do with this", items 1–6 | the order the run followed; item 6's two unowned threads are **19** and **20** |
+| 15 | The closing observation about the series' own shape | recorded verbatim below as the series' lesson |
+
+### The lesson the series ends on
+
+Recorded in the review's own words, because paraphrasing a criticism is how it
+gets softened:
+
+> Runs 2, 3 and 4 each found the same two defect classes, in different places:
+> a sentence that is checkable and wrong, and a guard advertised more broadly
+> than it holds. […] The residue is that **every one of the new guards is
+> itself advertised slightly beyond its scope** (F1, F4, and R13's nit). The
+> lesson worth carrying into the next series is not "check the numbers" — run
+> 4 checked the numbers — but that the sentence describing a guard needs the
+> same adversarial read as the guard.
+
+**Run 5 is evidence for it and against it, both ways round, and an honest
+close says so.** For: `audit-S6` caught its **own** over-claim mid-batch — it
+wrote that each of the four named edges of the sdist rule is planted, found
+the fourth unplantable, and corrected the sentence before committing — which
+is the lesson working inside the batch written to apply it. Against:
+`audit-S3` narrowed `audit-S1`'s guard **on the day it was widened**, by
+exempting the superseded census pair so that `CHANGELOG.md` entries recording
+what an earlier batch asserted stay true; the cost is that a *new* live
+sentence could state the retired figure unchallenged. It is written in the
+exemption's own comment **and** carried as thread 21, because a comment inside
+a test file is not where the standing cost of a mechanism gets read. Neither
+is flattering; both belong. And one more, which is the same lesson at the
+level of the series: the review's reason for calling F1 a **blocker** was not
+the five unguarded figures — it was that the close had already recorded the
+class as shut, so a future reader would trust the registry and stop checking.
+The practice that follows is to read a close's own claims the way the review
+reads the batches'.
 
 ### Cold review of run 1 — 2026-09-10
 
@@ -11026,6 +11233,16 @@ already where the series' deferred work lives, it is in the file a reader of
 the registry is already in, and every thread here names the batch or the review
 finding it came from. The one registered row that never ran, `audit-R18`, is
 thread 13.
+
+**Run 5 inherited that clause and it is moot, which is worth one sentence
+rather than silence.** `audit-S7`'s row carries `audit-R7`'s *"any row still
+`todo` moves to `DEBT.md`"* forward, and run 5 finished with **no `todo` row
+left**: `audit-S1`–`audit-S6` are all `done` with a sha, there was no memo and no halt, so the
+clause has nothing to move. The reasoning above still binds anything that
+*had* been left open — this list is the destination, and this repository still
+has no `DEBT.md`. Threads **19–23** are run 5's, and two of them (21, 22) are
+residues run 5 created or left rather than findings it inherited; saying which
+is which is the point of keeping them here.
 
 1. **Two adapter docstrings still promise a name no dialect states.**
    `spanweave/adapters/openinference.py:433` and `otel_genai.py:569` still say
@@ -11136,13 +11353,27 @@ thread 13.
     promise. `SPEC.md` §7 carries the table on those terms and
     `tests/test_serialize.py` measures both shapes, records the ratio it
     observed, and asserts only the containment -- which is the library's own.
-    The second cause was structural and is closed with it: CI's matrix was a
-    hard-coded list that had drifted below `requires-python`, so the only
-    interpreter where the two ceilings differ was the one nothing ran; the
-    matrix is now derived from the classifiers and `tests/test_acceptance.py`
-    fails if they disagree. (run-3 review F1, batch `audit-R13`. This project
-    has no `DEBT.md` or `DECISIONS.md` for it to live in; this section is where
-    the
+    The second cause was structural, and **two different mechanisms close two
+    different halves of it** — a distinction this thread previously collapsed
+    into "closed structurally", which is the run-4 review's R13 nit and the
+    series' own defect class one more time. CI's matrix was a hard-coded list
+    that had drifted below `requires-python`, so the only interpreter where
+    the two ceilings differ was the one nothing ran. What closes *that* is the
+    **`3.14` row itself**, now in the matrix and in the classifiers. What
+    `tests/test_acceptance.py` adds is narrower and is worth stating as what
+    it is: it fails if the matrix and the classifiers **disagree**, so the two
+    cannot drift apart again — but it would not have caught the original
+    blind spot, where both lists agreed at 3.11-3.13 while a local `uv run`
+    picked 3.14. `.github/workflows/ci.yml`'s own comment states it at that
+    precision. A second measurement note belongs here rather than in a
+    correction: the run-4 review re-measured the 3.11.15 ceiling pair this
+    thread's `CHANGELOG.md` entry gives as 991/989 and got **992/991** on its
+    own machine. That is ±2 on a quantity this thread's rule already refuses
+    to promise, and it is recorded rather than rewritten — replacing one
+    machine's number with another's would be the defect the rule exists to
+    prevent. (run-3 review F1, batch `audit-R13`; the two corrections above,
+    run-4 review §8 and §13, batch `audit-S7`. This project has no `DEBT.md`
+    or `DECISIONS.md` for it to live in; this section is where the
     series' durable record already is.)
 11. **On CPython 3.14 a deeply nested record raises `RecursionError` out of
     `spanweave.build`.** Found by `audit-R13` while measuring for thread 10, and
@@ -11168,7 +11399,15 @@ thread 13.
     begins is the interpreter's and §7 says so rather than promising a number.
     `SPEC.md` §3.6, §3.10 and §7 carry the rule, and `tests/json_depth.py` now
     holds the measurement machinery `audit-R13` wrote, shared by the
-    write-side pin and the reader's.
+    write-side pin and the reader's. **One cosmetic residue the run-4 review
+    recorded without filing** (§13): the refusal interpolates the
+    interpreter's own `RecursionError` text, which on 3.14 reads *"while
+    getting the repr of an object"* and carries a per-run kB figure — a clause
+    that sits oddly beside the library's own correct sentence about the JSON
+    encoder, and one `serialize.py` already emits on the write side. It is
+    text in a message, not a code or a behaviour, so nothing routable depends
+    on it; it is written down here because a message a caller reads is still
+    something the library says.
 
 12. **One non-finite number refuses a whole graph, and the library already
     carries a non-JSON literal as text elsewhere.** `audit-R1` made a trace
@@ -11268,8 +11507,13 @@ thread 13.
     has no canonical graph to express, and for a rule whose cases are flat
     dicts through `span_of`, but the Definition-of-Done checkbox is unmet and
     nothing says why. (f) Four documentation lines introduced by `audit-R5` run
-    90–126 characters against a ~78–82 norm. (run-3 review §2 F7, §3, §5
-    finding 5, §6 finding 6.)
+    90–126 characters against a ~78–82 norm. (g) **`tests/` is outside the
+    `mypy` gate**, so check code — `tests/install_check.py`'s sdist audit and
+    `tests/corpus_census.py` among it — is not type-checked by `make check`
+    even though the suite is where most of this series' new guards live. Noted
+    by the run-4 review at §10 against `audit-R15`'s new check, true of every
+    other one too, and owned by no batch's row. (run-3 review §2 F7, §3, §5
+    finding 5, §6 finding 6; (g) run-4 review §10.)
 17. **`audit-R4`'s rule is stated; two things around it are not.** The rule
     itself — a key is consumed where it is read, never before — is in
     `SPEC.md` §3.7 and was applied uniformly by `audit-R8` and `audit-R12`.
@@ -11309,6 +11553,100 @@ thread 13.
     decision's own text already names the trigger for revisiting: a second
     consumer of the unit, or a real mixed-unit export. (run-3 review §7
     finding 4.)
+
+19. **Two adapter conventions bind a future adapter by prose alone.** The
+    first is `audit-R10`'s and `audit-S3`'s shared rule: `span_id` and
+    `parent_id` must be filled through `spanweave.seam.span_ref()` /
+    `parent_ref()`, because a dialect spells "no id" two ways and the two ends
+    of that rule have to agree or the corpus splits.
+    `ADAPTERS.md` says the rule "is not optional" — and **nothing enforces
+    it**. `NormalizedSpan.__post_init__` normalizes `attributes` and
+    `call_names` and neither reference, so a third adapter that reads
+    `record.get("span_id")` straight into the seam passes every existing gate:
+    the cross-dialect equivalence test compares dialects of the same scenario,
+    and no scenario yet renders an empty id in a third dialect. The shipped
+    adapters are correct; the guard is the convention's, not the model's. The
+    second is the same silence at a second convention (run-4 review §7):
+    `ADAPTERS.md` points a new adapter at `_timestamps()` for the
+    `<record>.<field>` reporting rule and names **no** shared helper for the
+    rest — `unreadable_fields()` appears nowhere in `ADAPTERS.md` or
+    `SPEC.md`, though `audit-R8` and `audit-R12` made it the mechanism the
+    whole consume-on-decide rule runs through. Both are Phase 4 business,
+    because dialect three is the instrument that would find them, and by then
+    a regression costs a corpus rather than a review. (run-4 review §6 and §7.)
+20. **`OPEN_QUESTIONS.md` §17's figures are unguarded by doc-truth, and
+    `audit-R17` added four more.** F1's class, one document over, and recorded
+    by the run-4 review without being filed (§12). §17 states a 201-span
+    export's diagnostic counts, its node count, the ceiling constant, the
+    fixture's timestamp-value count and the ULP, none of which any doc-truth
+    test binds: they are not corpus-census figures, so `audit-S1`'s derived
+    families do not reach them, and §17 is on no named-site list. Every one of
+    them was re-measured by `audit-R17` and was true when it was written —
+    which is exactly the state every stale figure in this series was in
+    before it went stale. The fix is not obviously "add a family": most of
+    these are properties of a *generated* 201-span export that no fixture
+    carries, so guarding them means deciding first whether the export becomes
+    a fixture. That is a memo, not a patch. (run-4 review §12.)
+21. **`RETIRED_CENSUS_FIGURES` narrows `audit-S1`'s guard by one notch, on the
+    day it was widened.** `audit-S3` grew the corpus by one scenario, so every
+    present-tense census citation was recomputed — and the superseded pair
+    survives in the `CHANGELOG.md` entries recording what an earlier batch
+    asserted at the time. Rewriting those would be a falsification, not a
+    correction, so they are exempted by value in
+    `tests/test_doc_truth.py`'s `RETIRED_CENSUS_FIGURES`. **The cost is
+    standing and is stated in a comment there**: a *new* live sentence could
+    state the superseded figures and the scan would not object, because the
+    exemption is keyed on the value, not on the paragraph's tense or its
+    document. Every retirement makes the guard one notch wider-meshed, and the
+    mechanism has no expiry. What it needs is either a way to scope an
+    exemption to the sentences that own it, or a rule that a retired figure
+    may appear only inside a `CHANGELOG.md` entry — neither of which is a
+    close's decision to take. (`audit-S3`, and the run-4 review's closing
+    observation arriving inside the run written to answer it.)
+22. **This file's run-3 finding table names review sections as bare `R<n>`,
+    which is the collision `audit-S5` fixed one table over.** The run-3
+    review's F5 asked for the series' ids to stop colliding with the `0.9.1`
+    launch checklist's `R1`–`R3`; `audit-R7` applied `audit-R<n>` throughout
+    the prose and `audit-S5` caught the two survivors. The run-3
+    finding-by-finding table still writes `R1`, `R4`, `R5` and `R3` bare, and
+    it does so **deliberately** — its own preamble says the review's spelling
+    is kept inside a table that quotes the review. Both sentences are
+    defensible and they point opposite ways: the file's policy at the top says
+    `audit-R<n>` "**here**, throughout", and a reader meeting `R3` in that
+    table cannot tell the memo batch from the PyPI publish without reading the
+    preamble first. It is left open rather than decided at a close, because
+    the choice is between two stated policies and picking one silently is how
+    the collision happened in the first place. (run-3 review F5, `audit-S5`'s
+    residue.)
+23. **`CLAUDE.md` invariant 4 states determinism unconditionally, and two
+    other documents now qualify it. This one is the maintainer's.** Invariant
+    4 reads *"Same input bytes → byte-identical graph, on any machine, in any
+    process"*, and then lists what is banned — clocks, randomness, `hash()`,
+    iteration order, input line order. `SPEC.md` §5.3, *The one input that is
+    not the input bytes*, states the condition that sentence does not carry:
+    **the interpreter's integer-string digit limit is an input to the graph**,
+    so the same bytes under two differently configured interpreters produce
+    two different graphs, and a test asserts they differ so the paragraph
+    cannot quietly stop being true. `ENVIRONMENT.md` says the same and goes
+    further, naming the invariant directly: *"A caller who needs `CLAUDE.md`
+    4's byte-identity across machines pins it — `PYTHONINTMAXSTRDIGITS=4300`"*.
+    `audit-S6` made `SPEC.md` §5.1 and `README.md` point at §5.3 and
+    **deliberately left `CLAUDE.md` alone**: editing a `CLAUDE.md` invariant
+    is a halt point (`AGENT.md`, *"The license, or any change to `SPEC.md`
+    scope or the `CLAUDE.md` invariants"*), not a batch's call, and this close
+    does not take it either.
+    **What is on the table, for the maintainer and nobody else.** Either the
+    invariant gains a pointer to §5.3 — the smallest change, and the one that
+    makes the three documents say one thing — or it stays unconditional on the
+    ground that it is a *rule for the library's own code* (no clocks, no
+    randomness, no `hash()`) rather than a promise about every interpreter it
+    can be run under, in which case §5.3 is not a qualification of it at all
+    and `ENVIRONMENT.md`'s sentence is the one that needs a word. The reading
+    matters beyond the wording: `ENVIRONMENT.md` already tells a caller to pin
+    the limit *in order to get invariant 4*, which only makes sense under the
+    first reading. **No batch may resolve this**, and it is the one run-5 item
+    that stays open by rule rather than by judgement. (run-4 review §9, third
+    site; `audit-S6`'s residue.)
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

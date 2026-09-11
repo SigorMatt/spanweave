@@ -298,6 +298,47 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The September 2026 audit-fix series is closed a third time, and
+  `WORKPLAN.md` is gone with it.** Run 5 is seven batches -- `S1` `aed32a9`,
+  `S2` `bed0ce2`, `S3` `5e8a40f`, `S4` `51da70e`, `S5` `4727a46`, `S6`
+  `02c79b4`, `S7` this commit -- answering the cold read of run 4, with no
+  memo and no halt. The entry below is the previous close and is history, not
+  the current fact. What reopened the series this time is the sharpest version
+  of what reopened it before: the blocker was **written into the close
+  itself** -- `R9`'s widened census guard was recorded as having closed "a
+  copy of the census can rot in place", and eighteen planted figures left five
+  green with the whole suite passing, because the guard read a hand-written
+  list of eight regex families while `tests/corpus_census.py` computed figures
+  no family matched. `S1` derives that list from the census's own result type,
+  so a figure the census can compute cannot be cited without a family, and a
+  second test makes every family read a planted example, because a regex gone
+  dead is invisible to a scan that reports only what it finds. The rest of the
+  run is the series' other defect class, four more times: an `OSError` line
+  three documents said prints no bracket while the suite asserted `[Errno 2]`
+  (`S2`); an empty `span_id` that stayed a node identity after an empty
+  *reference* had stopped being one, which silently lost an explicit parent
+  edge (`S3`, and a decision -- an empty string is not a span identity, so it
+  takes the content-derived fallback and no node can be named `""`); a sdist
+  citation guard blind to the single-segment directory citation it was written
+  for (`S4`); and three wrong figures with their second sites (`S5`, whose
+  transferable finding is that **a wrong number in a durable document is
+  copied into the `CHANGELOG.md` entry of the batch that first wrote it** --
+  four of its six items had one, so grep the figure rather than fixing the
+  line a review cites). `S6` took the nits with a spec surface and caught its
+  own over-claim mid-batch. Final statuses, the decision taken on 2026-09-12,
+  the run-4 review's finding-by-finding accounting -- every finding and
+  sub-finding, including the four the review recorded without filing -- and
+  **five** new open threads are in `TASKS.md` under *September 2026 audit*,
+  which is again the only place any of it lives. The review's closing
+  observation is recorded there verbatim as the series' lesson: the sentence
+  describing a guard needs the same adversarial read as the guard. Three of
+  the five threads are run 5's own residue rather than inherited work, and one
+  of them -- `CLAUDE.md` invariant 4's unconditional determinism sentence,
+  which `SPEC.md` §5.3 and `ENVIRONMENT.md` both qualify -- is a **halt
+  point** recorded for the maintainer rather than a batch's to take. **No
+  behavior changed**; nothing under `spanweave/` moved in this commit.
+  (run-4 review findings F1-F7 and the accounting of all of them; batch `S7`)
+
 - **The September 2026 audit-fix series is closed again, and `WORKPLAN.md` is
   gone for the second time.** G4 closed it on 2026-09-10 and deleted its
   execution state; a cold read of run 2 reopened it, and a cold read of run 3
@@ -589,9 +630,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   be in the tree. Documentation and tracking only; no behaviour change.
 
 - **The September 2026 audit-fix series is closed, and `WORKPLAN.md` is
-  gone.** *(Written at G4, 2026-09-10, and superseded twice: the series was
-  reopened for runs 3 and 4 and the file came back with it. See the entry at
-  the head of this section for the close that stands.)* That file was the
+  gone.** *(Written at G4, 2026-09-10, and superseded three times: the series
+  was reopened for runs 3, 4 and 5 and the file came back with each of them.
+  See the entry at the head of this section for the close that stands.)* That file was the
   series' execution state -- protocol, live batch
   status, decisions log, resume note, finding-to-batch map -- and was written
   to be deleted once the series ended, so that no reader would have two places
