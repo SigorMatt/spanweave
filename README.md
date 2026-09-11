@@ -215,7 +215,7 @@ canonical graph**. That equivalence is the library's entire reason to exist, and
 it is a test, not a claim: `make conformance`.
 
 **What it covers today, in numbers rather than adjectives.** The corpus holds
-**27** scenarios. **22** are rendered in both dialects and compared across them.
+**28** scenarios. **23** are rendered in both dialects and compared across them.
 The other **4** are rendered in one, because the second dialect genuinely cannot
 express them — and each says so in a `coverage.json` file carrying the reason,
 because silence would be indistinguishable from an adapter nobody got round to
@@ -230,7 +230,7 @@ equality is the assertion.
 declare a field *dialect-varying* — a reviewable file in the corpus, never a
 branch in the comparison code (`FIXTURES.md` §4.4). One field is declared almost
 everywhere: `name`, the span name, which two instrumentors are least likely to
-spell the same way. **22 of those 22 cross-dialect scenarios declare it**, so
+spell the same way. **23 of those 23 cross-dialect scenarios declare it**, so
 the equivalence claim above is a statement about everything else — ids, kinds,
 operations, timestamps, statuses, payload states and values, usage, and every
 edge with its warrant and basis. **If you are matching nodes by `name` across

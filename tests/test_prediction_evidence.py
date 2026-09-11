@@ -252,9 +252,10 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
     # 34 -> 38 at batch A5, which added the `derived_ids` pair in both.
     # 38 -> 40 at batch D2, which added `receipt_redeclared` in both.
     # 40 -> 41 at batch E3: `mixed_instrumentation`, one rendering.
-    assert len(traces) == 41
-    assert bytes_moved == 41, "both consumers' serialized output is order-dependent"
-    assert substance_held == 41, "no per-node value or total depends on the order"
+    # 41 -> 43 at batch S3, which added `empty_ids` in both dialects.
+    assert len(traces) == 43
+    assert bytes_moved == 43, "both consumers' serialized output is order-dependent"
+    assert substance_held == 43, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -296,9 +297,10 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
             tied_traces.append(source)
 
     # 22 -> 24 at batch A3, 24 -> 26 at batch C1, 26 -> 30 at batch A5,
-    # 30 -> 32 at batch D2, and 32 -> 33 at batch E3, for the same reason as
-    # the count above.
-    assert a_choice_was_made == 33, "traces where two nodes were ready at once"
+    # 30 -> 32 at batch D2, 32 -> 33 at batch E3, and 33 -> 35 at batch S3, for
+    # the same reason as the count above -- `empty_ids`' two spans are both
+    # roots, so both are ready at once in each of its two renderings.
+    assert a_choice_was_made == 35, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 

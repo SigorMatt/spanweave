@@ -246,8 +246,13 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: That the states are `llm_tool_llm`'s exactly is the point of the scenario:
 #: forcing one adapter over the same file reports `absent` where content was
 #: emitted, which is the sharpest harm per-record dispatch removes.
+#:
+#: Batch S3 added `empty_ids`: two renderings of two spans, neither of which
+#: carries a payload attribute, so `absent` moved 139 -> 147 and nothing else
+#: moved. A scenario about identity has nothing to say about payloads, and the
+#: eight `absent` slots are that said in the one place it is counted.
 CORPUS_STATES = {
-    "absent": 139,
+    "absent": 147,
     "empty": 4,
     "present": 141,
     "redacted": 2,

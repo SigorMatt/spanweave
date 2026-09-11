@@ -111,6 +111,7 @@ implementation gets wrong.
 | `timestamp_units` | timestamps in nanoseconds, and one in a rendering §3.1 does not read | `timestamp_unit_suspect`, values unrescaled, the unread field named in `unmapped_attributes` |
 | `derived_ids` | records the dialect gives no span id, so every node id is derived | ids from the record's **content**, never its position (`SPEC.md` §3.6 rule 2) |
 | `derived_ids_shuffled` | `derived_ids`, lines reordered | byte-identical to its twin **and** every id still on its own record |
+| `empty_ids` | a `span_id` stated `""`, and a `parent_id` stated `""` | a **derived** id and no node named `""`, no `parent` edge, no diagnostic, both empty strings still in `raw` |
 
 Every new adapter must render **all** of these, including the degenerate ones.
 An adapter that only handles happy paths is not done.

@@ -722,6 +722,45 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An empty string is not a span identity, so an empty parent reference now
+  loses nothing.** Batch `audit-R10` normalized `parent_id: ""` /
+  `parentSpanId: ""` to *no parent* at the seam, on the stated ground that,
+  read as a reference, the empty string **names a span no input can contain**.
+  Only half of that was implemented. A record whose `span_id` was `""` kept
+  `""` as its node identity -- only a record with *no* `span_id` took
+  `SPEC.md` §3.6 rule 2's content-derived key -- so an input could contain
+  exactly the span the sentence said it could not, and the `parent` edge
+  between such a pair went from `('', 'c', parent, explicit)` before R10 to
+  **nothing at all, with no diagnostic**, after it. An `explicit` relation the
+  telemetry stated was dropped silently, which touches losslessness as well as
+  warrant, and the spec asserted an absolute an input could falsify. Both
+  halves are one rule now: an empty `span_id` states no id, so the record is
+  keyed by its content exactly as one that omits the field is, in **both
+  dialects** and **both containers** -- the OTLP reader renames `spanId` to
+  `span_id` and leaves the value, so the two paths meet at the same seam
+  reader. The same two-record input now builds two nodes, the first under a
+  derived `sw_` id, still no `parent` edge -- there is no pair of ids for one
+  to be stated between -- and **nothing is dropped**: both empty strings are on
+  the nodes' `raw.source` verbatim, which `tests/test_adapters.py` and
+  `tests/test_read.py` assert, since `canonical()` erases `raw` and the corpus
+  cannot see it. No new diagnostic code: an empty `span_id` is *read*, not
+  failed-to-read, so it draws no `unmapped_attributes` (the reading
+  `parent_id: ""` already gets), and a derived id is rule 2's honest answer
+  rather than a defect to report -- `derived_ids` records that argument and it
+  is unchanged here. **Exactly the empty string**, at both fields: `" "` and
+  `"0000000000000000"` are ids like any other. New degenerate conformance
+  scenario `empty_ids` in both dialects, one expected graph: two root spans,
+  one derived id, one `temporal` edge, zero diagnostics. **No corpus
+  expectation moved** -- no tracked record states an id empty, so no existing
+  `expected/graph.json` is touched -- and `tests/serialized_shape.json` is
+  unchanged. The corpus grew by two files and four records, so every
+  present-tense census citation was recomputed (52/151 -> **54/155**, 139 ->
+  **141** carrying a span id, 135 -> **137** trace-unique, 300 -> **308**
+  timestamp literals, 50 -> **52** tracked `*.jsonl`); the superseded values
+  survive only in the `CHANGELOG.md` entries that record what an earlier batch
+  asserted, and are retired as history rather than rewritten.
+  (run-4 review finding F3; batch `S3`; `SPEC.md` §3.6, §4.0)
+
 - **The documented rule for matching a failure line says what the CLI prints,
   and the README transcript names its own precondition.** Batch `audit-R16`
   made a raised refusal routable from outside the process, and stated the other

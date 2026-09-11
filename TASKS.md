@@ -11024,7 +11024,7 @@ thread 13.
    because G5's row named the Phase 4 text, not Phase 2's.
 3. **Seven test sweeps still glob `dialects/*.jsonl`.** F2 added `.json`
    renderings, and the census it maintains was widened to read every rendering
-   through the library (52 trace files / 151 records). Seven other sweeps were
+   through the library (54 trace files / 155 records). Seven other sweeps were
    not, so they do not see the new renderings. Stated in
    `fixtures/conformance/README.md` rather than left to be found.
 4. **C3 relaxed a gate, and a relaxed gate should be visible in the record.**
@@ -11050,7 +11050,7 @@ thread 13.
    counts the corpus from **`git ls-files`** — tracked files only, so a
    scratch capture cannot move a number a document asserts — and is the single
    source for
-   every corpus figure here. It counts **52 files / 151 records** today, and
+   every corpus figure here. It counts **54 files / 155 records** today, and
    `ROADMAP.md`, `CHANGELOG.md` and `OPEN_QUESTIONS.md` §12(c), §12(d),
    §12(f), §13(h) and §14 now assert that pair and cite 57/177 as history.
    The **decision is unaffected**: 0 records carry both markers under every one
@@ -11066,7 +11066,7 @@ thread 13.
    `*.jsonl` sweep; the fourth counted lines of an export `probe1.py` wrote
    to a temporary directory. All four recompute from `git ls-files` now, in
    the same module, and the documents state **34** timestamp values over
-   **3** captured files, **4** `data` edges over the same three, **50 of 50**
+   **3** captured files, **4** `data` edges over the same three, **52 of 52**
    tracked `*.jsonl`, and **one `malformed_record` per line** (**328** for
    the indented export F2's fixture carries). One claim moved rather than its
    arithmetic: C3's *"it bit no fixture"* was measured over a scope holding

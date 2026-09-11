@@ -150,6 +150,53 @@ class NormalizedSpan:
         object.__setattr__(self, "call_names", dict(self.call_names))
 
 
+def _stated_id(value: JsonValue) -> str | None:
+    """A span id a record states, or ``None`` where it states none.
+
+    **The empty string is not a span id.** It names nothing at either end of
+    a relation, so a record states no id by omitting the field, by reporting
+    it ``null``, or by reporting it ``""`` -- three spellings of one fact
+    (`SPEC.md` §3.6, §4.0). A value that is not a string at all is not an id
+    either, and it is *reported* as well as ignored: that is
+    `unreadable_fields`' business, not this function's.
+
+    **Exactly the empty string.** ``" "`` and ``"0000000000000000"`` are ids
+    like any other, because trimming or decoding one would be deciding what
+    the telemetry meant. Nothing is lost either way: the record is in ``raw``
+    verbatim, so which rendering the exporter used is still readable on the
+    node (`CLAUDE.md` 2).
+
+    Private because a caller should say which field it is reading -- the two
+    public readers below are the same rule seen from the two ends, and having
+    them share a body is the point: an identity rule and a reference rule that
+    can drift apart is exactly the defect this batch closed.
+    """
+    if not isinstance(value, str) or value == "":
+        return None
+    return value
+
+
+def span_ref(value: JsonValue) -> str | None:
+    """The id a record gives **itself**, or ``None`` when it states none.
+
+    An empty ``span_id`` is no id, so the record falls to `SPEC.md` §3.6 rule
+    2 and is keyed by its content -- the identical answer an absent ``span_id``
+    gets, because they are the identical statement.
+
+    **This is what makes `parent_ref`'s reasoning true.** That rule normalizes
+    an empty parent reference away on the ground that the empty string names a
+    span no input can contain; while `""` was still accepted as an *identity*
+    an input could contain exactly that span, and the `parent` edge between the
+    two records -- `explicit`, and stated by the telemetry -- was dropped with
+    no diagnostic at all. One end of a rule is not a rule.
+
+    Nothing is reported, for `derived_ids`' reason: the record stated no id,
+    rule 2 is the honest answer to that rather than a defect, and the empty
+    string itself is still on the node's ``raw.source`` verbatim (§3.5).
+    """
+    return _stated_id(value)
+
+
 def parent_ref(value: JsonValue) -> str | None:
     """The parent a record states, or ``None`` when it states none.
 
@@ -161,26 +208,18 @@ def parent_ref(value: JsonValue) -> str | None:
     span of every export (`SPEC.md` §7).
 
     Read as a *reference*, that empty string names a span no input can
-    contain, so every root drew an `orphan_parent` -- the diagnostic that
-    means "this trace is incomplete", reported on the one span that proves it
-    is not. So it is normalized here, at the seam, and the builder goes on
-    testing presence: an id that is not an id must not reach the layer that
-    has no way to tell.
-
-    **Exactly the empty string.** ``" "`` and ``"0000000000000000"`` are
-    references like any other, because trimming or decoding one would be
-    deciding what the telemetry meant. Nothing is lost either way: the record
-    is in ``raw`` verbatim, so which of the two renderings the exporter used
-    is still readable on the node (`CLAUDE.md` 2).
+    contain -- which `span_ref` above is what makes true -- so every root drew
+    an `orphan_parent`, the diagnostic that means "this trace is incomplete",
+    reported on the one span that proves it is not. So it is normalized here,
+    at the seam, and the builder goes on testing presence: an id that is not
+    an id must not reach the layer that has no way to tell.
 
     It lives here rather than in each adapter because two dialects disagreeing
     about one root is a cross-dialect equivalence claim, not a detail: the
     same run exported twice must produce the same graph, and a rule copied
     into two modules is a rule that can drift in one of them.
     """
-    if not isinstance(value, str) or value == "":
-        return None
-    return value
+    return _stated_id(value)
 
 
 #: The record fields every adapter reads as a plain string: the three ids and
@@ -202,9 +241,10 @@ def unreadable_fields(record: Mapping[str, JsonValue]) -> list[str]:
 
     Two renderings are read rather than refused, and both are absences rather
     than exceptions: a field the record omits, and one reported as `null` --
-    which is how a record says "no parent" and "no name". The third is
-    `parent_id: ""`, which `parent_ref` reads as *no parent* (§4.0) rather
-    than failing to read: it is a string, so it never reaches here.
+    which is how a record says "no parent" and "no name". The third is the
+    empty string, which `span_ref` and `parent_ref` read as *no id stated*
+    (§3.6, §4.0) rather than failing to read: it is a string, so it never
+    reaches here.
 
     It lives at the seam rather than in each adapter for `parent_ref`'s
     reason: two dialects reporting one unreadable id differently is a

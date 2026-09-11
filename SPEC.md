@@ -387,6 +387,43 @@ Node ids are deterministic and stable across runs, machines, and Python versions
    over the verbatim source record (§3.5). Both records are kept and
    `duplicate_source_id` (§3.7) reports the reuse.
 
+**The empty string is not a span id — at either end of a relation.** This is
+one rule with two halves, and it is stated here in one place because stating
+only one half is how it went wrong.
+
+| Field | Rendering | Read as |
+|---|---|---|
+| `span_id` / `spanId` | absent, `null`, or `""` | **no id stated** — rule 2 keys the record by its content |
+| `parent_id` / `parentSpanId` | absent, `null`, or `""` | **no parent** (§4.0) |
+
+The reference half is the one a real exporter exercises: `parentSpanId` is a
+proto3 `bytes` field, an unset one is the empty string, and a marshaler that
+emits defaults writes `""` on every root span of every export (§7). It is
+normalized to "no parent" on the ground that an empty reference **names a span
+no input can contain** — and that ground is the identity half above. While
+`""` was accepted as an identity the claim was false: an input could contain
+exactly that span, and the `parent` edge between such a pair — `explicit`, and
+stated by the telemetry — was dropped with no diagnostic. Both halves together,
+**nothing is lost**, because there is no node for an empty reference to have
+named.
+
+An empty `span_id` is therefore **read, not failed to read**: it decides which
+identity rule applies, so it is not an unreadable field and draws no
+`unmapped_attributes` (§3.7), and a derived id is not a defect to report but
+rule 2's honest answer. Nothing is dropped either way — the empty string is
+still on the node's `raw.source` verbatim (§3.5), so a consumer that wants to
+know which rendering the exporter wrote reads it there.
+
+**Exactly the empty string**, at both fields. `" "` and `"0000000000000000"`
+are ids like any other, because trimming or decoding one would be deciding
+what the telemetry meant. Both readings live at the seam
+(`spanweave.seam.span_ref` and `parent_ref`), not in each adapter: two
+dialects disagreeing about one id is a cross-dialect equivalence claim, and a
+rule copied into two modules is a rule that can drift in one of them.
+`fixtures/conformance/empty_ids` is the scenario, in both dialects; the same
+pair inside an OTLP export is pinned in `tests/test_read.py`, because a
+container is not a dialect (§7).
+
 **The formula is exact, because a reimplementation has to land on the same
 id.** Both hashes are taken over a **string encoded UTF-8** and read as a
 lowercase `hexdigest()`; the outer one is truncated to 16 characters, and the
@@ -951,6 +988,14 @@ string, and a marshaler that emits default-valued fields writes
 reference, that empty string names a span no input can contain, so every root
 would draw an `orphan_parent` — the diagnostic saying "this trace is
 incomplete" about the one span that proves it is not.
+
+**"No input can contain it" is §3.6's half of this rule, not a hope about
+inputs.** An empty `span_id` states no id, so no node is ever named `""` —
+which is what makes normalizing the reference away lose nothing. Until the
+September 2026 audit series (batch S3) only the reference half was stated, and
+in the gap a record whose `span_id` was `""` kept `""` as its identity: the
+`parent` edge between such a pair was dropped silently, and this paragraph
+asserted something an input could falsify. Read the two halves as one rule.
 
 So an empty parent reference is **no parent**, and the normalization happens in
 the adapter, at the seam (§6): `NormalizedSpan.parent_id` is `None`, and the

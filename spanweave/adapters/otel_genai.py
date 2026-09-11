@@ -85,6 +85,7 @@ from spanweave.seam import (
     NormalizedSpan,
     SpanLink,
     parent_ref,
+    span_ref,
     unreadable_fields,
 )
 
@@ -294,7 +295,12 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     consumed: set[str] = set()
     diagnostics: list[Diagnostic] = []
 
-    span_id = _as_str(record.get("span_id"))
+    # `span_ref` rather than `_as_str`, because `""` is not a span id: a
+    # record that states one is stating no id, exactly as one that omits the
+    # field is (`SPEC.md` §3.6). It is read at the seam so the two adapters
+    # cannot drift, and so the *reference* rule `parent_ref` applies below
+    # keeps the ground it stands on -- no node can be named `""`.
+    span_id = span_ref(record.get("span_id"))
     # The dialect's own id where there is one, and otherwise the record's
     # canonical digest -- content, never position. The index is right there
     # and it is wrong: it would bind the node id to where the record sat in

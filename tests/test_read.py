@@ -977,6 +977,30 @@ def test_a_parent_the_export_names_and_does_not_carry_is_still_an_orphan():
     assert [d.source for d in reported] == ["s9"]
 
 
+def test_an_empty_span_id_is_no_identity_in_the_export_container_too():
+    """`SPEC.md` §3.6 — batch S3, the other half of the rule above.
+
+    The sentence the test above rests on — that `""` names a span no input can
+    contain — was checkable and, until this batch, false: a span whose
+    `spanId` was `""` kept `""` as its node identity, so an export could carry
+    exactly the span the reference was said to be unable to name, and R10's
+    normalization dropped the `parent` edge between the two without a word.
+    An empty `spanId` states no id, so the node id is derived from the
+    record's content (§3.6 rule 2), here as in a JSONL file: the container is
+    not a dialect and it is not an identity rule either.
+    """
+    import spanweave
+
+    nameless = dict(OTLP_SPAN, spanId="", parentSpanId="")
+    graph = spanweave.build(json.dumps(envelope(nameless)).encode("utf-8"))
+
+    ids = [node.id for node in graph.nodes()]
+    assert ids != [""] and ids[0].startswith("sw_")
+    # Losslessness (`CLAUDE.md` 2): both empty strings are still on the record.
+    assert graph.node(ids[0]).raw.source["span_id"] == ""
+    assert graph.node(ids[0]).raw.source["parent_id"] == ""
+
+
 def test_no_trace_in_the_tree_reaches_the_otlp_branches():
     """The durable form of "no existing input changed" (`SPEC.md` §7).
 

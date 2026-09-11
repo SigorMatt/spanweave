@@ -481,7 +481,7 @@ timestamp values, **0** above 1e11, **0** whose shortest float repr differs
 from the literal in the file, **0** pairs of distinct literals collapsing onto
 one float. **13** sibling pairs, minimum gap **136 µs** — over 500x the ULP at
 that magnitude. Widen the scan to every trace file the repository carries and
-**10** of the tracked corpus's **300** timestamp literals sit above the line —
+**10** of the tracked corpus's **308** timestamp literals sit above the line —
 five per dialect in `timestamp_units`, which C1 wrote to exercise the ceiling,
 and they are exactly the ten whose float differs from the digits in the file.
 
@@ -555,7 +555,7 @@ but not to the input literal — `1.7000000001e+18` against `1700000000100000100
 is both a different spelling and a different number, and recovering the
 original means re-reading `raw.source`. Option 2: integer in, identical integer
 out; fractional seconds are unaffected, since Python's repr is
-shortest-round-trip and the **10** literals that differ from it, of **300** in
+shortest-round-trip and the **10** literals that differ from it, of **308** in
 the tracked corpus, are the integer nanosecond values in `timestamp_units` that
 option 2 keeps exactly. Option 3: nothing round-trips — every value is rescaled
 twice and comes back out as a float. Option 4: exact in both directions, at the price of a custom encoder.
@@ -977,13 +977,13 @@ source.
 in this repo's own harness — and not observed.** Said plainly, because G3 will
 ask whether E is a freeze precondition and the answer turns on this.
 
-What the corpus shows, scanned end to end — **52** files, **151** records
+What the corpus shows, scanned end to end — **54** files, **155** records
 (tracked files only):
 
 - **1 file** carries both markers, and it is
   `fixtures/conformance/mixed_instrumentation/`, constructed here by batch E3
-  out of two renderings of one scenario. Of the rest, **27** are
-  `openinference`-only and **24** are `otel_genai`-only. **Constructed is not
+  out of two renderings of one scenario. Of the rest, **28** are
+  `openinference`-only and **25** are `otel_genai`-only. **Constructed is not
   observed**, which is the whole point of this subsection.
 - **0 records** carry both markers. **0 records** carry neither.
 
@@ -1041,7 +1041,7 @@ per-record scan that returns `0.9` if **any** record in its sample carries its
 prefix in `attributes`, and `0.0` otherwise. That makes `detect([record])` a
 per-record classifier with no new method: *this adapter claims this record* iff
 `detect([record]) >= MINIMUM_CONFIDENCE`. Checked against a direct marker scan
-over all **151** tracked corpus records: **0 disagreements**. (The check was
+over all **155** tracked corpus records: **0 disagreements**. (The check was
 first run over 177 records of a working tree, batch E1; `tests/corpus_census.py`
 re-runs it over what a checkout holds on every test run.)
 
@@ -1132,9 +1132,11 @@ missing an adapter"*, which is a thing this library should be able to say.
   which was 117 of 117 in a checkout — so mixed dispatch moved **no id at all**
   in any fixture or capture that then existed. It is no longer every record:
   batch A5 added `derived_ids` and `derived_ids_shuffled` *because* nothing
-  exercised rule 2, so of the **151** tracked corpus records, **139** carry a
-  `span_id` and **135** of those are trace-unique. The other 16 take the two
-  rules below — 12 with no span id at all, 4 sharing one — and that is where
+  exercised rule 2, so of the **155** tracked corpus records, **141** carry a
+  `span_id` and **137** of those are trace-unique. The other 18 take the two
+  rules below — 14 with no *usable* span id (12 that state none, and the 2
+  `empty_ids` records that state `""`, which is no id either — batch S3,
+  `SPEC.md` §3.6), 4 sharing one — and that is where
   dispatch moves an id. Verified for the mixed build itself: its nodes are
   `s0`–`s3`, the same ids the pure builds give.
 - **Rule 2 — no `span_id` → `derive(adapter_id, trace_id, source_key)`.** Ids
@@ -1345,7 +1347,7 @@ The reasons, in order:
    means one claimant and `adapter_id` is the only thing dispatch feeds into an
    id; same `declared_confidence` (same first-50 sample); one `Meta.adapters`
    entry. (This read *"rule 1 for all 177 corpus records"* until batch R5:
-   135 of the 151 tracked records take rule 1 today, and the conclusion does
+   137 of the 155 tracked records take rule 1 today, and the conclusion does
    not depend on which rule any of them takes.)
 4. It makes the refusal proportionate. Today a mixed file is refused *entirely*
    and the recommended remedy silently damages it. Under (a) the refusal
@@ -1824,8 +1826,8 @@ agent may draft the text and assemble the links; posting is a halt point
 
 **(h) Where this meets G3, and E.** G3 asks whether mixed instrumentation is a
 freeze precondition. Not this memo's to decide; §12 (E1) supplies the fact it
-turns on — a mixed trace is **constructible but not observed**: **52** corpus
-files, **151** records (tracked files only), **0** carrying both markers. The gate above interacts with
+turns on — a mixed trace is **constructible but not observed**: **54** corpus
+files, **155** records (tracked files only), **0** carrying both markers. The gate above interacts with
 that in one direction worth having in front of G3:
 
 - **This gate is the mechanism by which a mixed trace would first be
@@ -1984,7 +1986,7 @@ id. That is an outside-evidence event — §13's B column — not a new gate.
 **Evidential power and urgency point different ways, as the brief asks be said.**
 The row's argument is about **power**: how much would a mixed trace tell us. The
 answer above is *less than the row assumes, and on constructed input almost
-nothing*. §12(c)'s finding is about **urgency**: **52** corpus files, **151**
+nothing*. §12(c)'s finding is about **urgency**: **54** corpus files, **155**
 records (tracked files only), **0** carrying both markers — constructible,
 structurally motivated, first-party
 evidence in `capture/backends.py` that the project itself steers around the
@@ -2073,7 +2075,7 @@ it.
    covering all of them is honest, is shorter than four, and does not require
    the roadmap to relitigate each.
 3. **Do not add a "mixed trace observed" condition.** **(f)**.
-4. **Record the absence as a measurement**: **52** files, **151** records
+4. **Record the absence as a measurement**: **54** files, **155** records
    (tracked files only), 0 with both markers, with the `capture/backends.py`
    comment as the strongest first-party evidence and the honest note that it is
    a prediction about the world.
@@ -2165,7 +2167,7 @@ sufficient*:
 > capture above.
 
 *The draft above quotes §12(c)'s working-tree pair. What landed in
-`ROADMAP.md` states the tracked corpus instead — 52 files, 151 records,
+`ROADMAP.md` states the tracked corpus instead — 54 files, 155 records,
 counted by `tests/corpus_census.py` — and names one constructed mixed file
 that did not exist when this was drafted. The **0** is the same in both
 (batch R5, 2026-09-11).*
@@ -2879,11 +2881,11 @@ first member key. Measured over the whole tree today:
   string `resourceSpans` when F1 was written. The two that carry it now are the
   `otlp_container` fixtures F2 added for this feature, which is the feature
   reaching its own input rather than an existing input moving.
-- **50 of 50** tracked `*.jsonl` files begin with `{`, and the first member key
-  of the first record is `trace_id` in **50 of 50** (tracked files only).
+- **52 of 52** tracked `*.jsonl` files begin with `{`, and the first member key
+  of the first record is `trace_id` in **52 of 52** (tracked files only).
 
 *Provenance. The second bullet said 64 of 64 from batch F1 (2026-09-10) until
-batch R9 (2026-09-11). A checkout carries 50 `*.jsonl` files; the extra 14 were
+batch R9 (2026-09-11). A checkout carries 52 `*.jsonl` files; the extra 14 were
 the fleet captures under the git-ignored `capture/_scratch/`, which is the same
 14 files batch R5 found in the 57/177 pair. Both counts are all-of-them, which
 is the only part the argument uses.*

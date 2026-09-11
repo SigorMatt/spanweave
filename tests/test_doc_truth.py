@@ -2212,18 +2212,37 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # `57 files / 177 records` was the working-tree scan; `43 files / 117
     # records` was what git tracked at the time and `14 files / 60 records` the
     # git-ignored `capture/_scratch/` difference between them (batch R5).
-    "corpus files / records": {(57, 177), (43, 117), (14, 60)},
+    #
+    # `52 files / 151 records` was the tracked corpus from batch R5 until batch
+    # S3 added the two `empty_ids` renderings. It is retired rather than
+    # rewritten because the sentences that still hold it are `CHANGELOG.md`
+    # entries recording what a *past* batch asserted: R5 really did move the
+    # documents to 52/151, and saying it moved them to 54/155 would be a
+    # falsification rather than a correction. Every present-tense citation was
+    # recomputed in S3's commit; the cost of this line is that a **new** live
+    # sentence could state 52/151 and this scan would not object, which is the
+    # standing price of the retirement mechanism and is stated here rather
+    # than left to be discovered.
+    "corpus files / records": {(57, 177), (43, 117), (14, 60), (52, 151)},
     # The same pair, quoted as a ratio: `0 of 117 tracked corpus records`
     # (`TASKS.md`) and `177 of 177` (`OPEN_QUESTIONS.md` §12(f)'s provenance).
-    "corpus records in a ratio": {(117,), (177,)},
+    # `151` joins them for the reason above (batch S3).
+    "corpus records in a ratio": {(117,), (177,), (151,)},
+    # R5's pair of span-id figures, superseded by S3's two records: an empty
+    # `span_id` is no span id (`SPEC.md` §3.6), so the corpus went 139 -> 141
+    # carrying one and 135 -> 137 trace-unique while gaining two records that
+    # carry neither.
+    "records carrying a span id": {(139,)},
+    "trace-unique span ids": {(135,)},
     # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
     "captured files": {(17,), (15,)},
     "timestamp literals": {(154,)},
     "sibling pairs": {(41,)},
     "minimum sibling gap": {(81,)},
     "`data` edges": {(24,)},
-    # F1's `64 of 64` counted `*.jsonl` files a checkout does not carry.
-    "tracked `*.jsonl` head scan": {(64, 64)},
+    # F1's `64 of 64` counted `*.jsonl` files a checkout does not carry, and
+    # R9's `50 of 50` was the tracked count until S3 added two renderings.
+    "tracked `*.jsonl` head scan": {(64, 64), (50, 50)},
     "corpus `*.jsonl` files": {(64,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},

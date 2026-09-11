@@ -98,6 +98,17 @@ Added since, each for a reason recorded at its task:
   it, `openinference+otel_genai.jsonl`; `+` is not a dialect and nothing is
   obliged to render a mix.
 
+- **`empty_ids`** (September 2026 audit, batch S3). Batch R10 read an empty
+  `parent_id` as *no parent*, on the stated ground that the empty string names
+  a span no input can contain — while a record whose `span_id` was `""` went
+  on being named `""`. So an input could contain exactly that span, and the
+  `parent` edge between such a pair, `explicit` and stated by the telemetry,
+  was dropped with no diagnostic; no fixture covered the case either way. An
+  empty `span_id` is no id now, so it takes `SPEC.md` §3.6 rule 2's
+  content-derived key like an absent one, and this scenario is the pair: a
+  derived id, no node named `""`, no `parent` edge to lose, and both empty
+  strings still in `raw` verbatim.
+
 - **`otlp_container`** (September 2026 audit, batch F2). Every rendering in the
   corpus was JSONL, so `SPEC.md` §7's third container — an **OTLP JSON export**,
   which is the body an exporter actually POSTs and a file receiver actually

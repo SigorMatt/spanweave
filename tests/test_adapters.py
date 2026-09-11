@@ -628,6 +628,71 @@ def test_a_span_id_still_wins_over_the_record_digest(adapter):
 
 
 # --------------------------------------------------------------------------
+# An empty string is not an identity either (batch S3)
+# --------------------------------------------------------------------------
+#
+# `parent_id: ""` has meant "no parent" since batch R10, on the ground that
+# the empty string names a span no input can contain (`SPEC.md` §4.0). That
+# was only half true: a record whose `span_id` was `""` kept `""` as its node
+# identity, so the graph really could contain such a span -- and the explicit
+# `parent` edge between the two was dropped, silently, when R10 normalized the
+# reference and left the identity alone. Both halves are one rule now
+# (`SPEC.md` §3.6): an empty `span_id` states no id, so rule 2's
+# content-derived key answers it, exactly as an absent one does.
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_an_empty_span_id_keys_on_its_content_like_an_absent_one(adapter):
+    record = a_record(adapter, span_id="")
+    span = next(iter(adapter.parse([record])))
+    assert span.span_id is None
+    assert span.source_key == record_digest(record)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_an_empty_span_id_was_read_and_is_not_reported(adapter):
+    # `parent_id: ""`'s rule, at the other field: `""` *decided* something,
+    # so it is not a rendering the adapter failed to read (`SPEC.md` §3.7).
+    span = next(iter(adapter.parse([a_record(adapter, span_id="")])))
+    assert "<record>.span_id" not in span.unmapped
+    assert not span.diagnostics
+    # And nothing is lost by the reading: the empty string is still on the
+    # record, verbatim (`CLAUDE.md` 2).
+    assert span.raw.source["span_id"] == ""
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_exactly_the_empty_span_id_and_no_other_rendering(adapter):
+    # The same boundary `parent_ref` draws: `" "` and an all-zero id are ids
+    # like any other, because trimming or decoding one would be deciding what
+    # the telemetry meant.
+    for stated in (" ", "0000000000000000"):
+        span = next(iter(adapter.parse([a_record(adapter, span_id=stated)])))
+        assert span.span_id == stated
+        assert span.source_key == stated
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_no_node_is_named_by_the_empty_string(adapter):
+    # The claim `SPEC.md` §4.0 rests on, asserted where it can fail: with no
+    # node named `""`, an empty parent reference loses nothing.
+    records = [
+        a_record(adapter, span_id="", name="parent"),
+        a_record(adapter, span_id="c", parent_id="", name="child"),
+    ]
+    graph = build_graph(
+        adapter.parse(records),
+        adapter=AdapterInfo(id=adapter.id, version=adapter.version),
+    )
+    ids = {node.id for node in graph.nodes()}
+    assert "" not in ids
+    assert len(ids) == 2 and "c" in ids
+    # Nothing was dropped in the process: both records are nodes, and the
+    # empty strings are still on them verbatim (`CLAUDE.md` 2).
+    assert sorted(n.raw.source["name"] for n in graph.nodes()) == ["child", "parent"]
+
+
+# --------------------------------------------------------------------------
 # Classification is per record (batch E2)
 # --------------------------------------------------------------------------
 

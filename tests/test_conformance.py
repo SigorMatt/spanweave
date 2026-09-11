@@ -107,6 +107,13 @@ DEGENERATE = (
     # `OPEN_QUESTIONS.md` §16). It is `llm_tool_llm`'s run repacked and shares
     # that scenario's expected graph: a container is not a dialect.
     "otlp_container",
+    # Added at the September 2026 audit's batch S3, not seeded: no record in
+    # the corpus stated an id **empty**, so `SPEC.md` §4.0's ground -- that an
+    # empty reference names a span no input can contain -- was checkable,
+    # false, and checked by nothing. A `span_id` of `""` was an identity while
+    # `parent_id` of `""` had stopped being a reference, and the `parent` edge
+    # between such a pair was dropped silently.
+    "empty_ids",
 )
 
 
