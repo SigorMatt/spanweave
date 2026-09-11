@@ -719,6 +719,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **Every figure the corpus census computes is guarded, and the registry no
+  longer claims more than that.** Batch `audit-R9` widened doc-truth from
+  figures at listed *sites* to a corpus figure anywhere, and `TASKS.md`
+  recorded the class as closed. It was not. The site-free scan read a
+  hand-written list of eight regex families while `tests/corpus_census.py`
+  computed figures no family matched, and a hand-written list cannot report
+  what it omits: the run-4 cold review planted eighteen figures one at a time
+  and **five stayed green** with the whole suite passing — records carrying a
+  span id, trace-unique span ids, and three zero-valued counts. The list is no
+  longer written down. `corpus_census.figure_names()` derives it from the
+  `Census` result type itself — fields, properties, nested dataclasses, dicts
+  and tuples, walked over the **type** so an empty container still has a name —
+  and a new test requires every derived figure to appear in some family, and
+  every family to name a figure the census actually computes. Adding a figure
+  to the census now fails the suite until a family covers it. Sixteen families
+  were added to reach that state, and every family — old and new — now carries
+  an example sentence it must still read, because a family that matches nothing
+  guards nothing and the scan reports only what it finds, never what it failed
+  to find. The one class a value-matching regex cannot reach, a figure that is
+  not a whole number, is named in `FRACTIONAL_FIGURES` together with the
+  whole-number figure that does pin it, and a test holds that mapping to what
+  the walk finds, so a new fractional figure fails rather than slips past. All
+  five of the review's surviving plants are now red. `TASKS.md`'s `audit-R9`
+  entry says what that batch closed — its eight families, wherever they are
+  written — and what it did not. **No behavior changed**; nothing under
+  `spanweave/` moved.
+
 - **A record too deep to digest is the library's named refusal, not a bare
   `RecursionError` out of `spanweave.build`.** Every record is digested for
   the duplicate check (`SPEC.md` §3.6), and a digest is an **encode**. The

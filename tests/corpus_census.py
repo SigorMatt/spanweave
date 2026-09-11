@@ -39,12 +39,15 @@ what holds the documents to these numbers; this module only counts.
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 import pathlib
 import re
 import subprocess
+import types
 from dataclasses import dataclass
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import spanweave
 from spanweave.adapters import MINIMUM_CONFIDENCE, registered
@@ -112,6 +115,30 @@ class Census:
     @property
     def captured(self) -> tuple[pathlib.Path, ...]:
         return captured_files(self.paths)
+
+    @property
+    def captured_file_count(self) -> int:
+        """The captured subset's size, as a number rather than as a tuple.
+
+        `figures()` below reads whole numbers off this dataclass, and a figure
+        documents cite -- *"the 3 captured trace files a checkout carries"* --
+        has to be one of them or no guard can be derived for it.
+        """
+        return len(self.captured)
+
+    @property
+    def records_claimed_by_no_adapter(self) -> int:
+        """`OPEN_QUESTIONS.md` §12(c)'s *"0 records carry neither"*."""
+        return self.claims.get(0, 0)
+
+    @property
+    def records_claimed_by_two_adapters(self) -> int:
+        """§12(c)'s *"0 records carry both markers"* -- the freeze precondition.
+
+        A claimant count absent from `claims` is a zero, and the zero is the
+        claim, so it is read off here rather than left to a missing key.
+        """
+        return self.claims.get(2, 0)
 
 
 def tracked_corpus_files(root: pathlib.Path = ROOT) -> tuple[pathlib.Path, ...]:
@@ -497,6 +524,157 @@ def census(root: pathlib.Path = ROOT) -> Census:
     )
 
 
+# -- Every number this module computes, enumerated from its own result type --
+#
+# `tests/test_doc_truth.py` holds the documents to these figures with a list of
+# regex families. That list was fixed and hand-written, so it could only ever
+# cover the figures someone remembered to add to it: the run-4 review planted
+# wrong values for five figures the census computes -- `with_span_id`,
+# `trace_unique_span_id`, and three zero-valued ones -- and the whole suite
+# stayed green (review finding F1). A fixed list cannot say what it does not
+# cover.
+#
+# So the list of figures is derived here, from `Census` itself, rather than
+# written down. `figure_names()` walks the result type -- fields, properties,
+# nested dataclasses, dicts and tuples -- and returns a name for every whole
+# number the census can produce. The doc-truth gate then requires a family for
+# every one of those names. Adding a figure to this module therefore fails that
+# gate until a family covers it, which is the property the fixed list never had.
+#
+# The walk is over the **type**, not the values, so a figure whose container
+# happens to be empty in one checkout still has a name and still needs a guard.
+
+#: The figures that are not whole numbers, and how each is guarded anyway.
+#: A regex over a document matches digits, so a fractional figure cannot be
+#: pinned by value the way the rest are. Rather than let that be a silent hole,
+#: every one is named here with the whole-number figure that does pin it -- and
+#: `tests/test_doc_truth.py` asserts this mapping is exactly the set the walk
+#: finds, so a *new* fractional figure fails that test instead of slipping past.
+FRACTIONAL_FIGURES: dict[str, str] = {
+    "timestamps.minimum_sibling_gap": (
+        "seconds; documents cite the microsecond rounding, and "
+        "`timestamps.minimum_sibling_gap_us` is a figure of its own"
+    ),
+    "captured_timestamps.minimum_sibling_gap": (
+        "seconds; documents cite the microsecond rounding, and "
+        "`captured_timestamps.minimum_sibling_gap_us` is a figure of its own"
+    ),
+}
+
+
+def _members(kind: Any) -> tuple[tuple[str, Any], ...]:
+    """(name, annotation) for every field and property of a census dataclass.
+
+    Sorted, because the caller's output is compared against a written-down set
+    and a dict's insertion order is not something to rest a gate on.
+    """
+    hints = get_type_hints(kind)
+    members: list[tuple[str, Any]] = [
+        (field.name, hints[field.name]) for field in dataclasses.fields(kind)
+    ]
+    for name, member in vars(kind).items():
+        if isinstance(member, property) and member.fget is not None:
+            members.append((name, get_type_hints(member.fget)["return"]))
+    return tuple(sorted(members))
+
+
+def _without_none(annotation: Any) -> Any:
+    """`int | None` is an int figure that is sometimes absent, not a new kind."""
+    if get_origin(annotation) in (Union, types.UnionType):
+        present = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(present) == 1:
+            return present[0]
+    return annotation
+
+
+def _names(prefix: str, annotation: Any, whole: list[str], fraction: list[str]) -> None:
+    """Every figure name reachable from `annotation`, by structure alone."""
+    annotation = _without_none(annotation)
+    origin = get_origin(annotation)
+    if annotation is int:
+        whole.append(prefix)
+    elif annotation is float:
+        fraction.append(prefix)
+    elif origin is dict:
+        key_type, value_type = get_args(annotation)
+        if value_type is int:
+            whole.append(prefix)
+        if key_type is int:
+            whole.append(f"{prefix}.keys")
+    elif origin is tuple:
+        element = (get_args(annotation) or (None,))[0]
+        if element is int:
+            whole.append(prefix)
+        elif dataclasses.is_dataclass(element):
+            for name, hint in _members(element):
+                _names(f"{prefix}[].{name}", hint, whole, fraction)
+    elif dataclasses.is_dataclass(annotation):
+        for name, hint in _members(annotation):
+            _names(f"{prefix}.{name}", hint, whole, fraction)
+
+
+def _walk(kind: Any = Census) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    whole: list[str] = []
+    fraction: list[str] = []
+    for name, hint in _members(kind):
+        _names(name, hint, whole, fraction)
+    return tuple(sorted(set(whole))), tuple(sorted(set(fraction)))
+
+
+def figure_names(kind: Any = Census) -> tuple[str, ...]:
+    """Every whole-number figure this census computes, by dotted name."""
+    return _walk(kind)[0]
+
+
+def fractional_figure_names(kind: Any = Census) -> tuple[str, ...]:
+    """The same, for the figures that are not whole numbers."""
+    return _walk(kind)[1]
+
+
+def _values(
+    prefix: str, annotation: Any, value: Any, into: dict[str, set[int]]
+) -> None:
+    """Fill `into` with the numbers `value` carries, under the walk's names."""
+    annotation = _without_none(annotation)
+    origin = get_origin(annotation)
+    if annotation is int:
+        if value is not None:
+            into[prefix].add(value)
+    elif origin is dict:
+        key_type, value_type = get_args(annotation)
+        if value_type is int:
+            into[prefix].update(value.values())
+        if key_type is int:
+            into[f"{prefix}.keys"].update(value)
+    elif origin is tuple:
+        element = (get_args(annotation) or (None,))[0]
+        if element is int:
+            into[prefix].update(value)
+        elif dataclasses.is_dataclass(element):
+            for item in value:
+                for name, hint in _members(element):
+                    _values(f"{prefix}[].{name}", hint, getattr(item, name), into)
+    elif dataclasses.is_dataclass(annotation):
+        for name, hint in _members(annotation):
+            _values(f"{prefix}.{name}", hint, getattr(value, name), into)
+
+
+def figures(counted: Census) -> dict[str, tuple[int, ...]]:
+    """Every figure this census computes, by name, with the values it takes.
+
+    A name maps to *every* value the census produces under it, because two
+    scopes are legitimately in the documents at once -- the whole tracked
+    corpus and the captured subset are separate names here, but a tuple of
+    documents, an OTLP export list or a per-adapter dict yields several numbers
+    under one name. A figure with no value (an absent gap, an empty tuple) maps
+    to an empty tuple and is still a name a family must cover.
+    """
+    into: dict[str, set[int]] = {name: set() for name in figure_names(type(counted))}
+    for name, hint in _members(type(counted)):
+        _values(name, hint, getattr(counted, name), into)
+    return {name: tuple(sorted(values)) for name, values in sorted(into.items())}
+
+
 def main() -> None:
     """Print the figures the documents cite. Tracked files only."""
     counted = census()
@@ -528,7 +706,7 @@ def main() -> None:
         f"float repr, {whole.floats_carrying_two_literals} float(s) carry two"
     )
     captured = counted.captured_timestamps
-    print(f"captured traces (tracked files only): {len(counted.captured)} files")
+    print(f"captured traces (tracked files only): {counted.captured_file_count} files")
     print(
         f"  timestamp literals: {captured.literals}, of which "
         f"{captured.above_ceiling} above {TIMESTAMP_UNIT_CEILING}, "

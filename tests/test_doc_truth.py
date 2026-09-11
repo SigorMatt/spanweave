@@ -35,17 +35,26 @@ something the project has not done yet.
 from __future__ import annotations
 
 import ast
+import itertools
 import json
 import pathlib
 import re
 import shlex
+from dataclasses import dataclass
 
 import pytest
 
 import spanweave
 from spanweave.adapters import registered
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
-from tests.corpus_census import Census, census
+from tests.corpus_census import (
+    FRACTIONAL_FIGURES,
+    Census,
+    census,
+    figure_names,
+    figures,
+    fractional_figure_names,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -1909,59 +1918,274 @@ def test_no_durable_document_states_the_working_tree_census_as_a_fact():
     )
 
 
-#: Every figure family `tests/corpus_census.py` counts, as the shapes the
-#: documents write them in. The pair shape names itself, so it is scanned
-#: everywhere; the rest are single numbers that mean nothing on their own
-#: (`4 data edges` is a census figure in one paragraph and a worked example in
-#: the next), so they are scanned only inside a paragraph that states the
-#: census's own scope -- `CENSUS_SCOPE` below, which is the qualifier G5 and R5
-#: made every one of these sentences carry.
+#: A figure family: the shape the documents write a census figure in, and the
+#: census figure names its capture groups must equal.
+#:
+#: The pair shape names itself, so it is scanned everywhere; most of the rest
+#: are single numbers that mean nothing on their own (`4 data edges` is a
+#: census figure in one paragraph and a worked example in the next), so they
+#: are scanned only inside a paragraph that states the census's own scope --
+#: `CENSUS_SCOPE` below, which is the qualifier G5 and R5 made every one of
+#: those sentences carry. A few are self-naming in their own words (*carry a
+#: `span_id`*, *`openinference`-only*) and are scanned everywhere too, because
+#: the sentences that state them do not carry the scope phrase.
 #:
 #: A number is written `(?<![\d,./-])(\d+)` so that `n(n-1)/2 data edges` and
 #: `1,225 data edges` are not read as the census's four.
-CENSUS_FIGURE_PATTERNS: tuple[tuple[str, str, bool], ...] = (
-    (
+@dataclass(frozen=True, slots=True)
+class CensusFigureFamily:
+    """One spelling of one census figure, and what it has to equal."""
+
+    #: What this family is called in a failure message.
+    name: str
+    #: The regex, matched against `flat(unemphasized(paragraph))`. Groups that
+    #: match are the figure; alternatives may each carry their own group.
+    pattern: str
+    #: Whether a paragraph must state the census's scope before this family is
+    #: read out of it.
+    requires_scope: bool
+    #: One entry per matched capture group, in order: the `corpus_census`
+    #: figure names whose value that group may be. This is the half that makes
+    #: the guard derived rather than remembered -- every figure the census
+    #: computes has to appear in some slot, or
+    #: `test_every_figure_the_census_computes_is_guarded_by_a_family` fails.
+    slots: tuple[tuple[str, ...], ...]
+    #: A sentence this family must read, with planted values, proving the
+    #: pattern matches the spelling it was written for. A family whose regex
+    #: silently stopped matching is a family that guards nothing.
+    example: str
+    #: The values `example` plants, in group order.
+    example_values: tuple[int, ...]
+
+
+CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
+    CensusFigureFamily(
         "corpus files / records",
         r"(?<![\d,./-])(\d+) (?:(?:trace|corpus|captured|tracked|committed|fixture) )*"
         r"files?\s*(?:/|,|and|--|—|-|:)\s*(\d+) records?\b",
         False,
+        (("files",), ("records",)),
+        "The corpus holds 99 files, 999 records.",
+        (99, 999),
     ),
-    (
+    CensusFigureFamily(
+        "corpus records in a ratio",
+        r"of (?:the )?(\d+) tracked (?:corpus )?records\b"
+        r"|of (?:the )?(\d+) records carry\b",
+        False,
+        (("records",),),
+        "of the 999 tracked corpus records, 99 carry a `span_id`",
+        (999,),
+    ),
+    CensusFigureFamily(
+        "records carrying a span id",
+        r"(?<![\d,./-])(\d+) of (?:the )?\d+ (?:tracked )?(?:corpus )?records carry "
+        r"(?:one|a span_id)"
+        r"|(?<![\d,./-])(\d+) carry a span_id",
+        False,
+        (("with_span_id",),),
+        "of the 999 tracked corpus records, 99 carry a `span_id`",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "trace-unique span ids",
+        r"(?<![\d,./-])(\d+) of those (?:are )?trace-unique"
+        r"|(?<![\d,./-])(\d+) of (?:the )?\d+ tracked records take rule 1",
+        False,
+        (("trace_unique_span_id",),),
+        "and 99 of those are trace-unique",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "records claimed by both dialects' markers",
+        r"(?<![\d,./-])(\d+) (?:records? )?carry(?:ing)? both (?:dialects' )?markers",
+        False,
+        (("records_claimed_by_two_adapters",),),
+        "99 records carry both markers.",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "records claimed by neither dialect's markers",
+        r"(?<![\d,./-])(\d+) records? carry neither\b",
+        False,
+        (("records_claimed_by_no_adapter",),),
+        "99 records carry neither.",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "files carrying both dialects",
+        r"(?<![\d,./-])(\d+) (?:corpus )?files?,? (?:now )?carr(?:y|ies) "
+        r"(?:records of both|both dialects|both markers)",
+        False,
+        (("mixed_files",),),
+        "99 files carry records of both",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "single-dialect files",
+        r"(?<![\d,./-])(\d+) are (?:openinference|otel_genai)-only",
+        False,
+        (("sole_dialect_files",),),
+        "99 are `openinference`-only and 99 are `otel_genai`-only",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "dialect claims",
+        r"(?<![\d,./-])(\d+) records? claimed by (\d+) adapters?",
+        True,
+        (("claims",), ("claims.keys",)),
+        "Over the tracked corpus: 999 records claimed by 9 adapters.",
+        (999, 9),
+    ),
+    CensusFigureFamily(
+        "marker-scan disagreements",
+        r"(?<![\d,./-])(\d+) disagreements?\b",
+        True,
+        (("marker_disagreements",),),
+        "Over the tracked corpus: 99 disagreements.",
+        (99,),
+    ),
+    CensusFigureFamily(
         "captured files",
         r"(?<![\d,./-])(\d+) captured (?:trace )?files?\b",
         True,
+        (("captured_file_count", "captured_receipts.files"),),
+        "Over the tracked corpus: 99 captured trace files.",
+        (99,),
     ),
-    (
+    CensusFigureFamily(
+        "corpus `*.jsonl` files",
+        r"(?:carries|holds) (\d+) \.jsonl files",
+        True,
+        (("jsonl_files", "head_scan.files"),),
+        "A checkout carries 99 `*.jsonl` files (tracked files only).",
+        (99,),
+    ),
+    CensusFigureFamily(
         "timestamp literals",
         r"(?<![\d,./-])(\d+) timestamp (?:values|literals)\b",
         True,
+        (("timestamps.literals", "captured_timestamps.literals"),),
+        "Over the tracked corpus: 99 timestamp values.",
+        (99,),
     ),
-    (
+    CensusFigureFamily(
+        "timestamp literals above the unit ceiling",
+        r"(?<![\d,./-])(\d+) above 1e11"
+        r"|(?<![\d,./-])(\d+) of the tracked corpus's \d+ timestamp literals sit "
+        r"above",
+        True,
+        (("timestamps.above_ceiling", "captured_timestamps.above_ceiling"),),
+        "Over the tracked corpus: 99 above 1e11.",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "literals differing from their shortest float repr",
+        r"(?<![\d,./-])(\d+) whose shortest float repr differs"
+        r"|(?<![\d,./-])(\d+) literals that differ from it",
+        True,
+        (
+            (
+                "timestamps.differing_from_shortest_repr",
+                "captured_timestamps.differing_from_shortest_repr",
+            ),
+        ),
+        "Over the tracked corpus: 99 whose shortest float repr differs.",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "floats carrying two literals",
+        r"(?<![\d,./-])(\d+) pairs? of distinct literals collapsing"
+        r"|(?<![\d,./-])(\d+) floats? carry(?:ing)? two",
+        True,
+        (
+            (
+                "timestamps.floats_carrying_two_literals",
+                "captured_timestamps.floats_carrying_two_literals",
+            ),
+        ),
+        "Over the tracked corpus: 99 pairs of distinct literals collapsing.",
+        (99,),
+    ),
+    CensusFigureFamily(
         "sibling pairs",
         r"(?<![\d,./-])(\d+) sibling pairs\b",
         True,
+        (("timestamps.sibling_pairs", "captured_timestamps.sibling_pairs"),),
+        "Over the tracked corpus: 99 sibling pairs.",
+        (99,),
     ),
-    (
+    CensusFigureFamily(
         "minimum sibling gap",
         r"minimum gap (?:of )?(\d+) µs",
         True,
+        (
+            (
+                "timestamps.minimum_sibling_gap_us",
+                "captured_timestamps.minimum_sibling_gap_us",
+            ),
+        ),
+        "Over the tracked corpus: minimum gap 99 µs.",
+        (99,),
     ),
-    (
+    CensusFigureFamily(
         "`data` edges",
         r"(?<![\d,./-])(\d+) data edges\b",
         True,
+        (("captured_receipts.data_edges",),),
+        "Over the tracked corpus: 99 `data` edges.",
+        (99,),
     ),
-    (
+    CensusFigureFamily(
+        "files producing a `data` edge",
+        r"(?<![\d,./-])(\d+) of (?:the )?\d+ (?:captured )?files? produce a data edge"
+        r"|(?<![\d,./-])(\d+) files? with data edges",
+        True,
+        (("captured_receipts.files_with_data_edges",),),
+        "Over the tracked corpus: 99 of 99 captured files produce a `data` edge.",
+        (99,),
+    ),
+    CensusFigureFamily(
+        "re-declared receipts",
+        r"(?<![\d,./-])(\d+) re-declarations?\b"
+        r"|(?<![\d,./-])(\d+) re-declared receipts?\b",
+        True,
+        (("captured_receipts.redeclared_receipts",),),
+        "Over the tracked corpus: 99 re-declarations.",
+        (99,),
+    ),
+    CensusFigureFamily(
         "tracked `*.jsonl` head scan",
         r"(?<![\d,./-])(\d+) of (\d+) tracked \.jsonl",
         True,
+        (
+            ("head_scan.beginning_with_brace", "head_scan.first_member_key_trace_id"),
+            ("head_scan.files",),
+        ),
+        "Over the tracked corpus: 99 of 999 tracked `*.jsonl` files begin with `{`.",
+        (99, 999),
     ),
-    (
+    CensusFigureFamily(
+        "lines of an indented export",
+        r"(?<![\d,./-])(\d+) lines, (\d+) of them not JSON",
+        True,
+        (
+            ("indented_exports[].lines",),
+            ("indented_exports[].lines_that_are_not_json",),
+        ),
+        "Over the tracked corpus: 99 lines, 999 of them not JSON.",
+        (99, 999),
+    ),
+    CensusFigureFamily(
         "`malformed_record` diagnostics for an indented export",
         r"(?<![\d,./-])(\d+) malformed_record\b"
         r"|malformed_record (?:diagnostic )?per line \((\d+)"
-        r"|(?<![\d,./-])(\d+) of them for the indented export",
+        r"|(?<![\d,./-])(\d+) of them for the indented export"
+        r"|(?<![\d,./-])(\d+) times for",
         True,
+        (("indented_exports[].lines_that_are_not_json",),),
+        "Over the tracked corpus: 99 `malformed_record` diagnostics.",
+        (99,),
     ),
 )
 
@@ -1989,6 +2213,9 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # records` was what git tracked at the time and `14 files / 60 records` the
     # git-ignored `capture/_scratch/` difference between them (batch R5).
     "corpus files / records": {(57, 177), (43, 117), (14, 60)},
+    # The same pair, quoted as a ratio: `0 of 117 tracked corpus records`
+    # (`TASKS.md`) and `177 of 177` (`OPEN_QUESTIONS.md` §12(f)'s provenance).
+    "corpus records in a ratio": {(117,), (177,)},
     # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
     "captured files": {(17,), (15,)},
     "timestamp literals": {(154,)},
@@ -1997,6 +2224,7 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     "`data` edges": {(24,)},
     # F1's `64 of 64` counted `*.jsonl` files a checkout does not carry.
     "tracked `*.jsonl` head scan": {(64, 64)},
+    "corpus `*.jsonl` files": {(64,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},
 }
@@ -2013,49 +2241,95 @@ def census_figures(paragraph: str) -> list[tuple[str, tuple[int, ...]]]:
     text = flat(unemphasized(paragraph))
     scoped = any(marker in text for marker in CENSUS_SCOPE)
     found: list[tuple[str, tuple[int, ...]]] = []
-    for family, pattern, requires_scope in CENSUS_FIGURE_PATTERNS:
-        if requires_scope and not scoped:
+    for family in CENSUS_FIGURE_FAMILIES:
+        if family.requires_scope and not scoped:
             continue
-        for match in re.finditer(pattern, text):
+        for match in re.finditer(family.pattern, text):
             found.append(
-                (family, tuple(int(group) for group in match.groups() if group))
+                (family.name, tuple(int(group) for group in match.groups() if group))
             )
     return found
 
 
 def stated_census_figures(counted: Census) -> dict[str, set[tuple[int, ...]]]:
-    """What each family's numbers are, over the tracked tree, by every scope.
+    """What each family's numbers are, over the tracked tree, derived.
 
-    A family gets a *set*, not a value, because two scopes are legitimately in
-    the documents at once: the whole tracked corpus and the captured subset,
-    and for the head scan the brace count and the first-key count. A figure
-    that is one of them is checkable; a figure that is none of them is the
-    thing this test exists to find.
+    A family gets a *set*, not a value, because a slot may legitimately hold
+    more than one of the census's figures: the whole tracked corpus and the
+    captured subset are both in the documents at once, and the head scan's two
+    counts share a spelling. The set is the product of the slots, so a
+    two-number family accepts exactly the combinations the census produces.
     """
-    whole = counted.timestamps
-    captured = counted.captured_timestamps
-    edges = counted.captured_receipts
-    scan = counted.head_scan
-    gaps = {
-        (gap,)
-        for gap in (whole.minimum_sibling_gap_us, captured.minimum_sibling_gap_us)
-        if gap is not None
+    counts = figures(counted)
+    stated: dict[str, set[tuple[int, ...]]] = {}
+    for family in CENSUS_FIGURE_FAMILIES:
+        options = [
+            sorted({value for name in slot for value in counts[name]})
+            for slot in family.slots
+        ]
+        stated[family.name] = {tuple(values) for values in itertools.product(*options)}
+    return stated
+
+
+def test_every_figure_the_census_computes_is_guarded_by_a_family():
+    """The gate the fixed list never had, and the reason this shape replaced it.
+
+    Batch `audit-R9` widened doc-truth from "figures at listed *sites*" to "a
+    corpus figure *anywhere*", and `TASKS.md` recorded the class as closed. It
+    was not: `CENSUS_FIGURE_PATTERNS` was a hand-written list of eight regex
+    families, and `tests/corpus_census.py` computed figures no family matched.
+    The run-4 review planted wrong values for eighteen figures one at a time
+    and **five stayed green** with the whole suite passing -- records carrying
+    a span id, trace-unique span ids, and three zero-valued figures (review
+    finding F1).
+
+    A hand-written list cannot report what it omits. So the list of figures is
+    no longer written down: `corpus_census.figure_names()` derives it from the
+    `Census` type itself, and this test requires every derived name to appear
+    in some family's slot. Adding a figure to the census now fails here until a
+    family covers it, and a family may not name a figure the census does not
+    compute -- which is the property that keeps the guard from narrowing again
+    as the census grows.
+    """
+    computed = set(figure_names())
+    guarded = {
+        name
+        for family in CENSUS_FIGURE_FAMILIES
+        for slot in family.slots
+        for name in slot
     }
-    return {
-        "corpus files / records": {(counted.files, counted.records)},
-        "captured files": {(len(counted.captured),), (edges.files,)},
-        "timestamp literals": {(whole.literals,), (captured.literals,)},
-        "sibling pairs": {(whole.sibling_pairs,), (captured.sibling_pairs,)},
-        "minimum sibling gap": gaps,
-        "`data` edges": {(edges.data_edges,)},
-        "tracked `*.jsonl` head scan": {
-            (scan.beginning_with_brace, scan.files),
-            (scan.first_member_key_trace_id, scan.files),
-        },
-        "`malformed_record` diagnostics for an indented export": {
-            (export.lines_that_are_not_json,) for export in counted.indented_exports
-        },
-    }
+    assert computed - guarded == set(), (
+        "`tests/corpus_census.py` computes these figures and no family in "
+        "`CENSUS_FIGURE_FAMILIES` matches any spelling of them, so a document "
+        "may cite one and no test will ever recompute it: "
+        + ", ".join(sorted(computed - guarded))
+        + ". That is review finding F1 exactly -- add a family with the "
+        "spelling the documents use, or, if the figure cannot be pinned by "
+        "value, say so here rather than leaving it silently uncovered"
+    )
+    assert guarded - computed == set(), (
+        "these families name a census figure that no longer exists, so they "
+        "guard nothing and their `stated_census_figures` lookup would raise: "
+        + ", ".join(sorted(guarded - computed))
+    )
+
+
+def test_the_census_computes_no_fractional_figure_without_a_stated_guard():
+    """The one class a value-matching regex cannot reach, named rather than lost.
+
+    A regex over a document matches digits, so a figure that is not a whole
+    number cannot be pinned the way the rest are. `corpus_census` names every
+    such figure and the whole-number figure that does pin it; this test holds
+    that mapping to what the walk actually finds, so a **new** fractional
+    figure fails here instead of becoming the next quiet gap.
+    """
+    assert set(fractional_figure_names()) == set(FRACTIONAL_FIGURES), (
+        "the census's fractional figures are "
+        f"{sorted(fractional_figure_names())} but `FRACTIONAL_FIGURES` names "
+        f"{sorted(FRACTIONAL_FIGURES)}. A fractional figure is guarded only "
+        "through a whole-number figure derived from it; say which one, or it "
+        "is guarded by nothing"
+    )
 
 
 def test_every_corpus_figure_a_durable_document_asserts_is_the_census():
@@ -2076,6 +2350,14 @@ def test_every_corpus_figure_a_durable_document_asserts_is_the_census():
     requires to be marked as history. Adding a new sentence that cites the
     corpus therefore needs no test edit, and copying an old one somewhere new
     cannot outlive the number it copied.
+
+    **What it does not do**, since the last widening of this guard was recorded
+    more broadly than it held: it reads the *spellings* the families carry, not
+    every number in every sentence. A figure written in words a family does not
+    match is invisible here -- which is why every family carries an `example`
+    that proves its pattern still reads the sentence it was written for, and
+    why the family list is checked against the census rather than maintained by
+    hand.
     """
     counted = census()
     stated = stated_census_figures(counted)
@@ -2102,6 +2384,23 @@ def test_every_corpus_figure_a_durable_document_asserts_is_the_census():
     )
 
 
+def test_every_figure_family_still_reads_the_sentence_it_was_written_for():
+    """Each family's regex, proven against the spelling it exists to match.
+
+    A family that covers a census figure on paper and matches no sentence in
+    practice is the same defect as no family at all, and it is invisible: the
+    scan above reports what it finds, never what it failed to find. So every
+    family carries one sentence with planted values and has to read it.
+    """
+    for family in CENSUS_FIGURE_FAMILIES:
+        found = census_figures(family.example)
+        assert (family.name, family.example_values) in found, (
+            f"the {family.name} family no longer reads its own example "
+            f"{family.example!r} as {family.example_values}; it read {found}. "
+            f"A family that matches nothing guards nothing"
+        )
+
+
 def test_the_corpus_figure_scan_reads_emphasis_tables_and_separators():
     """The matcher, proven against the spellings the documents actually use.
 
@@ -2118,21 +2417,11 @@ def test_the_corpus_figure_scan_reads_emphasis_tables_and_separators():
         "a working tree of 99 trace files: 999 records",
         "`99` corpus files -- `999` records",
     ):
-        assert census_figures(spelling) == [("corpus files / records", (99, 999))], (
+        assert ("corpus files / records", (99, 999)) in census_figures(spelling), (
             f"the corpus-pair scan does not read {spelling!r} as a claim about "
             f"the corpus, so a document may state it and no test will notice"
         )
 
-    scoped = (
-        "Over the tracked corpus: **888** captured trace files, **888** "
-        "timestamp values, **888** sibling pairs, minimum gap **888** µs, "
-        "**888** `data` edges, **888** of **888** tracked `*.jsonl`, and "
-        "**888** `malformed_record` diagnostics."
-    )
-    families = {family for family, _ in census_figures(scoped)}
-    assert families == {family for family, _, _ in CENSUS_FIGURE_PATTERNS[1:]}, (
-        f"a paragraph stating every scoped family was read as {families}"
-    )
     unscoped = (
         "A four-turn loop transcribing every earlier turn produces **888** "
         "`data` edges and **888** timestamp values, none of them counted over "

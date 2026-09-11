@@ -10730,13 +10730,23 @@ declared a blocker for closing again.
   verified: 25 tracked files carry one of the keys, 0 carry a non-string value.
   It found the same shape at six more keys and registered `audit-R12`. —
   **done** (`97ce154`).
-- **audit-R9 — The other four cited figures count what git tracks too, and any
-  figure anywhere is now the census.** Four more figure families recomputed and
-  every one moved. Widened in place after the run-3 review's R5 finding 1
-  showed that planting wrong values in six of `audit-R5`'s own figures left all
-  39 doc-truth tests green: the first test binds figures at listed *sites*, the
-  second scans every durable document site-free. Proven red on the review's six
-  plants plus two others. — **done** (`67d788d`, widening `0dbcc71`).
+- **audit-R9 — The other four cited figures count what git tracks too, and a
+  figure written in one of eight spellings is the census wherever it appears.**
+  Four more figure families recomputed and every one moved. Widened in place
+  after the run-3 review's R5 finding 1 showed that planting wrong values in six
+  of `audit-R5`'s own figures left all 39 doc-truth tests green: the first test
+  binds figures at listed *sites*, the second scans every durable document
+  site-free. Proven red on the review's six plants plus two others. — **done**
+  (`67d788d`, widening `0dbcc71`). *Headline corrected at `audit-S1`: this entry
+  said "any figure anywhere is now the census" and the widening commit said it
+  closed the case where a copy of the census can rot in place. It did not. The
+  site-free scan read a hand-written list of **eight** regex families, and
+  `tests/corpus_census.py` computed figures no family matched; the run-4 review
+  planted eighteen figures one at a time and **five stayed green** — records
+  carrying a span id, trace-unique span ids, and three zero-valued counts. What
+  R9 closed is its eight families, wherever they are written; what it left open
+  is the census growing a figure the list never learned. Closed by `audit-S1`,
+  which derives the list from the census's own result type.*
 - **audit-R10 — An empty parent reference is no parent.** An OTLP root carrying
   `parentSpanId: ""` drew `orphan_parent` on every root, contradicting F1's
   claim in `OPEN_QUESTIONS.md` §16(e). Normalized at the **seam**
