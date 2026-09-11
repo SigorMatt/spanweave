@@ -183,10 +183,12 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
 | `2` | a usage error (argparse's own) |
 
 A failure the library **raised** prints its stable error `code` in brackets, so
-a script can tell one refusal from another without matching English:
+a script can tell one refusal from another without matching English. The file
+below **exists** — it holds JSON no adapter recognizes, which is the refusal
+being shown; a name that is not there fails earlier and differently:
 
 ```
-$ spanweave build not-a-trace.jsonl
+$ spanweave build unrecognized.jsonl
 spanweave build: [adapter_unconfident] no adapter is confident enough about
 this input (highest 0.00, minimum 0.50). Confidence declared by each adapter:
 openinference 0.00, otel_genai 0.00. Name one explicitly with --adapter if you
@@ -194,11 +196,16 @@ know the dialect.
 ```
 
 Codes are a public contract from `0.9.x` and every one is listed in `SPEC.md`
-§3.10. **The bracket is the whole of what is machine-readable on that line** —
-the prose after it is for you, and may be reworded in any release. A failure
-the library did *not* raise, such as a file that is not there, prints no
-bracket: it has no code to print. And `1` is never subdivided — the exit status
-says *there is no graph*, the code says why.
+§3.10. **The machine-readable part of a failure line, when there is one, is
+the bracket immediately after `spanweave <command>: `, and what it contains is
+one of §3.10's codes** — that closed set is what a caller routes on, and the
+prose after it is for you, and may be reworded in any release. The CLI adds
+**no bracket of its own** to a failure the library did *not* raise: a file that
+is not there prints the operating system's own text, which carries a bracket of
+its own — `spanweave build: [Errno 2] No such file or directory: '...'`. `Errno
+2` is the OS's number, not a spanweave code, and a caller must not match it:
+route on §3.10's codes, never on *there is a bracket*. And `1` is never
+subdivided — the exit status says *there is no graph*, the code says why.
 
 ## Conformance
 

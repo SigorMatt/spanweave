@@ -341,10 +341,13 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   English sentence" and the only way to tell them apart was the prose nobody
   promised to keep. A raised `SpanweaveError` now prints its code in brackets
   first: `spanweave build: [adapter_unconfident] no adapter is confident
-  enough…`. An `OSError` deliberately prints **no** bracket -- it is the
-  operating system's answer, it has no code in §3.10's table, and inventing
-  one would name a contract that does not exist. The exit codes themselves
-  (`0`, `1`, argparse's `2`) lived only in a comment inside `spanweave/cli.py`
+  enough…`. An `OSError` deliberately gets **no bracket from the CLI** -- it is
+  the operating system's answer, it has no code in §3.10's table, and inventing
+  one would name a contract that does not exist; the line stays Python's own
+  text, which opens with the operating system's `[Errno 2]`, and that is an
+  `errno`, not a spanweave code (corrected from *"prints no bracket"* by the
+  batch below). The exit codes themselves (`0`, `1`, argparse's `2`) lived only
+  in a comment inside `spanweave/cli.py`
   and are now a table in `SPEC.md` §7 and in the README, with the reason `1` is
   never subdivided stated rather than left to be inferred. Both tables are
   recomputed from the CLI by `tests/test_doc_truth.py`, and the failure line the
@@ -718,6 +721,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **The documented rule for matching a failure line says what the CLI prints,
+  and the README transcript names its own precondition.** Batch `audit-R16`
+  made a raised refusal routable from outside the process, and stated the other
+  half of the rule three times -- in `README.md`, `SPEC.md` §7 (*Failures*) and
+  its own `CHANGELOG.md` entry above -- as *"a failure the library did not
+  raise prints no bracket: it has no code to print"*. That is false, and the
+  repository's own tests said so: `OSError.__str__` opens with `[Errno 2]`, so
+  `spanweave build /nope/not-a-trace.jsonl` prints
+  `spanweave build: [Errno 2] No such file or directory: '/nope/not-a-trace.jsonl'`,
+  which is exactly what `tests/test_cli.py` asserts. Followed literally, the
+  matching rule -- *the bracket is the whole of what is machine-readable on
+  that line* -- extracted `Errno 2` from a missing file and handed a caller a
+  "code" absent from `SPEC.md` §3.10's table. The behaviour was right and is
+  unchanged; the three sentences now say what it is. The intent survives in the
+  form that is true -- **the CLI adds no bracket of its own** -- with the OS's
+  bracket named as the operating system's text that a caller must not match,
+  and the machine-readable rule restated positively: the code, if there is one,
+  is the bracket immediately following `spanweave <command>: `, and its
+  contents are one of §3.10's values, so a caller routes on that closed set and
+  never on *the line carries a bracket*. Alongside it, the README's failure
+  transcript said `$ spanweave build not-a-trace.jsonl` and showed
+  `[adapter_unconfident] …`, which is true only if that file exists -- the
+  doc-truth test creates it first, so the fence passed while a reader pasting
+  the command met `[Errno 2] …`, the same confusion one screen above where it
+  is explained. The file is now named `unrecognized.jsonl` and the sentence
+  introducing it says that it exists and holds JSON no adapter recognizes.
+  Documentation only: nothing under `spanweave/` and no test assertion moved.
+  (run-4 review finding F2 and its §11 README nit; batch `S2`)
 
 - **Every figure the corpus census computes is guarded, and the registry no
   longer claims more than that.** Batch `audit-R9` widened doc-truth from

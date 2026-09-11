@@ -1687,22 +1687,31 @@ declares reaches `0.5`.
     and `graph_not_serializable` are otherwise both "exit 1 and an English
     sentence", and a script that wants to retry an ambiguous input with
     `--adapter` but fail hard on a graph that cannot be written has nothing to
-    branch on but prose. The bracket is the *whole* of what is machine-readable
-    on that line; everything after it is for a human and may be reworded in any
-    release.
-  - **A failure the library did not raise carries no bracket.** An `OSError`
-    from a file that is not there is the operating system's answer, not a
-    refusal this library defines, and it has no code in §3.10's table. Printing
-    an invented one would name a contract that does not exist, so the line
-    stays exactly as it was. When the file it could not open does **not
-    exist** and its path is one this project's own documents quote — the
-    `fixtures/` corpus, which ships in the source tree and not in the
-    installed package — a second, clearly secondary `hint:` line follows it,
+    branch on but prose. On such a line that bracket is the *whole* of what is
+    machine-readable; everything after it is for a human and may be reworded in
+    any release.
+  - **A failure the library did not raise carries no code, and the CLI adds no
+    bracket of its own.** An `OSError` from a file that is not there is the
+    operating system's answer, not a refusal this library defines, and it has
+    no code in §3.10's table. Printing an invented one would name a contract
+    that does not exist, so the line stays exactly as it was — which means it
+    stays whatever Python's `OSError.__str__` produced, and that text opens
+    with a bracket of the operating system's own:
+    `spanweave build: [Errno 2] No such file or directory: '/nope/t.jsonl'`.
+    `Errno 2` is the OS's `errno`, not a spanweave code; it is absent from
+    §3.10's table and a caller must not match it. When the file it could not
+    open does **not exist** and its path is one this project's own documents
+    quote — the `fixtures/` corpus, which ships in the source tree and not in
+    the installed package — a second, clearly secondary `hint:` line follows it,
     naming where those paths resolve from. The first line is byte-for-byte
     unchanged by the presence of the second, and the exit code is unchanged.
     Both lines are prose for a human, and neither is a matching surface: what
-    a caller matches on is the bracketed code above, and this failure has
-    none.
+    a caller matches on is a code from §3.10's table, and this failure has
+    none. Hence the rule's positive form — **the code, if there is one, is the
+    bracket immediately following `spanweave <command>: `, and its contents are
+    one of §3.10's values**. A caller routing on a code matches against that
+    closed set; *the line carries a bracket* is not the test, because this one
+    does.
 - Output goes to stdout / files **only**. Core never opens a network connection.
 
 ### Invocation
