@@ -150,7 +150,7 @@ never restarts, fixes, or touches anything. Conventions live in
 |---|---|---|---|
 | S1 | **Every census figure is guarded, and TASKS.md says only what is true.** Review F1: `CENSUS_FIGURE_PATTERNS` is eight fixed families; `corpus_census.py` computes figures no family matches (records with a span id 139, trace-unique ids 135, three zero-counts). Replace the fixed list with a guard derived from the census's own output: every figure the census prints must be matched by a family, and a test fails if the census emits a figure with no family. Plant each of the review's five surviving figures and prove red. Then correct `TASKS.md:10733` to the scope that is now actually closed. | done (`aed32a9`) | 15 |
 | S2 | **Error-output sentence matches the test.** Review F2: README.md:199, SPEC.md:1693, CHANGELOG.md:344 say an `OSError` prints no bracket; `tests/test_cli.py:630` asserts `[Errno 2]`. Reword all three to what the test asserts and say that `[Errno N]` is the OS's text, not a spanweave code, and that the spanweave bracket is the only one a caller should route on. Docs only. | done (`bed0ce2`) | 5 |
-| S3 | **Empty string is not an identity.** Per §3 decision: `span_id: ""` (both dialects, both containers) → content-derived fallback + diagnostic, as for a missing id; SPEC §3.6 and §893 sentence; conformance degenerate scenario `empty_ids` with a `""` span id and a `""` parent in both dialects, expected graph carries the explicit parent edge the review showed being lost (`('', 'c')` on the parent commit) — or, if the decision makes that edge unstatable, the fixture proves nothing is dropped silently. Corpus expectations must not move (verify). | todo | 15 |
+| S3 | **Empty string is not an identity.** Per §3 decision: `span_id: ""` (both dialects, both containers) → content-derived fallback + diagnostic, as for a missing id; SPEC §3.6 and §893 sentence; conformance degenerate scenario `empty_ids` with a `""` span id and a `""` parent in both dialects, expected graph carries the explicit parent edge the review showed being lost (`('', 'c')` on the parent commit) — or, if the decision makes that edge unstatable, the fixture proves nothing is dropped silently. Corpus expectations must not move (verify). | done (`5e8a40f`) | 15 |
 | S4 | **Sdist citation guard sees directories.** Review F4: `CITED_PATH` needs two segments and a trailing slash, so `reviews/` and `.github/` are invisible. Widen to any cited path that resolves to a tracked file or directory; plant `reviews/` and `.github/` absent from the sdist include list and prove red. | todo | 6 |
 | S5 | **Three wrong numbers.** Review F5 (SPEC.md:1632 "~238 ns" → 256 ns at 1.7e18, matching SPEC.md:162 and ADAPTERS.md:175), F6 (OPEN_QUESTIONS §16(a): the indented export gives 4 nodes and no `malformed_record`; state it dated, do not rewrite history), F7 (`tests/digit_limit.py:16` "five tests" → seven). Also the review's counting nits: R15's "38 candidates", R7's two, and the two bare `R3`s at TASKS.md:10720/:10782 → `audit-R3`. Docs only. | todo | 6 |
 | S6 | **Nits with a code or spec surface.** R8's SPEC over-statement, R12's missing seventh key and the ungrammatical SPEC.md:521, R14's unqualified determinism claim in SPEC §5.1 and README.md:169 (qualify with the digit-limit dependency §5.3 already states). Take each from the review's per-batch sections; one commit. Corpus must not move. | todo | 10 |
@@ -198,6 +198,23 @@ Run 5 = S1 → S2 → S3 → S4 → S5 → S6 → S7. No memos.
   bracket immediately after `spanweave <command>: `, and its contents are one
   of SPEC §3.10's values. R16's own CHANGELOG entry was one of the three
   corrected sites, and the new entry says so.
+- 2026-09-12: S3's decision landed as `span_ref` beside R10's `parent_ref`, so
+  both halves live at the seam and neither adapter branches. Two things the
+  row did not anticipate. **(a) A5 emits no diagnostic at all** for a missing
+  span id — by explicit design, its `scenario.md` says "rule 2 is the honest
+  answer to it, not a diagnostic" — so "the same diagnostic" is *none*, and
+  the fixture asserts losslessness instead, which is the row's own fallback
+  clause. The `('', 'c')` edge is indeed unstatable now. **(b) Adding a
+  scenario moved the corpus census** (52/151 → 54/155 and five other
+  figures), so ~14 present-tense citations across five documents were
+  recomputed and four corpus-size pins bumped.
+- 2026-09-12: **residue from (b), for S7.** The superseded values now sit in a
+  `RETIRED_CENSUS_FIGURES` exemption, because the only sentences still holding
+  them are CHANGELOG entries recording what an earlier batch asserted at the
+  time. The cost is standing and is stated in a comment there: a *new* live
+  sentence could state 52/151 unchallenged. That is S1's guard narrowed by one
+  notch on the day it was widened — the review's closing observation arriving
+  again — so it is an open thread, not a closed one.
 
 ---
 
