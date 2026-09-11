@@ -151,9 +151,9 @@ never restarts, fixes, or touches anything. Conventions live in
 | S1 | **Every census figure is guarded, and TASKS.md says only what is true.** Review F1: `CENSUS_FIGURE_PATTERNS` is eight fixed families; `corpus_census.py` computes figures no family matches (records with a span id 139, trace-unique ids 135, three zero-counts). Replace the fixed list with a guard derived from the census's own output: every figure the census prints must be matched by a family, and a test fails if the census emits a figure with no family. Plant each of the review's five surviving figures and prove red. Then correct `TASKS.md:10733` to the scope that is now actually closed. | done (`aed32a9`) | 15 |
 | S2 | **Error-output sentence matches the test.** Review F2: README.md:199, SPEC.md:1693, CHANGELOG.md:344 say an `OSError` prints no bracket; `tests/test_cli.py:630` asserts `[Errno 2]`. Reword all three to what the test asserts and say that `[Errno N]` is the OS's text, not a spanweave code, and that the spanweave bracket is the only one a caller should route on. Docs only. | done (`bed0ce2`) | 5 |
 | S3 | **Empty string is not an identity.** Per §3 decision: `span_id: ""` (both dialects, both containers) → content-derived fallback + diagnostic, as for a missing id; SPEC §3.6 and §893 sentence; conformance degenerate scenario `empty_ids` with a `""` span id and a `""` parent in both dialects, expected graph carries the explicit parent edge the review showed being lost (`('', 'c')` on the parent commit) — or, if the decision makes that edge unstatable, the fixture proves nothing is dropped silently. Corpus expectations must not move (verify). | done (`5e8a40f`) | 15 |
-| S4 | **Sdist citation guard sees directories.** Review F4: `CITED_PATH` needs two segments and a trailing slash, so `reviews/` and `.github/` are invisible. Widen to any cited path that resolves to a tracked file or directory; plant `reviews/` and `.github/` absent from the sdist include list and prove red. | todo | 6 |
+| S4 | **Sdist citation guard sees directories.** Review F4: `CITED_PATH` needs two segments and a trailing slash, so `reviews/` and `.github/` are invisible. Widen to any cited path that resolves to a tracked file or directory; plant `reviews/` and `.github/` absent from the sdist include list and prove red. | done (`51da70e`) | 6 |
 | S5 | **Three wrong numbers.** Review F5 (SPEC.md:1632 "~238 ns" → 256 ns at 1.7e18, matching SPEC.md:162 and ADAPTERS.md:175), F6 (OPEN_QUESTIONS §16(a): the indented export gives 4 nodes and no `malformed_record`; state it dated, do not rewrite history), F7 (`tests/digit_limit.py:16` "five tests" → seven). Also the review's counting nits: R15's "38 candidates", R7's two, and the two bare `R3`s at TASKS.md:10720/:10782 → `audit-R3`. Docs only. | todo | 6 |
-| S6 | **Nits with a code or spec surface.** R8's SPEC over-statement, R12's missing seventh key and the ungrammatical SPEC.md:521, R14's unqualified determinism claim in SPEC §5.1 and README.md:169 (qualify with the digit-limit dependency §5.3 already states). Take each from the review's per-batch sections; one commit. Corpus must not move. | todo | 10 |
+| S6 | **Nits with a code or spec surface.** R8's SPEC over-statement, R12's missing seventh key and the ungrammatical SPEC.md:521, R14's unqualified determinism claim in SPEC §5.1 and README.md:169 (qualify with the digit-limit dependency §5.3 already states). **Added by S4:** R15's first nit, `TASKS.md:6963-6966`, which states the sdist citation rule unqualified and is now the only durable place claiming that guard's reach without its limits. Take each from the review's per-batch sections; one commit. Corpus must not move. | todo | 10 |
 | S7 | **Series close, third time.** As R7, plus: the two unowned threads (a gate holding future adapters to the `parent_ref` convention; OPEN_QUESTIONS §17's figures unguarded by doc-truth) recorded as open threads; the run-4 review tracked under `reviews/2026-09-11-run4.md` and accounted finding by finding; the review's closing observation — that every new guard was advertised slightly beyond its scope — recorded verbatim as the lesson; WORKPLAN.md and its README row removed; `make check`. | todo | 8 |
 
 ---
@@ -215,6 +215,21 @@ Run 5 = S1 → S2 → S3 → S4 → S5 → S6 → S7. No memos.
   sentence could state 52/151 unchallenged. That is S1's guard narrowed by one
   notch on the day it was widened — the review's closing observation arriving
   again — so it is an open thread, not a closed one.
+- 2026-09-12: S4 widened the guard and then **isolated its own claim**, which
+  is the part worth keeping. In today's tree the `.github/` plant is red under
+  the *old* pattern too, because `reviews/2026-09-11-run3.md` cites
+  `.github/workflows/ci.yml` by full path — so the review's "caught by zero
+  citations" no longer holds literally. With that one citation reworded out of
+  the sandbox, the old pattern passes an sdist carrying no `.github` at all
+  and the widened one still fails. The generalization is real; the review's
+  demonstration of it had gone stale.
+- 2026-09-12: S4 states what the widened guard still misses, and planted each:
+  a root name with no slash (`Makefile`, `LICENSE`) is invisible; a cited
+  directory resolves if *anything* ships beneath it, not per file; prose,
+  untracked paths, citation accuracy and non-markdown citers are all out. S4
+  also dropped the unreproducible "38 candidates" figure from its own
+  docstring — **S5 still owns the CHANGELOG occurrence** — and handed
+  `TASKS.md:6963-6966` to S6, added to that row above.
 
 ---
 
