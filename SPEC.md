@@ -1674,8 +1674,9 @@ declares reaches `0.5`.
     number is kept exactly (§3.1), so no digit is lost and every edge is still
     built from what the export wrote. A rescale here is refused outright, and
     not on a technicality — `float()` at epoch-nanosecond magnitude has a
-    spacing of ~238 ns, so it would merge spans the record kept apart and make
-    the normalized field disagree with `raw.source` with nothing to report it.
+    spacing of 256 ns (§3.1's figure), so it would merge spans the record kept
+    apart and make the normalized field disagree with `raw.source` with nothing
+    to report it.
     The cost of leaving it is stated rather than softened: on such a file the
     diagnostic is a function of a format the consumer already knows, and a span
     genuinely encoded in seconds among nanosecond neighbours is the one span it

@@ -10717,7 +10717,7 @@ declared a blocker for closing again.
   `parentSpanId: ""` contradiction, registered as `audit-R10`. — **done
   (decided)** (`5697313`); decision (c), 2026-09-11, logged below and
   implemented by `audit-R11`.
-- **audit-R11 — The R3 decision, landed.** `SPEC.md` §3.7 and §7,
+- **audit-R11 — The `audit-R3` decision, landed.** `SPEC.md` §3.7 and §7,
   `ADAPTERS.md` and `OPEN_QUESTIONS.md` §17 now state that a conformant
   nanosecond export
   draws one `timestamp_unit_suspect` per span and why nothing is rescaled;
@@ -10789,9 +10789,9 @@ declared a blocker for closing again.
   one contract seen from outside the process. The `validate`/`build` asymmetry
   was real: a graph carrying a bare `NaN` printed `valid`, exit 0. — **done**
   (`e3d7743`).
-- **audit-R17 — The R3 memo discloses its envelope, and F1's parent cell names
-  the seam.** The run-3 review's §7. Re-measured on three trees rather than
-  copying either figure: both review figures reproduce on the pre-`audit-R10`
+- **audit-R17 — The `audit-R3` memo discloses its envelope, and F1's parent
+  cell names the seam.** The run-3 review's §7. Re-measured on three trees
+  rather than copying either figure: both review figures reproduce on the pre-`audit-R10`
   trees, and on the current tree the same export gives 200
   `timestamp_unit_suspect` and **0** `orphan_parent` — so the disclosure is
   written as history of a pre-`audit-R10` measurement, dated rather than

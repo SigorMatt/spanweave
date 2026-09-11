@@ -2594,7 +2594,9 @@ a line to `FIXTURES.md` §4's test-enforced Compared list (**g**).
 
 ## 16. F1: Is OTLP JSON a dialect, or a way of packing records?
 
-**(a) What happens today, measured.** An OTLP/JSON export
+**(a) What a checkout did when this memo was written, measured
+(2026-09-10).** Every outcome below is that day's, and what the tree
+gives now is stated beneath it. An OTLP/JSON export
 (`ExportTraceServiceRequest`, the body every OTLP-HTTP exporter POSTs and every
 `--set=exporter=otlp/json` file receiver writes) is refused twice over, and the
 two refusals are different failures wearing the same word.
@@ -2613,16 +2615,32 @@ every span — sitting in that one node's `raw.source`. Lossless, and useless.
 
 *Pretty-printed*, which is what a file receiver and every `curl | jq` writes:
 **one `malformed_record` diagnostic per line and 0 nodes.** Each line of the
-indented document is a line that is not JSON, and the reader says so once for
-each — **328** times for
+indented document is a line that is not JSON, and a line reader says so once
+for each — **328** times for
 `fixtures/conformance/otlp_container/dialects/openinference.json`, the
-indented export a checkout carries today (tracked files only).
+indented export a checkout carries today (tracked files only). The count is a
+property of that file's text and still recomputes; the outcome attached to it
+is F1-era and no longer happens — see the note below.
 
 *Provenance. This said 46 `malformed_record` diagnostics from batch F1
 (2026-09-10) until batch R9 (2026-09-11). 46 was the line count of an export
 `probe1.py` wrote into a temporary directory and no checkout has ever carried,
 so the number recomputed from nothing. What was being reported is per line,
 and per line recomputes — against the fixture F2 added for this feature.*
+
+*Provenance, the pretty-printed outcome above (dated by batch S5, 2026-09-12).
+It is what a checkout did when F1 was written, and it is out of date for the
+same reason the refusal block is. **(m)**'s F2 (2026-09-10, `ff05b2d`) made
+the envelope a container, and that same commit added the fixture named above,
+so no checkout has ever turned that file into 328 `malformed_record`
+diagnostics. Batch R9 (2026-09-11, `67d788d`) replaced F1's un-recomputable
+**46** with this file's line count, which recomputes from `git ls-files`
+(`tests/corpus_census.py`), and carried the stale behaviour across with it.
+Measured on this tree, 2026-09-12: `spanweave inspect` on that file reports
+**4** nodes — one `agent`, two `llm`, one `tool` — seven edges, and not one
+`malformed_record`; its two diagnostics are `unmapped_attributes`. The outcome
+is kept as the measurement that motivated the design, like the refusal block
+above it.*
 
 *Provenance, the refusal line above (added by batch R17, 2026-09-11). It is
 what a checkout printed when F1 was written, and it is twice out of date, in
@@ -2878,9 +2896,11 @@ expansion needs it list-valued on a record, buffering needs it as the input's
 first member key. Measured over the whole tree today:
 
 - **0** files under `fixtures/`, `capture/` or `examples/` contained the
-  string `resourceSpans` when F1 was written. The two that carry it now are the
-  `otlp_container` fixtures F2 added for this feature, which is the feature
-  reaching its own input rather than an existing input moving.
+  string `resourceSpans` when F1 was written. Three tracked files carry it now
+  (`git grep -l resourceSpans -- fixtures capture examples`), and all three are
+  F2's own: the two `otlp_container` renderings, which are the only *inputs*
+  among them, and the scenario note that describes the fixture. That is the
+  feature reaching its own input rather than an existing input moving.
 - **52 of 52** tracked `*.jsonl` files begin with `{`, and the first member key
   of the first record is `trace_id` in **52 of 52** (tracked files only).
 

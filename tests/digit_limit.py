@@ -11,12 +11,15 @@ than setting it.
 
 It follows that a test which hard-codes 4300 as *the* limit — or 5000 digits
 as *past* it — is a test about one configuration wearing the name of a rule.
-Batch R1 wrote seven such tests and every one of them goes red on a legally
-configured interpreter: under `PYTHONINTMAXSTRDIGITS=0` a 5000-digit literal
-is one the interpreter reads, so five tests asserting it is refused fail,
-and under `PYTHONINTMAXSTRDIGITS=640` two more raise `ValueError` inside the
-test body from their own `int("9" * 4300)`. Batch R14 derives both sides of
-every such boundary from here instead.
+Batch R1 wrote seven such test *functions* and every one of them goes red on a
+legally configured interpreter. Under `PYTHONINTMAXSTRDIGITS=0` a 5000-digit
+literal is one the interpreter reads, so the six asserting it is refused fail —
+**7 `pytest` ids**, because one of the six is parametrized over both adapters.
+Under `PYTHONINTMAXSTRDIGITS=640` the seventh raises `ValueError` inside its
+own body from `int("9" * 4300)`, in **both** of its ids. Nine ids and seven
+functions across the two non-default configurations; counted on R14's parent
+(`1e121d2`), identically under CPython 3.12.3 and 3.14.6. Batch R14 derives
+both sides of every such boundary from here instead.
 
 `enforced()` is the second half of that. Under a *disabled* limit there is no
 boundary at all, and a test that skipped there would be absent in exactly the

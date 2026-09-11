@@ -308,7 +308,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   scratch (`R2`, then `R15`, then this batch), and a sentence about the JSON
   depth ceiling that three consecutive batches stated as a universal from one
   interpreter's measurement (`R6`, corrected by `R13`). Runs 3 and 4 are
-  nineteen registered batches, seventeen of which ran; their final statuses,
+  nineteen registered batches, eighteen of which ran; their final statuses,
   the decision taken on 2026-09-11, the two cold reviews' finding-to-batch
   maps, and the threads the series did **not** close are all in `TASKS.md`
   under *September 2026 audit*, which is now the only place any of it lives.
@@ -400,11 +400,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   graphs differ, and another asserts byte-identity is unaffected *within* one
   limit.
 
-  The seven tests R1 wrote about the limit each described one configuration.
-  Five failed under `PYTHONINTMAXSTRDIGITS=0` (a 5000-digit literal is one
-  that interpreter reads, so the refusals they assert do not happen) and two
-  raised `ValueError` inside their own bodies under `PYTHONINTMAXSTRDIGITS=640`
-  -- both settings legal, the second the lowest the interpreter accepts. Every
+  The seven test *functions* R1 wrote about the limit each described one
+  configuration. Six of them failed under `PYTHONINTMAXSTRDIGITS=0` -- seven
+  `pytest` ids, one function being parametrized over both adapters -- because a
+  5000-digit literal is one that interpreter reads, so the refusals they assert
+  do not happen; the seventh raised `ValueError` inside its own body under
+  `PYTHONINTMAXSTRDIGITS=640`, in both of its two ids. Nine ids, seven
+  functions, both settings legal, the second the lowest the interpreter
+  accepts. Every
   digit-limit test now derives both sides of the boundary from
   `sys.get_int_max_str_digits()` through the new `tests/digit_limit.py`, which
   also **installs** a limit where the interpreter has none, so no such test is
@@ -435,8 +438,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   widened scan finds **10** literals above the ceiling and **10** whose float
   differs from the digits in the file -- all of them the values C1 wrote into
   `timestamp_units` on purpose, five per dialect. §16(k)'s neighbouring *0 files
-  contain `resourceSpans`* is now dated to F1 as well: the two that carry it are
-  F2's own fixtures. **No behavior changed**; nothing under `spanweave/` moved.
+  contain `resourceSpans`* is now dated to F1 as well: the files that carry it
+  are F2's own -- the two `otlp_container` renderings and the scenario note
+  describing them. **No behavior changed**; nothing under `spanweave/` moved.
   (`OPEN_QUESTIONS.md` §2, §11, §16; `TASKS.md` audit note 7)
 
 - **A conformant OTLP JSON export draws one `timestamp_unit_suspect` per span,
@@ -452,7 +456,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   the telemetry, which is exactly as conformant as its field name says.
   **Nothing is rescaled.** A rescale in the reader was refused on C2's own
   grounds rather than on taste: `float()` at epoch-nanosecond magnitude has a
-  spacing of ~238 ns, so two spans 100 ns apart would collapse onto one number
+  spacing of 256 ns, so two spans 100 ns apart would collapse onto one number
   and their `temporal` edge would be emitted as tied. The cost of leaving it is
   stated unsoftened in `SPEC.md` §7 -- on such a file the diagnostic is a
   function of a format the consumer already knows, and a consumer that does not
@@ -722,6 +726,61 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **Five wrong numbers in durable documents, and one present-tense claim that
+  is no longer true.** All measured again here rather than taken from the
+  report that found them (run-4 cold review, findings F5, F6 and F7 plus three
+  counting nits).
+
+  `SPEC.md` §7 said `float()` *"at epoch-nanosecond magnitude has a spacing of
+  ~238 ns"*. `math.ulp(1.7e18)` is **256.0**; 238.42 ns is the spacing at 1.7e9
+  **seconds**, one rescale away from the magnitude the sentence names. So the
+  document set held two figures for one stated magnitude -- `SPEC.md` §3.1 and
+  `ADAPTERS.md` already say 256 ns. The argument is untouched, because it never
+  depended on which of the two: spans 100 ns apart still collapse. `SPEC.md`
+  §7 and this file's `audit-R11` entry now say 256 ns.
+
+  `tests/digit_limit.py` said five of `audit-R1`'s tests go red under
+  `PYTHONINTMAXSTRDIGITS=0`, and its own enumeration summed to seven. Re-run on
+  `audit-R14`'s parent (`1e121d2`) under CPython 3.12.3 and 3.14.6 alike: **7
+  `pytest` ids / 6 functions** under `=0`, and **2 ids / 1 function** under
+  `=640` -- nine ids, seven functions, disjoint. Both the module docstring and
+  this file's `audit-R14` entry now say which population and which
+  configuration, because "seven" without that is the same defect one digit
+  over.
+
+  `OPEN_QUESTIONS.md` §16(a) stated, under a heading reading *"What happens
+  today, measured"*, that an indented OTLP export gives one `malformed_record`
+  per line and no nodes. It has not done that since batch F2 made the envelope
+  a container -- the same commit (`ff05b2d`) that added the fixture the
+  sentence names, so the behaviour was never true of that file. Measured today,
+  `spanweave inspect` on it reports **4** nodes, seven edges and two
+  `unmapped_attributes`, with no `malformed_record` at all. The sentence is
+  **dated rather than rewritten**, because it is the measurement the memo's
+  design was taken from: the heading now says when, a provenance note names
+  both commits and prints what the tree gives now, and the **328** it carries
+  stays -- that is the file's line count, it recomputes, and a test pins it.
+
+  Three counts. §16(k)'s *"the two that carry it now"* is **three** (`git grep
+  -l resourceSpans -- fixtures capture examples`), and has been since F2: the
+  two `otlp_container` renderings and the scenario note describing them. The
+  `audit-R7` entry below said runs 3 and 4 were "nineteen registered batches,
+  seventeen of which ran"; `TASKS.md` carries nineteen bullets of which exactly
+  one (`audit-R18`) is marked never-run, so **eighteen** ran, `audit-R7`
+  included. And `audit-R15`'s "38 scenario-relative citations" is dropped
+  rather than recomputed, as batch S4 already dropped it from the docstring it
+  described: the population depends on a pattern that has changed once, an
+  independent scan reproduces neither the figure nor a single obvious
+  definition of what it counted, and nothing gates it.
+
+  Also in `TASKS.md`: the two remaining bare `R3`s inside the audit registry
+  are now `audit-R3`, which is the collision the registry's own policy sentence
+  says it resolves. The `0.9.1` launch checklist's `R3` is untouched -- it is
+  the other `R3`, and the point of the spelling.
+
+  Documents only. Nothing under `spanweave/` moved, no test assertion changed,
+  and `tests/serialized_shape.json` does not move.
+  (`SPEC.md` §7; `OPEN_QUESTIONS.md` §16; run-4 review findings F5, F6, F7)
+
 - **The sdist citation guard can now see a directory, which is the citation it
   was written for.** Batch `audit-R15` added `install_check`'s "ships every
   tracked path its own documents cite" check, and a comment beside its pattern
@@ -902,9 +961,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   from code spans only, because a path in prose cannot be told from a sentence;
   a candidate counts as repo-relative only when its first segment is a
   top-level entry of the repository, which is what separates
-  `reviews/2026-09-10-run1.md` from the 38 scenario-relative `expected/graph.json`
+  `reviews/2026-09-10-run1.md` from the scenario-relative `expected/graph.json`
   and package-relative `adapters/base.py` citations the corpus and the spec are
-  full of; only paths git tracks are required, so `dist/…`, `out/…` and
+  full of, which are not counted here on purpose; only paths git tracks are required, so `dist/…`, `out/…` and
   untracked scratch are out of scope here and stay with
   `test_a_durable_document_cites_no_untracked_scratch_path`; and existence is
   all that is asked, never whether the cited section says what the citing
