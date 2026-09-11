@@ -149,7 +149,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | S1 | **Every census figure is guarded, and TASKS.md says only what is true.** Review F1: `CENSUS_FIGURE_PATTERNS` is eight fixed families; `corpus_census.py` computes figures no family matches (records with a span id 139, trace-unique ids 135, three zero-counts). Replace the fixed list with a guard derived from the census's own output: every figure the census prints must be matched by a family, and a test fails if the census emits a figure with no family. Plant each of the review's five surviving figures and prove red. Then correct `TASKS.md:10733` to the scope that is now actually closed. | done (`aed32a9`) | 15 |
-| S2 | **Error-output sentence matches the test.** Review F2: README.md:199, SPEC.md:1693, CHANGELOG.md:344 say an `OSError` prints no bracket; `tests/test_cli.py:630` asserts `[Errno 2]`. Reword all three to what the test asserts and say that `[Errno N]` is the OS's text, not a spanweave code, and that the spanweave bracket is the only one a caller should route on. Docs only. | todo | 5 |
+| S2 | **Error-output sentence matches the test.** Review F2: README.md:199, SPEC.md:1693, CHANGELOG.md:344 say an `OSError` prints no bracket; `tests/test_cli.py:630` asserts `[Errno 2]`. Reword all three to what the test asserts and say that `[Errno N]` is the OS's text, not a spanweave code, and that the spanweave bracket is the only one a caller should route on. Docs only. | done (`bed0ce2`) | 5 |
 | S3 | **Empty string is not an identity.** Per §3 decision: `span_id: ""` (both dialects, both containers) → content-derived fallback + diagnostic, as for a missing id; SPEC §3.6 and §893 sentence; conformance degenerate scenario `empty_ids` with a `""` span id and a `""` parent in both dialects, expected graph carries the explicit parent edge the review showed being lost (`('', 'c')` on the parent commit) — or, if the decision makes that edge unstatable, the fixture proves nothing is dropped silently. Corpus expectations must not move (verify). | todo | 15 |
 | S4 | **Sdist citation guard sees directories.** Review F4: `CITED_PATH` needs two segments and a trailing slash, so `reviews/` and `.github/` are invisible. Widen to any cited path that resolves to a tracked file or directory; plant `reviews/` and `.github/` absent from the sdist include list and prove red. | todo | 6 |
 | S5 | **Three wrong numbers.** Review F5 (SPEC.md:1632 "~238 ns" → 256 ns at 1.7e18, matching SPEC.md:162 and ADAPTERS.md:175), F6 (OPEN_QUESTIONS §16(a): the indented export gives 4 nodes and no `malformed_record`; state it dated, do not rewrite history), F7 (`tests/digit_limit.py:16` "five tests" → seven). Also the review's counting nits: R15's "38 candidates", R7's two, and the two bare `R3`s at TASKS.md:10720/:10782 → `audit-R3`. Docs only. | todo | 6 |
@@ -189,6 +189,15 @@ Run 5 = S1 → S2 → S3 → S4 → S5 → S6 → S7. No memos.
   any of their values (the named-site tests still pin those exactly). The two
   float figures cannot be value-matched and are named in `FRACTIONAL_FIGURES`
   with the µs figure that pins them.
+- 2026-09-12: S2 needed no test edit. `tests/test_cli.py` already asserted the
+  true line, and the README fence test parses the filename out of the fence,
+  so renaming the transcript's file to one that exists (`unrecognized.jsonl`,
+  with its precondition stated above the fence) left the guard untouched. The
+  three reworded sites keep R16's intent — the CLI adds no bracket of its own
+  — and replace the absolute with a positive rule: the code, if any, is the
+  bracket immediately after `spanweave <command>: `, and its contents are one
+  of SPEC §3.10's values. R16's own CHANGELOG entry was one of the three
+  corrected sites, and the new entry says so.
 
 ---
 
