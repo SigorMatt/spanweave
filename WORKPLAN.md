@@ -148,7 +148,7 @@ never restarts, fixes, or touches anything. Conventions live in
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| S1 | **Every census figure is guarded, and TASKS.md says only what is true.** Review F1: `CENSUS_FIGURE_PATTERNS` is eight fixed families; `corpus_census.py` computes figures no family matches (records with a span id 139, trace-unique ids 135, three zero-counts). Replace the fixed list with a guard derived from the census's own output: every figure the census prints must be matched by a family, and a test fails if the census emits a figure with no family. Plant each of the review's five surviving figures and prove red. Then correct `TASKS.md:10733` to the scope that is now actually closed. | todo | 15 |
+| S1 | **Every census figure is guarded, and TASKS.md says only what is true.** Review F1: `CENSUS_FIGURE_PATTERNS` is eight fixed families; `corpus_census.py` computes figures no family matches (records with a span id 139, trace-unique ids 135, three zero-counts). Replace the fixed list with a guard derived from the census's own output: every figure the census prints must be matched by a family, and a test fails if the census emits a figure with no family. Plant each of the review's five surviving figures and prove red. Then correct `TASKS.md:10733` to the scope that is now actually closed. | done (`aed32a9`) | 15 |
 | S2 | **Error-output sentence matches the test.** Review F2: README.md:199, SPEC.md:1693, CHANGELOG.md:344 say an `OSError` prints no bracket; `tests/test_cli.py:630` asserts `[Errno 2]`. Reword all three to what the test asserts and say that `[Errno N]` is the OS's text, not a spanweave code, and that the spanweave bracket is the only one a caller should route on. Docs only. | todo | 5 |
 | S3 | **Empty string is not an identity.** Per §3 decision: `span_id: ""` (both dialects, both containers) → content-derived fallback + diagnostic, as for a missing id; SPEC §3.6 and §893 sentence; conformance degenerate scenario `empty_ids` with a `""` span id and a `""` parent in both dialects, expected graph carries the explicit parent edge the review showed being lost (`('', 'c')` on the parent commit) — or, if the decision makes that edge unstatable, the fixture proves nothing is dropped silently. Corpus expectations must not move (verify). | todo | 15 |
 | S4 | **Sdist citation guard sees directories.** Review F4: `CITED_PATH` needs two segments and a trailing slash, so `reviews/` and `.github/` are invisible. Widen to any cited path that resolves to a tracked file or directory; plant `reviews/` and `.github/` absent from the sdist include list and prove red. | todo | 6 |
@@ -177,6 +177,18 @@ Run 5 = S1 → S2 → S3 → S4 → S5 → S6 → S7. No memos.
 - 2026-09-12: reopened for the run-4 review. Rule agreed with the maintainer:
   the PR opens after this run unless its review finds a live traceback or an
   invariant violation; wording findings become open threads.
+- 2026-09-12: S1 replaced the hand-written family list with one derived from
+  the census type itself: `figure_names()` walks `Census` and returns a dotted
+  name for all 33 whole numbers it can produce, and a test fails if any of
+  them has no family (16 families added, 24 total). A second new test makes
+  each family read its own planted example, because a regex that has gone dead
+  is otherwise invisible. All five of the review's surviving plants are red.
+  Two residues are stated rather than hidden, in the tests' own docstrings:
+  the scan checks the *spellings* the families carry, not every number in
+  every sentence; and where a slot names several figures the family accepts
+  any of their values (the named-site tests still pin those exactly). The two
+  float figures cannot be value-matched and are named in `FRACTIONAL_FIGURES`
+  with the µs figure that pins them.
 
 ---
 
