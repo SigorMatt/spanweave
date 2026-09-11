@@ -356,18 +356,23 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    Two exclusions, both because the excluded text is a record of a moment
-    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
-    copied verbatim; a review that says a file was untracked *when it was
-    read* is reporting, not citing. `WORKPLAN.md` is a series' own execution
-    state: it owns `patches/` as its scratch drop and is deleted at series
-    close, which is why nothing durable may depend on it.
+    One exclusion, because the excluded text is a record of a moment rather
+    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
+    verbatim, and a review that says a file was untracked *when it was read*
+    is reporting, not citing.
+
+    A second exclusion stood here while the September 2026 audit-fix series
+    ran -- `WORKPLAN.md`, a series' own execution state, which owned
+    `patches/` as its scratch drop and was written to be deleted at series
+    close. That is exactly why nothing durable was allowed to depend on it,
+    and it is gone: the series closed and the file went with it (`TASKS.md`,
+    *September 2026 audit*). A future series' plan file needs the exclusion
+    back.
     """
     return [
         path
         for path in documents()
-        if path.name != "WORKPLAN.md"
-        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 

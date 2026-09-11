@@ -15,12 +15,14 @@ would settle it, **(d)** the provisional stance the seed specs take.
 
 **Entries §10–§17 were written as memos during the September 2026 audit-fix
 series** and refer throughout to `WORKPLAN.md`, that series' execution state.
-`WORKPLAN.md` was written to be deleted at series close and was deleted by
-batch G4 on 2026-09-10; everything of it that outlives the series — the batch
-list with final statuses, the decisions log, the run-1 review and the threads
-the series left open — is in `TASKS.md` under *September 2026 audit*. Those
-references are kept as written, because a memo that is re-edited after the fact
-stops being evidence of what was known when it was taken.
+`WORKPLAN.md` was written to be deleted at series close: batch G4 deleted it on
+2026-09-10, two cold reviews reopened the series and the file came back with
+it, and batch R7 deleted it again on 2026-09-11 at the close that stands.
+Everything of it that outlives the series — the batch list with final statuses,
+the decisions log for both dates, the cold reviews and the threads the series
+left open — is in `TASKS.md` under *September 2026 audit*. Those references are
+kept as written, because a memo that is re-edited after the fact stops being
+evidence of what was known when it was taken.
 
 ---
 
@@ -3264,7 +3266,9 @@ tests and needs a fixture the corpus does not have: an OTLP rendering with real
 nanosecond timestamps, which no committed file is.
 
 **Decision: option (c)**, taken 2026-09-11 by the maintainer on this memo and
-implemented by batch R11. The decision, in the words it was recorded in:
+implemented by batch R11; the series' decisions log carries the same row, in
+`TASKS.md` under *September 2026 audit*, *Decisions taken*. The decision, in
+the words it was recorded in:
 
 > Option (c): document that a conformant OTLP JSON export draws one
 > `timestamp_unit_suspect` per span, and that the warning is a statement about

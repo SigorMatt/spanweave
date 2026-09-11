@@ -298,6 +298,39 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The September 2026 audit-fix series is closed again, and `WORKPLAN.md` is
+  gone for the second time.** G4 closed it on 2026-09-10 and deleted its
+  execution state; a cold read of run 2 reopened it, and a cold read of run 3
+  reopened it once more, so the entry below is history rather than the current
+  fact. What each reopening found was a defect in the
+  **close**, not new audit surface: a blocker that had escaped to the CLI
+  (`R1`), a review cited from a durable document but living only in untracked
+  scratch (`R2`, then `R15`, then this batch), and a sentence about the JSON
+  depth ceiling that three consecutive batches stated as a universal from one
+  interpreter's measurement (`R6`, corrected by `R13`). Runs 3 and 4 are
+  nineteen registered batches, seventeen of which ran; their final statuses,
+  the decision taken on 2026-09-11, the two cold reviews' finding-to-batch
+  maps, and the threads the series did **not** close are all in `TASKS.md`
+  under *September 2026 audit*, which is now the only place any of it lives.
+  Three things are deliberate in how it was closed. The run-3 review is
+  archived as `reviews/2026-09-11-run3.md`, verified byte-for-byte against the
+  `patches/` original by digest, so the citation and the review ship together —
+  `R15`'s sdist gate then proves it. Every finding that review raised is
+  accounted for one by one: each is closed by a named batch or is an open
+  thread, and the table says which, because a review whose nits evaporate at
+  the close is one nobody writes again. And the seven new threads — chief among
+  them that **one non-finite number refuses a whole graph** while the library
+  already carries a non-JSON literal as *text* elsewhere, and the record-level
+  coercions `R18` was registered for — are recorded in `TASKS.md` rather than
+  in a new `DEBT.md`: this repository has none, and inventing one at a close
+  would create the second place to look that deleting `WORKPLAN.md` exists to
+  prevent. The series' batch ids are written `audit-R<n>` in `TASKS.md`, where
+  the `0.9.1` launch checklist already numbers items `R1`-`R3`; everywhere
+  else, including this file, they stay bare. **No behavior changed**; nothing
+  under `spanweave/` moved.
+  (run-3 review findings F5, F6, F7 and the accounting of all of them; batch
+  `audit-R7`)
+
 - **A refusal is now routable from outside the process, and `spanweave
   validate` refuses the document `spanweave build` refuses to write.**
   `spanweave/errors.py` has said *"match on this, never on the message"* since
@@ -549,7 +582,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   be in the tree. Documentation and tracking only; no behaviour change.
 
 - **The September 2026 audit-fix series is closed, and `WORKPLAN.md` is
-  gone.** That file was the series' execution state -- protocol, live batch
+  gone.** *(Written at G4, 2026-09-10, and superseded twice: the series was
+  reopened for runs 3 and 4 and the file came back with it. See the entry at
+  the head of this section for the close that stands.)* That file was the
+  series' execution state -- protocol, live batch
   status, decisions log, resume note, finding-to-batch map -- and was written
   to be deleted once the series ended, so that no reader would have two places
   to look up a status and one place to read a stale one. Everything of it that
