@@ -722,6 +722,41 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The sdist citation guard can now see a directory, which is the citation it
+  was written for.** Batch `audit-R15` added `install_check`'s "ships every
+  tracked path its own documents cite" check, and a comment beside its pattern
+  saying that `reviews/` **as a whole missing directory must be visible too**.
+  It was not: the pattern required at least two path segments *and* a trailing
+  slash, so a top-level directory citation -- `reviews/`, `.github/` -- matched
+  nothing, in any document. The check went red on its own defect only because
+  the review *files* are also cited by full path, which is an accident of those
+  two citations rather than the rule the commit stated. The pattern now takes a
+  second shape: one segment carrying a slash. Resolution follows it -- a cited
+  path is a file or a directory according to what **git** tracks it as, not
+  according to whether the citation happens to end in a slash, so
+  `fixtures/conformance` and `fixtures/conformance/` are now the same question.
+  Planted both ways before landing. With `/reviews` removed from
+  `[tool.hatch.build.targets.sdist].include`, the check fails naming
+  `reviews/` and the three documents citing it, alongside the three review
+  files it already named. With `/.github` removed it fails naming `.github/`
+  and the three documents citing that -- and with the single full-path
+  citation of `.github/workflows/ci.yml` reworded out of the sandbox, the old
+  pattern passes a sdist with no `.github` in it at all while the new one still
+  fails: that is the generalization, isolated. Widening what is *looked* at
+  widens what is not a path, so a candidate that resolves nowhere, or that git
+  does not track, is skipped exactly as before rather than becoming a new
+  failure. The scope sentences were rewritten with it, in the module
+  docstring, in `_audit_sdist_resolves_its_own_citations`, and in the
+  `pyproject.toml` comment that points at it, and they now state the two limits
+  that remain: a root name written with no slash at all (`Makefile`, `tests`)
+  is a word, not a citation, and cannot be seen; and a cited directory is
+  resolved by *something* shipping beneath it, not by a per-file manifest. Both
+  limits, and the directory citation itself, are pinned by tests in
+  `tests/test_acceptance.py`, because a sentence about a guard's reach that
+  nothing plants against is how this one came to overstate itself. `SPEC.md`
+  does not move: the library's behaviour is unchanged, and nothing under
+  `spanweave/` is touched. (run-4 review F4)
+
 - **An empty string is not a span identity, so an empty parent reference now
   loses nothing.** Batch `audit-R10` normalized `parent_id: ""` /
   `parentSpanId: ""` to *no parent* at the seam, on the stated ground that,
