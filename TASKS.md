@@ -6963,9 +6963,25 @@ consumer's findings go in the exit record beside these and carry more weight.
   **this file** citing `reviews/2026-09-10-run1.md` as the full text of a
   review it did not contain. A third check now runs the inward direction,
   scoped to what a reader reaches for: every repo-relative path a document the
-  sdist ships cites must resolve inside the sdist. Its exact reach — code
-  spans only, tracked paths only, existence and not accuracy — is stated in
-  `install_check._audit_sdist_resolves_its_own_citations`.
+  sdist ships cites **in a code span, and that git tracks**, must resolve
+  inside the sdist — as a file, or as a directory with something shipped
+  beneath it. Those qualifiers are the rule rather than a footnote to it, and
+  the reach they leave has four edges. A candidate git does not track is
+  skipped, never failed, which is why **this file** can cite
+  `fixtures/conformance/span_links/dialects/otel_genai.jsonl` — a rendering
+  proposed by a memo above and never written — and the check says nothing
+  about it. A root name written with no slash (`Makefile`, `tests`) reads as an
+  ordinary word rather than as a path, so it cannot be seen at all. A cited
+  directory asks only that *something* ship beneath it, not for a per-file
+  manifest. And existence is the whole question: never whether the cited file
+  says what the citing sentence claims. The reach is stated in full beside the
+  code it describes (`install_check._audit_sdist_resolves_its_own_citations`,
+  widened to reach a directory citation after the run-4 review found it could
+  not). Three of those four edges are planted against in
+  `tests/test_acceptance.py` — the untracked candidate, the slashless root
+  name, the partially shipped directory. The fourth is not plantable and is
+  not a defect: accuracy is a human reading, and the check says so rather than
+  implying otherwise.
 
   **What is checked, beyond the three commands the task names.** Both
   artifacts are audited (`uv build` builds the wheel *from* the sdist, so

@@ -555,7 +555,7 @@ recognizes but cannot read — a `start_time` in a rendering §3.1 does not
 accept — is *not* normalized, and saying so here is what keeps it from
 vanishing between the raw record and a `None`.
 
-The timestamps are not the only fields that holds for. A record's **identity
+The timestamps are not the only fields it holds for. A record's **identity
 fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain
 strings, so one stated in any other rendering (`"name": 42`) is a field
 recognized and not read: it falls to its default and is reported. Three
@@ -586,15 +586,20 @@ fact that one arrived unreadable vanish between the raw record and a decision
 that was never made.
 
 That is the adapter's rule, not one key's: **a key is consumed where it is
-read, never before**. A name the adapter cannot read as a string
-(`tool.name`, `llm.model_name`, `embedding.model_name`) leaves `operation` and
-`model` `None`, and a call id it cannot read (`tool_call.id`, in the
-fulfilling form or the requested one) leaves the span stating no call — each
-of those is a key read and not usable, so each stays reported. Marking the key
-consumed ahead of the read is the same overstatement pointing the other way:
-it claims the adapter mapped a value it never had, and the claim is loudest
-exactly where it is wrong, because the value that survives only in `raw` is
-the one nothing else records.
+read, never before**. The reading is per key, and so is what it costs: a name
+the adapter cannot read as a string (`tool.name`, `llm.model_name`,
+`embedding.model_name`) contributes nothing *of its own*, so `operation` and
+`model` still hold whatever the readable names beside it state — a span
+whose `tool.name` is a number and whose `llm.model_name` is `"m"` reports
+`operation` and `model` as `"m"`, exactly as one that never sent a tool name
+would — and the two are `None` only where no readable name is left. A call id
+it cannot read (`tool_call.id`, in the fulfilling form or the requested one)
+leaves the span stating no call. Each unreadable key is a key read and not
+usable, whatever the keys beside it decided, so each stays reported. Marking
+the key consumed ahead of the read is the same overstatement pointing the
+other way: it claims the adapter mapped a value it never had, and the claim is
+loudest exactly where it is wrong, because the value that survives only in
+`raw` is the one nothing else records.
 
 The rule is the adapter's whole surface, not a list of keys, and three of its
 cases are worth naming because each looks like an exception and is not:
@@ -1186,6 +1191,10 @@ adapter can recover, and it is frequently **not** the parent/child relation.
 
 Same input bytes + same adapter version + same `spanweave` version → **the same
 graph, byte-for-byte** on serialization, on any machine.
+
+The guarantee has one condition, and it is stated two subsections down rather
+than left for a reader to find: §5.3, *The one input that is not the input
+bytes*.
 
 ### 5.2 Rules
 

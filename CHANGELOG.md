@@ -726,6 +726,56 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **Four sentences that advertised a rule, a guard or a guarantee slightly
+  wider than it holds, and one that was ungrammatical.** The run-4 cold
+  review's per-batch nits with a code or a spec surface (its §4 `R8`, §7 `R12`
+  twice, §9 `R14`, §10 `R15`), each probed against the code before the
+  sentence was rewritten, which is what none of them had. **No behaviour changed**: nothing under `spanweave/`
+  is touched, no stored expectation and no `tests/serialized_shape.json`
+  moved.
+
+  `SPEC.md` §3.7 said a name the adapter cannot read *"leaves `operation` and
+  `model` `None`"*, listing all three OpenInference name keys, which reads as
+  a claim about the span. It is a claim about the **key**: an attribute map of
+  `{"tool.name": 7, "llm.model_name": "m"}` gives `operation` and `model` both
+  `"m"`, in either dialect, because an unreadable key contributes nothing *of
+  its own* and the readable one beside it is untouched -- exactly as if the
+  number had never been sent, which is the wording the `audit-R8` entry below
+  already used. §3.7 now states the per-key reading its adapters' `_operation`
+  docstrings carry, and says the two fields are `None` only where no readable
+  name is left. The same paragraph's *"The timestamps are not the only fields
+  that holds for"* is now grammatical.
+
+  `SPEC.md` §5.1 and `README.md`'s determinism bullet state the guarantee with
+  no condition on it two subsections before §5.3 states the condition. Both
+  now **point at** §5.3 by its title rather than paraphrasing it: the
+  dependency is one fact, and a second wording of it is a second thing to keep
+  true. Neither the guarantee nor `CLAUDE.md` invariant 4 is weakened, and
+  `CLAUDE.md` -- the third site carrying the unconditional sentence, and the
+  one `SPEC.md` §5.3 was written to qualify -- is deliberately left alone.
+
+  `TASKS.md` 3.6's `audit-R15` amendment stated the sdist citation rule as a
+  universal (*"every repo-relative path a document the sdist ships cites must
+  resolve inside the sdist"*) with its qualifiers appended as an aside, and
+  the shipped `TASKS.md` itself cites two paths that resolve nowhere. It was
+  the last durable place claiming that guard's reach without the limits its
+  code discloses. The qualifiers are now inside the rule, the reach is stated
+  as the four edges it has -- an untracked candidate skipped rather than
+  failed (the two unresolving citations are exactly that case, and one is now
+  named where the rule is stated), a root name with no slash unreachable, a
+  cited directory asking only that *something* ship beneath it, existence and
+  never accuracy -- and the sentence says which three of the four are planted
+  against in `tests/test_acceptance.py` and why the fourth cannot be.
+
+  The `audit-R12` entry below counted *six* keys, *three per dialect*, and
+  walked the corpus for six; the commit changed **seven**, the seventh being
+  `gen_ai.operation.name` -- the genai half of the span-kind fix that entry
+  describes in prose and left out of its list. Corrected there, with the
+  seventh key's walk run here at that commit and again at this one rather than
+  taken from the report.
+  (run-4 review §4 `R8`, §7 `R12`, §9 `R14`, §10 `R15`;
+  `SPEC.md` §3.7, §5.1)
+
 - **Five wrong numbers in durable documents, and one present-tense claim that
   is no longer true.** All measured again here rather than taken from the
   report that found them (run-4 cold review, findings F5, F6 and F7 plus three
@@ -1020,24 +1070,31 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 - **The rule now holds at every deciding key in both dialects, and the
   diagnostic stops saying "no attribute" of a key that was sent.** Three more
-  OpenInference keys and three OTel GenAI ones were still marked consumed
+  OpenInference keys and four OTel GenAI ones were still marked consumed
   before they were read: `input.mime_type` / `output.mime_type` (a mime the
   adapter cannot read types nothing -- the payload is `present` with no mime
   -- and a mime stated beside *no value* is never read at all, since an
   `absent` payload carries none), `openinference.span.kind`, and
-  `gen_ai.tool.name`, `gen_ai.request.model`, `gen_ai.tool.call.id`. The last
-  three are not cosmetic: an unreadable name or call id never reaches a node
-  field, so `unmapped_attributes` is the entire report of it, and until now
-  OpenInference reported one while OTel GenAI swallowed it -- a cross-dialect
-  difference in the only place the difference could be seen. A span kind is
-  the odd one: every value but `null` is read with `str()` and preserved as
-  `attributes.reported_kind`, so only `null` is unreadable there, and its
-  `unknown_span_kind` message said *"no `openinference.span.kind` attribute"*
-  of a span that carried one. Both adapters now say which of the two happened.
-  No conformance or corpus expectation moved: across every tracked `.json` /
-  `.jsonl`, these keys occur 221 times in 51 files and **none** carries a
-  non-string value or a mime with no value beside it, in either the flat or
-  the OTLP `KeyValue` rendering.
+  `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.request.model`,
+  `gen_ai.tool.call.id`. The last three are not cosmetic: an unreadable name
+  or call id never reaches a node field, so `unmapped_attributes` is the
+  entire report of it, and until now OpenInference reported one while OTel
+  GenAI swallowed it -- a cross-dialect difference in the only place the
+  difference could be seen. A span kind is the odd one in each dialect -- `openinference.span.kind` and
+  `gen_ai.operation.name`: every value but `null` is read with `str()` and
+  preserved as `attributes.reported_kind`, so only `null` is unreadable there,
+  and the `unknown_span_kind` message said *"no `openinference.span.kind`
+  attribute"* of a span that carried one. Both adapters now say which of the
+  two happened. No conformance or corpus expectation moved: across every
+  tracked `.json` / `.jsonl` at that commit, these seven keys occur 297 times
+  in 52 files and **none** carries a non-string value or a mime with no value
+  beside it, in either the flat or the OTLP `KeyValue` rendering. *The count
+  was six, and the walk behind it six keys wide, until run 5's batch S6:
+  `gen_ai.operation.name` was changed by the same commit and named in neither.
+  Re-walked there, at the commit and again at run 5's tip: the seventh key
+  alone is 76 occurrences in 25 files then and 78 in 26 now, all of them
+  strings both times, so the conclusion the six-key walk reached holds for the
+  branch it had not looked at.*
   (audit finding 6, follow-up; `SPEC.md` §3.7)
 
 - **A name or a call id the adapter could not read is reported too.** The

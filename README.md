@@ -167,7 +167,9 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
 ## Guarantees
 
 - **Deterministic.** Same input bytes → byte-identical graph. Sorted adjacency,
-  explicit tie-breaks, no clocks, no randomness, no salted hashing.
+  explicit tie-breaks, no clocks, no randomness, no salted hashing. The one
+  condition on that is not an input byte, and it is stated in `SPEC.md` §5.3,
+  *The one input that is not the input bytes*.
 - **Lossless.** Every node keeps its verbatim source record. Anything that can't
   be mapped becomes a **diagnostic**, never a silent discard.
 - **Zero runtime dependencies.** Core is stdlib-pure and readable in one sitting.
