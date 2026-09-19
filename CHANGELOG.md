@@ -298,6 +298,31 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The digit limit is the library's, and the interpreter's setting no longer
+  changes a graph.** Batch R14 named CPython's integer-string digit limit as
+  an input to the graph and told a caller to pin `PYTHONINTMAXSTRDIGITS=4300`
+  for byte-identity; the maintainer decided instead (thread 23) that
+  `CLAUDE.md` invariant 4 stays unconditional. The new
+  `spanweave/jsoncodec.py` owns `DIGIT_LIMIT = 4300` -- the interpreter
+  default, so nothing a stock interpreter built changes -- and applies it by
+  counting digits before any conversion: an unquoted literal past it is a
+  `malformed_record`, a quoted timestamp past it is `missing_timestamp`, and
+  an OTLP `intValue` past it is carried as its decimal string, under every
+  setting. Integers inside it are parsed, rendered into diagnostic messages
+  and encoded through `decimal.Decimal` or a placeholder pass over the
+  unchanged stdlib encoder, so a lowered setting no longer refuses them: under
+  `PYTHONINTMAXSTRDIGITS=640` a 1000-digit integer used to make its line a
+  `malformed_record`, and a quoted 1000-digit timestamp built a node with no
+  start time. The interpreter's setting is still never changed. A test builds
+  one trace and one OTLP export carrying integers on both sides of both limits
+  under the setting unset, `=0` and `=640`, and asserts the graphs are
+  byte-identical; it replaces R14's test asserting they differ. The
+  digit-limit tests derive their boundaries from the constant rather than
+  from `sys.get_int_max_str_digits()`, and `tests/digit_limit.py` no longer
+  moves the interpreter's limit. No corpus expectation and no serialized
+  shape moves. (thread 23, batch S8; `SPEC.md` §3.1, §5.1, §5.3, §7;
+  `ENVIRONMENT.md`, `README.md`)
+
 - **The September 2026 audit-fix series is closed a third time, and
   `WORKPLAN.md` is gone with it.** Run 5 is seven batches -- `S1` `aed32a9`,
   `S2` `bed0ce2`, `S3` `5e8a40f`, `S4` `51da70e`, `S5` `4727a46`, `S6`

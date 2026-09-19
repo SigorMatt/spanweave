@@ -12,12 +12,11 @@ says, so nothing there is a judgement about the trace.
 from __future__ import annotations
 
 import argparse
-import json
 import pathlib
 import sys
 from collections.abc import Iterable, Sequence
 
-from spanweave import api, serialize
+from spanweave import api, jsoncodec, serialize
 from spanweave.adapters import registered
 from spanweave.errors import SpanweaveError
 from spanweave.model import JsonValue
@@ -219,7 +218,7 @@ def _read_document(path: str) -> JsonValue | None:
     if path == "-":
         return None
     try:
-        document = json.loads(pathlib.Path(path).read_bytes())
+        document = jsoncodec.loads(pathlib.Path(path).read_bytes())
     except (ValueError, OSError, RecursionError):
         return None
     if isinstance(document, dict) and "schema_version" in document:
@@ -268,7 +267,7 @@ def _refuse_the_constant(token: str) -> float:
 
 def _do_validate(args: argparse.Namespace) -> int:
     try:
-        document = json.loads(
+        document = jsoncodec.loads(
             pathlib.Path(args.graph).read_bytes(),
             parse_constant=_refuse_the_constant,
         )

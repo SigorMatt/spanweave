@@ -5,6 +5,7 @@ about refusing rather than choosing.
 """
 
 import dataclasses
+import decimal
 
 import pytest
 
@@ -300,8 +301,8 @@ TIMESTAMP_RENDERINGS = (
     ("1e400", None),  # a JSON number literal with no float64: it is `inf`
     # The digit-limit rendering is not in this table: its `repr` is thousands
     # of digits and that becomes the test's id, and its length is derived from
-    # the interpreter rather than written down (§5.3). It has its own pair of
-    # tests below, one for each side of the line.
+    # the library's constant rather than written down (§5.3). It has its own
+    # pair of tests below, one for each side of the line.
     (float("inf"), None),  # what an unquoted `Infinity` or `1e400` parses to
     (float("-inf"), None),
     (float("nan"), None),  # what an unquoted `NaN` parses to
@@ -397,27 +398,24 @@ def test_a_timestamp_past_the_digit_limit_is_refused_the_same_way(adapter):
     # The other side of the boundary below, and the same refusal: this one
     # used to leave as an interpreter `ValueError` raised straight out of
     # `parse` (batch R1).
-    with digit_limit.enforced() as limit:
-        assert_the_rendering_is_refused(adapter, digit_limit.past(limit))
+    assert_the_rendering_is_refused(adapter, digit_limit.past())
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
 def test_a_timestamp_just_inside_the_digit_limit_is_still_read(adapter):
-    # The line is the interpreter's, and the pair of tests states which side
-    # of it is which. Without this the fix could be "refuse any long integer"
+    # The line is the library's, and the pair of tests states which side of
+    # it is which. Without this the fix could be "refuse any long integer"
     # and still pass everything above.
     #
-    # Both sides are DERIVED from `sys.get_int_max_str_digits()` rather than
-    # written as 4300 and 5000 (batch R14, `SPEC.md` §5.3). The limit is a
-    # runtime setting: written as constants, this test raised `ValueError`
-    # inside its own body converting 4300 digits under
-    # `PYTHONINTMAXSTRDIGITS=640`, and its sibling above asserted a refusal
-    # that does not happen under `PYTHONINTMAXSTRDIGITS=0`.
-    with digit_limit.enforced() as limit:
-        inside = digit_limit.inside(limit)
-        span = next(iter(adapter.parse([a_record(adapter, start_time=inside)])))
-        assert span.started_at == int(inside)
-        assert type(span.started_at) is int
+    # Both sides are DERIVED from the library's `DIGIT_LIMIT` rather than
+    # written as 4300 and 4301 (batches R14 and S8, `SPEC.md` §5.3), and the
+    # expected value is built through `Decimal`, because `int()` on 4300
+    # digits raises in this test's own body under `PYTHONINTMAXSTRDIGITS=640`
+    # -- the setting the library no longer lets decide anything.
+    inside = digit_limit.inside()
+    span = next(iter(adapter.parse([a_record(adapter, start_time=inside)])))
+    assert span.started_at == int(decimal.Decimal(inside))
+    assert type(span.started_at) is int
 
 
 @pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)

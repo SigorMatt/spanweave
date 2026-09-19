@@ -735,16 +735,15 @@ def test_an_int_value_past_the_interpreter_digit_limit_is_carried_verbatim():
     # used to come out of `spanweave build` as an interpreter traceback. The
     # reader carries the decimal string it could not convert (`SPEC.md` §7).
     #
-    # "That long" is the interpreter's limit, derived rather than written as
-    # 5000 (batch R14, `SPEC.md` §5.3): under `PYTHONINTMAXSTRDIGITS=0` there
-    # is no such string, and this test used to assert one existed.
-    with digit_limit.enforced() as limit:
-        digits = digit_limit.past(limit)
-        span = dict(OTLP_SPAN, attributes=[{"key": "k", "value": {"intValue": digits}}])
-        stream = read_trace(json.dumps(envelope(span)).encode())
-        records = list(stream)
-        assert records[0]["attributes"]["k"] == digits
-        assert len(stream.diagnostics) == 0
+    # "That long" is the library's limit, derived rather than written down
+    # (batches R14 and S8, `SPEC.md` §5.3), and the same on every interpreter
+    # setting.
+    digits = digit_limit.past()
+    span = dict(OTLP_SPAN, attributes=[{"key": "k", "value": {"intValue": digits}}])
+    stream = read_trace(json.dumps(envelope(span)).encode())
+    records = list(stream)
+    assert records[0]["attributes"]["k"] == digits
+    assert len(stream.diagnostics) == 0
 
 
 def test_an_int_value_that_is_not_an_integer_literal_is_carried_verbatim():
@@ -1126,29 +1125,28 @@ def test_shuffling_the_spans_inside_an_export_changes_nothing():
 
 
 def test_a_bare_integer_past_the_digit_limit_is_a_malformed_record():
-    # `json.loads` raises `ValueError` on it, which is already how the reader
-    # reports an unreadable line -- pinned here because the *quoted* form of
-    # the same number reaches a different layer, and this states which is
-    # which. Length derived from the interpreter (batch R14, `SPEC.md` §5.3).
-    with digit_limit.enforced() as limit:
-        digits = digit_limit.past(limit)
-        line = f'{{"span_id":"s0","start_time":{digits}}}\n'.encode()
-        stream = read_trace(line)
-        assert list(stream) == []
-        reported = stream.diagnostics.collected()
-        assert [d.code for d in reported] == [codes.MALFORMED_RECORD]
-        assert digits in reported[0].source
+    # The reader's parse refuses it, which is already how the reader reports
+    # an unreadable line -- pinned here because the *quoted* form of the same
+    # number reaches a different layer, and this states which is which.
+    # Length derived from the library's constant (batches R14 and S8,
+    # `SPEC.md` §5.3).
+    digits = digit_limit.past()
+    line = f'{{"span_id":"s0","start_time":{digits}}}\n'.encode()
+    stream = read_trace(line)
+    assert list(stream) == []
+    reported = stream.diagnostics.collected()
+    assert [d.code for d in reported] == [codes.MALFORMED_RECORD]
+    assert digits in reported[0].source
 
 
 def test_a_quoted_integer_past_the_digit_limit_is_a_record_like_any_other():
     # The reader has no opinion about a string: it is the adapter that must
     # decline to read it as a timestamp (`SPEC.md` §3.1, tests/test_adapters).
-    with digit_limit.enforced() as limit:
-        digits = digit_limit.past(limit)
-        line = f'{{"span_id":"s0","start_time":"{digits}"}}\n'.encode()
-        stream = read_trace(line)
-        assert list(stream) == [{"span_id": "s0", "start_time": digits}]
-        assert len(stream.diagnostics) == 0
+    digits = digit_limit.past()
+    line = f'{{"span_id":"s0","start_time":"{digits}"}}\n'.encode()
+    stream = read_trace(line)
+    assert list(stream) == [{"span_id": "s0", "start_time": digits}]
+    assert len(stream.diagnostics) == 0
 
 
 # --- What a real OTLP export's timestamps produce (batch R1, pinned) ---

@@ -476,14 +476,11 @@ def test_a_number_the_interpreter_cannot_read_still_builds(tmp_path, capsys, sta
 
 
 def test_a_quoted_integer_past_the_digit_limit_still_builds(tmp_path, capsys):
-    # Same rule, but the length of "past the limit" is the interpreter's and
-    # is derived from it (batch R14, `SPEC.md` §5.3): under
-    # `PYTHONINTMAXSTRDIGITS=0` a 5000-digit literal IS read, and this case
-    # asserted a refusal that does not happen.
-    with digit_limit.enforced() as limit:
-        _assert_the_timestamp_is_refused_and_the_graph_writes(
-            tmp_path, capsys, f'"{digit_limit.past(limit)}"'
-        )
+    # Same rule, and "past the limit" is the library's constant, derived
+    # rather than written down (batches R14 and S8, `SPEC.md` §5.3).
+    _assert_the_timestamp_is_refused_and_the_graph_writes(
+        tmp_path, capsys, f'"{digit_limit.past()}"'
+    )
 
 
 @pytest.mark.parametrize(
@@ -509,17 +506,14 @@ def test_an_unquoted_non_finite_number_is_a_refusal_not_a_traceback(
 def test_an_unquoted_integer_past_the_digit_limit_is_a_malformed_record(
     tmp_path, capsys
 ):
-    # This one never reaches an adapter: `json.loads` refuses the line, which
-    # the reader already reports (`SPEC.md` §7).
-    with digit_limit.enforced() as limit:
-        trace = tmp_path / "t.jsonl"
-        trace.write_text(
-            _span(digit_limit.past(limit)) + _span("1.0").replace('"s0"', '"s1"')
-        )
-        assert main(["inspect", str(trace)]) == 0
-        printed = capsys.readouterr().out
-        assert "nodes: 1" in printed
-        assert "malformed_record: 1" in printed
+    # This one never reaches an adapter: the reader refuses the line and
+    # reports it (`SPEC.md` §5.3, §7).
+    trace = tmp_path / "t.jsonl"
+    trace.write_text(_span(digit_limit.past()) + _span("1.0").replace('"s0"', '"s1"'))
+    assert main(["inspect", str(trace)]) == 0
+    printed = capsys.readouterr().out
+    assert "nodes: 1" in printed
+    assert "malformed_record: 1" in printed
 
 
 def _otlp_envelope(digits):
@@ -552,15 +546,14 @@ def _otlp_envelope(digits):
 
 
 def test_an_otlp_int_value_past_the_digit_limit_is_not_a_traceback(tmp_path, capsys):
-    with digit_limit.enforced() as limit:
-        digits = digit_limit.past(limit)
-        trace = tmp_path / "otlp.json"
-        trace.write_text(json.dumps(_otlp_envelope(digits)))
-        out = tmp_path / "g.json"
-        assert main(["build", str(trace), "-o", str(out)]) == 0
-        document = json.loads(out.read_text())
-        assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == digits
-        capsys.readouterr()
+    digits = digit_limit.past()
+    trace = tmp_path / "otlp.json"
+    trace.write_text(json.dumps(_otlp_envelope(digits)))
+    out = tmp_path / "g.json"
+    assert main(["build", str(trace), "-o", str(out)]) == 0
+    document = json.loads(out.read_text())
+    assert document["nodes"][0]["raw"]["source"]["attributes"]["k"] == digits
+    capsys.readouterr()
 
 
 # --------------------------------------------------------------------------

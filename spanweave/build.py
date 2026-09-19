@@ -29,6 +29,7 @@ from spanweave import diagnostics as codes
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.graph import Graph
 from spanweave.ids import assign
+from spanweave.jsoncodec import number_text
 from spanweave.model import (
     AdapterInfo,
     DiagnosticLevel,
@@ -421,8 +422,11 @@ def _report_nonmonotonic_time(
         # about the trace, and correcting it here would hide it.
         collected.add(
             codes.NONMONOTONIC_TIME,
-            f"ended_at ({span.ended_at}) precedes started_at "
-            f"({span.started_at}); both are kept as reported",
+            # `number_text`, not `str`: a reported integer the library reads
+            # renders the same on every interpreter setting (`SPEC.md` §5.3).
+            f"ended_at ({number_text(span.ended_at)}) precedes "
+            f"started_at ({number_text(span.started_at)}); both are "
+            f"kept as reported",
             node_id=node_id,
             source=[span.started_at, span.ended_at],
             adapter=by_node[node_id],
@@ -461,7 +465,7 @@ def _report_timestamp_unit_suspect(
             continue
         collected.add(
             codes.TIMESTAMP_UNIT_SUSPECT,
-            f"{', '.join(f'{f} ({v})' for f, v in over.items())} "
+            f"{', '.join(f'{f} ({number_text(v)})' for f, v in over.items())} "
             f"exceeds {TIMESTAMP_UNIT_CEILING}, which unix seconds cannot "
             f"reach; the field may be in milliseconds or nanoseconds. Every "
             f"value is kept exactly as reported and nothing is rescaled",

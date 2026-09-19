@@ -63,6 +63,7 @@ import math
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
+from spanweave import jsoncodec
 from spanweave.diagnostics import (
     PAYLOAD_PARSE_FAILED,
     UNKNOWN_SPAN_KIND,
@@ -405,10 +406,12 @@ def _kind_of(
         )
         return NodeKind.UNKNOWN, normalized
 
-    # Anything else was read: `str` renders it, and whatever it renders is
-    # kept verbatim as `reported_kind` below when it maps to no `NodeKind`.
+    # Anything else was read: `str` renders it -- the library's rendering,
+    # which writes a long integer whole on every interpreter setting -- and
+    # whatever it renders is kept verbatim as `reported_kind` below when it
+    # maps to no `NodeKind`.
     consumed.add(OPERATION)
-    text = str(reported)
+    text = jsoncodec.python_text(reported)
     mapped = OPERATIONS.get(text)
     if mapped is not None:
         return mapped, normalized
@@ -505,7 +508,7 @@ def _payload(
         )
 
     try:
-        value = json.loads(reported)
+        value = jsoncodec.loads(reported)
     # RecursionError is `json`'s answer to nesting it will not descend.
     # A payload that cannot be read is `present` either way (`SPEC.md` §7);
     # letting one of the two escape would take the whole build down.
@@ -537,7 +540,7 @@ def _as_text(reported: JsonValue) -> str | None:
     if isinstance(reported, str):
         return reported
     try:
-        return json.dumps(reported)
+        return jsoncodec.encode(reported, json.dumps)
     except RecursionError:
         return None
 
@@ -848,16 +851,17 @@ def _as_time(value: JsonValue) -> int | float | None:
         # `"1e9"` is the same float `1e9` is.
         try:
             parsed: int | float = (
-                int(value) if _JSON_INTEGER.fullmatch(value) else float(value)
+                jsoncodec.parse_integer(value)
+                if _JSON_INTEGER.fullmatch(value)
+                else float(value)
             )
         except ValueError:
-            # The interpreter's integer-string digit limit: a runtime
-            # setting, 4300 digits by default, which `SPEC.md` §5.3 states as
-            # an input to the graph rather than a constant.
-            # An unquoted literal that long never gets here -- `json.loads`
-            # refuses the line and the reader reports it -- but a *quoted* one
-            # is an ordinary JSON string until this call, and this call used
-            # to raise `ValueError` straight out of `build` (`SPEC.md` §3.1).
+            # Longer than the library's digit limit (`SPEC.md` §5.3): a
+            # constant, and the digits are counted before anything converts
+            # them, so this answer does not depend on how the interpreter's
+            # own limit is set. An unquoted literal that long never gets
+            # here -- the reader refuses the line -- but a *quoted* one is an
+            # ordinary JSON string until this call (`SPEC.md` §3.1).
             return None
         return _finite(parsed)
     return None

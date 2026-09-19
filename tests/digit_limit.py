@@ -1,80 +1,42 @@
-"""The interpreter's integer-string digit limit, as a test must read it.
+"""The library's integer digit limit, as a test must read it.
 
-CPython refuses to convert an integer *string* longer than
-`sys.get_int_max_str_digits()`. That limit is a runtime setting rather than a
-property of the language — 4300 digits by default, anything from
-`sys.int_info.str_digits_check_threshold` (640) upward, or disabled entirely
-with `0`, via `PYTHONINTMAXSTRDIGITS`, `-X int_max_str_digits` or
-`sys.set_int_max_str_digits`. `SPEC.md` §5.3 states what that means for the
-library: the limit is an input to the graph, and the library reads it rather
-than setting it.
+`SPEC.md` §5.3. spanweave reads an integer literal of at most
+`spanweave.jsoncodec.DIGIT_LIMIT` digits and refuses a longer one, and it
+decides that by counting digits rather than by asking the interpreter. The
+interpreter has a limit of its own -- `sys.get_int_max_str_digits()`, 4300 by
+default, anything from `sys.int_info.str_digits_check_threshold` (640) upward,
+or none at all -- and since batch S8 that setting changes nothing a graph
+says. So every boundary a test draws is derived from the library's constant,
+never from the interpreter's setting, and never written down as a number:
+a test that wrote 4300 would stop testing the rule the day the constant moved.
 
-It follows that a test which hard-codes 4300 as *the* limit — or 5000 digits
-as *past* it — is a test about one configuration wearing the name of a rule.
-Batch R1 wrote seven such test *functions* and every one of them goes red on a
-legally configured interpreter. Under `PYTHONINTMAXSTRDIGITS=0` a 5000-digit
-literal is one the interpreter reads, so the six asserting it is refused fail —
-**7 `pytest` ids**, because one of the six is parametrized over both adapters.
-Under `PYTHONINTMAXSTRDIGITS=640` the seventh raises `ValueError` inside its
-own body from `int("9" * 4300)`, in **both** of its ids. Nine ids and seven
-functions across the two non-default configurations; counted on R14's parent
-(`1e121d2`), identically under CPython 3.12.3 and 3.14.6. Batch R14 derives
-both sides of every such boundary from here instead.
-
-`enforced()` is the second half of that. Under a *disabled* limit there is no
-boundary at all, and a test that skipped there would be absent in exactly the
-configuration where the behaviour it pins does not happen — `CONTRIBUTING.md`'s
-bar in its purest form, a test green where it cannot catch anything. So a
-limit is installed for the duration and the ambient one restored afterwards:
-every configuration exercises the same boundary, and the boundary is still the
-interpreter's line rather than a number this suite invented.
+`above_the_floor()` is the one number derived from the interpreter, and it is
+derived from the one thing about it that is not a setting: the lowest limit
+any interpreter may be configured with. A literal that long is one the library
+reads and a minimally configured interpreter would refuse to convert, which is
+exactly the range batch S8 made the library's business.
 """
 
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
 
-#: What `sys.get_int_max_str_digits()` returns when there is no limit at all.
-DISABLED = 0
+from spanweave.jsoncodec import DIGIT_LIMIT
 
-
-@contextmanager
-def enforced() -> Iterator[int]:
-    """Yield a digit limit that is genuinely in force, restoring the ambient one.
-
-    Yields the interpreter's own limit where it has one, and the lowest limit
-    the interpreter will accept where it does not.
-    """
-    ambient = sys.get_int_max_str_digits()
-    if ambient != DISABLED:
-        yield ambient
-        return
-    floor = sys.int_info.str_digits_check_threshold
-    sys.set_int_max_str_digits(floor)
-    try:
-        yield floor
-    finally:
-        sys.set_int_max_str_digits(ambient)
+#: The lowest integer-string digit limit an interpreter can be configured with.
+FLOOR = sys.int_info.str_digits_check_threshold
 
 
-@contextmanager
-def disabled() -> Iterator[None]:
-    """Run with no digit limit at all, restoring the ambient one."""
-    ambient = sys.get_int_max_str_digits()
-    sys.set_int_max_str_digits(DISABLED)
-    try:
-        yield
-    finally:
-        sys.set_int_max_str_digits(ambient)
-
-
-def inside(limit: int) -> str:
-    """The longest integer string this interpreter will convert."""
+def inside(limit: int = DIGIT_LIMIT) -> str:
+    """The longest integer string the library reads."""
     return "9" * limit
 
 
-def past(limit: int) -> str:
-    """The shortest integer string this interpreter refuses to convert."""
+def past(limit: int = DIGIT_LIMIT) -> str:
+    """The shortest integer string the library refuses to read."""
     return "9" * (limit + 1)
+
+
+def above_the_floor() -> str:
+    """An integer string the library reads and the lowest setting would refuse."""
+    return "9" * (FLOOR + 1)

@@ -22,6 +22,7 @@ import pathlib
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from spanweave import jsoncodec
 from spanweave.annotate import AnnotationStore
 from spanweave.errors import GraphNotSerializableError
 from spanweave.graph import Graph
@@ -86,6 +87,21 @@ def _a_non_finite_number(value: object) -> float | None:
     return None
 
 
+def _stdlib_canonical(value: JsonValue) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        # RFC 8259 has no `Infinity` and no `NaN`; Python's encoder writes
+        # them anyway unless told not to. A document carrying one is the
+        # worst outcome available -- it is produced, it looks written, and
+        # a strict parser on the other end refuses it -- so it is a
+        # refusal here instead (`SPEC.md` §7).
+        allow_nan=False,
+    )
+
+
 def canonical_bytes(value: JsonValue) -> bytes:
     """The one encoder. Everything written by this library goes through it.
 
@@ -111,18 +127,10 @@ def canonical_bytes(value: JsonValue) -> bytes:
     (`CLAUDE.md` 2). Naming it (`SPEC.md` §3.10) is what a caller can act on.
     """
     try:
-        text = json.dumps(
-            value,
-            sort_keys=True,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            # RFC 8259 has no `Infinity` and no `NaN`; Python's encoder writes
-            # them anyway unless told not to. A document carrying one is the
-            # worst outcome available -- it is produced, it looks written, and
-            # a strict parser on the other end refuses it -- so it is a
-            # refusal here instead (`SPEC.md` §7).
-            allow_nan=False,
-        )
+        # Through `jsoncodec.encode`, so that an integer the library read is
+        # written whole whatever the interpreter's own digit limit is set to
+        # (`SPEC.md` §5.3). The encoder and its arguments are unchanged.
+        text = jsoncodec.encode(value, _stdlib_canonical)
     except ValueError as failure:
         if _a_non_finite_number(value) is None:
             # The other thing `json.dumps` raises `ValueError` for. Nothing

@@ -2453,42 +2453,60 @@ def test_the_corpus_figure_scan_reads_emphasis_tables_and_separators():
     )
 
 
-# -- The interpreter setting the graph depends on, named where it is owed ---
+# -- The digit limit is the library's, and the documents say so -------------
 #
-# Batch R14. `CLAUDE.md` 4 promises one graph from one input on any machine,
-# and the integer-string digit limit is a legal per-interpreter setting that
-# changes the graph (`SPEC.md` §5.3, measured in `tests/test_determinism.py`).
-# A conditional guarantee whose condition is written down in only one of the
-# two documents a reader would consult is a condition that will be missed --
-# before R14 it was named exactly once in the whole repository, in a
-# parenthesis, and `ENVIRONMENT.md` did not mention it at all.
+# Batch R14 named the interpreter's integer-string digit limit as an input to
+# the graph; batch S8 removed the input (`SPEC.md` §5.3): the library owns a
+# constant, counts digits against it, and builds one graph under every
+# setting, measured in `tests/test_determinism.py`. What is held here is that
+# the documents say the second thing and have stopped saying the first --
+# advice to pin the setting would now be advice to do something pointless, and
+# a reader following it would conclude the guarantee still needs it.
 
-#: The spellings a reader needs in order to act: read it, and set it.
-DIGIT_LIMIT_SPELLINGS = (
-    "sys.get_int_max_str_digits",
-    "sys.set_int_max_str_digits",
-    "PYTHONINTMAXSTRDIGITS",
-)
+#: What each document that states the rule must name.
+DIGIT_LIMIT_SPELLINGS = ("PYTHONINTMAXSTRDIGITS", "sys.get_int_max_str_digits")
 
 
-def test_the_determinism_section_names_the_setting_its_guarantee_depends_on():
+def test_the_determinism_section_states_the_librarys_digit_limit():
+    from spanweave.jsoncodec import DIGIT_LIMIT
+
     determinism = section(read("SPEC.md"), "\n## 5. Determinism")
+    stated = f"`DIGIT_LIMIT` in\n`spanweave/jsoncodec.py` is **{DIGIT_LIMIT}**"
+    assert stated in determinism, (
+        f"SPEC.md §5.3 does not state the library's digit limit as "
+        f"{DIGIT_LIMIT}, which is what `spanweave/jsoncodec.py` applies"
+    )
     for spelling in DIGIT_LIMIT_SPELLINGS:
         assert spelling in determinism, (
-            f"SPEC.md §5 does not name {spelling!r}. §5.1 promises the same "
-            f"graph on any machine and the digit limit is a per-interpreter "
-            f"setting that changes it, so the determinism section is where "
-            f"the condition has to be readable -- not only §3.1's parenthesis"
+            f"SPEC.md §5 does not name {spelling!r}: the section has to say "
+            f"which interpreter setting the guarantee no longer depends on"
         )
 
 
-def test_the_environment_contract_names_the_setting_too():
+def test_the_environment_contract_names_the_setting_it_does_not_depend_on():
     runtime = section(read("ENVIRONMENT.md"), "\n## Runtime")
     for spelling in DIGIT_LIMIT_SPELLINGS:
         assert spelling in runtime, (
-            f"ENVIRONMENT.md's Runtime section does not name {spelling!r}. It "
-            f"is the runtime contract, and this setting is part of the runtime "
-            f"in the strongest sense: it decides what the graph says"
+            f"ENVIRONMENT.md's Runtime section does not name {spelling!r}; a "
+            f"reader who knows the interpreter setting exists looks there for "
+            f"whether it matters"
+        )
+
+
+@pytest.mark.parametrize("document", ["SPEC.md", "README.md", "ENVIRONMENT.md"])
+def test_no_document_tells_a_caller_to_pin_the_digit_limit(document):
+    from spanweave.jsoncodec import DIGIT_LIMIT
+
+    text = read(document)
+    for retired in (
+        f"PYTHONINTMAXSTRDIGITS={DIGIT_LIMIT}",
+        "input to the graph",
+        "not the input bytes",
+    ):
+        assert retired not in text, (
+            f"{document} still says {retired!r}. Since batch S8 the digit "
+            f"limit is the library's constant and no interpreter setting "
+            f"changes a graph (`SPEC.md` §5.3)"
         )
 
 
@@ -2496,10 +2514,11 @@ def test_no_test_hard_codes_the_digit_limit_it_is_supposed_to_derive():
     """The defect R14 fixed, kept fixed.
 
     R1's seven digit-limit tests wrote 4300 and 5000 as constants and every
-    one of them went red on a legally configured interpreter. The rule is that
-    the boundary comes from the interpreter; a test that writes it down is a
-    test about one machine, and a test that moves the limit by hand is a test
-    that can leave the process changed for every test after it.
+    one of them went red on a legally configured interpreter. Since S8 the
+    boundary is the library's constant; a test that writes it down stops
+    testing the rule the day the constant moves, and a test that moves the
+    interpreter's limit by hand can leave the process changed for every test
+    after it.
     """
     helper = "tests/digit_limit.py"
     literal = re.compile(r"""["']9["']\s*\*\s*\d{3,}""")
@@ -2512,14 +2531,14 @@ def test_no_test_hard_codes_the_digit_limit_it_is_supposed_to_derive():
         ):
             assert not literal.search(line), (
                 f"{path.name}:{number} hard-codes a digit-limit boundary: "
-                f"{line.strip()!r}. 4300 is only the default and 5000 is only "
-                f"past it on an interpreter that has a limit at all "
+                f"{line.strip()!r}. The boundary is the library's constant "
                 f"(`SPEC.md` §5.3); derive it through {helper}"
             )
             assert moves_it not in line, (
                 f"{path.name}:{number} moves the interpreter's digit limit "
-                f"directly: {line.strip()!r}. {helper} is where that happens, "
-                f"because it restores the ambient setting afterwards"
+                f"directly: {line.strip()!r}. It is process-wide; a test that "
+                f"needs another setting runs a subprocess under "
+                f"PYTHONINTMAXSTRDIGITS, as `tests/test_determinism.py` does"
             )
 
 

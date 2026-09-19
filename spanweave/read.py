@@ -64,6 +64,7 @@ import sys
 from collections.abc import Iterator
 
 from spanweave import diagnostics as codes
+from spanweave import jsoncodec
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.errors import GraphNotSerializableError
 from spanweave.model import DiagnosticLevel, JsonValue
@@ -213,7 +214,7 @@ class RecordStream:
     def _read_array(self, data: bytes) -> Iterator[JsonValue]:
         text = data.decode("utf-8", errors="replace")
         try:
-            document = json.loads(text)
+            document = jsoncodec.loads(text)
         # RecursionError is how `json` reports nesting it will not descend;
         # unreadable is unreadable, and neither may leave this layer (§7).
         except (ValueError, RecursionError) as failure:
@@ -246,7 +247,7 @@ class RecordStream:
         """
         text = data.decode("utf-8", errors="replace")
         try:
-            document = json.loads(text)
+            document = jsoncodec.loads(text)
         # RecursionError: see `_read_array`. The line reader reports it.
         except (ValueError, RecursionError):
             yield from self._read_lines(data, iter(()))
@@ -283,7 +284,7 @@ class RecordStream:
             # A blank line is not a record, and losing it drops nothing.
             return
         try:
-            yield json.loads(line)
+            yield jsoncodec.loads(line)
         # RecursionError: see `_read_array`. Deep nesting is a bad record,
         # not a bad interpreter, and it is reported as one.
         except (ValueError, RecursionError) as failure:
@@ -303,6 +304,14 @@ def _canonical_text(record: JsonValue) -> str:
     reimplementation has to land on the same bytes, so `tests/test_doc_truth.py`
     checks this spelling against the spec's character for character.
     """
+    return jsoncodec.encode(record, _stdlib_canonical_text)
+
+
+def _stdlib_canonical_text(record: JsonValue) -> str:
+    # `jsoncodec.encode` runs this and, where the interpreter's own digit
+    # limit refuses an integer the library reads, runs it again with that
+    # integer written whole: the digest is of the same text on every
+    # interpreter setting (`SPEC.md` §5.3).
     return json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -673,16 +682,14 @@ def _any_value(value: JsonValue) -> JsonValue | _Unfoldable:
 def _int_value(reported: JsonValue) -> JsonValue:
     if isinstance(reported, str) and _INTEGER.fullmatch(reported):
         try:
-            return int(reported)
+            return jsoncodec.parse_integer(reported)
         except ValueError:
-            # Past the interpreter's integer-string digit limit -- a
-            # runtime setting, 4300 digits by default, and an input to the
-            # graph rather than a constant (`SPEC.md` §5.3). No `int64` is
-            # that long, but a file can say one is, and `int()` answers by
-            # raising -- which used to come out of `spanweave build` as a
-            # traceback. The decimal string is carried verbatim instead,
-            # which is what every value the reader cannot decode does
-            # (`SPEC.md` §7).
+            # Longer than the library's digit limit (`SPEC.md` §5.3) -- a
+            # constant, counted before any conversion, so the answer is the
+            # same on every interpreter setting. No `int64` is that long, but
+            # a file can say one is. The decimal string is carried verbatim
+            # instead, which is what every value the reader cannot decode
+            # does (`SPEC.md` §7).
             return reported
     return reported
 

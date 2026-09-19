@@ -11647,6 +11647,13 @@ is which is the point of keeping them here.
     first reading. **No batch may resolve this**, and it is the one run-5 item
     that stays open by rule rather than by judgement. (run-4 review §9, third
     site; `audit-S6`'s residue.)
+    **Decided 2026-09-12, by the maintainer, and implemented by `audit-S8`:**
+    invariant 4 stays unconditional and `CLAUDE.md` is not edited. The
+    library owns its digit limit (`DIGIT_LIMIT`, 4300, applied by counting
+    digits), so the interpreter's setting no longer changes the graph;
+    `SPEC.md` §5.1 is unconditional again, §5.3 states the constant, and
+    `ENVIRONMENT.md`'s advice to pin `PYTHONINTMAXSTRDIGITS` is gone. The
+    description above is of the state before `audit-S8`.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

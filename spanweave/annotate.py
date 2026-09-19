@@ -20,6 +20,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from spanweave import jsoncodec
 from spanweave.model import JsonValue, NodeId
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, and deliberately so:
@@ -117,7 +118,7 @@ class AnnotationStore:
 def check_serializable(value: JsonValue) -> None:
     """Annotation values must survive a round trip through the graph file."""
     try:
-        json.dumps(value, sort_keys=True)
+        jsoncodec.encode(value, _stdlib_dump)
     # RecursionError is how `json` reports nesting it will not descend -- the
     # same fact as a `ValueError`, reported as a different exception, and this
     # check exists precisely to catch what the graph file could not hold.
@@ -174,3 +175,7 @@ def annotate_many(graph: Graph, entries: Iterable[AnnotationEntry]) -> Graph:
     """
     prepared = [_checked(graph, *entry) for entry in entries]
     return graph._with_annotations(graph.annotations.with_entries(prepared))
+
+
+def _stdlib_dump(value: JsonValue) -> str:
+    return json.dumps(value, sort_keys=True)
