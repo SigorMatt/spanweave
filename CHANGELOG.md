@@ -298,6 +298,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **Five sentences that stated a rule more widely than the code keeps it are
+  narrowed to what it does.** Found by the run-5 cold review, swept by grep
+  rather than by citation. `spanweave/cli.py`'s comment said an `OSError`
+  *"prints no bracket"*: the CLI adds none, but Python's `OSError.__str__`
+  opens with `[Errno N]`, which is not a `SPEC.md` §3.10 code, and the
+  comment now says so; the test whose name stated the retracted general rule
+  is renamed to what it asserts, that the bracket on a *raised* refusal is
+  one of `ERROR_CODES`. Both `_operation` docstrings said an unreadable name
+  leaves *"`operation` and `model` stay `None`"*, which
+  `openinference._operation({'tool.name': 7, 'llm.model_name': 'm'})` answers
+  with `('m', 'm')`; `SPEC.md` §3.7's replacement clause, *"the two are
+  `None` only where no readable name is left"*, is answered by
+  `otel_genai._operation(LLM, {'gen_ai.tool.name': 't'})` with
+  `(None, None)` and by `{'tool.name': 't', 'llm.model_name': 7}` with
+  `('t', None)`. §3.7 and the two docstrings now state the same per-field
+  reading for each dialect: each field is `None` only where no readable name
+  for that field is left. This file's entry on the digest fix called three
+  ceiling pairs *"coincide (991/989, 9997/9996, 9998/9997)"*; none did, and
+  all three contradicted the `audit-R13` table. It now cites the table and
+  carries a dated correction note, and `TASKS.md` thread 10 no longer calls
+  the pairs ±2 recorded rather than rewritten. Re-measured 2026-09-19, one
+  fresh process per probe, dicts and lists: 3.11.15 994/994, 3.12.3
+  9997/9997, 3.13.14 9998/9998. Every pair coincides, and 3.11's figure moves
+  with the caller's stack depth. `OPEN_QUESTIONS.md` §10(c)'s *"0 under
+  256 ns"* was the epoch-nanosecond spacing applied to seconds-magnitude
+  literals, and now reads 238.42 ns, `math.ulp(1.787e9)`. Comments,
+  docstrings, one test name and documents only -- **no behaviour changed**.
+  (run-5 review 2.1, 2.2, 5.1, 6.1, 6.2, 7.1; batch `S11`; `SPEC.md` §3.7)
+
 - **The digit limit is the library's, and the interpreter's setting no longer
   changes a graph.** Batch R14 named CPython's integer-string digit limit as
   an input to the graph and told a caller to pin `PYTHONINTMAXSTRDIGITS=4300`
@@ -1134,9 +1163,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   bisected at ~37,230 and a parser ceiling at ~40,100 in the same process:
   **36,840 built and wrote, 37,640 and 38,670 raised `RecursionError`, 40,500
   was the `malformed_record` §7 promises** — three bands, the middle one a
-  defect. On 3.11.15, 3.12.3 and 3.13.14 the two ceilings coincide (991/989,
-  9997/9996, 9998/9997) and the middle band does not exist: every depth past
-  the ceiling is a `malformed_record` there, measured the same way.
+  defect. On 3.11.15, 3.12.3 and 3.13.14 the two ceilings coincide (992/992,
+  9997/9997, 9998/9998, the `audit-R13` table above and `SPEC.md` §7) and the
+  middle band does not exist: every depth past the ceiling is a
+  `malformed_record` there, measured the same way. (Corrected 2026-09-19 from
+  *"coincide (991/989, 9997/9996, 9998/9997)"* -- three pairs, none of them
+  coincident, contradicting the table -- by batch `S11`, below.)
   The middle band is now `graph_not_serializable` — **the code the write side
   already raises for the same value**, rather than a second code or a new
   diagnostic, because it is one fact about one record: a record with no digest

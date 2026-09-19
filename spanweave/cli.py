@@ -394,8 +394,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # as a subprocess has nothing else: without it `adapter_unconfident`
         # and `graph_not_serializable` are both "exit 1 and a sentence", and
         # the only way to tell them apart is the English nobody promised to
-        # keep. An `OSError` below prints no bracket -- it is the operating
-        # system's answer and has no code in that table to print.
+        # keep. An `OSError` below gets no bracket from the CLI -- it is the
+        # operating system's answer and has no code in that table to print.
+        # Its line is still Python's own `OSError.__str__`, which opens with
+        # `[Errno N]`, and that bracket is the operating system's `errno`, not
+        # a `SPEC.md` §3.10 code.
         print(
             f"spanweave {args.command}: [{failure.code}] {failure}",
             file=sys.stderr,

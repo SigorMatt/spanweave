@@ -612,10 +612,15 @@ def _operation(
     empty on the same span. It surfaces in `unmapped` and is reported.
 
     Each key is consumed where it is READ, not before (`SPEC.md` §3.7): a name
-    the adapter cannot read as a string decided nothing -- `operation` and
-    `model` stay `None` -- so it stays in `unmapped` rather than being claimed
-    as mapped. Both are read even where the kind means only one can be used,
-    because a readable name that merely lost the field was still read.
+    the adapter cannot read as a string contributes nothing of its own, so it
+    stays in `unmapped` rather than being claimed as mapped, and each of
+    `operation` and `model` is `None` only where no readable name for that
+    field is left. `model` is `gen_ai.request.model` when that reads as a
+    string, else `None`; `operation` is `gen_ai.tool.name` when that reads as
+    a string and the span is a tool span, else `model`. Both are read even
+    where the kind means only one can be used, because a readable name that
+    merely lost the field was still read -- on a span that is not a tool span
+    with no readable `gen_ai.request.model`, that leaves both `None`.
     """
     tool = _as_str(attributes.get(TOOL_NAME))
     model = _as_str(attributes.get(REQUEST_MODEL))

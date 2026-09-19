@@ -609,12 +609,22 @@ that was never made.
 
 That is the adapter's rule, not one key's: **a key is consumed where it is
 read, never before**. The reading is per key, and so is what it costs: a name
-the adapter cannot read as a string (`tool.name`, `llm.model_name`,
-`embedding.model_name`) contributes nothing *of its own*, so `operation` and
-`model` still hold whatever the readable names beside it state — a span
-whose `tool.name` is a number and whose `llm.model_name` is `"m"` reports
+the adapter cannot read as a string contributes nothing *of its own*, and each
+of `operation` and `model` is `None` only where no readable name **for that
+field** is left. In OpenInference, `model` is `llm.model_name` when that reads
+as a non-empty string, else `embedding.model_name` when that reads as a
+string, else `None` (so an empty `llm.model_name` counts as no name for
+`model`); `operation` is `tool.name` when that reads as a string, else
+`model`. In OTel GenAI, `model` is `gen_ai.request.model` when that reads
+as a string, else `None`; `operation` is `gen_ai.tool.name` when that reads as
+a string and the span is a tool span, else `model`. So a span whose
+`tool.name` is a number and whose `llm.model_name` is `"m"` reports
 `operation` and `model` as `"m"`, exactly as one that never sent a tool name
-would — and the two are `None` only where no readable name is left. A call id
+would; one whose `tool.name` is `"t"` and whose `llm.model_name` is a number
+reports `operation` `"t"` and `model` `None`; and a GenAI span that is not a
+tool span, carrying a readable `gen_ai.tool.name` and no readable
+`gen_ai.request.model`, reports both as `None` — its tool name was read and
+consumed, and has no field on that span. A call id
 it cannot read (`tool_call.id`, in the fulfilling form or the requested one)
 leaves the span stating no call. Each unreadable key is a key read and not
 usable, whatever the keys beside it decided, so each stays reported. Marking

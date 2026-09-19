@@ -11365,16 +11365,25 @@ is which is the point of keeping them here.
     cannot drift apart again — but it would not have caught the original
     blind spot, where both lists agreed at 3.11-3.13 while a local `uv run`
     picked 3.14. `.github/workflows/ci.yml`'s own comment states it at that
-    precision. A second measurement note belongs here rather than in a
-    correction: the run-4 review re-measured the 3.11.15 ceiling pair this
-    thread's `CHANGELOG.md` entry gives as 991/989 and got **992/991** on its
-    own machine. That is ±2 on a quantity this thread's rule already refuses
-    to promise, and it is recorded rather than rewritten — replacing one
-    machine's number with another's would be the defect the rule exists to
-    prevent. (run-3 review F1, batch `audit-R13`; the two corrections above,
-    run-4 review §8 and §13, batch `audit-S7`. This project has no `DEBT.md`
-    or `DECISIONS.md` for it to live in; this section is where the
-    series' durable record already is.)
+    precision. A second measurement note: the `CHANGELOG.md` sentence on
+    the digest fix gave the three ceiling pairs as *"coincide (991/989,
+    9997/9996, 9998/9997)"*. This thread once called that ±2 on a quantity
+    its rule refuses to promise, recorded rather than rewritten; that was
+    wrong (run-5 review 7.1). No pair in it coincides, so it contradicted the
+    word beside it, and it gave the same interpreters different pairs from
+    the `audit-R13` table in the same file (992/992, 9997/9997, 9998/9998). Batch
+    `S11` corrected that sentence to the table on 2026-09-19. Re-measured the
+    same day on this machine (one fresh process per probe, both shapes,
+    the library's `dumps` arguments): 3.11.15 994/994, 3.12.3 9997/9997,
+    3.13.14 9998/9998. Every pair coincides; 3.11's absolute figure sits two
+    above the table's because on 3.11 the ceiling counts Python frames
+    against `sys.getrecursionlimit()`, so it moves with the caller's stack
+    depth. That is the kind of difference this thread's rule means. (run-3
+    review F1, batch `audit-R13`; the two corrections above,
+    run-4 review §8 and §13, batch `audit-S7`; the ceiling note, run-5
+    review 7.1, batch `S11`. This project has no `DEBT.md` or
+    `DECISIONS.md` for it to live in; this section is where the series'
+    durable record already is.)
 11. **On CPython 3.14 a deeply nested record raises `RecursionError` out of
     `spanweave.build`.** Found by `audit-R13` while measuring for thread 10, and
     outside its row, which was documentation, one test and CI. `SPEC.md` §7

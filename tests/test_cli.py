@@ -600,9 +600,11 @@ def test_a_raised_refusal_names_its_code_on_stderr(tmp_path, capsys, text, argv,
     assert printed.count("\n") == 1, "a refusal is one line"
 
 
-def test_the_bracket_is_the_only_machine_readable_part_of_the_line(tmp_path, capsys):
-    # The rule stated as a property: whatever the prose says, the code a
-    # caller reads off the line is the code the library raised.
+def test_the_bracket_on_a_raised_refusal_is_one_of_the_error_codes(tmp_path, capsys):
+    # On a refusal the library raised, whatever the prose says, the code a
+    # caller reads off the line is one of §3.10's codes. This is not the
+    # general rule for every failure line: an `OSError`'s line opens with
+    # the operating system's `[Errno N]` (the test below).
     from spanweave.errors import ERROR_CODES
 
     trace = tmp_path / "t.jsonl"

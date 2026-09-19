@@ -475,9 +475,14 @@ def _operation(
     """The tool / model / retriever name, when the dialect names one.
 
     Each key is consumed where it is READ, not before (`SPEC.md` §3.7): a name
-    the adapter cannot read as a string decided nothing -- `operation` and
-    `model` stay `None` -- so it stays in `unmapped` rather than being claimed
-    as mapped. All three are read even though at most two are used, because a
+    the adapter cannot read as a string contributes nothing of its own, so it
+    stays in `unmapped` rather than being claimed as mapped, and each of
+    `operation` and `model` is `None` only where no readable name for that
+    field is left. `model` is `llm.model_name` when that reads as a non-empty
+    string, else `embedding.model_name` when that reads as a string, else
+    `None` (so an empty `llm.model_name` counts as no name for `model`);
+    `operation` is `tool.name` when that reads as a string, else `model`. All
+    three are read even though at most two are used, because a
     readable name that merely lost to another key was still read and acted on.
     """
     tool = _as_str(attributes.get(TOOL_NAME))

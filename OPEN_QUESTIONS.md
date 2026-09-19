@@ -591,7 +591,10 @@ exports for a literal whose shortest float repr differs from the literal, or
 for two sibling spans whose literals differ while their floats do not. One hit
 means option 2 is insufficient and option 4's blast radius is bought
 honestly. The captured traces today, tracked files only: **34** values, **0**
-hits; **13** sibling pairs, **0** under 256 ns. The same scan is one loop over
+hits; **13** sibling pairs, **0** under 238.42 ns -- the float64 spacing
+`math.ulp(1.787e9)` at the seconds magnitude the captured literals sit at
+(corrected 2026-09-19 from *"256 ns"*, the spacing at epoch-nanosecond
+magnitude, by batch `S11`). The same scan is one loop over
 `start_time`/`end_time` literals and can run against every trace the project
 captures from here on.
 
