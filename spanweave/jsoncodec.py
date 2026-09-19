@@ -38,8 +38,11 @@ from spanweave.model import JsonValue
 #: interpreter: an unquoted one makes its line unreadable JSON, a quoted
 #: timestamp is not read (`SPEC.md` §3.1), and an OTLP `intValue` is carried
 #: as its decimal string (§7). 4300 is CPython's default limit, chosen so
-#: that no graph a stock interpreter produced before this constant existed
-#: changes -- but it is this library's number now, not the interpreter's.
+#: that no node, edge or diagnostic code a stock interpreter produced before
+#: this constant existed changes -- the message of a `malformed_record` or
+#: `payload_parse_failed` refused over such a literal now names this limit
+#: rather than quoting the interpreter's (§5.3) -- but it is this library's
+#: number now, not the interpreter's.
 DIGIT_LIMIT = 4300
 
 #: An integer of at most this many digits converts under *any* interpreter

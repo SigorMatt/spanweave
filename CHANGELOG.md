@@ -298,6 +298,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The run-6 cold review is archived and every finding it raised is
+  registered.** The review read run 6's three code batches -- `S8`
+  `62385b6`, `S9` `80a1cfe`, `S10` `f00ade4` -- found **nothing that
+  blocks**, and raised twelve open threads, one of them a regression `S8`
+  introduced, which `642773e` fixed (under *Fixed* below). It did not reopen
+  the series. It is archived as `reviews/2026-09-13-run6.md`, byte-for-byte
+  from the untracked scratch drop, `sha256` `d28837c91590688e...`, and
+  `TASKS.md` records the scratch file's name and the whole digest beside it,
+  as it does for run 5's. Its twelve ready-made sentences are pasted into
+  `TASKS.md`'s open threads verbatim as threads 60-71, in the review's
+  section order, each pointing at the section and finding id that reproduce
+  it. Two are marked closed, each re-run rather than read off a report:
+  S8.2 by `642773e`, and S8.1 by this commit, which narrows `S8`'s claim
+  that no graph a stock interpreter built changes to nodes, edges and
+  diagnostic codes, and records that the message of a `malformed_record` or
+  `payload_parse_failed` refused over a literal of more than 4300 digits
+  changed, in `SPEC.md` §5.3, the `DIGIT_LIMIT` comment and the `S8` entry
+  below. The review accepted `S10`'s widening to absent, `null` and
+  non-string link targets (thread 59, now closed) and confirmed and widened
+  the retired-figure exemption (thread 58, open). **No behavior changed**;
+  the one change under `spanweave/` is a comment. (run-6 review, all
+  findings)
+
 - **The September 2026 audit-fix series is closed a fourth and final time,
   and every run-5 review finding is accounted for.** Run 6 is five batches --
   `S8` `62385b6`, `S9` `80a1cfe`, `S10` `f00ade4`, `S11` `a834de4`, and `S12`,
@@ -361,7 +384,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   for byte-identity; the maintainer decided instead (thread 23) that
   `CLAUDE.md` invariant 4 stays unconditional. The new
   `spanweave/jsoncodec.py` owns `DIGIT_LIMIT = 4300` -- the interpreter
-  default, so nothing a stock interpreter built changes -- and applies it by
+  default, so no node, edge or diagnostic code a stock interpreter built
+  changes, though a `malformed_record` or `payload_parse_failed` refused over
+  a literal of more than 4300 digits now names the library's limit in its
+  message instead of quoting the interpreter's (*"Exceeds the limit (4300
+  digits) for integer string conversion: ..."* became *"an integer literal of
+  4301 digits is longer than the 4300 digits spanweave reads (`SPEC.md`
+  §5.3)"*). (Corrected 2026-09-19 from *"so nothing a stock interpreter
+  built changes"*, false for those two messages, by the commit that archived
+  the run-6 review, above; run-6 review S8.1.) It applies the limit by
   counting digits before any conversion: an unquoted literal past it is a
   `malformed_record`, a quoted timestamp past it is `missing_timestamp`, and
   an OTLP `intValue` past it is carried as its decimal string, under every

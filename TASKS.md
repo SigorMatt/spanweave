@@ -10460,7 +10460,9 @@ thread 23. The four later runs exist because **the close is the thing the
 reviews kept finding defects in**, not because the audit grew. Run 6 was
 planned as the last: the run-5 review found nothing that blocks, and its
 wording findings are open threads below rather than a run 7. The close that
-stands is this one.
+stands is this one: the cold read of run 6, the sixth cold review the series
+archived, found nothing that blocks and did not reopen it, and its findings
+are open threads below too, two of them closed after the close without a run.
 
 - **Run 3** (`30766fc..15cfab5`), in execution order: `audit-R1`, `audit-R2`,
   `audit-R4`, `audit-R6`, `audit-R5`, `audit-R3` — which halted the run on a
@@ -10524,6 +10526,11 @@ appears anywhere else in this file, so the prefix is a convention held in
 advance of the collision instead of after it. (Run 6 had written itself bare
 twice, in thread 10, and those two are respelled; the run-5 review's
 sentences pasted as threads 24–56 carry no bare `S<n>`.)
+The run-6 review's sentences, pasted as threads 60–71 after that close, do
+carry bare `S8` and `S10`, and each thread is tagged with the review's own
+finding id, `S8.1` to `S10.3`, which is a batch id with a finding number after
+it. Both are kept as the review wrote them, as the run-3 table keeps its
+`R<n>`: quoting a document is not the place to apply this file's prefix.
 
 ### The batches, with final status
 
@@ -11009,6 +11016,16 @@ run 7.
   run N"*, and `WORKPLAN.md` and its README row are removed. — **done** (the
   closing commit of run 6).
 
+**After the close.** The cold read of run 6 (`reviews/2026-09-13-run6.md`)
+found nothing that blocks and twelve open threads, and did not reopen the
+series. Two commits followed the close, neither of them a batch and neither
+with a row here: `642773e` fixed the finding the review called a regression, an
+annotation integer of more than 4300 digits that `dumps` wrote and the
+library's own reader refused, and the commit that archived the review
+registered its findings as threads 60–71 and narrowed the `audit-S8` sentence
+the review found false. Both are accounted for under *Cold review of run 6*
+below.
+
 ### Decisions taken  *(moved here from `WORKPLAN.md` §3)*
 
 Six memo batches of runs 1 and 2 halted together on purpose, so the decisions
@@ -11215,6 +11232,38 @@ because the thread list *is* the map: one row per finding would repeat 33
 sentences to point at them. Twelve are marked closed — ten by `audit-S9`,
 `audit-S10` and `audit-S11`, two by this close — each with what was re-run
 here rather than read off the batch's report. The other 21 are open.
+
+### Cold review of run 6
+
+`reviews/2026-09-13-run6.md`, archived byte-for-byte from the untracked scratch
+drop, where the file was named `REVIEW-2026-09-13-run6.md` directly under
+`patches/`: `cmp` clean, and `sha256`
+`d28837c91590688ef9acd7eba6345bf11b08c866c5ca44774cd0de0c45779524` on both
+sides. As for the run-5 review (thread 55), the scratch name and the whole
+digest are written here and not in the archive, which is kept byte-for-byte;
+the name is provenance and not a path to open, because `patches/` is absent
+from a clean checkout and the doc-truth guard refuses a durable citation into
+it. The date in the file name is the run-6 review slot's; the review's header
+says it was written on 2026-09-19.
+
+The review is scoped to run 6's three code batches, `audit-S8`, `audit-S9` and
+`audit-S10`, and checked the other commits of `67c7642..6eb1762` for hygiene
+only. Its verdict is that **nothing blocks**: no traceback on a supported
+interpreter and no `CLAUDE.md` invariant broken. It raised twelve open threads,
+four on `audit-S8`, five on `audit-S9` and three on `audit-S10`, each with a
+ready-made sentence for this file, and called one of them, S8.2, a
+**regression** `audit-S8` introduced against a written `SPEC.md` promise. It
+did not reopen the series: there is no run 7 and no `WORKPLAN.md`.
+
+Its twelve threads are **60–71** below, one per finding in the review's section
+order, and, as for run 5, the thread list is the map. Two are closed, neither
+by a batch: S8.2 by `642773e`, the one code commit after the close, and S8.1 by
+the commit that archived the review, which corrected the sentence at its three
+sites. Each closure was re-run rather than read off a report, and each thread
+says what. The other ten are open. The review also ruled on two of run 6's own
+threads: the widening in thread 59 is **accepted** (§3), so that thread is
+closed, and thread 58 is **confirmed and widened** (S9.1, S9.2) and stays open,
+cross-referenced to threads 64 and 65.
 
 ### The lesson the series ends on
 
@@ -11962,6 +12011,16 @@ clause is moot again.
     the figure, or require the marker to precede the figure. Recorded for the
     cold review of run 6 rather than taken at a close. (run-6 resume note,
     `git show b44be76:WORKPLAN.md` §4; `audit-S9`.)
+    **Confirmed by the run-6 cold review, and widened**
+    (`reviews/2026-09-13-run6.md` §2, *Thread 58's gap is reproduced*, and
+    S9.1, S9.2). A retired figure in a live sentence with no marker is red, and
+    the same sentence goes green when it names a batch in any of three
+    spellings the review tried; a wrong value that is not a retired one stays
+    red beside a batch id, because the family scan still reads it. Two findings
+    widen the gap: the batch-id marker is a shape that also matches tokens that
+    are not batches (thread 64), and the sentence split lets one marker exempt
+    a whole bullet list, table or closing parenthetical (thread 65). Still
+    open, and still a decision about the test rather than a patch to it.
 59. **`audit-S10` reported more than its row asked, deliberately, and the cold
     review of run 6 is to accept the widening or narrow it.** The row was the
     empty link target, `""`. For `""` to get *the same handling as an absent
@@ -11978,6 +12037,121 @@ clause is moot again.
     `tests/serialized_shape.json` unmoved; the scenario is
     `empty_link_target`, because `FIXTURES.md` §8 froze `empty_ids`. (run-6
     resume note, `git show b44be76:WORKPLAN.md` §4; `audit-S10`.)
+    **Accepted by the run-6 cold review** (`reviews/2026-09-13-run6.md` §3,
+    *Verdict on the widening (thread 59): accept*), which built every link
+    shape in all three containers against the parent `e0784f8`. Its reasons,
+    summarised: the parent got none of these shapes right, and each widened
+    shape went from a silent drop to a reported one with the same graph, while
+    valid, whitespace, duplicate and outside-trace links are unchanged and a
+    mixed list keeps every valid edge; invariant 2 is satisfied, not
+    overreached, because `raw.source` keeping the entry is not the `unknown`
+    node or diagnostic the invariant asks for, and `SPEC.md` §3.7 already
+    reported an unreadable identity field as `<record>.<field>`, which is the
+    same case one level up; under invariant 3 and §4.0 the one graph change is
+    the removal of an `explicit` edge to `''` the telemetry never stated, and
+    the outside-trace dangling link §4.0 permits is untouched; narrowing to
+    `""` alone would be worse, contradicting the batch's own claim that `""`,
+    absent and `null` are one statement and reporting `""` while `{}` and
+    `null` stay silent; the cost is small, an existing code at `info` level
+    with no model or schema move, on shapes no tracked producer emits; and one
+    asymmetry is acceptable and named, a `null` or absent link target being
+    reported while a `null` or absent `parent_id` is not, for the reason §3.7
+    gives. **Closed** by that verdict. What the review found wrong in the
+    batch's wording rather than its scope is threads 69 and 70.
+
+**The run-6 cold review's accounting.** Threads **60–71** are the run-6 cold
+review's twelve open threads (`reviews/2026-09-13-run6.md`), one per finding in
+the review's section order — S8.1 to S8.4, S9.1 to S9.5, S10.1 to S10.3 —
+rather than the order of its §4 register, which puts S8.2 first. Each is its
+ready-made sentence pasted as the review wrote it, reflowed and not reworded,
+followed by the review section and finding id that reproduce it. Two are
+closed: S8.2 by `642773e` and S8.1 by the commit that archived the review, each
+saying what was re-run. The review also settled two of run 6's own threads: 59
+is accepted and closed, and 58 is confirmed, widened by threads 64 and 65, and
+open. After it the list holds 71 threads, and 53 of them are open.
+
+60. S8's claim that no graph a stock interpreter built changes (SPEC §5.3,
+    `jsoncodec.py:41`, CHANGELOG S8) is false for
+    `malformed_record`/`payload_parse_failed` message text on literals over
+    4300 digits; narrow it to nodes, edges and diagnostic codes, or record the
+    message change. (`reviews/2026-09-13-run6.md` §1, S8.1.) **Closed by the
+    commit that archived this review**, *docs: archive the run-6 review and
+    register its threads*. A commit cannot name its own sha, so, as thread 57
+    has `audit-S12`'s row do, it is described rather than named, and its
+    subject line finds it in `git log`. That commit narrowed the claim to
+    nodes, edges and diagnostic codes and recorded the message change at every
+    site that states the claim, found by a repo-wide grep for *stock
+    interpreter* outside `reviews/`: `SPEC.md` §5.3, the `DIGIT_LIMIT` comment
+    in `spanweave/jsoncodec.py` (a comment only; the module's AST is unchanged)
+    and `CHANGELOG.md`'s `S8` entry, as a dated correction. The grep's two
+    other hits, `SPEC.md` §5.3's account of what the interpreter used to do and
+    `CHANGELOG.md`'s entry for `642773e`, are about the state before `62385b6`,
+    not this claim, and are left. Re-measured for it against `5fd4660`, the
+    parent of `62385b6`, on a two-record trace carrying a 4301-digit literal in
+    an `application/json` payload and a second, unquoted, in a record's
+    attributes: the same one node, no edges and the same two codes,
+    `malformed_record` and `payload_parse_failed`, on both sides, and only
+    their message text differs, as the review says.
+61. `annotate.check_serializable` must refuse an integer longer than
+    `jsoncodec.DIGIT_LIMIT`, because since S8 the library writes one that its
+    own reader then refuses, breaking SPEC's annotation round-trip promise
+    (run-6 review S8.2). (`reviews/2026-09-13-run6.md` §1, S8.2.) **Closed by
+    `642773e`**, a fix after the close rather than a batch:
+    `check_serializable` refuses an integer of more than `DIGIT_LIMIT` digits
+    at any depth of an annotation value, and `SPEC.md` §8 states the rule
+    beside its round-trip promise. Re-run at this registration rather than read
+    off that commit's report, at `642773e` under `PYTHONINTMAXSTRDIGITS` unset,
+    `=0` and `=640`: an annotation `{"a": [±(10**N - 1)]}` on a built
+    conformance graph is refused by `annotate` with `ValueError` for N = 4301
+    and 20000, either sign, and for N = 700 and 4300 `dumps` writes it and
+    `spanweave validate` exits 0 on the file.
+62. `jsoncodec._unused_marker` costs attempts × total string length, so
+    untrusted input can force quadratic time under a lowered
+    `PYTHONINTMAXSTRDIGITS`; choose the marker in one scan (for example, the
+    highest attempt seen + 1). (`reviews/2026-09-13-run6.md` §1, S8.3.)
+63. `jsoncodec.encode` leaves integer dict keys to the interpreter's limit and
+    `serialize` reports that failure as a cycle; refuse non-`str` keys in
+    `check_serializable` and word the error for what it is.
+    (`reviews/2026-09-13-run6.md` §1, S8.4.)
+64. Thread 58 addendum: the batch-id marker `[A-Z]\d{1,2}` also exempts tokens
+    that are not batches (`E1` section references, `H2`, `V2`, `X1` in a code
+    span), so the fix should match a list of real batch ids and scope the
+    marker to the clause carrying the figure (run-6 review S9.1).
+    (`reviews/2026-09-13-run6.md` §2, S9.1.) Open, and cross-referenced from
+    thread 58, which it widens.
+65. The retired-figure check's sentence split misses `.)` and `."` endings,
+    bullet items and table rows, so one history marker in a list or table
+    exempts every retired figure in it; split on those boundaries too (run-6
+    review S9.2). (`reviews/2026-09-13-run6.md` §2, S9.2.) Open, and
+    cross-referenced from thread 58, which it widens.
+66. `test_every_figure_the_census_prints_is_read_by_a_family` assumes a scope
+    phrase, and 23 of 41 printed census figures, copied verbatim into a
+    paragraph without one, are read by no test; print the scope on every census
+    line or narrow the test's message (run-6 review S9.3).
+    (`reviews/2026-09-13-run6.md` §2, S9.3.)
+67. Census figure families match case-sensitively, so a sentence starting
+    `Of the N tracked corpus records` escapes both the family scan and the
+    retired check; compile with `re.I` or plant capitalised variants in the
+    family self-test (run-6 review S9.4). (`reviews/2026-09-13-run6.md` §2,
+    S9.4.)
+68. The spellings `over all N tracked corpus records`,
+    `N across the M captured files` and `trace_id in N of M` have no census
+    family and are held only at their listed sites; add families or record it
+    as a stated limit (run-6 review S9.5). (`reviews/2026-09-13-run6.md` §2,
+    S9.5.)
+69. S10's rationale that a link's `trace_id` and `attributes` would vanish
+    holds for every link, since the builder never carries either, so reword
+    SPEC §3.6/§3.7/§4.0 and `seam.span_links` to "no relation reaches the
+    graph", or decide separately whether link attributes are carried or
+    reported (run-6 review S10.1). (`reviews/2026-09-13-run6.md` §3, S10.1.)
+70. SPEC §4.0 *A link that names no span* and the §3.6 table row list three
+    renderings while §3.7 and `seam.span_links` report six shapes; align them
+    or point both at §3.7 (run-6 review S10.2). (`reviews/2026-09-13-run6.md`
+    §3, S10.2.)
+71. `audit-S10` (`f00ade4`) also carries run-5 review 3.2's CHANGELOG
+    re-measurement of `5e8a40f`, a second, docs-only concern; accept it as part
+    of the batch or record the exception (run-6 review S10.3).
+    (`reviews/2026-09-13-run6.md` §3, S10.3.)
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

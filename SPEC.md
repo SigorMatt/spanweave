@@ -1285,9 +1285,11 @@ integer was part of a record on a stock interpreter and made its line
 unreadable under `PYTHONINTMAXSTRDIGITS=640`.
 
 **The library owns the limit instead.** `DIGIT_LIMIT` in
-`spanweave/jsoncodec.py` is **4300** — the interpreter default, so no graph a
-stock interpreter built changes — and it is applied by **counting the
-literal's digits** (the sign is not a digit) before anything converts it:
+`spanweave/jsoncodec.py` is **4300** — the interpreter default, so on a stock
+interpreter no graph's nodes, edges or diagnostic codes change, though the
+message text of two diagnostics does (below) — and it is applied by
+**counting the literal's digits** (the sign is not a digit) before anything
+converts it:
 
 - an **unquoted** integer literal of more than 4300 digits makes its line
   unreadable JSON, reported as `malformed_record` (§7);
@@ -1296,6 +1298,15 @@ literal's digits** (the sign is not a digit) before anything converts it:
   the node gets `missing_timestamp` (§3.1);
 - an OTLP `intValue` of more than 4300 digits is carried verbatim as the
   decimal string it arrived as (§7).
+
+The two diagnostics are `malformed_record` and `payload_parse_failed`. When
+either refuses a line or a payload over a literal of more than 4300 digits,
+its message used to quote the interpreter's refusal — *"Exceeds the limit
+(4300 digits) for integer string conversion: …"* — and now names the
+library's: *"an integer literal of 4301 digits is longer than the 4300 digits
+spanweave reads (`SPEC.md` §5.3)"*. Nodes, edges and diagnostic codes are the
+same as a stock interpreter built them before the constant existed (run-6
+review S8.1).
 
 An integer of 4300 digits or fewer is read, carried and written whole, and
 every conversion the library makes between such an integer and text — in the
