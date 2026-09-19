@@ -148,7 +148,7 @@ never restarts, fixes, or touches anything. Conventions live in
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| S8 | **Library-owned digit limit.** Per §3: a `DIGIT_LIMIT = 4300` constant applied by string length before any `int()` on a timestamp literal, in both adapters and the seam, so `PYTHONINTMAXSTRDIGITS=0` and `=640` produce the same graph as the default; R14's boundary tests derive from the constant, not `sys.get_int_max_str_digits()`; ENVIRONMENT.md's pinning sentence deleted; SPEC §5.3 and §5.1's determinism statement made unconditional again; README.md:169 likewise. Tests: the whole suite green under all three configurations, and one test that asserts byte-identical graphs across them. No corpus expectation moves (verify). CLAUDE.md untouched. | todo | 15 |
+| S8 | **Library-owned digit limit.** Per §3: a `DIGIT_LIMIT = 4300` constant applied by string length before any `int()` on a timestamp literal, in both adapters and the seam, so `PYTHONINTMAXSTRDIGITS=0` and `=640` produce the same graph as the default; R14's boundary tests derive from the constant, not `sys.get_int_max_str_digits()`; ENVIRONMENT.md's pinning sentence deleted; SPEC §5.3 and §5.1's determinism statement made unconditional again; README.md:169 likewise. Tests: the whole suite green under all three configurations, and one test that asserts byte-identical graphs across them. No corpus expectation moves (verify). CLAUDE.md untouched. | done (`62385b6`) | 15 |
 | S9 | **Census families for every printed figure.** Review item 1: `N/M`, `N carrying a span id`, `N trace-unique`, `N tracked *.jsonl` have no family, so four figures at CHANGELOG.md:942-944 stay green when wrong; `RETIRED_CENSUS_FIGURES` masks `137 of the 155 → 135` and `52 → 64 *.jsonl` because `WORKING_TREE_CENSUS` was never extended. Derive families from the census's output line format so a figure with no family fails the guard itself; extend the retired set correctly; re-plant all figures the review lists and prove red. | todo | 12 |
 | S10 | **Links under the empty-id rule.** Review S3 finding: `links[].span_id == ""` still yields an `explicit` edge with `dst == ""`, so SPEC §3.6's "not a span id at either end of a relation" is falsifiable. Bring link targets under S3's rule at the seam (`""` → no link, with the same handling as an absent target and a diagnostic that says what was declared), extend `empty_ids` in both dialects, fix the body's before/after table so it reproduces. Corpus unmoved (verify). | todo | 10 |
 | S11 | **The sentences the source still carries.** Review items 2 and 3 and the S6/S5 residue, swept by grep not by citation: `cli.py:398` ("prints no bracket"); both `_operation` docstrings (name unreadable → `None`, falsified by `('m','m')`); the replacement SPEC §3.7 clause falsified by `otel_genai._operation(LLM, {'gen_ai.tool.name': 't'})`; `CHANGELOG.md:1018` ceiling pairs (none coincide; match the R13 table at :555 and SPEC.md:1556, dated); `OPEN_QUESTIONS.md:594` ("0 under 256 ns" over seconds-magnitude data). Rule: for each sentence, grep the phrase repo-wide including `spanweave/` and `tests/`, fix every site, list the sites in the commit body. Docs and docstrings only. | todo | 10 |
@@ -177,6 +177,12 @@ finds a live traceback or an invariant violation.
 - 2026-09-12: reopened after the run-5 review ("nothing blocks the PR; 33
   open threads"). Run 6 is the last run of the series; wording findings from
   its review become open threads in the PR description, not a run 7.
+- 2026-09-19: S8 found the digit limit reached past timestamps: under
+  `=640`, `json.dumps` of a long int, `str()`, the record digest and
+  `json.loads` of a bare long literal all raised. New `spanweave/jsoncodec.py`
+  owns `DIGIT_LIMIT` and is used by the reader, both adapters, build, CLI,
+  annotate and serialize; the interpreter setting is never read or set.
+  Suite green (2513 passed, 2 skipped) under unset, `=0` and `=640`.
 
 ---
 
