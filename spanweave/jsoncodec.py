@@ -195,10 +195,17 @@ def encode(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
     text = dump(swapped)
     # Each placeholder was written by the same encoder as a JSON string, and
     # `marker` occurs in no string of `value`, so the encoded placeholder
-    # occurs in `text` only where a long integer stood.
+    # occurs in `text` only where a long integer stood. Finding it means
+    # spelling that string a second time, and the arguments below are
+    # `canonical_dump`'s so that the module reads as one policy rather than
+    # two. They decide nothing here, and could not: no argument `json.dumps`
+    # takes changes how a `str` is written, the marker is ASCII, and its NUL
+    # is escaped under either `ensure_ascii`. That is also why this spelling
+    # need not match the `dump` the caller passed -- and does not try to,
+    # since callers pass different ones.
     for index, number in enumerate(found):
         text = text.replace(
-            json.dumps(f"{marker}{index}\x00", ensure_ascii=False),
+            json.dumps(f"{marker}{index}\x00", sort_keys=True, ensure_ascii=False),
             integer_text(number),
         )
     return text

@@ -285,8 +285,8 @@ class RecordStream:
             return
         try:
             yield jsoncodec.loads(line)
-        # RecursionError: see `_read_array`. Deep nesting is a bad record,
-        # not a bad interpreter, and it is reported as one.
+        # RecursionError: see `_read_array`. Nesting the parser will not
+        # descend is a property of the record, and is reported as one.
         except (ValueError, RecursionError) as failure:
             self._collector.add(
                 codes.MALFORMED_RECORD,
@@ -732,7 +732,8 @@ def _kvlist_value(reported: JsonValue) -> JsonValue | _Unfoldable:
 
 #: The UTF-8 encoding of U+FEFF. Editors and Windows tooling write it at the
 #: head of a file; `str.strip()` does not remove it, so left in place it rides
-#: into the parser and costs the file its FIRST record (`SPEC.md` §7).
+#: into the parser and leaves the file's FIRST record unparseable
+#: (`SPEC.md` §7).
 _BOM = b"\xef\xbb\xbf"
 
 

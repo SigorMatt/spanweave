@@ -298,6 +298,27 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **Three review nits: one encoder argument, one test import, three
+  comments.** `jsoncodec.encode` re-spells a placeholder string to find it in
+  the text the caller's `dump` produced, and that `json.dumps` call now passes
+  `sort_keys=True` beside the `ensure_ascii=False` it already had, so the
+  module reads as one encoder policy rather than two. The argument decides
+  nothing -- the value is a `str`, and no argument `json.dumps` takes changes
+  how a `str` is written -- and a comment now says that, and says why this
+  spelling need not match the `dump` a caller passed, since callers pass
+  different ones. `tests/test_read.py` imports `hashlib` at module scope
+  instead of calling `__import__("hashlib")` twice; `__import__` is banned
+  under `spanweave/` by a gate whose scan root is the package, which is why
+  the two survived in `tests/`. And three comments say what is measured or
+  what the record is rather than what it costs or how bad it is:
+  `DETECTION_SAMPLE_SIZE`'s ("measured over at most this many records,
+  whether the trace holds 10 or 10 million"), the reader's `RecursionError`
+  one ("nesting the parser will not descend is a property of the record"),
+  and `_BOM`'s ("leaves the file's FIRST record unparseable"). **No behaviour
+  changed**: every conformance dialect fixture builds byte-identically across
+  the change, and so does `encode` on the long-integer path the fixtures do
+  not reach. (Qodo findings 4, 5 and 6)
+
 - **The run-6 cold review is archived and every finding it raised is
   registered.** The review read run 6's three code batches -- `S8`
   `62385b6`, `S9` `80a1cfe`, `S10` `f00ade4` -- found **nothing that

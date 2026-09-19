@@ -4,6 +4,7 @@ The reader's contract is mostly about what it refuses to do: it does not
 raise, it does not drop, and it does not decide what a record means.
 """
 
+import hashlib
 import io
 import json
 
@@ -242,7 +243,7 @@ def test_the_digest_fingerprints_the_input_bytes():
     stream = read_trace(JSONL)
     assert stream.digest is None  # nothing read yet, nothing to fingerprint
     list(stream)
-    assert stream.digest == __import__("hashlib").sha256(JSONL).hexdigest()
+    assert stream.digest == hashlib.sha256(JSONL).hexdigest()
 
 
 def test_reading_is_lazy_until_asked():
@@ -326,7 +327,7 @@ def test_the_digest_covers_the_bom_because_it_fingerprints_the_bytes_as_given():
     data = b"\xef\xbb\xbf" + JSONL
     stream = read_trace(data)
     list(stream)
-    assert stream.digest == __import__("hashlib").sha256(data).hexdigest()
+    assert stream.digest == hashlib.sha256(data).hexdigest()
 
 
 def test_a_bom_split_across_chunk_boundaries_is_still_one_bom():

@@ -52,8 +52,9 @@ __all__ = [
 ]
 
 #: What an adapter is asked to *declare* over: a bounded sample, so the number
-#: recorded in `meta` costs the same on a 10-record trace and a 10-million-record
-#: one. Classification is a separate question and is asked of every record
+#: recorded in `meta` is measured over at most this many records, whether the
+#: trace holds 10 or 10 million. Classification is a separate question and is
+#: asked of every record
 #: (`SPEC.md` §6.1).
 DETECTION_SAMPLE_SIZE = 50
 
