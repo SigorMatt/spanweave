@@ -48,8 +48,8 @@ from spanweave.read import record_digest
 from spanweave.seam import (
     CallRole,
     NormalizedSpan,
-    SpanLink,
     parent_ref,
+    span_links,
     span_ref,
     unreadable_fields,
 )
@@ -232,12 +232,17 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     status, status_note = _status(record)
 
     started_at, ended_at, unreadable_times = _timestamps(record)
+    # Read at the seam, beside the record's own id and its parent: a link
+    # target is the third reference field and `""` names no span there either
+    # (`SPEC.md` §3.6). An entry that names none is no link, and is reported.
+    links, unread_links = span_links(record)
 
     unmapped = sorted(
         [str(key) for key in attributes if str(key) not in consumed]
         + [f"<record>.{key}" for key in record if key not in KNOWN_RECORD_KEYS]
         + unreadable_times
         + unreadable_fields(record)
+        + unread_links
     )
     if unmapped:
         diagnostics.append(
@@ -274,7 +279,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_ids=call_ids,
         call_role=call_role,
         call_names=call_names,
-        links=_links(record),
+        links=links,
         received_call_ids=received_call_ids,
         attributes=normalized,
         unmapped=tuple(unmapped),
@@ -566,28 +571,6 @@ def _status(record: Mapping[str, JsonValue]) -> tuple[Status, str | None]:
     if text is None:
         return Status.UNSET, note
     return STATUSES.get(text.upper(), Status.UNSET), note
-
-
-def _links(record: Mapping[str, JsonValue]) -> tuple[SpanLink, ...]:
-    reported = record.get("links")
-    if not isinstance(reported, list):
-        return ()
-    links = []
-    for link in reported:
-        if not isinstance(link, dict):
-            continue
-        span_id = _as_str(link.get("span_id"))
-        if span_id is None:
-            continue
-        attributes = link.get("attributes")
-        links.append(
-            SpanLink(
-                span_id=span_id,
-                trace_id=_as_str(link.get("trace_id")),
-                attributes=attributes if isinstance(attributes, dict) else {},
-            )
-        )
-    return tuple(links)
 
 
 def _received_results(

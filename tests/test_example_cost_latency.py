@@ -140,7 +140,8 @@ def test_the_sweep_reads_every_committed_trace_and_refuses_none_of_them():
     # 49 -> 50 at batch E3: `mixed_instrumentation`, whose ONE rendering is
     # read by both adapters at once (`SPEC.md` §6.1).
     # 50 -> 52 at batch S3: `empty_ids`, two renderings.
-    assert len(traces) == 52, "the corpus changed size; re-read what this bounds"
+    # 52 -> 54 at batch S10: `empty_link_target`, two renderings.
+    assert len(traces) == 54, "the corpus changed size; re-read what this bounds"
 
 
 def test_a_refusal_is_a_result_and_not_an_exit(tmp_path):

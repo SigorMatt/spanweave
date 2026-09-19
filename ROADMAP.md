@@ -627,7 +627,7 @@ once and counted twice is not a gate.
 
 **The shape has never been observed here, and that is recorded as a measurement
 rather than assumed away.** Over the fixture corpus this repository carries —
-**54** trace files, **155** records, tracked files only — **0** records carry
+**56** trace files, **159** records, tracked files only — **0** records carry
 both dialects' markers and every record carries exactly one. **1** file carries records of
 both: `fixtures/conformance/mixed_instrumentation/`, built by the audit
 series' batch E3 out of two existing renderings of one scenario, because

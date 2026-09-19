@@ -381,13 +381,14 @@ Node ids are deterministic and stable across runs, machines, and Python versions
    `duplicate_source_id` (§3.7) reports the reuse.
 
 **The empty string is not a span id — at either end of a relation.** This is
-one rule with two halves, and it is stated here in one place because stating
-only one half is how it went wrong.
+one rule at three fields, and it is stated here in one place because stating
+it at only some of them is how it went wrong — twice.
 
 | Field | Rendering | Read as |
 |---|---|---|
 | `span_id` / `spanId` | absent, `null`, or `""` | **no id stated** — rule 2 keys the record by its content |
 | `parent_id` / `parentSpanId` | absent, `null`, or `""` | **no parent** (§4.0) |
+| `links[].span_id` / `links[].spanId` | absent, `null`, or `""` | **no link** — and the entry is reported (below, and §3.7) |
 
 The reference half is the one a real exporter exercises: `parentSpanId` is a
 proto3 `bytes` field, an unset one is the empty string, and a marshaler that
@@ -407,15 +408,34 @@ rule 2's honest answer. Nothing is dropped either way — the empty string is
 still on the node's `raw.source` verbatim (§3.5), so a consumer that wants to
 know which rendering the exporter wrote reads it there.
 
-**Exactly the empty string**, at both fields. `" "` and `"0000000000000000"`
+**A link target is the third field, and the far end of a relation.** Batch S3
+stated the rule at the first two and left the third reading `""` as a target,
+so a link stating `span_id: ""` became an `explicit` `link` edge whose `dst`
+was `""` — a span the identity half had just made sure no input can contain,
+and this sentence was falsifiable by a one-line input (run-5 review 3.1, fixed
+at batch S10). An empty link target now gets exactly what an absent one always
+got: **no link**, so no edge. It differs from the other two fields in one
+respect, and the difference is what the reading leaves behind. A record with
+no `span_id` is still a node, and a record with no parent is still a root —
+each statement is complete. A link entry exists only to name a span, so one
+that names none becomes **nothing**, and its `trace_id` and `attributes` would
+vanish between `raw` and the graph. So the entry is reported:
+`unmapped_attributes` names it `<record>.links[<i>]`, its place in that
+record's `links` (never the record's place in the file), keys only (§3.7).
+Every entry that becomes no link draws that report — absent, `null` or `""`
+target, a target that is not a string, an entry that is not an object — and a
+`links` field that is not a list is reported as `<record>.links`.
+
+**Exactly the empty string**, at every field. `" "` and `"0000000000000000"`
 are ids like any other, because trimming or decoding one would be deciding
-what the telemetry meant. Both readings live at the seam
-(`spanweave.seam.span_ref` and `parent_ref`), not in each adapter: two
-dialects disagreeing about one id is a cross-dialect equivalence claim, and a
-rule copied into two modules is a rule that can drift in one of them.
-`fixtures/conformance/empty_ids` is the scenario, in both dialects; the same
-pair inside an OTLP export is pinned in `tests/test_read.py`, because a
-container is not a dialect (§7).
+what the telemetry meant. All three readings live at the seam
+(`spanweave.seam.span_ref`, `parent_ref` and `link_ref`, the last read by
+`span_links`), not in each adapter: two dialects disagreeing about one id is a
+cross-dialect equivalence claim, and a rule copied into two modules is a rule
+that can drift in one of them. `fixtures/conformance/empty_ids` and
+`fixtures/conformance/empty_link_target` are the scenarios, in both dialects;
+the same inputs inside an OTLP export are pinned in `tests/test_read.py`,
+because a container is not a dialect (§7).
 
 **The formula is exact, because a reimplementation has to land on the same
 id.** Both hashes are taken over a **string encoded UTF-8** and read as a
@@ -556,6 +576,15 @@ readings are *not* reports, because each is something the adapter read rather
 than failed to: a field the record omits, a field reported as `null` — which
 is how a record says "no parent" and "no name" — and `parent_id: ""`, which is
 *no parent* rather than an unreadable one (§4.0).
+
+A **span link** is held to the same rule and lands on the other side of it. An
+entry in `links` that names no span — its target absent, `null`, `""` or not
+a string, or the entry not an object — becomes no link (§3.6), and that is a
+declaration the adapter recognized and could not map: nothing of the entry
+reaches the graph, so it is reported as `<record>.links[<i>]`. A `links` field
+that is present, not `null`, and not a list is `<record>.links`. A `links`
+field the record omits or reports as `null` states no links and is not
+reported.
 
 **A key an adapter read and acted on is mapped, and is not reported here.**
 Not every mapped key becomes a field. Some are read to *decide*: a tool-result
@@ -1007,6 +1036,17 @@ Nothing is dropped in the process (`CLAUDE.md` 2). The empty string is still in
 the node's `raw.source`, verbatim (§3.5), so a consumer that wants to know
 which of the two renderings the exporter used reads it there. What is
 normalized away is the *reference*, into the absence it already stated.
+
+#### A link that names no span
+
+The table above is about a link whose target is **not in this input**. A link
+whose target is **no span at all** — `span_id` absent, `null` or `""` — is a
+different case and gets no edge: an edge whose `dst` is `""` would not be a
+dangling link but an `explicit` claim to a span the telemetry never named,
+and no input can contain one (§3.6). Unlike an empty parent reference it is
+reported, as `unmapped_attributes` (§3.7), because a link entry that names
+nothing becomes nothing, and the report is what keeps it from vanishing
+between `raw` and the graph. The entry itself is in `raw.source`, verbatim.
 
 ### 4.1 Warrant
 

@@ -1000,6 +1000,28 @@ def test_an_empty_span_id_is_no_identity_in_the_export_container_too():
     assert graph.node(ids[0]).raw.source["parent_id"] == ""
 
 
+def test_an_empty_link_target_is_no_link_in_the_export_container_too():
+    """`SPEC.md` §3.6 — batch S10, the third reference field.
+
+    `links[].spanId` is a proto3 `bytes` field like `parentSpanId`, so an
+    unset one is the empty string. The reader renames it to `span_id` and
+    leaves the value, so it meets the same seam reader a JSONL link does:
+    no link, and no `link` edge whose `dst` is `""` (run-5 review 3.1) --
+    reported, because a link entry that names no span becomes nothing.
+    """
+    import spanweave
+
+    linked = dict(OTLP_SPAN, links=[{"traceId": "t1", "spanId": ""}])
+    graph = spanweave.build(json.dumps(envelope(linked)).encode("utf-8"))
+
+    assert [edge.kind.value for edge in graph.edges()] == []
+    reported = [d for d in graph.diagnostics if d.code == "unmapped_attributes"]
+    assert [d.source for d in reported] == [["<record>.links[0]"]]
+    # Losslessness (`CLAUDE.md` 2): the link is still on the record.
+    (node,) = graph.nodes()
+    assert node.raw.source["links"] == [{"trace_id": "t1", "span_id": ""}]
+
+
 def test_no_trace_in_the_tree_reaches_the_otlp_branches():
     """The durable form of "no existing input changed" (`SPEC.md` §7).
 

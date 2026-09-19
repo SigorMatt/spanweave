@@ -114,6 +114,14 @@ DEGENERATE = (
     # `parent_id` of `""` had stopped being a reference, and the `parent` edge
     # between such a pair was dropped silently.
     "empty_ids",
+    # Added at the September 2026 audit's batch S10, not seeded: S3 applied
+    # that rule to `span_id` and `parent_id` and not to the third reference
+    # field, so a link stating `span_id: ""` became an explicit `link` edge
+    # whose `dst` was `""` -- a span S3 had just made sure no input can
+    # contain (run-5 review 3.1). No record in the corpus stated a link
+    # target empty, so `SPEC.md` §3.6's "at either end of a relation" was
+    # checked by nothing.
+    "empty_link_target",
 )
 
 

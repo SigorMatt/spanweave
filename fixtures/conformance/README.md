@@ -109,6 +109,16 @@ Added since, each for a reason recorded at its task:
   derived id, no node named `""`, no `parent` edge to lose, and both empty
   strings still in `raw` verbatim.
 
+- **`empty_link_target`** (September 2026 audit, batch S10). S3 applied that
+  rule to a record's `span_id` and `parent_id` and not to the third reference
+  field: a link stating `span_id: ""` became an `explicit` `link` edge whose
+  `dst` was `""`, a span S3 had just made sure no input can contain (run-5
+  review 3.1). A link target is read by the same seam rule now, so an empty
+  one is no link — the handling an absent one always got — and, because a
+  link entry exists only to name a span, the entry that names none is
+  reported as `unmapped_attributes` `<record>.links[0]` rather than vanishing.
+  One `parent` edge, no `link` edge, one diagnostic.
+
 - **`otlp_container`** (September 2026 audit, batch F2). Every rendering in the
   corpus was JSONL, so `SPEC.md` §7's third container — an **OTLP JSON export**,
   which is the body an exporter actually POSTs and a file receiver actually

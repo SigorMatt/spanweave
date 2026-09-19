@@ -118,6 +118,16 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   nothing. Use the shared helpers rather than your own check: two adapters
   disagreeing about one id is a cross-dialect equivalence failure, not a
   detail.
+- **The same rule holds at the third reference field, a link's target.** Fill
+  `links` from `from spanweave.seam import span_links`, which reads each
+  entry's `span_id` with `link_ref` — the same rule again — and returns the
+  links together with the `<record>.links[<i>]` keys of the entries that name
+  no span. Add those keys to what you report as `unmapped_attributes`. An
+  empty target is **no link**, exactly as an absent one is: transcribing it
+  gives the builder an `explicit` `link` edge whose `dst` is `""`, a span no
+  input can contain (`SPEC.md` §3.6; batch S3 left this field out, and batch
+  S10 closed it). Unlike the other two it is *reported*, because a link entry
+  that names nothing becomes nothing.
 
 **Classification**
 - `kind` — map to the closed `NodeKind` set (`SPEC.md` §3.2). If the dialect's
@@ -255,7 +265,9 @@ The builder constructs every edge and supplies every `basis`, because `basis`
 describes how an edge came to be and the builder is what brings edges into
 being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
 
-- `links` — span links, when present. Leave `SpanLink.basis` as `None`: your
+- `links` — span links, when present, read with `span_links` (above) so an
+  entry that names no span is no link and is reported. Leave
+  `SpanLink.basis` as `None`: your
   dialect saying a link *exists* is not your dialect saying *why*, and the
   builder names the relation. Set it **only** if the dialect states the
   reason — a retry, a continuation, a fan-in — in which case the builder

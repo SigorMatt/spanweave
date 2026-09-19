@@ -2269,16 +2269,31 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     "corpus records in a ratio": {(117,), (177,), (151,)},
     # The same pairs in the census's `N/M` spelling (batch S9 gave it a
     # family; S3's recount sentence and the provenance notes write them so).
-    "corpus files / records as N/M": {(57, 177), (43, 117), (14, 60), (52, 151)},
+    #
+    # `54/155` was the tracked corpus from batch S3 until batch S10 added the
+    # two `empty_link_target` renderings, and S3's `CHANGELOG.md` entry
+    # records it in this spelling; retired for the reason `52/151` was.
+    "corpus files / records as N/M": {
+        (57, 177),
+        (43, 117),
+        (14, 60),
+        (52, 151),
+        (54, 155),
+    },
     # R5's pair of span-id figures, superseded by S3's two records: an empty
     # `span_id` is no span id (`SPEC.md` §3.6), so the corpus went 139 -> 141
     # carrying one and 135 -> 137 trace-unique while gaining two records that
     # carry neither.
-    "records carrying a span id": {(139,)},
-    "trace-unique span ids": {(135,)},
+    #
+    # S3's own pair, superseded the same way by S10's four records, all of
+    # which state a usable span id: 141 -> 145 carrying one, 137 -> 141
+    # trace-unique. S3's `CHANGELOG.md` entry records the pair it measured.
+    "records carrying a span id": {(139,), (141,)},
+    "trace-unique span ids": {(135,), (137,)},
     # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
     "captured files": {(17,), (15,)},
-    "timestamp literals": {(154,)},
+    # S3 measured 308 over the tracked corpus; S10's four records add 8.
+    "timestamp literals": {(154,), (308,)},
     "sibling pairs": {(41,)},
     "minimum sibling gap": {(81,)},
     "`data` edges": {(24,)},
@@ -2287,7 +2302,8 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     "tracked `*.jsonl` head scan": {(64, 64), (50, 50)},
     "corpus `*.jsonl` files": {(64,)},
     # Both, in the `N tracked *.jsonl` spelling batch S9 gave a family.
-    "tracked `*.jsonl` files": {(64,), (50,)},
+    # S3's `52` joins them: S10 added two renderings.
+    "tracked `*.jsonl` files": {(64,), (50,), (52,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},
 }

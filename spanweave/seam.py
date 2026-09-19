@@ -166,10 +166,11 @@ def _stated_id(value: JsonValue) -> str | None:
     verbatim, so which rendering the exporter used is still readable on the
     node (`CLAUDE.md` 2).
 
-    Private because a caller should say which field it is reading -- the two
-    public readers below are the same rule seen from the two ends, and having
-    them share a body is the point: an identity rule and a reference rule that
-    can drift apart is exactly the defect this batch closed.
+    Private because a caller should say which field it is reading -- the
+    three public readers below are the same rule seen from each end of a
+    relation, and having them share a body is the point: an identity rule and
+    a reference rule that can drift apart is exactly the defect batch S3
+    closed, and a third field left reading ``""`` is the one S10 closed.
     """
     if not isinstance(value, str) or value == "":
         return None
@@ -220,6 +221,77 @@ def parent_ref(value: JsonValue) -> str | None:
     into two modules is a rule that can drift in one of them.
     """
     return _stated_id(value)
+
+
+def link_ref(value: JsonValue) -> str | None:
+    """The span a link **targets**, or ``None`` when it names none.
+
+    The third reference field, and the same rule as the other two: a link
+    target is the far end of a relation, and the empty string is not a span
+    id at either end of one (`SPEC.md` §3.6). Batch S3 applied the rule to
+    `span_ref` and `parent_ref` and left this field reading ``""`` as a
+    target, so a link stating ``span_id: ""`` became an ``explicit`` `link`
+    edge whose ``dst`` was ``""`` -- a span `span_ref` had just made sure no
+    input can contain (run-5 review 3.1). Absent, ``null`` and ``""`` are one
+    statement here too, and exactly ``""``: ``" "`` is a target like any other.
+    """
+    return _stated_id(value)
+
+
+def span_links(
+    record: Mapping[str, JsonValue],
+) -> tuple[tuple[SpanLink, ...], list[str]]:
+    """A record's span links, and `<record>.<field>` for each it could not state.
+
+    **A link entry that names no span is no link, and it is reported.** Its
+    target is read by `link_ref`, so an entry whose ``span_id`` is absent,
+    ``null`` or ``""`` states no target -- and one that is not a string, or an
+    entry that is not an object at all, states none the adapter can read. None
+    of them becomes a `SpanLink`: a link to nothing is not a relation, and an
+    edge whose ``dst`` is ``""`` would be an ``explicit`` claim the telemetry
+    never made.
+
+    Where the other two fields are *not* reported, this one is, and the
+    difference is what the reading leaves behind. A record with no ``span_id``
+    is still a node, and a record with no parent is still a root: the
+    statement is complete. A link entry exists only to name a span, so one
+    that names none becomes **nothing**, and its ``trace_id`` and
+    ``attributes`` would vanish between ``raw`` and the graph. Saying so is
+    `unmapped_attributes`' job for a record field recognized and not read
+    (`SPEC.md` §3.7), so the entry is named -- ``<record>.links[<i>]``, its
+    place in *this record's* list, never the record's place in the file -- and
+    its content stays in ``raw`` verbatim, keys only in the report.
+
+    A ``links`` field that is present, not ``null`` and not a list states no
+    entry the adapter can read, and is reported as ``<record>.links``.
+
+    It lives at the seam for `parent_ref`'s reason: the two adapters' copies of
+    this loop were identical, and a rule copied into two modules is a rule
+    that can drift in one of them.
+    """
+    reported = record.get("links")
+    if reported is None:
+        return (), []
+    if not isinstance(reported, list):
+        return (), ["<record>.links"]
+    links: list[SpanLink] = []
+    unread: list[str] = []
+    for index, entry in enumerate(reported):
+        target = link_ref(entry.get("span_id")) if isinstance(entry, dict) else None
+        if target is None:
+            unread.append(f"<record>.links[{index}]")
+            continue
+        assert isinstance(entry, dict)  # narrowed by `target`
+        trace_id = entry.get("trace_id")
+        attributes = entry.get("attributes")
+        links.append(
+            SpanLink(
+                span_id=target,
+                trace_id=trace_id if isinstance(trace_id, str) else None,
+                attributes=attributes if isinstance(attributes, dict) else {},
+            )
+        )
+    return tuple(links), unread
 
 
 #: The record fields every adapter reads as a plain string: the three ids and

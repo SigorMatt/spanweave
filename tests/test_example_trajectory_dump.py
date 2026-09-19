@@ -251,8 +251,13 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: carries a payload attribute, so `absent` moved 139 -> 147 and nothing else
 #: moved. A scenario about identity has nothing to say about payloads, and the
 #: eight `absent` slots are that said in the one place it is counted.
+#:
+#: Batch S10 added `empty_link_target` the same way -- two renderings of two
+#: spans, no payload attribute on either -- so `absent` moved 147 -> 155 and
+#: nothing else moved: a scenario about a link target says nothing about
+#: payloads either.
 CORPUS_STATES = {
-    "absent": 147,
+    "absent": 155,
     "empty": 4,
     "present": 141,
     "redacted": 2,

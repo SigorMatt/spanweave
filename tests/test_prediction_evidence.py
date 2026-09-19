@@ -253,9 +253,10 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
     # 38 -> 40 at batch D2, which added `receipt_redeclared` in both.
     # 40 -> 41 at batch E3: `mixed_instrumentation`, one rendering.
     # 41 -> 43 at batch S3, which added `empty_ids` in both dialects.
-    assert len(traces) == 43
-    assert bytes_moved == 43, "both consumers' serialized output is order-dependent"
-    assert substance_held == 43, "no per-node value or total depends on the order"
+    # 43 -> 45 at batch S10, which added `empty_link_target` in both.
+    assert len(traces) == 45
+    assert bytes_moved == 45, "both consumers' serialized output is order-dependent"
+    assert substance_held == 45, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():

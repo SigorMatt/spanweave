@@ -691,6 +691,116 @@ def test_no_node_is_named_by_the_empty_string(adapter):
 
 
 # --------------------------------------------------------------------------
+# ... and not a link target (batch S10)
+# --------------------------------------------------------------------------
+#
+# S3 made the empty string no span id at a record's `span_id` and `parent_id`
+# and left the third reference field alone: a link stating `span_id: ""` was
+# transcribed as a link, so the builder emitted an `explicit` `link` edge
+# whose `dst` was `""` -- a span S3 had just made sure no input can contain
+# (run-5 review 3.1). A link target is the far end of a relation, and
+# `SPEC.md` §3.6's rule is "at either end of a relation": `""` states no
+# target, exactly as an omitted `span_id` does, so it is no link.
+#
+# Unlike the other two fields it is **reported**. A record with no `span_id`
+# is still a node and a record with no parent is still a root, but a link
+# entry exists only to name a span: one that names none becomes nothing, so
+# its `trace_id` and `attributes` would vanish between `raw` and the graph
+# unless `unmapped_attributes` says so (`SPEC.md` §3.7).
+
+#: Every rendering of a link entry that names no span. The first three are
+#: the three spellings `span_ref` and `parent_ref` already read as "none
+#: stated"; the rest are renderings no reader can use.
+NO_LINK_TARGET = [
+    pytest.param({"trace_id": "t2"}, id="absent"),
+    pytest.param({"trace_id": "t2", "span_id": None}, id="null"),
+    pytest.param({"trace_id": "t2", "span_id": ""}, id="empty"),
+    pytest.param({"trace_id": "t2", "span_id": 42}, id="number"),
+    pytest.param("s9", id="not-an-object"),
+]
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("entry", NO_LINK_TARGET)
+def test_a_link_that_names_no_span_is_no_link_and_is_reported(adapter, entry):
+    span = next(iter(adapter.parse([a_record(adapter, links=[entry])])))
+    assert span.links == ()
+    assert span.unmapped == ("<record>.links[0]",)
+    assert [d.code for d in span.diagnostics] == [codes.UNMAPPED_ATTRIBUTES]
+    # Keys only, never values (`SPEC.md` §3.7): the entry is still on the
+    # record verbatim, which is where a consumer reads what was declared.
+    assert span.diagnostics[0].source == ["<record>.links[0]"]
+    assert span.raw.source["links"] == [entry]
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_the_empty_link_target_is_handled_exactly_as_an_absent_one(adapter):
+    # The batch's claim in one assertion: the three spellings of "no target"
+    # produce the same seam value apart from the record they came from.
+    def seam(entry):
+        span = next(iter(adapter.parse([a_record(adapter, links=[entry])])))
+        return span.links, span.unmapped, [d.code for d in span.diagnostics]
+
+    absent = seam({"trace_id": "t2"})
+    assert seam({"trace_id": "t2", "span_id": ""}) == absent
+    assert seam({"trace_id": "t2", "span_id": None}) == absent
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("stated", [" ", "0000000000000000", "s9"])
+def test_exactly_the_empty_link_target_and_no_other_rendering(adapter, stated):
+    # The boundary `span_ref` and `parent_ref` draw: trimming or decoding a
+    # target would be deciding what the telemetry meant.
+    entry = {"trace_id": "t2", "span_id": stated}
+    span = next(iter(adapter.parse([a_record(adapter, links=[entry])])))
+    assert span.links == (SpanLink(span_id=stated, trace_id="t2"),)
+    assert span.unmapped == ()
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_the_entry_named_is_the_one_that_names_no_span(adapter):
+    # The index is the entry's place in *this record's* `links`, not the
+    # record's place in the file, so it cannot move under a shuffle
+    # (`SPEC.md` §5.2). A usable entry beside it is kept.
+    entries = [{"span_id": "s9"}, {"span_id": ""}, {"span_id": "s8"}]
+    span = next(iter(adapter.parse([a_record(adapter, links=entries)])))
+    assert [link.span_id for link in span.links] == ["s9", "s8"]
+    assert span.unmapped == ("<record>.links[1]",)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+@pytest.mark.parametrize("links", [None, []], ids=["null", "empty-list"])
+def test_no_links_stated_is_nothing_to_report(adapter, links):
+    span = next(iter(adapter.parse([a_record(adapter, links=links)])))
+    assert span.links == () and span.unmapped == () and not span.diagnostics
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_a_links_field_that_is_not_a_list_is_reported(adapter):
+    span = next(iter(adapter.parse([a_record(adapter, links={"span_id": "s9"})])))
+    assert span.links == ()
+    assert span.unmapped == ("<record>.links",)
+
+
+@pytest.mark.parametrize("adapter", REAL_ADAPTERS, ids=lambda a: a.id)
+def test_no_edge_names_the_empty_string_either(adapter):
+    # Review 3.1's repro, in both dialects: before S10 this built
+    # `(sw_..., '', link, explicit, span.link)`, an edge guaranteed to dangle.
+    records = [
+        a_record(adapter, span_id="a", name="parent"),
+        a_record(adapter, span_id="", name="child", links=[{"span_id": ""}]),
+    ]
+    graph = build_graph(
+        adapter.parse(records),
+        adapter=AdapterInfo(id=adapter.id, version=adapter.version),
+    )
+    assert all("" not in (edge.src, edge.dst) for edge in graph.edges())
+    assert not [edge for edge in graph.edges() if edge.kind == EdgeKind.LINK]
+    child = next(n for n in graph.nodes() if n.raw.source["name"] == "child")
+    assert child.raw.source["links"] == [{"span_id": ""}]
+
+
+# --------------------------------------------------------------------------
 # Classification is per record (batch E2)
 # --------------------------------------------------------------------------
 

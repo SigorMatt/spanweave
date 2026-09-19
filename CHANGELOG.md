@@ -792,6 +792,74 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A span link whose target is `""` is no link, as an absent target always
+  was, and the entry is reported rather than turned into an edge to `""`.**
+  Batch `S3` made the empty string no span id at a record's `span_id` and
+  `parent_id`, and `SPEC.md` §3.6 said so "at either end of a relation"; both
+  adapters' `_links()` still read a link's `span_id` as a plain string, so the
+  third reference field was left out. On run-5 review 3.1's two-record input
+  (an agent `a`, and a tool whose `span_id` is `""` and whose `links` is
+  `[{"span_id": ""}]`), in the flat OpenInference JSONL, the flat OTel GenAI
+  JSONL and an `ExportTraceServiceRequest` carrying `links[].spanId: ""`:
+
+  | Link entry | Before (`e0784f8`), all three containers | After, all three containers |
+  |---|---|---|
+  | `{}` (target absent) | no link edge, **no diagnostic** | no link edge, `unmapped_attributes` `["<record>.links[0]"]` |
+  | `{"span_id": null}` | no link edge, **no diagnostic** | the same |
+  | `{"span_id": ""}` | `(sw_…, '', link, explicit, span.link)`, no diagnostic | the same |
+
+  An `explicit` edge whose `dst` is `""` is guaranteed to dangle, because S3
+  made sure no node can be named `""`; the export additionally carries its
+  expected one `timestamp_unit_suspect` per span, unchanged. The link target
+  is now read at the seam by `link_ref`, over the same `_stated_id` as
+  `span_ref` and `parent_ref`, inside a new `span_links(record)` that
+  replaces the two adapters' identical `_links()` copies. An empty target is
+  no link, exactly as an absent one was. Unlike the other two fields the entry
+  is **reported**: a record with no `span_id` is still a node and one with no
+  parent is still a root, but a link entry exists only to name a span, so one
+  naming none becomes nothing, and its `trace_id` and `attributes` would
+  vanish between `raw` and the graph. The report is `unmapped_attributes`
+  -- the code §3.7 already gives a record field recognized and not read --
+  keyed `<record>.links[<i>]` (keys only; the entry stays in `raw.source`
+  verbatim). So absent and `null` targets now draw it too, as do a target
+  that is not a string, an entry that is not an object, and a `links` field
+  that is not a list (`<record>.links`): all were dropped silently before.
+  **Exactly the empty string**: `" "` and `"0000000000000000"` remain targets.
+  No new diagnostic code, no model change, and `tests/serialized_shape.json`
+  is unchanged. New degenerate scenario `empty_link_target` in both dialects
+  (one `parent` edge, no `link` edge, one `unmapped_attributes`); FIXTURES.md
+  §8 freezes an expected graph, so `empty_ids` was not extended. **No corpus
+  expectation moved**: no tracked record carried a link entry that names no
+  span. At batch `S10` the corpus grew by two files and four records, all
+  stating a usable span id: 54/155 -> **56/159**, 141 -> **145** carrying a
+  span id, 137 -> **141** trace-unique, 308 -> **316** timestamp literals, 52
+  -> **54** tracked `*.jsonl`, and the README's scenario counts went from 28
+  and 23 to 29 and 24.
+
+  **S3's before/after table, re-measured** (run-5 review 3.2). The body of
+  `5e8a40f` prints a three-row table that does not reproduce: its first two
+  rows came from the run-4 review's timestamp-less input, while its third row
+  carries a derived id only a timestamped input produces. Measured here on
+  **one** input for every row -- the record that derives
+  `sw_b1ea560c790200c4`, recovered from `spanweave.ids.derive`:
+
+  ```
+  {"trace_id":"t1","span_id":"","name":"agent.run","start_time":1000.0,"end_time":1003.0,"attributes":{"openinference.span.kind":"AGENT"}}
+  {"trace_id":"t1","span_id":"c","parent_id":"","name":"tool.lookup","start_time":1000.5,"end_time":1001.0,"attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup"}}
+  ```
+
+  | Tree | nodes | edges | diagnostics |
+  |---|---|---|---|
+  | `0ad7382` (before R10, `7480ac3^`) | `['', 'c']` | `('', 'c', parent, explicit, span.parent_span_id)`, `('', 'c', temporal, derived)` | none |
+  | `7480ac3` (R10) and `bed0ce2` (before S3) | `['', 'c']` | `('', 'c', temporal, derived)` | none |
+  | `5e8a40f` (S3) | `['sw_b1ea560c790200c4', 'c']` | `('sw_b1ea560c790200c4', 'c', temporal, derived)` | none |
+
+  The load-bearing claim holds as the body stated it -- the `explicit` parent
+  edge disappears at R10 with no diagnostic -- but the body's second row
+  (`edges []`) omits the `temporal` edge every row after the first carries,
+  and its first omits the `temporal` edge beside the `parent` one.
+  (run-5 review 3.1, 3.2; batch `S10`; `SPEC.md` §3.6, §3.7, §4.0)
+
 - **Every figure the corpus census prints is read back by a figure family, in
   the census's own words, and a retired figure asserted in a live sentence
   fails.** Batch `S1` derived the census's *figures* from its result type, but
@@ -989,10 +1057,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   one derived id, one `temporal` edge, zero diagnostics. **No corpus
   expectation moved** -- no tracked record states an id empty, so no existing
   `expected/graph.json` is touched -- and `tests/serialized_shape.json` is
-  unchanged. The corpus grew by two files and four records, so every
-  present-tense census citation was recomputed (52/151 -> **54/155**, 139 ->
-  **141** carrying a span id, 135 -> **137** trace-unique, 300 -> **308**
-  timestamp literals, 50 -> **52** tracked `*.jsonl`); the superseded values
+  unchanged. At batch `S3` the corpus grew by two files and four records, so
+  every present-tense census citation was recomputed (52/151 -> **54/155**,
+  139 -> **141** carrying a span id, 135 -> **137** trace-unique, 300 ->
+  **308** timestamp literals, 50 -> **52** tracked `*.jsonl`); the superseded values
   survive only in the `CHANGELOG.md` entries that record what an earlier batch
   asserted, and are retired as history rather than rewritten.
   (run-4 review finding F3; batch `S3`; `SPEC.md` §3.6, §4.0)
