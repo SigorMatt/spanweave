@@ -234,6 +234,121 @@ def test_the_annotation_digit_rule_is_the_same_under_every_setting():
     assert len(written) == 1
 
 
+# The run-6 review, S8.4. `check_serializable` probed the value with a laxer
+# encoder than the one a graph file is written with -- `sort_keys=True` alone,
+# against `serialize`'s `sort_keys=True, ensure_ascii=False,
+# separators=(",", ":"), allow_nan=False` -- so two shapes the writer refuses
+# were accepted at annotate time and the caller was left holding a graph that
+# could not be written: a non-finite number, which only `allow_nan=False`
+# refuses; and a dict key that is not a string, which `json` silently coerces,
+# so the annotation does not come back as it went in, and which, when the key
+# is an integer the interpreter's own `str()` will not render, reached the
+# writer as a bare `ValueError` and was reported there as a cycle. Both are
+# refused by `annotate` and `annotate_many` now, in the existing wording. The
+# probe runs `jsoncodec.canonical_dump`, which is that policy stated once.
+
+#: The opening of every `check_serializable` refusal.
+_REFUSED = "must be JSON-serializable so they survive serialization"
+
+
+@pytest.mark.parametrize(
+    "number",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=["nan", "inf", "-inf"],
+)
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_holding_a_non_finite_number_is_refused_when_annotated(
+    number, where
+):
+    graph = spanweave.build(FIXTURE)
+    value = _placed(number)[where]
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate("s2", "my_evals", "k", value)
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate_many([("s2", "my_evals", "k", value)])
+
+
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_the_non_finite_refusal_is_what_the_graph_file_would_have_refused(where):
+    # The point of the stricter probe: what `annotate` now refuses is exactly
+    # what writing the graph refuses, rather than being accepted here and
+    # failing at `dumps` with the graph already in the caller's hands.
+    from spanweave.errors import GraphNotSerializableError
+
+    value = _placed(float("nan"))[where]
+    with pytest.raises(GraphNotSerializableError, match="no way to write"):
+        canonical_bytes({"annotations": [{"value": value}]})
+
+
+@pytest.mark.parametrize(
+    "key",
+    [10, 10**700],
+    ids=["small", "longer than a lowered interpreter renders"],
+)
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_whose_dict_key_is_not_a_string_is_refused(key, where):
+    graph = spanweave.build(FIXTURE)
+    value = _placed({key: 1})[where]
+    expected = f"{_REFUSED}; .* is not \\(a mapping key of type int is not a string"
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate("s2", "my_evals", "k", value)
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate_many([("s2", "my_evals", "k", value)])
+
+
+#: Annotates a value keyed by an integer this interpreter's `str()` refuses,
+#: and prints whatever the refusal says.
+_ANNOTATE_A_LONG_KEY = (
+    "import sys, spanweave\n"
+    "graph = spanweave.build(sys.argv[1])\n"
+    "try:\n"
+    "    graph.annotate('s2', 'my_evals', 'k', {10**700: 1})\n"
+    "except ValueError as failure:\n"
+    "    sys.stdout.write(str(failure))\n"
+    "else:\n"
+    "    raise SystemExit('accepted a key the graph file cannot carry')\n"
+)
+
+
+def test_a_dict_key_the_interpreter_cannot_render_is_named_as_a_key():
+    # 10**700 is well inside the library's digit limit and outside a
+    # 640-digit interpreter's, so `str()` of it raises there -- the failure
+    # `serialize` used to meet and report as a value that refers back to
+    # itself, because `json.dumps` answers both facts with `ValueError`. It is
+    # refused at annotate time now, and said to be what it is.
+    import os
+    import subprocess
+    import sys
+
+    environment = dict(os.environ)
+    environment["PYTHONINTMAXSTRDIGITS"] = "640"
+    finished = subprocess.run(
+        [sys.executable, "-c", _ANNOTATE_A_LONG_KEY, str(FIXTURE)],
+        capture_output=True,
+        env=environment,
+        cwd=pathlib.Path(__file__).resolve().parent.parent,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr.decode()[-2000:]
+    said = finished.stdout.decode()
+    assert "a mapping key of type int is not a string" in said, said
+    assert "refers back to itself" not in said, said
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+def test_the_stricter_probe_still_accepts_an_integer_at_the_digit_limit(sign):
+    # The guard on what must *not* move: the stricter encoder narrows nothing
+    # about integers. An integer of exactly `DIGIT_LIMIT` digits is still
+    # annotated, written and read back equal -- the full path, through the CLI
+    # and `validate`, is `test_an_annotation_integer_at_the_digit_limit_
+    # round_trips` above.
+    from tests import digit_limit
+
+    value = {"n": [sign * _integer(digit_limit.inside())]}
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(graph))["annotations"][0]["value"] == value
+
+
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------

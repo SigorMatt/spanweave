@@ -145,6 +145,31 @@ def _is_long_integer(value: object) -> bool:
     )
 
 
+def canonical_dump(value: JsonValue) -> str:
+    """The encoder policy a graph file is written under, stated once.
+
+    Sorted keys, compact separators and non-ASCII kept as text are what makes
+    two runs agree on bytes (`SPEC.md` §5.2). ``allow_nan=False`` is the one
+    argument that decides what is *writable*: RFC 8259 has no ``Infinity`` and
+    no ``NaN``, Python's encoder writes them anyway unless told not to, and a
+    document carrying one is the worst outcome available -- it is produced, it
+    looks written, and a strict parser on the other end refuses it
+    (`SPEC.md` §7).
+
+    It lives here rather than in ``serialize`` because it is not only the
+    writer that has to know it: ``annotate`` refuses a value this encoder
+    could not write, at the moment it is annotated rather than at ``dumps``,
+    and a second spelling of the policy is a second thing to drift.
+    """
+    return json.dumps(
+        value,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
 def encode(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
     """``dump(value)``, with every integer written whole.
 

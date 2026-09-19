@@ -16,7 +16,6 @@ anything a consumer asked for.
 
 from __future__ import annotations
 
-import json
 import math
 import pathlib
 from collections.abc import Iterable, Mapping, Sequence
@@ -87,21 +86,6 @@ def _a_non_finite_number(value: object) -> float | None:
     return None
 
 
-def _stdlib_canonical(value: JsonValue) -> str:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        # RFC 8259 has no `Infinity` and no `NaN`; Python's encoder writes
-        # them anyway unless told not to. A document carrying one is the
-        # worst outcome available -- it is produced, it looks written, and
-        # a strict parser on the other end refuses it -- so it is a
-        # refusal here instead (`SPEC.md` §7).
-        allow_nan=False,
-    )
-
-
 def canonical_bytes(value: JsonValue) -> bytes:
     """The one encoder. Everything written by this library goes through it.
 
@@ -129,8 +113,11 @@ def canonical_bytes(value: JsonValue) -> bytes:
     try:
         # Through `jsoncodec.encode`, so that an integer the library read is
         # written whole whatever the interpreter's own digit limit is set to
-        # (`SPEC.md` §5.3). The encoder and its arguments are unchanged.
-        text = jsoncodec.encode(value, _stdlib_canonical)
+        # (`SPEC.md` §5.3). The encoder and its arguments are unchanged;
+        # `canonical_dump` states them, and `annotate` refuses against the
+        # same statement so that nothing is accepted here that cannot be
+        # written here.
+        text = jsoncodec.encode(value, jsoncodec.canonical_dump)
     except ValueError as failure:
         if _a_non_finite_number(value) is None:
             # The other thing `json.dumps` raises `ValueError` for. Nothing

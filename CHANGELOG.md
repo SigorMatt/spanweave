@@ -881,6 +881,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An annotation is refused at annotate time for anything the graph file
+  cannot carry, because the probe is now the encoder the file is written
+  with.** `check_serializable` encoded the value with
+  `json.dumps(value, sort_keys=True)`, while `serialize` writes a graph with
+  `sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+  allow_nan=False`. Two shapes fell through the gap. `NaN`, `inf` and `-inf`
+  passed `annotate` and `annotate_many` and were refused only later by `dumps`
+  -- `GraphNotSerializableError`, *"it holds a number JSON has no way to
+  write"* -- so the caller was handed a graph that could not be written. And a
+  dict key that is not a string passed: `json` coerces it, so `{10: 1}` was
+  annotated and read back as `{"10": 1}`, and a key of `10**700`, well inside
+  the library's own digit limit, raised inside `str()` under
+  `PYTHONINTMAXSTRDIGITS=640` -- which `serialize` then reported as *"a value
+  refers back to itself"*, because `json.dumps` answers both facts with
+  `ValueError`. The policy is now stated **once**, as
+  `jsoncodec.canonical_dump`, and `serialize.canonical_bytes` and
+  `check_serializable` both run it; it sits in `jsoncodec`, the bottom of the
+  stack, because `serialize` imports `annotate` and the reverse import would be
+  upward. A non-`str` mapping key at any depth is refused before the encode, by
+  a walk that returns the key's *type* rather than rendering it -- rendering it
+  is what can raise -- and is named as what it is: *"annotation values must be
+  JSON-serializable so they survive serialization; dict is not (a mapping key
+  of type int is not a string, and a JSON object is keyed by strings only, so
+  it would not be read back as it was written)"*. Nothing about integers
+  narrows: a value holding an integer of exactly 4300 digits is still
+  annotated, written and read back equal, and the `DIGIT_LIMIT` refusal above
+  is unchanged. `SPEC.md` §8 states both rules beside its round-trip promise.
+  No corpus expectation and no serialized shape moves. (run-6 review S8.4;
+  `SPEC.md` §5.2, §7, §8)
+
 - **An annotation holding an integer of more than 4300 digits is refused when
   it is annotated, instead of being written into a file the library's own
   reader refuses.** Since batch `S8` the encoder writes an integer of any

@@ -15,7 +15,6 @@ Three properties make that safe:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -127,9 +126,32 @@ def check_serializable(value: JsonValue) -> None:
     Digits are counted exactly as the reader counts a literal's -- the sign is
     not one -- and without asking the interpreter to convert the integer, so
     the answer is the same under every setting.
+
+    *The* encoder, not a laxer stand-in: the probe runs
+    ``jsoncodec.canonical_dump``, which is the policy a graph file is written
+    under. A value is therefore refused here exactly when writing the graph
+    would have refused it, rather than being accepted and leaving the caller a
+    graph it cannot write -- which is what a probe without ``allow_nan=False``
+    did to ``NaN``, ``inf`` and ``-inf`` (run-6 review S8.4).
+
+    A mapping key that is not a string is refused first and named as that. It
+    is the one shape the encoder does not refuse and does not preserve: ``json``
+    coerces an integer key to a string, so the annotation does not come back
+    as it went in; and a key long enough that ``str()`` itself refuses it under
+    a lowered interpreter limit would otherwise reach the writer as a bare
+    ``ValueError`` and be reported there as a value that refers back to itself.
     """
+    unstringly = _non_string_key(value)
+    if unstringly is not None:
+        raise ValueError(
+            f"annotation values must be JSON-serializable so they survive "
+            f"serialization; {type(value).__name__} is not (a mapping key of "
+            f"type {unstringly.__name__} is not a string, and a JSON object "
+            f"is keyed by strings only, so it would not be read back as it "
+            f"was written)"
+        )
     try:
-        jsoncodec.encode(value, _stdlib_dump)
+        jsoncodec.encode(value, jsoncodec.canonical_dump)
     # RecursionError is how `json` reports nesting it will not descend -- the
     # same fact as a `ValueError`, reported as a different exception, and this
     # check exists precisely to catch what the graph file could not hold.
@@ -147,6 +169,36 @@ def check_serializable(value: JsonValue) -> None:
             f"{digits} digits is longer than the {jsoncodec.DIGIT_LIMIT} digits "
             f"spanweave reads (`SPEC.md` §5.3))"
         )
+
+
+def _non_string_key(value: JsonValue) -> type | None:
+    """The type of a mapping key in ``value`` that is not a string, if any.
+
+    The type, not the key: rendering the key is the very thing that can raise
+    here, and this runs *before* the encoder rather than after it, so it can
+    rely on nothing the encoder would have established. Hence iterative, and
+    it remembers the containers it is already inside -- a value that refers
+    back to itself ends the walk and is reported by the encoder, which is the
+    check that owns that fact.
+    """
+    seen: set[int] = set()
+    stack: list[JsonValue] = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, Mapping):
+            for key in current:
+                if not isinstance(key, str):
+                    return type(key)
+            inside: list[JsonValue] = list(current.values())
+        elif isinstance(current, list | tuple):
+            inside = list(current)
+        else:
+            continue
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        stack.extend(inside)
+    return None
 
 
 #: The smallest magnitude with more digits than the library reads. Compared
@@ -223,7 +275,3 @@ def annotate_many(graph: Graph, entries: Iterable[AnnotationEntry]) -> Graph:
     """
     prepared = [_checked(graph, *entry) for entry in entries]
     return graph._with_annotations(graph.annotations.with_entries(prepared))
-
-
-def _stdlib_dump(value: JsonValue) -> str:
-    return json.dumps(value, sort_keys=True)

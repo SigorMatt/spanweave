@@ -12068,7 +12068,7 @@ followed by the review section and finding id that reproduce it. Two are
 closed: S8.2 by `642773e` and S8.1 by the commit that archived the review, each
 saying what was re-run. The review also settled two of run 6's own threads: 59
 is accepted and closed, and 58 is confirmed, widened by threads 64 and 65, and
-open. After it the list holds 71 threads, and 53 of them are open.
+open. After it the list holds 71 threads, and 52 of them are open.
 
 60. S8's claim that no graph a stock interpreter built changes (SPEC §5.3,
     `jsoncodec.py:41`, CHANGELOG S8) is false for
@@ -12112,7 +12112,39 @@ open. After it the list holds 71 threads, and 53 of them are open.
 63. `jsoncodec.encode` leaves integer dict keys to the interpreter's limit and
     `serialize` reports that failure as a cycle; refuse non-`str` keys in
     `check_serializable` and word the error for what it is.
-    (`reviews/2026-09-13-run6.md` §1, S8.4.)
+    (`reviews/2026-09-13-run6.md` §1, S8.4.) **Closed by the commit carrying
+    this closure**, *annotate: an annotation is refused at annotate time for
+    anything the graph file cannot carry*. A commit cannot name its own sha,
+    so, as thread 60 does, it is described rather than named and its subject
+    line finds it in `git log`. Widened past the key, because the key was the
+    second half of one defect: `check_serializable` probed with
+    `json.dumps(value, sort_keys=True)` while a graph file is written with
+    `sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    allow_nan=False`, so the probe was laxer than the policy it stood for. The
+    policy is now stated once, as `jsoncodec.canonical_dump`, and both
+    `serialize.canonical_bytes` and `check_serializable` run it — in
+    `jsoncodec` rather than in `serialize` because `serialize` imports
+    `annotate` and the reverse import would be upward (`DESIGN.md` §2). A
+    non-`str` mapping key at any depth is refused before the encode, by a walk
+    that returns the key's *type* rather than rendering it, since rendering it
+    is the very thing that can raise; the refusal is the existing `ValueError`
+    family, ending *"(a mapping key of type int is not a string, and a JSON
+    object is keyed by strings only, so it would not be read back as it was
+    written)"*. `SPEC.md` §8 states both rules beside the round-trip promise.
+    The `DIGIT_LIMIT` refusal thread 61 added is untouched. Measured against
+    the parent `574c53f` on a built `llm_tool_llm` graph: `float('nan')`,
+    `float('inf')` and `float('-inf')` were each **accepted** by `annotate` and
+    then refused by `dumps` with `GraphNotSerializableError` (*"it holds a
+    number JSON has no way to write"*); `{10: 1}` was accepted and read back as
+    `{"10": 1}`; `{10**700: 1}` was accepted and its key read back as a
+    701-character string; and the same annotation written under
+    `PYTHONINTMAXSTRDIGITS=640` was refused by `dumps` as *"a value refers back
+    to itself"* — the misattribution this thread names. After, all five are
+    refused by `annotate` and `annotate_many` with `ValueError`, the key cases
+    naming the key, under the setting unset and at `640`. Re-run: `make check`
+    (2623 passed, 2 skipped; gates 82 passed), `make conformance` (599 passed,
+    2 skipped) and `make install-check` (33 checks, 4 plants held). No corpus
+    expectation and `tests/serialized_shape.json` unmoved.
 64. Thread 58 addendum: the batch-id marker `[A-Z]\d{1,2}` also exempts tokens
     that are not batches (`E1` section references, `H2`, `V2`, `X1` in a code
     span), so the fix should match a list of real batch ids and scope the

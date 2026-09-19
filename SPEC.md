@@ -1885,6 +1885,16 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
   `annotate_many` as a value that is not JSON-serializable, under every
   interpreter setting. An integer of 4300 digits or fewer is written whole and
   read back equal.
+- A value the library could **not write at all** is refused there too, and for
+  the same reason: `annotate` probes the value with the encoder the graph file
+  is written under (§5.2, §7), not a laxer one, so what a graph file cannot
+  carry is refused at annotate time rather than at `dumps` with the graph
+  already in the caller's hands. Two shapes: a **non-finite number** anywhere
+  in the value — `NaN`, `Infinity` or `-Infinity`, which RFC 8259 has no way to
+  write — and a **mapping key that is not a string**, at any depth, which JSON
+  would coerce, so the annotation would not come back as it went in. Both are
+  refused by `annotate` and `annotate_many` as a value that is not
+  JSON-serializable, and the refusal for a key says it is a key.
 - The library **never reads** an annotation to change its own behavior. It has
   no opinion about what is in there — that is the whole point.
 
