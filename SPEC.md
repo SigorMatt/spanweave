@@ -1752,7 +1752,11 @@ declares reaches `0.5`.
   - **`status.code`** becomes `"UNSET"`, `"OK"` or `"ERROR"`, read from the
     proto enum name (`STATUS_CODE_OK`) or its number (`0`, `1`, `2`), because
     proto3 JSON permits either. Any other value is carried verbatim, read as
-    `UNSET`, and survives in the record.
+    `UNSET`, and survives in the record. A `Status` that writes no `code` is
+    not missing one — proto3 gives a scalar field a default rather than an
+    absence — so it is read as code `0`, `"UNSET"`, and the status the export
+    wrote survives into the record instead of leaving it indistinguishable
+    from a span that carried no `status` at all.
   - **Resource and scope are preserved, not dropped.** Each record carries
     `resource_spans` — its `ResourceSpans` entry without `scopeSpans` — and
     `scope_spans` — its `ScopeSpans` entry without `spans` — verbatim, and each

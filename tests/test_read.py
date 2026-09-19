@@ -681,11 +681,72 @@ def test_an_unrecognized_status_code_is_carried_verbatim():
     assert record["status_message"] == "boom"
 
 
-def test_a_status_with_no_code_is_absent_rather_than_invented():
+def test_a_status_object_with_no_code_is_the_default_code_it_declares():
+    # proto3 gives every scalar field a default rather than an absence, so
+    # `"status": {}` is a `Status` carrying code 0 -- `UNSET` -- and not a span
+    # that said nothing about its status (`SPEC.md` §7).
+    record = only(json.dumps(envelope(dict(OTLP_SPAN, status={}))).encode())
+    assert record["status"] == "UNSET"
+    # `message` has no default worth inventing, so none is invented.
+    assert "status_message" not in record
+
+
+def test_an_empty_status_object_stays_distinguishable_from_no_status_at_all():
+    # The whole point of the fix, asserted as the one comparison rather than
+    # left to fall out of two tests: dropping the key made an export that
+    # wrote `"status": {}` read exactly like one that wrote no `status`.
+    no_status = {key: v for key, v in OTLP_SPAN.items() if key != "status"}
+    present = only(json.dumps(envelope(dict(OTLP_SPAN, status={}))).encode())
+    absent = only(json.dumps(envelope(no_status)).encode())
+    assert present != absent
+    assert present["status"] == "UNSET"
+    assert "status" not in absent
+
+
+def test_an_empty_status_object_reaches_the_built_node_as_unset(tmp_path):
+    # Losslessness is about `raw.source`, so the record shape is only half of
+    # it: the status the export wrote has to survive onto the node.
+    graph = _built(envelope(dict(OTLP_SPAN, status={})), tmp_path)
+    (node,) = graph.nodes()
+    assert node.raw.source["status"] == "UNSET"
+    assert "status_message" not in node.raw.source
+
+
+def test_an_explicit_zero_and_an_omitted_code_read_the_same():
+    # They are the same wire value: proto3 JSON may write a field holding its
+    # default or omit it, and both say code 0.
+    omitted = only(json.dumps(envelope(dict(OTLP_SPAN, status={}))).encode())
+    written = only(json.dumps(envelope(dict(OTLP_SPAN, status={"code": 0}))).encode())
+    assert omitted["status"] == written["status"] == "UNSET"
+
+
+def test_a_status_with_a_message_and_no_code_carries_both():
+    # The same proto3 argument: a `Status` that writes a message and no code is
+    # an `UNSET` status with a message, not a message with no status.
     span = dict(OTLP_SPAN, status={"message": "boom"})
     record = only(json.dumps(envelope(span)).encode())
-    assert "status" not in record
+    assert record["status"] == "UNSET"
     assert record["status_message"] == "boom"
+
+
+def test_a_populated_status_is_untouched_by_the_default():
+    # A guard on the scope of the rule: reading an omitted `code` as 0 must not
+    # reach a `Status` that stated one.
+    span = dict(OTLP_SPAN, status={"code": 2, "message": "boom"})
+    record = only(json.dumps(envelope(span)).encode())
+    assert record["status"] == "ERROR"
+    assert record["status_message"] == "boom"
+
+
+def test_a_status_that_is_not_plain_is_still_carried_verbatim():
+    # The other half of the scope: only a `{"code", "message"}` subset is
+    # flattened at all, so an object with anything else in it is carried as it
+    # arrived and gains no default (`SPEC.md` §7, and `_is_a_plain_status`).
+    for reported in ({"unexpected": 1}, {"message": "boom", "unexpected": 1}):
+        span = dict(OTLP_SPAN, status=reported)
+        record = only(json.dumps(envelope(span)).encode())
+        assert record["status"] == reported
+        assert "status_message" not in record
 
 
 def test_an_any_value_is_unwrapped_by_its_tag():

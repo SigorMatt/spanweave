@@ -399,6 +399,13 @@ _STATUS_CODES: dict[str | int, str] = {
     "STATUS_CODE_ERROR": "ERROR",
 }
 
+#: What a `Status` that writes no `code` is carrying. proto3 gives every scalar
+#: field a default rather than an absence, so an omitted `code` is this number
+#: and not a missing field (`SPEC.md` §7). Kept as the number the format
+#: defines, and spelled by `_STATUS_CODES` above like any other code, so the
+#: two cannot drift.
+_DEFAULT_STATUS_CODE = 0
+
 #: An integer literal, the same subset of RFC 8259 the adapters apply to a
 #: quoted timestamp -- and applied here for the opposite reason. A timestamp
 #: field states only a *name*, so its owner reads it (`SPEC.md` §3.1); an
@@ -551,8 +558,16 @@ def _flattened(
             record["links"] = _flattened_links(value)
         elif key == "status" and _is_a_plain_status(value):
             assert isinstance(value, dict)  # narrowed by `_is_a_plain_status`
-            if "code" in value:
-                record["status"] = _status_code(value["code"])
+            # A `Status` that writes no `code` is carrying proto3's default for
+            # the field, which is 0 -- `UNSET`, not an absence. Reading it as
+            # anything else drops the span's `status` key entirely, and a record
+            # with no `status` is what a span that carried no `status` at all
+            # produces: the two become indistinguishable, which is a silent
+            # discard of a field the export wrote (`CLAUDE.md` 2).
+            # `message` has no default worth inventing -- there is no string a
+            # `Status` that wrote none can be said to have stated -- so an
+            # absent one stays absent and no `status_message` is made up.
+            record["status"] = _status_code(value.get("code", _DEFAULT_STATUS_CODE))
             if "message" in value:
                 record["status_message"] = value["message"]
         else:

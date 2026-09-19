@@ -881,6 +881,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An OTLP `Status` that writes no `code` is read as code 0, `"UNSET"`,
+  instead of vanishing from the record.** The reader flattened a plain
+  `status` object field by field and wrote `status` only when a `code` was
+  present, so a span carrying `"status": {}` produced a record with no
+  `status` key -- exactly what a span carrying no `status` at all produces,
+  which made the two indistinguishable on the record and on the node's
+  `raw.source`. proto3 gives a scalar field a default rather than an absence,
+  so the empty object is not missing information: it *is* `UNSET`, and
+  dropping it was a silent discard (`CLAUDE.md` 2). A `{"message": "..."}`
+  with no `code` gains the same `"UNSET"`, by the same argument. `message` is
+  untouched and still has no default: none is invented, so no
+  `status_message` key appears where the export wrote none. A populated
+  status is unchanged, and a `status` object that is not a `{"code",
+  "message"}` subset is still carried verbatim and gains nothing. No node's
+  normalized `status` moves -- both adapters already read an absent status as
+  `Status.UNSET` -- so no corpus expectation and no serialized shape moves
+  either; every `otlp_container` fixture span carries `STATUS_CODE_OK`.
+  (Qodo finding 9; `SPEC.md` §7)
+
 - **A diagnostic about the whole input names an adapter only when a single
   adapter read every record, so a part-unclaimed input names none.**
   `missing_trace_id` and `duplicate_source_id` are one statement about
