@@ -1,11 +1,14 @@
 """Serialization and validation (TASKS.md 1.8)."""
 
+import decimal
 import json
 import pathlib
 
 import pytest
 
 import spanweave
+from spanweave import jsoncodec
+from spanweave.jsoncodec import DIGIT_LIMIT
 from spanweave.serialize import ROOT_KEYS, canonical_bytes, dumps, to_document, validate
 from tests.json_depth import (
     MEASUREMENT_NOISE,
@@ -123,6 +126,112 @@ def test_annotations_round_trip_through_the_file():
     graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "note", {"n": [1, 2]})
     reread = json.loads(dumps(graph))
     assert reread["annotations"][0]["value"] == {"n": [1, 2]}
+
+
+# The run-6 review, S8.2. Since batch S8 the encoder writes an integer of any
+# length whole under every interpreter setting, while the reader refuses a
+# literal of more than `DIGIT_LIMIT` digits (`SPEC.md` §5.3). An annotation
+# holding a longer one was accepted, written, and then refused by the
+# library's own reader, so `check_serializable` refuses it up front; one of
+# exactly `DIGIT_LIMIT` digits must still go all the way round. Both sides are
+# derived from the library's constant, and converted through `Decimal`, as
+# `tests/digit_limit.py` requires.
+
+
+def _integer(text):
+    return int(decimal.Decimal(text))
+
+
+def _placed(number):
+    """The integer alone, as a dict value, as a list item, and deep in both."""
+    return {
+        "alone": number,
+        "dict value": {"n": number},
+        "list item": [1, number],
+        "nested": {"a": [{"b": [number]}]},
+    }
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_integer_past_the_digit_limit_is_refused_when_annotated(
+    sign, where
+):
+    from tests import digit_limit
+
+    past = sign * _integer(digit_limit.past())
+    graph = spanweave.build(FIXTURE)
+    expected = (
+        f"must be JSON-serializable so they survive serialization; .* is not "
+        f"\\(an integer of {DIGIT_LIMIT + 1} digits is longer than the "
+        f"{DIGIT_LIMIT} digits spanweave reads"
+    )
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate("s2", "my_evals", "k", _placed(past)[where])
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate_many([("s2", "my_evals", "k", _placed(past)[where])])
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+def test_an_annotation_integer_at_the_digit_limit_round_trips(tmp_path, capsys, sign):
+    from spanweave.cli import main
+    from tests import digit_limit
+
+    inside = sign * _integer(digit_limit.inside())
+    value = _placed(inside)
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    written = dumps(graph)
+    reread = jsoncodec.loads(written)
+    assert validate(reread) == ()
+    assert reread["annotations"][0]["value"] == value
+    path = tmp_path / "graph.json"
+    path.write_bytes(written)
+    assert main(["validate", str(path)]) == 0, capsys.readouterr().err
+
+
+#: Annotates the integers either side of the limit and writes what survives.
+_ANNOTATE_BOTH_SIDES = (
+    "import decimal, sys, spanweave\n"
+    "from spanweave import jsoncodec\n"
+    "from tests import digit_limit\n"
+    "graph = spanweave.build(sys.argv[1])\n"
+    "past = int(decimal.Decimal(digit_limit.past()))\n"
+    "inside = int(decimal.Decimal(digit_limit.inside()))\n"
+    "try:\n"
+    "    graph.annotate('s2', 'my_evals', 'k', {'n': [past]})\n"
+    "except ValueError:\n"
+    "    pass\n"
+    "else:\n"
+    "    raise SystemExit('accepted an integer the reader refuses')\n"
+    "written = spanweave.dumps(graph.annotate('s2', 'my_evals', 'k', [inside]))\n"
+    "assert jsoncodec.loads(written)['annotations'][0]['value'] == [inside]\n"
+    "sys.stdout.buffer.write(written)\n"
+)
+
+
+def test_the_annotation_digit_rule_is_the_same_under_every_setting():
+    # The refusal counts digits rather than asking the interpreter, so a
+    # lowered or disabled `PYTHONINTMAXSTRDIGITS` moves neither side of it.
+    import os
+    import subprocess
+    import sys
+
+    written = set()
+    for setting in (None, "0", "640"):
+        environment = dict(os.environ)
+        environment.pop("PYTHONINTMAXSTRDIGITS", None)
+        if setting is not None:
+            environment["PYTHONINTMAXSTRDIGITS"] = setting
+        finished = subprocess.run(
+            [sys.executable, "-c", _ANNOTATE_BOTH_SIDES, str(FIXTURE)],
+            capture_output=True,
+            env=environment,
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+            check=False,
+        )
+        assert finished.returncode == 0, (setting, finished.stderr.decode()[-2000:])
+        written.add(finished.stdout)
+    assert len(written) == 1
 
 
 # --------------------------------------------------------------------------

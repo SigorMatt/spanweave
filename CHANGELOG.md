@@ -850,6 +850,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An annotation holding an integer of more than 4300 digits is refused when
+  it is annotated, instead of being written into a file the library's own
+  reader refuses.** Since batch `S8` the encoder writes an integer of any
+  length whole under every interpreter setting, and the reader refuses a
+  literal of more than `DIGIT_LIMIT` digits; `check_serializable` asked only
+  the encoder, so at `6eb1762` a 4301-digit annotation was accepted, `dumps`
+  wrote it, and `spanweave validate` exited 1 on the file (*"an integer
+  literal of 4301 digits is longer than the 4300 digits spanweave reads"*).
+  Before `S8`, on a stock interpreter, the encoder had refused it up front.
+  `check_serializable` now also refuses an integer anywhere in the value --
+  at the top, as a dict value, as a list item, at any depth -- whose
+  magnitude has more than `DIGIT_LIMIT` digits, counted as the reader counts
+  a literal's (the sign is not one) and by arithmetic rather than through
+  the interpreter's string conversion, so the answer is the same under every
+  setting. The refusal is the existing `ValueError`, in the same words:
+  *"annotation values must be JSON-serializable so they survive
+  serialization; int is not (an integer of 4301 digits is longer than the
+  4300 digits spanweave reads (`SPEC.md` §5.3))"*. An integer of exactly 4300
+  digits, either sign, is written and read back equal, and `spanweave
+  validate` accepts the file. `SPEC.md` §8 states the rule beside its
+  round-trip promise. No corpus expectation and no serialized shape moves.
+  (run-6 review S8.2; `SPEC.md` §5.3, §8)
+
 - **A span link whose target is `""` is no link, as an absent target always
   was, and the entry is reported rather than turned into an edge to `""`.**
   Batch `S3` made the empty string no span id at a record's `span_id` and

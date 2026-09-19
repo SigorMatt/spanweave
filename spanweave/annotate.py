@@ -116,7 +116,18 @@ class AnnotationStore:
 
 
 def check_serializable(value: JsonValue) -> None:
-    """Annotation values must survive a round trip through the graph file."""
+    """Annotation values must survive a round trip through the graph file.
+
+    Refused, with ``ValueError``: a value the encoder cannot write, and a value
+    it can write but the library cannot read back -- an integer, at any depth,
+    of more than ``jsoncodec.DIGIT_LIMIT`` digits (`SPEC.md` §5.3, §8). The
+    encoder writes such an integer whole under every interpreter setting, and
+    the reader refuses every literal that long, so accepting it here would
+    produce a graph file that ``loads`` and ``spanweave validate`` refuse.
+    Digits are counted exactly as the reader counts a literal's -- the sign is
+    not one -- and without asking the interpreter to convert the integer, so
+    the answer is the same under every setting.
+    """
     try:
         jsoncodec.encode(value, _stdlib_dump)
     # RecursionError is how `json` reports nesting it will not descend -- the
@@ -127,6 +138,43 @@ def check_serializable(value: JsonValue) -> None:
             f"annotation values must be JSON-serializable so they survive "
             f"serialization; {type(value).__name__} is not ({failure})"
         ) from failure
+    unreadable = _unreadable_integer(value)
+    if unreadable is not None:
+        digits = len(jsoncodec.integer_text(abs(unreadable)))
+        raise ValueError(
+            f"annotation values must be JSON-serializable so they survive "
+            f"serialization; {type(value).__name__} is not (an integer of "
+            f"{digits} digits is longer than the {jsoncodec.DIGIT_LIMIT} digits "
+            f"spanweave reads (`SPEC.md` §5.3))"
+        )
+
+
+#: The smallest magnitude with more digits than the library reads. Compared
+#: by arithmetic, which no interpreter setting governs.
+_FIRST_UNREADABLE = 10**jsoncodec.DIGIT_LIMIT
+
+
+def _unreadable_integer(value: JsonValue) -> int | None:
+    """An integer in ``value`` the reader would refuse, if there is one.
+
+    Called only on a value the encoder has written, so it holds no cycle and
+    no nesting the encoder would not descend; iterative all the same, so that
+    it meets no depth ceiling of its own. Keys are not searched: the encoder
+    writes a key as a string, and a string is read back whatever its length.
+    """
+    stack: list[JsonValue] = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, bool):
+            continue
+        if isinstance(current, int):
+            if abs(current) >= _FIRST_UNREADABLE:
+                return current
+        elif isinstance(current, Mapping):
+            stack.extend(current.values())
+        elif isinstance(current, list | tuple):
+            stack.extend(current)
+    return None
 
 
 def _checked(

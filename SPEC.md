@@ -1866,7 +1866,14 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
   annotated is indistinguishable from one built with those annotations from the
   start.
 - Annotations round-trip through serialization under a top-level `annotations`
-  key, sorted by `(namespace, node_id, key)`.
+  key, sorted by `(namespace, node_id, key)`. So a value the library could
+  write but not read back is refused when it is annotated, not when the file
+  is read: an integer anywhere in the value — at the top, as a dict value, as
+  a list item, at any depth — of more than the library's digit limit (4300
+  digits, §5.3; the sign is not a digit) is refused by `annotate` and
+  `annotate_many` as a value that is not JSON-serializable, under every
+  interpreter setting. An integer of 4300 digits or fewer is written whole and
+  read back equal.
 - The library **never reads** an annotation to change its own behavior. It has
   no opinion about what is in there — that is the whole point.
 
