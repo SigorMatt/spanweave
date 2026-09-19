@@ -792,6 +792,32 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **Every figure the corpus census prints is read back by a figure family, in
+  the census's own words, and a retired figure asserted in a live sentence
+  fails.** Batch `S1` derived the census's *figures* from its result type, but
+  the families that read documents were still a hand-written list of
+  *spellings*: the run-5 review planted wrong values for four figures in S3's
+  own recount sentence in this file -- the `N/M` pair, *carrying a span id*,
+  *trace-unique* and *tracked `*.jsonl`* -- and the suite stayed green, while
+  a fifth plant in the same sentence went red. `tests/corpus_census.py`'s
+  output is now data (`report()`, a line of text and named figures), every
+  figure the census computes is printed, in the number-first spelling the
+  documents copy, and a test plants a sentinel at each printed figure in turn
+  and requires a family to read it back under that figure's name -- so a
+  printed figure with no family fails the guard itself. Four spellings gained
+  a family or an alternative, and two widened to read the census's own
+  `record(s)` and `1e+11`. The second half: `WORKING_TREE_CENSUS` listed only
+  the working-tree values, so the values later batches retired passed any
+  sentence (two green plants in `OPEN_QUESTIONS.md`). A new test derives the
+  check from `RETIRED_CENSUS_FIGURES`: a retired value its family reads is
+  allowed only in a *sentence* that names a batch, says *history* or sits left
+  of a `->`, and a second test plants every retired value into its family's
+  example to prove none is unreadable. One `OPEN_QUESTIONS.md` §12 sentence is
+  split so today's rule-1 figure no longer shares a sentence with the batch
+  that superseded the old one. **No behaviour changed**: nothing under
+  `spanweave/` moved, and neither did any fixture or
+  `tests/serialized_shape.json`. (run-5 review findings 1.1, 1.2; batch `S9`)
+
 - **Four sentences that advertised a rule, a guard or a guarantee slightly
   wider than it holds, and one that was ungrammatical.** The run-4 cold
   review's per-batch nits with a code or a spec surface (its §4 `R8`, §7 `R12`

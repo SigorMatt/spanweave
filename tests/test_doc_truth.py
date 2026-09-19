@@ -50,10 +50,13 @@ from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
 from tests.corpus_census import (
     FRACTIONAL_FIGURES,
     Census,
+    Printed,
     census,
     figure_names,
     figures,
     fractional_figure_names,
+    render,
+    report,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -1695,6 +1698,12 @@ def test_the_open_questions_census_is_the_tracked_census():
 #: `capture/_scratch` is deliberately **not** a history marker. Naming the
 #: git-ignored directory is what these paragraphs did while asserting the
 #: figure -- it was the defect, not the disclaimer.
+#:
+#: This list is hand-written and covers the working-tree values only; the
+#: values later batches retired (`139`, `135`, `151`, `50`, `64`) are held by
+#: `test_no_durable_document_asserts_a_retired_figure_in_a_live_sentence`,
+#: which derives them from `RETIRED_CENSUS_FIGURES` rather than from here
+#: (run-5 review 1.2).
 WORKING_TREE_CENSUS = re.compile(
     r"\b177\b"
     r"|\b57 (?:files|corpus files)\b"
@@ -1968,6 +1977,19 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
         "The corpus holds 99 files, 999 records.",
         (99, 999),
     ),
+    # The census prints the pair a second time as `54/155`, and S3's recount
+    # sentence in `CHANGELOG.md` writes it that way (`52/151 -> 54/155`). A
+    # bare `N/M` means nothing out of scope, so this one needs the scope phrase,
+    # and `Phase 0/1` -- the one other `N/M` a scoped paragraph holds -- is a
+    # roadmap phase pair, not a figure.
+    CensusFigureFamily(
+        "corpus files / records as N/M",
+        r"(?<![\d,./-])(?<![Pp]hase )(\d+)/(\d+)(?![\d/])",
+        True,
+        (("files",), ("records",)),
+        "Over the tracked corpus: 99/999.",
+        (99, 999),
+    ),
     CensusFigureFamily(
         "corpus records in a ratio",
         r"of (?:the )?(\d+) tracked (?:corpus )?records\b"
@@ -1981,7 +2003,8 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
         "records carrying a span id",
         r"(?<![\d,./-])(\d+) of (?:the )?\d+ (?:tracked )?(?:corpus )?records carry "
         r"(?:one|a span_id)"
-        r"|(?<![\d,./-])(\d+) carry a span_id",
+        r"|(?<![\d,./-])(\d+) carry a span_id"
+        r"|(?<![\d,./-])(\d+) (?:records? )?carrying a span[ _]id",
         False,
         (("with_span_id",),),
         "of the 999 tracked corpus records, 99 carry a `span_id`",
@@ -1990,7 +2013,8 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
     CensusFigureFamily(
         "trace-unique span ids",
         r"(?<![\d,./-])(\d+) of those (?:are )?trace-unique"
-        r"|(?<![\d,./-])(\d+) of (?:the )?\d+ tracked records take rule 1",
+        r"|(?<![\d,./-])(\d+) of (?:the )?\d+ tracked records take rule 1"
+        r"|(?<![\d,./-])(\d+) trace-unique\b",
         False,
         (("trace_unique_span_id",),),
         "and 99 of those are trace-unique",
@@ -2031,7 +2055,7 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
     ),
     CensusFigureFamily(
         "dialect claims",
-        r"(?<![\d,./-])(\d+) records? claimed by (\d+) adapters?",
+        r"(?<![\d,./-])(\d+) records?(?:\(s\))? claimed by (\d+) adapters?",
         True,
         (("claims",), ("claims.keys",)),
         "Over the tracked corpus: 999 records claimed by 9 adapters.",
@@ -2061,6 +2085,18 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
         "A checkout carries 99 `*.jsonl` files (tracked files only).",
         (99,),
     ),
+    # `50 -> 52 tracked *.jsonl` (S3's recount) and the census's own
+    # `52 tracked *.jsonl` lines. Self-naming, so read everywhere: the words
+    # *tracked `*.jsonl`* are the scope. Either count may be meant -- the
+    # corpus's `*.jsonl` and every one in the tree are both 52 today.
+    CensusFigureFamily(
+        "tracked `*.jsonl` files",
+        r"(?<![\d,./-])(\d+) tracked \.jsonl\b",
+        False,
+        (("jsonl_files", "head_scan.files"),),
+        "99 tracked `*.jsonl` files.",
+        (99,),
+    ),
     CensusFigureFamily(
         "timestamp literals",
         r"(?<![\d,./-])(\d+) timestamp (?:values|literals)\b",
@@ -2071,7 +2107,7 @@ CENSUS_FIGURE_FAMILIES: tuple[CensusFigureFamily, ...] = (
     ),
     CensusFigureFamily(
         "timestamp literals above the unit ceiling",
-        r"(?<![\d,./-])(\d+) above 1e11"
+        r"(?<![\d,./-])(\d+) above 1e\+?11"
         r"|(?<![\d,./-])(\d+) of the tracked corpus's \d+ timestamp literals sit "
         r"above",
         True,
@@ -2204,8 +2240,11 @@ CENSUS_SCOPE = (
 #: by family. A durable document may still *name* one -- five commit bodies
 #: carry them and cannot be rewritten -- so this test allows the value and
 #: leaves the "say it is history" half to
-#: `test_no_durable_document_states_the_working_tree_census_as_a_fact`. The two
-#: tests divide the work: that one says a retired figure must be marked as
+#: `test_no_durable_document_asserts_a_retired_figure_in_a_live_sentence`,
+#: which is derived from this dict (batch S9), and to
+#: `test_no_durable_document_states_the_working_tree_census_as_a_fact` for the
+#: bare spellings of the working-tree pair no family reads (`177` alone). The
+#: tests divide the work: those say a retired figure must be marked as
 #: history, this one says a figure that is neither the census's nor retired is
 #: simply wrong.
 RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
@@ -2219,15 +2258,18 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # entries recording what a *past* batch asserted: R5 really did move the
     # documents to 52/151, and saying it moved them to 54/155 would be a
     # falsification rather than a correction. Every present-tense citation was
-    # recomputed in S3's commit; the cost of this line is that a **new** live
-    # sentence could state 52/151 and this scan would not object, which is the
-    # standing price of the retirement mechanism and is stated here rather
-    # than left to be discovered.
+    # recomputed in S3's commit. A **new** live sentence stating 52/151 passes
+    # this scan; it fails the derived history test, unless the sentence itself
+    # names a batch or says it is history -- the standing price of the
+    # retirement mechanism, stated here rather than left to be discovered.
     "corpus files / records": {(57, 177), (43, 117), (14, 60), (52, 151)},
     # The same pair, quoted as a ratio: `0 of 117 tracked corpus records`
     # (`TASKS.md`) and `177 of 177` (`OPEN_QUESTIONS.md` §12(f)'s provenance).
     # `151` joins them for the reason above (batch S3).
     "corpus records in a ratio": {(117,), (177,), (151,)},
+    # The same pairs in the census's `N/M` spelling (batch S9 gave it a
+    # family; S3's recount sentence and the provenance notes write them so).
+    "corpus files / records as N/M": {(57, 177), (43, 117), (14, 60), (52, 151)},
     # R5's pair of span-id figures, superseded by S3's two records: an empty
     # `span_id` is no span id (`SPEC.md` §3.6), so the corpus went 139 -> 141
     # carrying one and 135 -> 137 trace-unique while gaining two records that
@@ -2244,21 +2286,29 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # R9's `50 of 50` was the tracked count until S3 added two renderings.
     "tracked `*.jsonl` head scan": {(64, 64), (50, 50)},
     "corpus `*.jsonl` files": {(64,)},
+    # Both, in the `N tracked *.jsonl` spelling batch S9 gave a family.
+    "tracked `*.jsonl` files": {(64,), (50,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},
 }
 
 
-def census_figures(paragraph: str) -> list[tuple[str, tuple[int, ...]]]:
+def census_figures(
+    paragraph: str, scoped: bool | None = None
+) -> list[tuple[str, tuple[int, ...]]]:
     """Every corpus figure a paragraph asserts, by family, in reading order.
 
     `paragraph` is raw markdown: emphasis and code spans are stripped here, so
     that `**52** files / **151** records`, a table cell, and a plain sentence
     are all read as one claim. That is the half of R5's guard the run-3 review
     called weak -- a figure is bold in at least one of the places it appears.
+
+    `scoped` overrides the scope test, for a caller reading one sentence of a
+    paragraph whose scope phrase sits in another sentence.
     """
     text = flat(unemphasized(paragraph))
-    scoped = any(marker in text for marker in CENSUS_SCOPE)
+    if scoped is None:
+        scoped = any(marker in text for marker in CENSUS_SCOPE)
     found: list[tuple[str, tuple[int, ...]]] = []
     for family in CENSUS_FIGURE_FAMILIES:
         if family.requires_scope and not scoped:
@@ -2400,6 +2450,211 @@ def test_every_corpus_figure_a_durable_document_asserts_is_the_census():
         "these paragraphs state a corpus figure that is neither what "
         "`tests/corpus_census.py` counts over the tracked tree nor a retired "
         "figure the documents quote as history:\n  " + "\n  ".join(offenders)
+    )
+
+
+# -- What the census prints is what the families read ------------------------
+#
+# The run-5 review planted four wrong figures in one `CHANGELOG.md` sentence --
+# `52/151 -> 854/955`, `941 carrying a span id`, `937 trace-unique`,
+# `50 -> 952 tracked *.jsonl` -- and the whole suite stayed green, while a fifth
+# plant in the same sentence (`908 timestamp literals`) went red. Every one of
+# the four figures had a family; none of the four *spellings* did. The gate
+# above derives the figures from `Census`, so it cannot say which spellings a
+# family misses: a hand-written family list is still a hand-written list of
+# spellings, and it cannot report what it omits.
+#
+# The spelling a document copies first is the one the census prints. So the
+# census's output is now data (`corpus_census.report`), and the two tests below
+# derive from it: every figure the census computes is printed, and every figure
+# printed is read back, under its own name, by a family. A printed figure no
+# family reads fails here, in the census's own words, before any document has
+# copied it.
+
+#: A value no census figure takes and no document states, planted in place of
+#: one printed figure at a time.
+PRINTED_SENTINEL = 918273645
+
+
+def printed_figures() -> list[tuple[int, int, Printed]]:
+    """(line, position, figure) for every figure the census prints."""
+    return [
+        (row, column, part)
+        for row, line in enumerate(report(census()))
+        for column, part in enumerate(line)
+        if isinstance(part, Printed)
+    ]
+
+
+def test_every_figure_the_census_computes_is_printed():
+    """The half that makes the printed-spelling gate below reach every figure.
+
+    A figure the census computes and does not print has no printed spelling,
+    so the gate below would have nothing to derive a family from for it.
+    """
+    printed = {part.name for _, _, part in printed_figures()}
+    computed = set(figure_names())
+    assert computed - printed == set(), (
+        "`tests/corpus_census.py` computes these figures and `report()` never "
+        "prints them, so no printed spelling of them is held to a family: "
+        + ", ".join(sorted(computed - printed))
+    )
+    assert printed - computed == set(), (
+        "`report()` prints these under a name the census does not compute: "
+        + ", ".join(sorted(printed - computed))
+    )
+
+
+def test_every_figure_the_census_prints_is_read_by_a_family():
+    """Each printed figure, replaced by a sentinel, is read back under its name.
+
+    One figure at a time, so that a line printing three figures proves all
+    three rather than whichever one a family happens to reach. The line is
+    read as a scope-stating paragraph, because the census's output *is* the
+    tracked-corpus scope.
+    """
+    families = {family.name: family for family in CENSUS_FIGURE_FAMILIES}
+    lines = report(census())
+    unread: list[str] = []
+    for row, column, part in printed_figures():
+        planted = list(lines[row])
+        planted[column] = Printed(part.name, PRINTED_SENTINEL)
+        text = render(tuple(planted))
+        read_back = any(
+            value == PRINTED_SENTINEL and part.name in families[family].slots[index]
+            for family, values in census_figures(text, scoped=True)
+            for index, value in enumerate(values)
+        )
+        if not read_back:
+            unread.append(f"{part.name} in {text.strip()!r}")
+    assert not unread, (
+        "the census prints these figures in a spelling no family in "
+        "`CENSUS_FIGURE_FAMILIES` reads under that figure's name, so a "
+        "document that copies the census's own words can state any value "
+        "there and no test will recompute it:\n  " + "\n  ".join(unread)
+    )
+
+
+# -- A retired figure in a live sentence -------------------------------------
+#
+# `RETIRED_CENSUS_FIGURES` lets the scan above accept a superseded value, and
+# the docstring there says the other half -- "a retired figure must be marked
+# as history" -- belongs to
+# `test_no_durable_document_states_the_working_tree_census_as_a_fact`. That
+# test reads `WORKING_TREE_CENSUS`, a hand-written alternation over the
+# *working-tree* values only; it never learned `139`, `135`, `151`, `50` or
+# `64`, so the run-5 review planted `137 of the 155 -> 135` and
+# `carries 52 -> 64` in `OPEN_QUESTIONS.md` and both stayed green (review
+# finding 1.2). The check below is derived from the dict instead: a retired
+# value is found by the family it is retired from, and is allowed only in a
+# sentence that marks it as history.
+#
+# The unit is the *sentence*, not the paragraph. `OPEN_QUESTIONS.md`'s
+# rule-1 line names batch R5 in the clause before the colon and states today's
+# figure in the clause after it; a paragraph-wide marker would let the second
+# clause state anything the dict holds. A figure written to the left of an
+# arrow (`139 -> 141`) is the superseded side of a recount and is history by
+# its spelling.
+
+#: What marks a sentence as quoting a retired figure rather than asserting it.
+#: `checkout` is not here, unlike in `CENSUS_HISTORY_MARKERS`: *"a checkout
+#: carries"* is the live scope phrase every present-tense citation uses, so a
+#: marker that matched it would exempt exactly the sentences this test is for.
+#: The rest say, in the sentence itself, whose figure it was or when.
+RETIRED_HISTORY_MARKERS = re.compile(
+    "|".join(
+        re.escape(marker)
+        for marker in (*CENSUS_HISTORY_MARKERS, "history", "then-", "of the day")
+        if marker != "checkout"
+    )
+    # A batch named in the sentence -- `R5 made`, `C3's sweep`, `audit-R9` --
+    # attributes the figure to that batch's moment rather than to today.
+    + r"|\b(?:audit-)?[A-Z]\d{1,2}\b"
+)
+
+#: A sentence ends at terminal punctuation or a semicolon followed by space;
+#: `SPEC.md` and `3.6` are not boundaries. A colon is not one either: the
+#: clause after a colon is usually the figure the clause before introduced.
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.;!?])\s+")
+
+#: The superseded side of a recount: whatever sits immediately left of `->`.
+LEFT_OF_AN_ARROW = re.compile(r"\S+\s*(?:->|→)\s*")
+
+
+def retired_figures_asserted(
+    paragraph: str, stated: dict[str, set[tuple[int, ...]]]
+) -> list[tuple[str, tuple[int, ...], str]]:
+    """(family, values, sentence) for each retired figure a paragraph asserts."""
+    text = flat(unemphasized(paragraph))
+    scoped = any(marker in text for marker in CENSUS_SCOPE)
+    found: list[tuple[str, tuple[int, ...], str]] = []
+    for sentence in SENTENCE_BOUNDARY.split(text):
+        if RETIRED_HISTORY_MARKERS.search(sentence):
+            continue
+        for family, values in census_figures(
+            LEFT_OF_AN_ARROW.sub("", sentence), scoped=scoped
+        ):
+            if values in stated[family]:
+                continue
+            if values in RETIRED_CENSUS_FIGURES.get(family, set()):
+                found.append((family, values, sentence))
+    return found
+
+
+def test_every_retired_figure_is_one_its_family_reads_in_a_live_sentence():
+    """Each value in `RETIRED_CENSUS_FIGURES`, planted, is caught.
+
+    The derivation is only as wide as the families: a retired value its family
+    cannot read would be accepted by nothing and flagged by nothing. So each
+    one is planted into its family's own example sentence, which states no
+    history, and must come back as a retired figure asserted live.
+    """
+    stated = stated_census_figures(census())
+    families = {family.name: family for family in CENSUS_FIGURE_FAMILIES}
+    missed: list[str] = []
+    for name, retired in sorted(RETIRED_CENSUS_FIGURES.items()):
+        family = families[name]
+        for values in sorted(retired):
+            swap = {
+                str(old): str(new)
+                for old, new in zip(family.example_values, values, strict=True)
+            }
+            planted = re.sub(
+                r"(?<![\d.])\d+(?!\d|\.\d|e\d)",
+                lambda match, swap=swap: swap.get(match.group(), match.group()),
+                family.example,
+            )
+            if not any(
+                (found, value) == (name, values)
+                for found, value, _ in retired_figures_asserted(planted, stated)
+            ):
+                missed.append(f"{name} {values} in {planted!r}")
+    assert not missed, (
+        "these retired figures are not caught when a live sentence asserts "
+        "them, so `RETIRED_CENSUS_FIGURES` accepts them everywhere and nothing "
+        "requires them to be marked as history:\n  " + "\n  ".join(missed)
+    )
+
+
+def test_no_durable_document_asserts_a_retired_figure_in_a_live_sentence():
+    """The history-marking half of the retirement, derived from the dict."""
+    stated = stated_census_figures(census())
+    offenders: list[str] = []
+    for path in durable_documents():
+        for paragraph in path.read_text(encoding="utf-8").split("\n\n"):
+            if any(line.lstrip().startswith(">") for line in paragraph.splitlines()):
+                continue
+            for family, values, sentence in retired_figures_asserted(paragraph, stated):
+                offenders.append(
+                    f"{path.relative_to(ROOT)} states {family} as "
+                    f"{', '.join(str(value) for value in values)}, a retired "
+                    f"figure, in a sentence that does not say it is history -- "
+                    f"{sentence[:160]}"
+                )
+    assert not offenders, (
+        "these sentences assert a figure `RETIRED_CENSUS_FIGURES` retired, "
+        "with nothing marking it as history; the census counts "
+        "something else today:\n  " + "\n  ".join(offenders)
     )
 
 

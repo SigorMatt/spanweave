@@ -675,65 +675,219 @@ def figures(counted: Census) -> dict[str, tuple[int, ...]]:
     return {name: tuple(sorted(values)) for name, values in sorted(into.items())}
 
 
-def main() -> None:
-    """Print the figures the documents cite. Tracked files only."""
-    counted = census()
-    claimed = ", ".join(
-        f"{count} record(s) claimed by {claimants} adapter(s)"
-        for claimants, count in sorted(counted.claims.items())
+@dataclass(frozen=True, slots=True)
+class Printed:
+    """One figure as the census prints it: the figure's name and its value.
+
+    The report below is built from these rather than from f-strings, so that
+    what the census *prints* is data a test can read: which figure sits at
+    which position in which line. `tests/test_doc_truth.py` plants a sentinel
+    at every one and requires a figure family to read it back under that name
+    -- the census's own spelling of a figure is the first spelling a document
+    copies, so a printed figure no family reads is a guard with a hole in it.
+    """
+
+    #: A name `figure_names()` derives.
+    name: str
+    #: What the census counted for it; `None` where the figure is absent.
+    value: int | None
+
+
+#: One printed line: literal text and figures, in order.
+Line = tuple[str | Printed, ...]
+
+
+def report(counted: Census) -> tuple[Line, ...]:
+    """What `python -m tests.corpus_census` prints, line by line.
+
+    Every figure `figure_names()` derives is printed at least once, and each is
+    printed in a spelling the documents use -- number first, then the words
+    that name it (*"141 carrying a span id"*, *"54/155"*) -- because a reader
+    copying the census into a sentence copies its words, and
+    `tests/test_doc_truth.py` requires a family to read every one of them.
+    """
+    lines: list[Line] = [
+        (
+            "corpus (tracked files only): ",
+            Printed("files", counted.files),
+            " files, ",
+            Printed("records", counted.records),
+            " records -- ",
+            Printed("files", counted.files),
+            "/",
+            Printed("records", counted.records),
+        ),
+        (
+            "  ",
+            Printed("jsonl_files", counted.jsonl_files),
+            " tracked `*.jsonl` files among them",
+        ),
+    ]
+    claimed: list[str | Printed] = ["  dialect claims: "]
+    for position, (claimants, count) in enumerate(sorted(counted.claims.items())):
+        if position:
+            claimed.append(", ")
+        claimed.extend(
+            (
+                Printed("claims", count),
+                " record(s) claimed by ",
+                Printed("claims.keys", claimants),
+                " adapter(s)",
+            )
+        )
+    lines.append(tuple(claimed))
+    lines.extend(
+        (
+            (
+                "  ",
+                Printed(
+                    "records_claimed_by_two_adapters",
+                    counted.records_claimed_by_two_adapters,
+                ),
+                " records carry both markers, ",
+                Printed(
+                    "records_claimed_by_no_adapter",
+                    counted.records_claimed_by_no_adapter,
+                ),
+                " records carry neither",
+            ),
+            (
+                "  ",
+                Printed("mixed_files", counted.mixed_files),
+                " files carry records of both dialects",
+            ),
+        )
     )
-    print(
-        f"corpus (tracked files only): {counted.files} files, {counted.records} records"
-    )
-    print(f"  of which `*.jsonl`: {counted.jsonl_files}")
-    print(f"  dialect claims: {claimed}")
-    print(f"  files carrying records of both dialects: {counted.mixed_files}")
     for adapter_id, count in sorted(counted.sole_dialect_files.items()):
-        print(f"  files that are {adapter_id}-only: {count}")
-    print(
-        f"  detect() vs direct marker scan: {counted.marker_disagreements} "
-        f"disagreement(s)"
+        lines.append(
+            (
+                "  of the rest, ",
+                Printed("sole_dialect_files", count),
+                f" are {adapter_id}-only",
+            )
+        )
+    lines.extend(
+        (
+            (
+                "  detect() vs direct marker scan: ",
+                Printed("marker_disagreements", counted.marker_disagreements),
+                " disagreement(s)",
+            ),
+            (
+                "  ",
+                Printed("with_span_id", counted.with_span_id),
+                " carrying a span id, ",
+                Printed("trace_unique_span_id", counted.trace_unique_span_id),
+                " trace-unique (SPEC.md 3.6 rule 1)",
+            ),
+        )
     )
-    print(f"  records carrying a span id: {counted.with_span_id}")
-    print(
-        f"  of which trace-unique (SPEC.md 3.6 rule 1): {counted.trace_unique_span_id}"
-    )
-    whole = counted.timestamps
-    print(
-        f"  timestamp literals: {whole.literals}, of which "
-        f"{whole.above_ceiling} above {TIMESTAMP_UNIT_CEILING}, "
-        f"{whole.differing_from_shortest_repr} differ from their shortest "
-        f"float repr, {whole.floats_carrying_two_literals} float(s) carry two"
-    )
-    captured = counted.captured_timestamps
-    print(f"captured traces (tracked files only): {counted.captured_file_count} files")
-    print(
-        f"  timestamp literals: {captured.literals}, of which "
-        f"{captured.above_ceiling} above {TIMESTAMP_UNIT_CEILING}, "
-        f"{captured.differing_from_shortest_repr} differ from their shortest "
-        f"float repr, {captured.floats_carrying_two_literals} float(s) carry two"
-    )
-    print(
-        f"  sibling pairs: {captured.sibling_pairs}, minimum gap "
-        f"{captured.minimum_sibling_gap_us} us"
-    )
+    for scope, stamps in (
+        ("timestamps", counted.timestamps),
+        ("captured_timestamps", counted.captured_timestamps),
+    ):
+        if scope == "captured_timestamps":
+            lines.append(
+                (
+                    "captured traces (tracked files only): ",
+                    Printed("captured_file_count", counted.captured_file_count),
+                    " captured trace files",
+                )
+            )
+        lines.extend(
+            (
+                (
+                    "  ",
+                    Printed(f"{scope}.literals", stamps.literals),
+                    " timestamp literals, of which ",
+                    Printed(f"{scope}.above_ceiling", stamps.above_ceiling),
+                    f" above {TIMESTAMP_UNIT_CEILING:.0e}, ",
+                    Printed(
+                        f"{scope}.differing_from_shortest_repr",
+                        stamps.differing_from_shortest_repr,
+                    ),
+                    " whose shortest float repr differs, ",
+                    Printed(
+                        f"{scope}.floats_carrying_two_literals",
+                        stamps.floats_carrying_two_literals,
+                    ),
+                    " floats carrying two",
+                ),
+                (
+                    "  ",
+                    Printed(f"{scope}.sibling_pairs", stamps.sibling_pairs),
+                    " sibling pairs, minimum gap ",
+                    Printed(
+                        f"{scope}.minimum_sibling_gap_us", stamps.minimum_sibling_gap_us
+                    ),
+                    " µs",
+                ),
+            )
+        )
     receipt = counted.captured_receipts
-    print(
-        f"  `data` edges: {receipt.data_edges} over "
-        f"{receipt.files_with_data_edges} file(s), "
-        f"{receipt.redeclared_receipts} re-declared receipt(s)"
+    lines.append(
+        (
+            "  ",
+            Printed("captured_receipts.data_edges", receipt.data_edges),
+            " `data` edges, ",
+            Printed(
+                "captured_receipts.files_with_data_edges",
+                receipt.files_with_data_edges,
+            ),
+            " files with data edges of ",
+            Printed("captured_receipts.files", receipt.files),
+            " captured files, ",
+            Printed(
+                "captured_receipts.redeclared_receipts", receipt.redeclared_receipts
+            ),
+            " re-declared receipts",
+        )
     )
     scan = counted.head_scan
-    print(
-        f"tracked `*.jsonl` anywhere in the tree: {scan.files}, of which "
-        f"{scan.beginning_with_brace} begin with a brace and "
-        f"{scan.first_member_key_trace_id} open on `trace_id`"
+    lines.append(
+        (
+            "anywhere in the tree: ",
+            Printed("head_scan.files", scan.files),
+            " tracked `*.jsonl`; ",
+            Printed("head_scan.beginning_with_brace", scan.beginning_with_brace),
+            " of ",
+            Printed("head_scan.files", scan.files),
+            " tracked `*.jsonl` begin with a brace, ",
+            Printed(
+                "head_scan.first_member_key_trace_id", scan.first_member_key_trace_id
+            ),
+            " of ",
+            Printed("head_scan.files", scan.files),
+            " tracked `*.jsonl` open on `trace_id`",
+        )
     )
     for export in counted.indented_exports:
-        print(
-            f"  {export.path}: {export.lines} lines, "
-            f"{export.lines_that_are_not_json} of them not JSON"
+        lines.append(
+            (
+                f"  {export.path}: ",
+                Printed("indented_exports[].lines", export.lines),
+                " lines, ",
+                Printed(
+                    "indented_exports[].lines_that_are_not_json",
+                    export.lines_that_are_not_json,
+                ),
+                " of them not JSON",
+            )
         )
+    return tuple(lines)
+
+
+def render(line: Line) -> str:
+    """One report line as text."""
+    return "".join(
+        str(part.value) if isinstance(part, Printed) else part for part in line
+    )
+
+
+def main() -> None:
+    """Print the figures the documents cite. Tracked files only."""
+    for line in report(census()):
+        print(render(line))
 
 
 if __name__ == "__main__":  # pragma: no cover -- `python -m tests.corpus_census`

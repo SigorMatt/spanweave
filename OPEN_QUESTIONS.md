@@ -1347,8 +1347,8 @@ The reasons, in order:
    a byte-identical graph — same ids under every rule, because one dialect
    means one claimant and `adapter_id` is the only thing dispatch feeds into an
    id; same `declared_confidence` (same first-50 sample); one `Meta.adapters`
-   entry. (This read *"rule 1 for all 177 corpus records"* until batch R5:
-   137 of the 155 tracked records take rule 1 today, and the conclusion does
+   entry. (This read *"rule 1 for all 177 corpus records"* until batch R5.
+   Today 137 of the 155 tracked records take rule 1, and the conclusion does
    not depend on which rule any of them takes.)
 4. It makes the refusal proportionate. Today a mixed file is refused *entirely*
    and the recommended remedy silently damages it. Under (a) the refusal
