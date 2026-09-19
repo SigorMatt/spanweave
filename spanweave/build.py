@@ -188,7 +188,8 @@ def build_contributed_graph(
         for node_id, producer in zip(ids, producers, strict=True)
     }
     # What a statement about the **whole input** can honestly be attributed
-    # to: the one adapter that read it, or nobody when several did. A
+    # to: the one adapter that read every record of it, or nobody when
+    # several did, or when any record was claimed by none. A wholly-claimed
     # single-dialect input therefore reports exactly what it always did.
     whole_input = _sole_contributor(producers)
     for duplicated in assignment.duplicate_source_ids:
@@ -241,8 +242,23 @@ def _id_of(producer: AdapterInfo | None) -> str | None:
 
 
 def _sole_contributor(producers: Sequence[AdapterInfo | None]) -> str | None:
-    """The one adapter that produced every node here, or `None`."""
-    named = {producer.id for producer in producers if producer is not None}
+    """Whose records a statement about the whole input was made from.
+
+    An id only when there is at least one record and **every** one of them was
+    produced by that same adapter. `None` when the records came from more than
+    one adapter, when any of them was produced by no adapter at all
+    (`SPEC.md` §6.1), and when there are no records to attribute anything to.
+
+    This is `_edge_adapter`'s reasoning one level up: a diagnostic such as
+    `missing_trace_id` is one statement about everything that arrived
+    (`SPEC.md` §7), so naming one dialect for a fact another dialect -- or
+    nobody -- also contributed to would be a false attribution, exactly as
+    naming one dialect for a relation two of them made would be
+    (`SPEC.md` §3.7, §3.8).
+    """
+    if not producers:
+        return None
+    named = {_id_of(producer) for producer in producers}
     return next(iter(named)) if len(named) == 1 else None
 
 

@@ -1042,3 +1042,106 @@ def test_two_adapters_reusing_one_span_id_keep_both_records_and_report_it():
     reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
     assert len(reported) == 1
     assert reported[0].source == "s0"
+
+
+# --------------------------------------------------------------------------
+# What a whole-input diagnostic may name (Qodo finding 7; SPEC.md 3.7)
+# --------------------------------------------------------------------------
+#
+# `missing_trace_id` and `duplicate_source_id` are the two diagnostics about
+# the input as a whole -- neither names a node -- and both take their
+# `adapter` from the same question: did one adapter read *every* record? The
+# rule these pin is the rule, not the one example: an id only when the input
+# is non-empty and wholly claimed by one adapter, `None` otherwise. An input
+# one adapter read half of was the case that used to name that adapter for a
+# fact the records it never saw also made.
+
+
+def _reused_source_id_pair():
+    """Two records claiming one span id, distinct enough that both are kept."""
+    return a_span("s0", name="mine"), dataclasses.replace(
+        a_span("s0", name="theirs", line=2),
+        raw=RawRecord(source={"span_id": "s0", "other": True}, source_id="s0"),
+    )
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_a_record_was_unclaimed():
+    # One OpenInference-shaped record with no trace id, and one record no
+    # adapter claimed (`SPEC.md` §6.1). The missing trace id is a fact about
+    # both of them, so the adapter that read one of them cannot be named for
+    # it: `some_dialect` here would say a dialect reported something about a
+    # record it never saw.
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0", trace=None)]),
+            (None, [a_span("s9", trace=None, line=2)]),
+        ]
+    )
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_the_duplicate_source_id_report_names_nobody_when_a_record_was_unclaimed():
+    # The same rule at the other call site: the reused span id is a fact
+    # about two records, and only one of them has an adapter to name.
+    mine, stranger = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [mine]), (None, [stranger])])
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", None)]
+
+
+def test_the_duplicate_source_id_report_names_nobody_when_two_adapters_read_it():
+    mine, theirs = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [mine]), (OTHER, [theirs])])
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", None)]
+
+
+def test_a_wholly_claimed_input_still_names_the_one_adapter_that_read_it():
+    # The must-not-change half. Every record claimed by one adapter, so that
+    # adapter did make the statement and is named -- at both call sites.
+    mine, theirs = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [dataclasses.replace(mine, trace_id=None)])])
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    duplicated = mixed_build([(ADAPTER, [mine, theirs])])
+    reported = [
+        d for d in duplicated.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID
+    ]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", "some_dialect")]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_no_record_arrived():
+    # An adapter that contributed no records read nothing, so there is
+    # nothing to attribute to it. The empty case is decided rather than
+    # falling out of an empty set of names.
+    graph = mixed_build([(ADAPTER, [])])
+    assert graph.nodes() == ()
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_meta_still_lists_the_adapter_a_whole_input_diagnostic_cannot_name():
+    # `meta.adapters` answers a different question -- who contributed at all
+    # (`SPEC.md` §3.9) -- and is built from `_contributors`, not from the
+    # whole-input attribution. A part-unclaimed input keeps naming its one
+    # real contributor, with its version and declared confidence, while the
+    # diagnostic names nobody.
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0", trace=None)]),
+            (None, [a_span("s9", trace=None, line=2)]),
+        ]
+    )
+    assert [(a.id, a.version, a.declared_confidence) for a in graph.meta.adapters] == [
+        ("some_dialect", "0.1.0", 0.9)
+    ]
+    assert [d.adapter for d in graph.diagnostics] == [None]
+    # And the per-node attribution is untouched by the same change.
+    assert {n.id: n.provenance.adapter_id for n in graph.nodes()} == {
+        "s0": "some_dialect",
+        "s9": None,
+    }

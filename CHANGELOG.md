@@ -881,6 +881,28 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A diagnostic about the whole input names an adapter only when a single
+  adapter read every record, so a part-unclaimed input names none.**
+  `missing_trace_id` and `duplicate_source_id` are one statement about
+  everything that arrived (`SPEC.md` §7) and take their `adapter` from
+  `_sole_contributor`, which asked only *how many adapters are named here* and
+  ignored the records no adapter claimed. An input of one OpenInference record
+  carrying no trace id plus one record nothing claimed therefore reported
+  `missing_trace_id` with `adapter: "openinference"` -- a fact the unclaimed
+  record helped make, attributed to a dialect that never saw it. It is now an
+  id only when the input is non-empty **and** every record was produced by
+  that same adapter; the empty input is decided rather than falling out of an
+  empty set of names. This is the rule `Edge.adapter` already followed for an
+  edge whose two ends came from different adapters (`SPEC.md` §3.8), one level
+  up. A wholly-claimed single-dialect input is unchanged and still names its
+  adapter, and `meta.adapters` is untouched -- it answers who contributed at
+  all, is built from `_contributors`, and still lists the one real contributor
+  of an input whose diagnostic can name nobody. Per-node `provenance` and
+  per-edge `adapter` are unchanged. No corpus expectation and no serialized
+  shape moves: `canonical()` compares diagnostics by code and count, and no
+  conformance fixture carries an unclaimed record. (Qodo finding 7;
+  `SPEC.md` §3.7)
+
 - **An annotation is refused at annotate time for anything the graph file
   cannot carry, because the probe is now the encoder the file is written
   with.** `check_serializable` encoded the value with
