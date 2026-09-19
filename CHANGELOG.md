@@ -298,6 +298,34 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The September 2026 audit-fix series is closed a fourth and final time,
+  and every run-5 review finding is accounted for.** Run 6 is five batches --
+  `S8` `62385b6`, `S9` `80a1cfe`, `S10` `f00ade4`, `S11` `a834de4`, and `S12`,
+  the closing commit of run 6 -- answering the maintainer's decision on
+  thread 23 and the cold read of run 5, with no memo and no halt. The entry
+  below is the previous close and is history, not the current fact. That
+  review found **nothing that blocks** and 33 open threads, so run 6 was
+  planned as the last run and its wording findings stay threads rather than
+  becoming a run 7. The review is archived as `reviews/2026-09-12-run5.md`,
+  byte-for-byte from the untracked scratch drop, `sha256`
+  `4c1afa39ebfd6c38...`, and `TASKS.md` records the scratch file's name and
+  the whole digest beside it, which is the review's own §7.3 applied to
+  itself. Its 33 ready-made sentences are pasted into `TASKS.md`'s open
+  threads verbatim as threads 24-56, each pointing at the review section
+  that reproduces it; twelve are marked closed, ten by `S9`-`S11` and two by
+  this close, each re-run rather than read off a batch's report, and thread
+  23 is marked closed by `S8`. Three new threads record what run 6 itself
+  left: that a close cannot name its own commit, the batch-name exemption
+  `S9`'s retired-figure check keeps, and `S10`'s deliberate widening to
+  absent, `null` and non-string link targets, for the cold review to accept
+  or narrow. The registry's *"this commit"* spellings now say *"the closing
+  commit of run N"*, with the sha where a later commit can supply it, and the
+  run-4 map row that still called the ceiling pairs ±2 points at thread 10.
+  Run 6's decision moved into `TASKS.md`'s decisions log verbatim but for one
+  id spelling. `WORKPLAN.md` and its README row are removed, and
+  `durable_documents()` drops its exclusion again. **No behavior changed**;
+  nothing under `spanweave/` moved. (run-5 review, all findings; batch `S12`)
+
 - **Five sentences that stated a rule more widely than the code keeps it are
   narrowed to what it does.** Found by the run-5 cold review, swept by grep
   rather than by citation. `spanweave/cli.py`'s comment said an `OSError`
@@ -684,9 +712,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   be in the tree. Documentation and tracking only; no behaviour change.
 
 - **The September 2026 audit-fix series is closed, and `WORKPLAN.md` is
-  gone.** *(Written at G4, 2026-09-10, and superseded three times: the series
-  was reopened for runs 3, 4 and 5 and the file came back with each of them.
-  See the entry at the head of this section for the close that stands.)* That file was the
+  gone.** *(Written at G4, 2026-09-10, and superseded four times: the series
+  was reopened for runs 3, 4, 5 and 6 and the file came back with each of
+  them. See the entry at the head of this section for the close that
+  stands.)* That file was the
   series' execution state -- protocol, live batch
   status, decisions log, resume note, finding-to-batch map -- and was written
   to be deleted once the series ended, so that no reader would have two places

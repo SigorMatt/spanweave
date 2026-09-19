@@ -16,9 +16,9 @@ would settle it, **(d)** the provisional stance the seed specs take.
 **Entries §10–§17 were written as memos during the September 2026 audit-fix
 series** and refer throughout to `WORKPLAN.md`, that series' execution state.
 `WORKPLAN.md` was written to be deleted at series close: batch G4 deleted it on
-2026-09-10, three cold reviews reopened the series and the file came back with
-each of them, batch R7 deleted it again on 2026-09-11, and batch S7 deleted it
-on 2026-09-12 at the close that stands.
+2026-09-10, four cold reviews reopened the series and the file came back with
+each of them, batch R7 deleted it again on 2026-09-11, batch S7 on 2026-09-12,
+and batch S12 deleted it on 2026-09-19 at the close that stands.
 Everything of it that outlives the series — the batch list with final statuses,
 the decisions log for all three dates, the cold reviews and the threads the
 series left open — is in `TASKS.md` under *September 2026 audit*. Those references are
