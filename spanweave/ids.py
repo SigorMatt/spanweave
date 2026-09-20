@@ -30,6 +30,7 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from spanweave import jsoncodec
 from spanweave.errors import DuplicateNodeIdError
 from spanweave.model import NodeId
 from spanweave.read import record_digest
@@ -78,7 +79,16 @@ def derive(
     """
     parts = (adapter_id or "", trace_id or "", source_key)
     material = _SEPARATOR.join(parts if record is None else (*parts, record))
-    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    # A trace id or a source key is text the input stated, so it can hold a
+    # lone surrogate -- a code point `str` carries and UTF-8 cannot, which
+    # made this line an interpreter traceback out of a build that had read its
+    # input without complaint. It is written the way every other text this
+    # library encodes is written, as its JSON escape (`jsoncodec`, `SPEC.md`
+    # §3.6). No id moves: material that holds one had no digest before this,
+    # because the encode it needed raised.
+    digest = hashlib.sha256(
+        jsoncodec.escape_lone_surrogates(material).encode("utf-8")
+    ).hexdigest()
     return f"{DERIVED_PREFIX}{digest[:DERIVED_LENGTH]}"
 
 

@@ -349,6 +349,202 @@ def test_the_stricter_probe_still_accepts_an_integer_at_the_digit_limit(sign):
     assert jsoncodec.loads(dumps(graph))["annotations"][0]["value"] == value
 
 
+# The run-7 review, T3 / T1 / T2. A lone surrogate is a code point `str`
+# carries and UTF-8 cannot, and `json.loads` produces one from a `\uD800`
+# escape nothing pairs with. It reached three `.encode("utf-8")` calls as an
+# interpreter traceback out of values the library had already accepted: the
+# record digest (`read.py`), the writer (`serialize.py`, outside the `try`, so
+# not even wrapped as `GraphNotSerializableError`) and a derived node id
+# (`ids.py`). It is written as its JSON escape now, in `jsoncodec`, which
+# every one of those three goes through. And because the writer accepts it,
+# `annotate` does -- which left depth as the only shape the probe still
+# disagreed with the writer about, and that one is position rather than
+# policy: the probe now wraps the value where the document puts it.
+
+#: A lone surrogate: the low end of the range, and the one both the review and
+#: RFC 8259's §7/§8.1 disagreement are about.
+_LONE_SURROGATE = "\ud800"
+
+
+def _record_holding(value):
+    """A minimal OpenInference span whose `output.value` is `value`."""
+    return {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "llm.call",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {
+            "openinference.span.kind": "LLM",
+            "output.value": value,
+        },
+    }
+
+
+def test_a_lone_surrogate_is_written_as_its_escape_and_read_back_identical():
+    # Lower-case, six characters, which is what `json.dumps` itself emits
+    # under `ensure_ascii=True` -- so a strict parser reads it, and reading it
+    # returns the identical string. The escape is the *only* thing that moved:
+    # nothing else in the text is touched, and escaping twice changes nothing.
+    text = jsoncodec.canonical_dump({"s": _LONE_SURROGATE, "é": "é"})
+    assert text == '{"s":"\\ud800","é":"é"}'
+    assert json.loads(text) == {"s": _LONE_SURROGATE, "é": "é"}
+    assert text.encode("utf-8").decode("utf-8") == text
+    assert jsoncodec.escape_lone_surrogates(text) == text
+
+
+def test_a_trace_record_holding_a_lone_surrogate_builds_and_round_trips(tmp_path):
+    # T3. `spanweave.build` raised `UnicodeEncodeError` out of
+    # `hashlib.sha256(text.encode("utf-8"))` in `record_digest` -- no
+    # diagnostic, no `unknown` node, no refusal, which is `CLAUDE.md` 2's
+    # *degrade honestly* failing on untrusted input (`SECURITY.md`).
+    record = _record_holding(_LONE_SURROGATE)
+    trace = tmp_path / "surrogate.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(trace)
+    written = dumps(graph)
+
+    assert [node.id for node in graph.nodes()] == ["s0"]
+    assert graph.diagnostics == ()
+    # Losslessness: the record comes back out of the file identical, the lone
+    # surrogate included, rather than replaced or dropped to get past it.
+    reread = json.loads(written.decode("utf-8"))
+    assert reread["nodes"][0]["raw"]["source"] == record
+    assert reread["nodes"][0]["raw"]["source"]["attributes"]["output.value"] == (
+        _LONE_SURROGATE
+    )
+    assert validate(reread) == ()
+    assert b'"\\ud800"' in written
+
+
+def test_a_lone_surrogate_in_a_derived_ids_material_is_not_a_traceback(tmp_path):
+    # The third `.encode("utf-8")`. A record that states no span id is named
+    # by a SHA-256 over the adapter id, the trace id and its source key
+    # (`SPEC.md` §3.6), and the trace id is text the input stated.
+    record = _record_holding("plain")
+    del record["span_id"]
+    record["trace_id"] = _LONE_SURROGATE
+    trace = tmp_path / "surrogate_id.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(trace)
+    assert graph.trace_id == _LONE_SURROGATE
+    assert [node.id.startswith("sw_") for node in graph.nodes()] == [True]
+    assert validate(json.loads(dumps(graph).decode("utf-8"))) == ()
+
+
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_holding_a_lone_surrogate_is_accepted_and_written(where):
+    # T1. It was accepted before this too -- and then `dumps` raised a bare
+    # `UnicodeEncodeError` from the `.encode("utf-8")` that is outside
+    # `canonical_bytes`'s `try`, so the caller did not even get
+    # `GraphNotSerializableError`. Accepted is the right answer; writable is
+    # what was missing.
+    value = _placed(_LONE_SURROGATE)[where]
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(graph))["annotations"][0]["value"] == value
+    assert spanweave.build(FIXTURE).annotate_many(
+        [("s2", "my_evals", "k", value)]
+    ).annotations_for("s2", "my_evals") == {"k": value}
+
+
+def test_a_long_integer_and_a_lone_surrogate_survive_the_same_encode():
+    # T12's path, exercised rather than read. `encode` writes a long integer
+    # by swapping it for a placeholder, encoding, and replacing the encoded
+    # placeholder with the digits -- so the needle it looks for has to be
+    # spelled by the same encoder that wrote the haystack. It is spelled by
+    # calling `canonical_dump`, which is also the encoder that escapes, and
+    # this is the value that would notice if the two ever disagreed.
+    value = {"n": 10 ** (DIGIT_LIMIT - 1), "s": _LONE_SURROGATE}
+    text = jsoncodec.encode(value, jsoncodec.canonical_dump)
+    assert json.loads(text) == value
+    assert '"\\ud800"' in text
+    assert "spanweave-integer" not in text
+
+
+def _unchecked_annotation(graph, value):
+    """`graph` carrying `value`, with `check_serializable` never consulted.
+
+    The writer's own ceiling is what this measures, so the probe under test
+    must not be in the way of measuring it.
+    """
+    from spanweave.annotate import Annotation, AnnotationStore
+
+    entry = Annotation(namespace="my_evals", node_id="s2", key="k", value=value)
+    return graph._with_annotations(AnnotationStore(entries=(entry,)))
+
+
+def test_annotate_refuses_exactly_the_nesting_the_writer_refuses(record_property):
+    """T2. Two measured ceilings, and the claim is that they are one.
+
+    `check_serializable` probed the bare value while the graph file wraps it
+    in three containers, so the three deepest values the probe accepted were
+    three the writer then refused -- accepted-then-refused, which is the whole
+    defect the S8.4 commit existed to remove, surviving in the one shape that
+    depends on *where* the value sits rather than on what it is.
+
+    Both ceilings are measured by bisection in this process rather than
+    pinned: the number belongs to the interpreter's C recursion budget and
+    differs by version (`SPEC.md` §7, and 9,993 here against 37,231 on
+    CPython 3.14.6). What is the library's is that the two agree, and that is
+    all this asserts.
+    """
+    graph = spanweave.build(FIXTURE)
+
+    def writing(depth):
+        dumps(_unchecked_annotation(graph, nested_dicts(depth)))
+
+    def annotating(depth):
+        try:
+            graph.annotate("s2", "my_evals", "k", nested_dicts(depth))
+        # `deepest_accepted` knows the two exceptions depth arrives as;
+        # `annotate` reports the same fact as the `ValueError` its whole
+        # refusal family uses.
+        except ValueError as failure:
+            raise spanweave.GraphNotSerializableError(str(failure)) from failure
+
+    writable = deepest_accepted(writing)
+    annotatable = deepest_accepted(annotating)
+    record_property(
+        "annotation_depth", f"writable={writable} annotatable={annotatable}"
+    )
+    assert annotatable == writable, (
+        f"`annotate` accepts an annotation nested {annotatable} deep and the "
+        f"graph file carries one nested {writable} deep, so {annotatable - writable} "
+        f"depths are accepted at annotate time and refused at `dumps` with the "
+        f"graph already in the caller's hands"
+    )
+    # Both ends of that agreement, exercised: the deepest one goes all the way
+    # round, and one past it is refused *before* the graph exists.
+    value = nested_dicts(writable)
+    annotated = graph.annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(annotated))["annotations"][0]["value"] == value
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate("s2", "my_evals", "k", nested_dicts(writable + 1))
+
+
+def test_the_probe_wraps_an_annotation_where_the_document_puts_it():
+    # The wrapping derived from `serialize` rather than counted by hand: a
+    # document puts an annotation's value under `annotations`, in an entry,
+    # under `value`. `annotate` restates that shape because importing
+    # `serialize` from it would be the upward import `DESIGN.md` §2 forbids,
+    # and this is what stops the restatement drifting. 40 levels so the
+    # annotation is deeper than anything else the fixture's document holds.
+    from spanweave.annotate import _where_the_document_puts_it
+
+    value = nested_dicts(40)
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    document = to_document(graph)
+    # Three: the document, the `annotations` array, the entry.
+    assert _deepest_nesting(document) - _deepest_nesting(value) == 3
+    assert _deepest_nesting(_where_the_document_puts_it(value)) == (
+        _deepest_nesting(document)
+    )
+
+
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------

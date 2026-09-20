@@ -127,12 +127,16 @@ def check_serializable(value: JsonValue) -> None:
     not one -- and without asking the interpreter to convert the integer, so
     the answer is the same under every setting.
 
-    *The* encoder, not a laxer stand-in: the probe runs
-    ``jsoncodec.canonical_dump``, which is the policy a graph file is written
-    under. A value is therefore refused here exactly when writing the graph
-    would have refused it, rather than being accepted and leaving the caller a
-    graph it cannot write -- which is what a probe without ``allow_nan=False``
-    did to ``NaN``, ``inf`` and ``-inf`` (run-6 review S8.4).
+    *The* encoder, not a laxer stand-in, and at *the* depth, not at the top of
+    a document of one value: the probe runs ``jsoncodec.canonical_dump``,
+    which is the policy a graph file is written under, over
+    ``_where_the_document_puts_it(value)``, which is the nesting the graph
+    file wraps an annotation's value in. A value is therefore refused here
+    exactly when writing the graph would have refused it, rather than being
+    accepted and leaving the caller a graph it cannot write -- which is what a
+    probe without ``allow_nan=False`` did to ``NaN``, ``inf`` and ``-inf``
+    (run-6 review S8.4), and what a probe at the top level did to a value
+    nested within three levels of the encoder's ceiling (run-7 review T2).
 
     A mapping key that is not a string is refused first and named as that. It
     is the one shape the encoder does not refuse and does not preserve: ``json``
@@ -151,7 +155,7 @@ def check_serializable(value: JsonValue) -> None:
             f"was written)"
         )
     try:
-        jsoncodec.encode(value, jsoncodec.canonical_dump)
+        jsoncodec.encode(_where_the_document_puts_it(value), jsoncodec.canonical_dump)
     # RecursionError is how `json` reports nesting it will not descend -- the
     # same fact as a `ValueError`, reported as a different exception, and this
     # check exists precisely to catch what the graph file could not hold.
@@ -169,6 +173,34 @@ def check_serializable(value: JsonValue) -> None:
             f"{digits} digits is longer than the {jsoncodec.DIGIT_LIMIT} digits "
             f"spanweave reads (`SPEC.md` §5.3))"
         )
+
+
+def _where_the_document_puts_it(value: JsonValue) -> JsonValue:
+    """``value`` inside the containers a graph document wraps it in.
+
+    The graph file is an object whose ``annotations`` key holds an array of
+    objects, and the value is one object's ``value`` (`SPEC.md` §8). Three
+    containers, so the encoder meets the value three levels lower than a probe
+    of the bare value does -- and depth is the one thing an encoder refuses
+    that a probe of the bare value cannot see, because every other refusal is
+    a property of the value itself and is the same wherever it sits.
+
+    The shape is restated here rather than imported because ``serialize``
+    imports this module, so importing it back would be the upward import
+    `CLAUDE.md` and `DESIGN.md` §2 forbid. It is not left to drift for that:
+    `tests/test_serialize.py` derives the wrapping from ``to_document`` of a
+    real annotated graph and fails if it stops matching this.
+
+    The sibling keys are the ones ``serialize`` writes, with the values an
+    entry always has -- strings -- so that the probe encodes the object the
+    writer will encode rather than a smaller one. None of them can change the
+    outcome: they are shallower than ``value`` and they always encode.
+    """
+    return {
+        "annotations": [
+            {"namespace": "", "node_id": "", "key": "", "value": value},
+        ],
+    }
 
 
 def _non_string_key(value: JsonValue) -> type | None:

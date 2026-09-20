@@ -250,12 +250,59 @@ def spec_faithful_derive(adapter_id, trace_id, source_key, record=None):
     """
     material = "\x00".join((adapter_id, trace_id or "", source_key))
     if record is not None:
-        canonical = json.dumps(
-            record, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        canonical = spec_escaped(
+            json.dumps(
+                record, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            )
         )
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         material = "\x00".join((material, digest))
-    return "sw_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+    return (
+        "sw_" + hashlib.sha256(spec_escaped(material).encode("utf-8")).hexdigest()[:16]
+    )
+
+
+def spec_escaped(text):
+    """§3.6's surrogate sentence, written from the text and nothing else.
+
+    "A surrogate code point is written as its six-character lower-case
+    `\\uXXXX` escape before the UTF-8 encoding" -- the one thing in the
+    formula that is not the interpreter's default, and the one without which a
+    faithful reimplementation raises rather than deriving an id.
+    """
+    return "".join(
+        f"\\u{ord(character):04x}" if 0xD800 <= ord(character) <= 0xDFFF else character
+        for character in text
+    )
+
+
+#: A lone surrogate: a code point a trace can state, `str` can hold, and UTF-8
+#: cannot encode.
+LONE_SURROGATE = "\ud800"
+
+
+def test_a_lone_surrogate_in_the_material_derives_an_id(tmp_path):
+    # A trace id and a source key are text the input stated, so either can
+    # hold one, and `hashlib.sha256(material.encode("utf-8"))` raised
+    # `UnicodeEncodeError` on it -- an interpreter traceback out of a build
+    # that had read its input without complaint (run-7 review, the third of
+    # the three `.encode` calls T3 named). No existing id moves: material
+    # holding one had no digest before, because the encode it needed raised.
+    assert derive("openinference", LONE_SURROGATE, "s1") == spec_faithful_derive(
+        "openinference", LONE_SURROGATE, "s1"
+    )
+    assert derive("openinference", "t1", LONE_SURROGATE) == spec_faithful_derive(
+        "openinference", "t1", LONE_SURROGATE
+    )
+    # Disclosed rather than glossed: the escaping is not injective, so a trace
+    # id of `\ud800` and one of the six literal characters `\ud800` derive the
+    # same id. The material was already non-injective this way -- it joins its
+    # parts with a NUL a source key may itself contain -- and the consequence
+    # is bounded by `_refuse_collisions`, which refuses two records that land
+    # on one node id rather than overwriting either (`SPEC.md` §3.6).
+    assert derive("openinference", LONE_SURROGATE, "s1") == derive(
+        "openinference", "\\ud800", "s1"
+    )
 
 
 #: A record whose canonicalization differs between `ensure_ascii=False` and

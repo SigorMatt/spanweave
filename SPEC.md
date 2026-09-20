@@ -450,6 +450,22 @@ on which of two equally reasonable encodings each implementation happened to
 pick. Rules 2 and 3 stated the digest without that argument until the
 September 2026 audit series (batch A7); the library has passed it since the
 digest existed (batch A3), so it was the spec that was wrong.
+
+**A surrogate code point is written as its six-character lower-case `\uXXXX`
+escape before either UTF-8 encoding** — the canonicalized record's, and rule
+2's and rule 3's material. `ensure_ascii=False` says the text keeps its
+non-ASCII characters, and a lone surrogate is the one code point a `str` can
+hold that UTF-8 cannot carry: `json.loads` produces one from a `\uD800`-
+`\uDFFF` escape that no second escape pairs with (a *pair* is how JSON writes
+a code point above the BMP, and the parser joins it), and encoding it raises
+rather than producing bytes. So the digest is taken over the text with those
+code points escaped, which is what JSON already offers for them and what a
+strict parser reads back as the identical string. It changes no id that does
+not hold one, and an id that does had none before: the encode raised. The
+escaping is not injective — a `\uD800` code point and the six literal
+characters `\ud800` give one digest — which is the same bounded property the
+`\x00` separator already has, and two records that land on one node id are
+refused rather than merged (rule 3's collision rule).
 `tests/test_ids.py` derives an id from this text and compares it against the
 library's, and pins two `sw_` literals so neither side can drift quietly.
 
@@ -1272,6 +1288,14 @@ library by a constant of its own (§5.3).
 - Diagnostics are sorted by `(code, node_id or "", message)`.
 - Serialization uses stdlib `json` with `sort_keys=True`, `ensure_ascii=False`,
   `separators=(",", ":")`, and a trailing newline.
+  - With one addition, which is the only thing `ensure_ascii=False` cannot be
+    left to decide: **a surrogate code point is written as its six-character
+    lower-case `\uXXXX` escape** (§3.6). Keeping text as text hands back a
+    `str`, and a lone surrogate is the one code point a `str` holds and UTF-8
+    cannot encode — so the file was not written at all, and the failure was an
+    interpreter traceback from outside the writer's own refusal. Escaped, it
+    is written, every strict parser reads it, and reading it back returns the
+    identical string.
 - **Input line order is not significant.** Shuffling the records of an input file
   MUST produce an identical graph. This is a test (`TASKS.md` 0.6).
   - The one field exempt from that claim is **`meta.source_digest`**, which
@@ -1918,6 +1942,23 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
   would coerce, so the annotation would not come back as it went in. Both are
   refused by `annotate` and `annotate_many` as a value that is not
   JSON-serializable, and the refusal for a key says it is a key.
+- The probe is at the **depth the document puts the value**, not at the top of
+  a document of one value: an annotation's value sits under the `annotations`
+  key, in an entry, under `value` — three containers — and depth is the one
+  thing the encoder refuses that depends on *where* a value sits rather than
+  on what it is. Probing the bare value therefore accepted the three deepest
+  nestings the writer then refused. Two shapes, then, that `annotate` settles
+  and that this bullet and the one above state in full:
+  - a value **nested within three levels of the encoder's ceiling** is refused
+    by `annotate` and `annotate_many`, because the graph file could not carry
+    it. Where that ceiling is belongs to the interpreter, not to this library
+    (§7); that `annotate` and `dumps` agree on it is the library's.
+  - a value holding a **lone surrogate** is **accepted**, and written as the
+    `\uXXXX` escape §5.2 states. It round-trips: reading the file back gives
+    the identical string. It is not a shape the graph file cannot carry, so
+    refusing it would have been the mirror error — and before it was written
+    that way, `dumps` raised a bare `UnicodeEncodeError` from outside its own
+    refusal, so the caller did not even get `GraphNotSerializableError`.
 - The library **never reads** an annotation to change its own behavior. It has
   no opinion about what is in there — that is the whole point.
 

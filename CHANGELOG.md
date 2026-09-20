@@ -902,6 +902,61 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A lone surrogate is written as its `\uXXXX` escape, so nothing about it
+  raises.** `json.loads` produces a surrogate code point from a `\uD800`-
+  `\uDFFF` escape nothing pairs with, `str` carries it, and
+  `str.encode("utf-8")` refuses it -- so a value the library had already
+  **accepted** became an interpreter traceback at three `.encode` calls. One
+  OpenInference line whose `output.value` is `"\ud800"` made `spanweave.build`
+  raise `UnicodeEncodeError` out of the record digest, with no diagnostic, no
+  `unknown` node and no refusal, which is *degrade honestly* failing on
+  untrusted input; `graph.annotate(..., "\ud800")` was accepted and then made
+  `dumps` raise the same error from the one line that sits **outside**
+  `canonical_bytes`'s `try`, so the caller did not even get
+  `GraphNotSerializableError`; and a derived node id over a trace id holding
+  one raised from `ids.derive`. The escape is written once, in `jsoncodec`,
+  which all three go through, and it is the escape JSON already has for those
+  code points: lower-case, six characters, read back by any strict parser as
+  the identical string. No id, digest or byte of the corpus moves -- none of
+  the 228 tracked files under `fixtures/`, `capture/` and `examples/` contains
+  a surrogate escape or a raw surrogate byte sequence, and material that held
+  one had no digest before, because the encode it needed raised. `SPEC.md`
+  §3.6 and §5.2 state the rule, including that it is not injective and that
+  two records landing on one node id are refused rather than merged.
+  (cold-review findings T3, T1; `SPEC.md` §3.6, §5.2, §8)
+
+- **`annotate` probes a value at the depth the graph document puts it, so the
+  three deepest nestings it accepted are no longer refused by `dumps`.** An
+  annotation's value sits three containers into the document -- under
+  `annotations`, in an entry, under `value` -- and the probe encoded the bare
+  value, so depth was the one shape the probe and the writer still disagreed
+  about: measured on CPython 3.12.3, depths 9,995, 9,996 and 9,997 were
+  accepted at annotate time and then refused at `dumps` with the graph already
+  in the caller's hands, while 9,994 passed both -- the same
+  accepted-then-refused defect the previous change removed for non-finite
+  numbers, surviving in the one shape that depends on *where* a value sits
+  rather than on what it is. Those absolute figures belong to the harness as
+  much as to the interpreter, so nothing pins them: both ceilings are measured
+  by bisection, because the number belongs to the interpreter's C recursion
+  budget and not to this library (9,993 through the test's own harness on
+  3.12.3 against 37,231 on 3.14.6), and what is asserted is that the two
+  agree. The wrapping is restated in `annotate` rather than imported, because
+  `serialize` imports `annotate` and the reverse would be an upward import,
+  and a test derives it from `to_document` so the restatement cannot drift.
+  (cold-review finding T2; `SPEC.md` §8)
+
+- **The placeholder path calls `canonical_dump` instead of restating a subset
+  of its arguments.** `jsoncodec.encode` writes a long integer by swapping it
+  for a placeholder and replacing the placeholder's *encoded* form afterwards,
+  and it spelled that form with two of `canonical_dump`'s four arguments while
+  the comment above it said it spelled `canonical_dump`'s. Nothing was wrong
+  with the output -- no `json.dumps` argument changes how an ASCII string is
+  written -- but the module exists so that a reader meets **one** policy, and
+  a two-of-four subset is a third spelling of it. Now that `canonical_dump`
+  also escapes surrogates, the two spellings would no longer be equivalent in
+  principle either, and a value holding both a long integer and a lone
+  surrogate is the test that would notice. (cold-review finding T12)
+
 - **A diagnostic's `adapter` names an adapter only when that adapter read what
   the diagnostic is about, which `missing_timestamp` and a partly-read input
   did not.** Two holes in the rule `SPEC.md` §3.7 states, one at each scope.

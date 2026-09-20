@@ -21,6 +21,14 @@ rather than through ``int``'s string conversion). The interpreter's setting is
 the host, and a library that moved it on import would change every unrelated
 line of code in that process.
 
+The other code point that does not survive a round trip through the
+interpreter's defaults is the **lone surrogate**: ``json.loads`` produces one
+from a ``\\uD800``-``\\uDFFF`` escape nothing pairs with, ``str`` carries it,
+and ``str.encode("utf-8")`` refuses it -- so a value the reader had accepted
+became an interpreter traceback out of the digest and out of the writer.
+``escape_lone_surrogates`` below writes it as the escape JSON already has for
+it, which every strict parser reads back as the identical string.
+
 This is the bottom of the stack: it imports nothing from the package but the
 ``JsonValue`` alias, and everything that reads or writes JSON imports it.
 """
@@ -29,6 +37,7 @@ from __future__ import annotations
 
 import decimal
 import json
+import re
 from collections.abc import Callable, Mapping
 
 from spanweave.model import JsonValue
@@ -145,6 +154,41 @@ def _is_long_integer(value: object) -> bool:
     )
 
 
+#: Every code point JSON must write as an escape because UTF-8 cannot carry
+#: it. `json.loads` produces one from a `\\uD800`-`\\uDFFF` escape that no
+#: second escape pairs with, and `str` holds it happily; `str.encode("utf-8")`
+#: is where it stops being holdable.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def escape_lone_surrogates(text: str) -> str:
+    """``text`` with every surrogate code point written as its JSON escape.
+
+    A JSON string may contain ``\\uD800``-``\\uDFFF``. A *pair* of them is how
+    JSON writes a code point above the BMP, and ``json.loads`` joins such a
+    pair into the one character it names -- so a surrogate that survives into
+    a parsed ``str`` is always a **lone** one, and pairing is not a case this
+    has to handle. (A ``str`` assembled in memory could hold a pair, and this
+    would then write the two escapes JSON already says are that character.)
+
+    A lone surrogate is a perfectly good Python ``str`` and a perfectly good
+    JSON string, and it is neither UTF-8 nor anything else encodable: RFC 8259
+    §7 says a string is a sequence of Unicode code points and §8.1 says a
+    document is encoded UTF-8, and those two sentences disagree about exactly
+    this. Python resolves the disagreement by raising ``UnicodeEncodeError``
+    from ``encode``, which turned a value the library had *accepted* into an
+    interpreter traceback out of a digest and out of the writer.
+
+    So the library writes it the other way JSON offers: as the six-character
+    escape, lower-case, which is what ``json.dumps`` itself emits under
+    ``ensure_ascii=True``. That text is pure ASCII at those positions, every
+    strict parser reads it, and ``json.loads`` of it returns the identical
+    ``str`` -- the round trip is exact, and nothing is lost or replaced.
+    Idempotent by construction: the result holds no surrogate to escape again.
+    """
+    return _LONE_SURROGATE.sub(lambda found: f"\\u{ord(found.group()):04x}", text)
+
+
 def canonical_dump(value: JsonValue) -> str:
     """The encoder policy a graph file is written under, stated once.
 
@@ -160,18 +204,26 @@ def canonical_dump(value: JsonValue) -> str:
     writer that has to know it: ``annotate`` refuses a value this encoder
     could not write, at the moment it is annotated rather than at ``dumps``,
     and a second spelling of the policy is a second thing to drift.
+
+    ``ensure_ascii=False`` keeps text as text, which is the determinism
+    argument and also the one hole in it: it hands back a ``str`` holding
+    whatever the input held, and a lone surrogate is a code point ``str``
+    holds and UTF-8 cannot. ``escape_lone_surrogates`` closes it, so what this
+    returns always encodes.
     """
-    return json.dumps(
-        value,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        allow_nan=False,
+    return escape_lone_surrogates(
+        json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
     )
 
 
 def encode(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
-    """``dump(value)``, with every integer written whole.
+    """``dump(value)``, integers written whole and surrogates written escaped.
 
     ``dump`` is a ``json.dumps`` call with whatever arguments its caller
     states. It is tried as it is first, which is every value that holds no
@@ -182,7 +234,22 @@ def encode(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
     decided by the identical encoder -- and the placeholders are replaced by
     the integers' digits. A ``ValueError`` that was not about integers raises
     again from the second attempt, unchanged.
+
+    The surrogate escape is applied **here** rather than only in
+    ``canonical_dump`` because this, not that, is the funnel: every text this
+    library makes out of a parsed JSON value comes through this function, the
+    record digest's canonicalization (`SPEC.md` §3.6) included, and that one
+    passes a ``dump`` of its own whose spelling is pinned to the spec's
+    character for character. A caller's ``dump`` may already have escaped
+    them -- ``canonical_dump`` has, and so has any ``dump`` left at
+    ``ensure_ascii=True`` -- and running it twice changes nothing, because
+    escaped text holds no surrogate.
     """
+    return escape_lone_surrogates(_encoded(value, dump))
+
+
+def _encoded(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
+    """``encode`` without the surrogate escape. See it for the contract."""
     try:
         return dump(value)
     except ValueError:
@@ -196,16 +263,18 @@ def encode(value: JsonValue, dump: Callable[[JsonValue], str]) -> str:
     # Each placeholder was written by the same encoder as a JSON string, and
     # `marker` occurs in no string of `value`, so the encoded placeholder
     # occurs in `text` only where a long integer stood. Finding it means
-    # spelling that string a second time, and the arguments below are
-    # `canonical_dump`'s so that the module reads as one policy rather than
-    # two. They decide nothing here, and could not: no argument `json.dumps`
-    # takes changes how a `str` is written, the marker is ASCII, and its NUL
-    # is escaped under either `ensure_ascii`. That is also why this spelling
-    # need not match the `dump` the caller passed -- and does not try to,
-    # since callers pass different ones.
+    # spelling that string a second time, and it is spelled by *calling*
+    # `canonical_dump` so that the module reads as one policy rather than
+    # two -- a subset of its arguments restated here would be a third
+    # spelling of the same policy, which is the drift this module exists to
+    # remove (run-7 review T12). Which encoder it is decides nothing here, and
+    # could not: no argument `json.dumps` takes changes how an ASCII `str` is
+    # written, and the marker's NUL is escaped under either `ensure_ascii`.
+    # That is also why this call need not match the `dump` the caller passed
+    # -- and does not try to, since callers pass different ones.
     for index, number in enumerate(found):
         text = text.replace(
-            json.dumps(f"{marker}{index}\x00", sort_keys=True, ensure_ascii=False),
+            canonical_dump(f"{marker}{index}\x00"),
             integer_text(number),
         )
     return text

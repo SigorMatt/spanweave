@@ -109,6 +109,13 @@ def canonical_bytes(value: JsonValue) -> bytes:
     degrade to: the offending value may be a node's verbatim source record, and
     dropping it to get past this is the one thing losslessness forbids
     (`CLAUDE.md` 2). Naming it (`SPEC.md` §3.10) is what a caller can act on.
+
+    The ``.encode`` on the last line is **outside** that guard, and stays
+    outside it, because nothing it can be handed raises: ``str.encode("utf-8")``
+    fails on exactly one thing, a surrogate code point, and the encoder writes
+    those as their escape (`SPEC.md` §5.2). It raised a bare
+    ``UnicodeEncodeError`` -- not even wrapped as ``GraphNotSerializableError``
+    -- until it did (run-7 review T1).
     """
     try:
         # Through `jsoncodec.encode`, so that an integer the library read is

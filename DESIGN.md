@@ -203,7 +203,10 @@ to the north star itself — do not build them now.
   explicit tie-break; a single-pass group-by for sibling temporal edges; a dict
   join for `call_result` pairing.
 - **Serialization:** stdlib `json`, `sort_keys=True`, `ensure_ascii=False`,
-  compact separators — enforced by a test, not convention.
+  compact separators — enforced by a test, not convention. Plus the one thing
+  `ensure_ascii=False` cannot be left to decide: a surrogate code point is
+  written as its `\uXXXX` escape, because it is the one code point a `str`
+  holds and UTF-8 cannot encode (`SPEC.md` §3.6, §5.2).
 - **No YAML in core.** There is no human-edited config; the catalog-style
   tunability that would justify YAML lives in consumers, not here.
 - **Reading:** stdlib only. `json.loads` per line. **Never `pickle`, never
