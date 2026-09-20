@@ -46,9 +46,27 @@ MISSING_TIMESTAMP = "missing_timestamp"
 # `ended_at` precedes `started_at`. Reported, never repaired.
 NONMONOTONIC_TIME = "nonmonotonic_time"
 
+# A reported `started_at`/`ended_at` above 1e11, which unix seconds cannot
+# reach in any plausible wall-clock time (1e11 seconds after the epoch is the
+# year 5138) while milliseconds and nanoseconds do. It is a statement about
+# the *unit of the field*, not about the run: the value is kept exactly as
+# reported and every edge is still built from it (`SPEC.md` §3.1).
+TIMESTAMP_UNIT_SUSPECT = "timestamp_unit_suspect"
+
 # Two records claimed the same source id, without their node ids colliding.
 # A node id collision is a hard error instead (`SPEC.md` §3.6).
 DUPLICATE_SOURCE_ID = "duplicate_source_id"
+
+# The same record appeared more than once in the input -- an at-least-once
+# exporter or a collector retry. One copy is kept; keeping both would publish
+# two nodes for one operation, and an invented span is worse than a missing
+# one because nothing downstream can tell (`SPEC.md` §7).
+DUPLICATE_RECORD = "duplicate_record"
+
+# No trace id in the input at all, so the graph's `trace_id` is empty. One
+# per graph, never one per record: the fact is about the input as a whole and
+# has no node to point at (`SPEC.md` §7).
+MISSING_TRACE_ID = "missing_trace_id"
 
 # More than one trace id in a single input (`SPEC.md` §7).
 MULTI_TRACE_INPUT = "multi_trace_input"
@@ -57,20 +75,32 @@ MULTI_TRACE_INPUT = "multi_trace_input"
 # carrying its text is the only place it survives.
 MALFORMED_RECORD = "malformed_record"
 
+# No registered adapter claimed this record, so nothing read it: it is kept
+# as an `unknown` node carrying the record verbatim, with no adapter on its
+# provenance (`SPEC.md` §6.1). The honest report of "you are missing an
+# adapter" -- never a discard, and never handed to a designated adapter,
+# which would put a dialect's name on a node on the strength of that dialect
+# having said nothing about the record.
+UNCLAIMED_RECORD = "unclaimed_record"
+
 # The ordering edges contain a cycle, which telemetry should not produce and
 # sometimes does. The graph is still built (`SPEC.md` §5.2).
 ORDERING_CYCLE = "ordering_cycle"
 
 #: Every code the library emits. A test asserts this matches `SPEC.md` §3.7.
 CODES = (
+    DUPLICATE_RECORD,
     DUPLICATE_SOURCE_ID,
     MALFORMED_RECORD,
     MISSING_TIMESTAMP,
+    MISSING_TRACE_ID,
     MULTI_TRACE_INPUT,
     NONMONOTONIC_TIME,
     ORDERING_CYCLE,
     ORPHAN_PARENT,
     PAYLOAD_PARSE_FAILED,
+    TIMESTAMP_UNIT_SUSPECT,
+    UNCLAIMED_RECORD,
     UNKNOWN_SPAN_KIND,
     UNMAPPED_ATTRIBUTES,
     UNPAIRED_CALL,

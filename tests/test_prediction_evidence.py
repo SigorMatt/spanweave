@@ -77,10 +77,24 @@ def test_every_data_edge_in_the_corpus_is_declared():
     ]
     carrying = [path for path, graph in _buildable() if graph.edges(kind=EdgeKind.DATA)]
 
-    assert len(edges) == 12, "the count 3.5's record states"
-    assert len(carrying) == 11, "traces carrying at least one"
+    # 12 -> 18 at batch D2, which added `receipt_redeclared`: three `data`
+    # edges per rendering, in two dialects. 11 -> 13 traces carrying one.
+    # 18 -> 19 at batch E3, which added `mixed_instrumentation`: one `data`
+    # edge in its one rendering, and it is the first in the corpus whose two
+    # ends were read by DIFFERENT adapters -- declared by the telemetry all
+    # the same, which is what P3 is about.
+    assert len(edges) == 19, "the count 3.5's record states"
+    assert len(carrying) == 14, "traces carrying at least one"
     assert {str(edge.warrant) for edge in edges} == {"explicit"}
-    assert {edge.basis for edge in edges} == {"tool_call_id in tool-result message"}
+    # Two bases, and P3 is untouched by the second: both say the telemetry
+    # declared the receipt, and the parenthetical says only which declaration
+    # of it came first (`SPEC.md` §4.2.1). Neither is a value comparison, and
+    # the corpus still holds no third basis, because no rank here was decided
+    # by a `started_at` tie.
+    assert {edge.basis for edge in edges} == {
+        "tool_call_id in tool-result message",
+        "tool_call_id in tool-result message (not the earliest receiving span)",
+    }
     # Non-vacuity: the three captured traces each carry one, so this cannot
     # pass by the corpus losing its `data` edges.
     assert sum(1 for path in carrying if "captured" in path) == 3
@@ -232,9 +246,17 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
         if held_t and held_c:
             substance_held += 1
 
-    assert len(traces) == 30
-    assert bytes_moved == 30, "both consumers' serialized output is order-dependent"
-    assert substance_held == 30, "no per-node value or total depends on the order"
+    # 30 -> 32 at batch A3: `duplicate_span_ids` stopped being a refusal and
+    # became a two-node graph in both dialects (`SPEC.md` §3.6 rule 3).
+    # 32 -> 34 at batch C1, which added `timestamp_units` in both dialects.
+    # 34 -> 38 at batch A5, which added the `derived_ids` pair in both.
+    # 38 -> 40 at batch D2, which added `receipt_redeclared` in both.
+    # 40 -> 41 at batch E3: `mixed_instrumentation`, one rendering.
+    # 41 -> 43 at batch S3, which added `empty_ids` in both dialects.
+    # 43 -> 45 at batch S10, which added `empty_link_target` in both.
+    assert len(traces) == 45
+    assert bytes_moved == 45, "both consumers' serialized output is order-dependent"
+    assert substance_held == 45, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -275,7 +297,11 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
             a_start_time_tie += 1
             tied_traces.append(source)
 
-    assert a_choice_was_made == 22, "traces where two nodes were ready at once"
+    # 22 -> 24 at batch A3, 24 -> 26 at batch C1, 26 -> 30 at batch A5,
+    # 30 -> 32 at batch D2, 32 -> 33 at batch E3, and 33 -> 35 at batch S3, for
+    # the same reason as the count above -- `empty_ids`' two spans are both
+    # roots, so both are ready at once in each of its two renderings.
+    assert a_choice_was_made == 35, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 
@@ -303,8 +329,15 @@ def test_edge_order_reaches_the_transcript_and_not_the_attribution():
         ):
             attribution_moved.append(source)
 
-    assert len(transcript_moved) == 2
-    assert all("parallel_tool_calls/" in source for source in transcript_moved)
+    # 2 -> 4 at batch D2. `receipt_redeclared` is the second shape in which
+    # one node is the endpoint of several edges of one kind: s5 is fed by two
+    # producers, so the order of its `feeds` tuple follows edge order exactly
+    # as `parallel_tool_calls`'s `fulfilled_by` does.
+    assert len(transcript_moved) == 4
+    assert all(
+        "parallel_tool_calls/" in source or "receipt_redeclared/" in source
+        for source in transcript_moved
+    )
     assert attribution_moved == []
 
     # And what moved: the ids of the results one call produced, in edge order.

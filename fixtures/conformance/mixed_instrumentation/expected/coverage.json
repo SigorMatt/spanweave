@@ -1,0 +1,11 @@
+{
+  "_note": "Dialects that CANNOT render this scenario, each with a reason (FIXTURES.md 4.3). A renderable:false is an INVITATION TO CHECK THE REASON against observed output, not a settled fact.",
+  "openinference": {
+    "reason": "This scenario IS a trace whose records come from two instrumentors at once, so a rendering of it in one dialect alone is not this scenario -- it is llm_tool_llm, which the corpus already holds and whose canonical graph this one is identical to. Rendering it in openinference alone would either duplicate that fixture or, if the other instrumentor's records were merely relabelled, assert that a mixed trace is a single-dialect trace, which is the claim this scenario exists to test the library against. The rendering under dialects/ is named for both adapters that read it, and every record in it is claimed by exactly one of them (SPEC.md 6.1): mixing is a property of the FILE here, never of a record.",
+    "renderable": false
+  },
+  "otel_genai": {
+    "reason": "This scenario IS a trace whose records come from two instrumentors at once, so a rendering of it in one dialect alone is not this scenario -- it is llm_tool_llm, which the corpus already holds and whose canonical graph this one is identical to. Rendering it in otel_genai alone would either duplicate that fixture or, if the other instrumentor's records were merely relabelled, assert that a mixed trace is a single-dialect trace, which is the claim this scenario exists to test the library against. The rendering under dialects/ is named for both adapters that read it, and every record in it is claimed by exactly one of them (SPEC.md 6.1): mixing is a property of the FILE here, never of a record.",
+    "renderable": false
+  }
+}

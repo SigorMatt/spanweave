@@ -43,6 +43,15 @@ DUPLICATE_ADAPTER_ID = "duplicate_adapter_id"
 # A caller named an adapter that is not registered.
 UNKNOWN_ADAPTER = "unknown_adapter"
 
+# A value the library must encode cannot be: it nests deeper than the JSON
+# encoder will descend, is a non-finite number RFC 8259 has no token for, or
+# refers back to itself. Either the graph is held and cannot be written, or a
+# record cannot be digested (`SPEC.md` §3.6). Nothing may be dropped to get
+# past any of them -- the verbatim record is the whole of losslessness -- so
+# there is no graph to publish, and saying so beats an interpreter's
+# traceback.
+GRAPH_NOT_SERIALIZABLE = "graph_not_serializable"
+
 #: Every code the library raises. A test asserts this matches `SPEC.md` §3.10.
 ERROR_CODES = (
     ADAPTER_AMBIGUOUS,
@@ -50,6 +59,7 @@ ERROR_CODES = (
     ADAPTER_UNCONFIDENT,
     DUPLICATE_ADAPTER_ID,
     DUPLICATE_NODE_ID,
+    GRAPH_NOT_SERIALIZABLE,
     NO_ADAPTERS_REGISTERED,
     UNKNOWN_ADAPTER,
 )
@@ -95,3 +105,43 @@ class DuplicateNodeIdError(SpanweaveError):
     """
 
     code = DUPLICATE_NODE_ID
+
+
+class GraphNotSerializableError(SpanweaveError):
+    """A value the library must encode cannot be, so there is nothing to publish.
+
+    Raised where the reader's own guard cannot help. Three things defeat the
+    encoder, and `json.dumps` reports them as **two different exception
+    types**, which is why the guard names both:
+
+    * A value the JSON parser accepted at the top level can still nest deeper
+      than the encoder will descend once it sits inside a graph document
+      (`SPEC.md` §7 measures the offset). That arrives as ``RecursionError``.
+    * A non-finite number -- ``inf``, ``-inf``, ``nan`` -- which RFC 8259 has
+      no token for, and which the encoder is told to refuse rather than write
+      as Python's extension to JSON. That arrives as ``ValueError``.
+    * A value that refers back to itself, which JSON cannot express at all.
+      That arrives as ``ValueError`` too, so the message says which of the two
+      it was rather than guessing.
+
+    A guard that named only one of the two types would be a guard that is not
+    there for the other, and what escapes instead is an interpreter traceback
+    from a build that read its input without complaint (§7's rule that
+    unreadable input never escapes as one).
+
+    It is a refusal rather than a diagnostic because nothing can be dropped to
+    get past it: the offending value may be a node's verbatim source record,
+    and losslessness is not negotiable (`CLAUDE.md` 2). What a caller acts on
+    is the ``code`` (`SPEC.md` §3.10), which the CLI prints on stderr for the
+    same reason.
+
+    **Two places raise it, for one fact about one value.** Writing a graph is
+    the obvious one. The other is `spanweave.read.record_digest`: a record's
+    canonical digest is an encode too (`SPEC.md` §3.6), so on an interpreter
+    whose encoder ceiling is the lower of the two the *reader* meets it first,
+    on a record the parser was willing to read. A record with no digest has no
+    identity and could not have been written either, so it is the same
+    refusal and not a second code to learn.
+    """
+
+    code = GRAPH_NOT_SERIALIZABLE

@@ -6,12 +6,14 @@ tie-broken by a stated rule, because a topological order is not unique and an
 unstated choice is a determinism bug waiting for a second machine.
 """
 
+import spanweave
 from spanweave import diagnostics as codes
-from spanweave.build import build_graph
+from spanweave.build import Contribution, build_contributed_graph, build_graph
 from spanweave.model import AdapterInfo, EdgeKind, NodeKind, RawRecord, Warrant
 from spanweave.seam import CallRole, NormalizedSpan
 
 ADAPTER = AdapterInfo(id="some_dialect", version="0.1.0")
+OTHER = AdapterInfo(id="another_dialect", version="9.9.9")
 
 
 def a_span(span_id, parent=None, started=None, **overrides):
@@ -30,6 +32,17 @@ def a_span(span_id, parent=None, started=None, **overrides):
 
 def build(spans, **kwargs):
     return build_graph(spans, adapter=ADAPTER, **kwargs)
+
+
+def mixed_build(pairs, **kwargs):
+    """`pairs` is (AdapterInfo | None, [spans]), in the order given."""
+    return build_contributed_graph(
+        [
+            Contribution(adapter=producer, spans=tuple(spans))
+            for producer, spans in pairs
+        ],
+        **kwargs,
+    )
 
 
 def temporal_of(graph):
@@ -289,3 +302,67 @@ def test_a_cycle_through_call_result_is_caught_too():
     )
     assert set(order_of(graph)) == {"a", "b"}
     assert codes.ORDERING_CYCLE in codes_of(graph)
+
+
+# --------------------------------------------------------------------------
+# What these two diagnostics may name (`SPEC.md` §3.7)
+# --------------------------------------------------------------------------
+#
+# `missing_timestamp` is about **one record**, so it carries the adapter that
+# read that record, exactly as every other record-scoped diagnostic does. It
+# was the only node-scoped report in the builder that named nobody, and the
+# node it points at named its adapter in `provenance` all along.
+#
+# `ordering_cycle` names no node, so it takes the whole-input value instead:
+# an adapter only when one adapter read every record of the input.
+
+
+def test_missing_timestamp_names_the_adapter_that_read_the_record():
+    graph = build([a_span("a", started=1.0), a_span("b")])
+    reported = [d for d in graph.diagnostics if d.code == codes.MISSING_TIMESTAMP]
+    assert [(d.node_id, d.adapter) for d in reported] == [("b", "some_dialect")]
+
+
+def test_missing_timestamp_names_the_adapter_end_to_end():
+    # Where it was found: one OpenInference record carrying no times at all.
+    # The node's provenance and the diagnostic about that node disagreed.
+    graph = spanweave.build(
+        b'{"trace_id":"t1","span_id":"s0","name":"chain.one",'
+        b'"attributes":{"openinference.span.kind":"CHAIN"}}\n'
+    )
+    reported = [d for d in graph.diagnostics if d.code == codes.MISSING_TIMESTAMP]
+    assert [(d.node_id, d.adapter) for d in reported] == [("s0", "openinference")]
+    assert [(n.id, n.provenance.adapter_id) for n in graph.nodes()] == [
+        ("s0", "openinference")
+    ]
+
+
+def test_missing_timestamp_names_nobody_for_a_record_no_adapter_claimed():
+    # The other half of the record-scoped rule: a record no adapter claimed
+    # has no adapter to name, and the two reports in one graph differ.
+    graph = mixed_build([(ADAPTER, [a_span("a")]), (None, [a_span("z")])])
+    reported = [d for d in graph.diagnostics if d.code == codes.MISSING_TIMESTAMP]
+    assert [(d.node_id, d.adapter) for d in reported] == [
+        ("a", "some_dialect"),
+        ("z", None),
+    ]
+
+
+def test_the_cycle_report_names_the_one_adapter_that_read_every_record():
+    graph = build([a_span("a", "b", started=1.0), a_span("b", "a", started=2.0)])
+    cycle = next(d for d in graph.diagnostics if d.code == codes.ORDERING_CYCLE)
+    assert cycle.node_id is None
+    assert cycle.adapter == "some_dialect"
+
+
+def test_the_cycle_report_names_nobody_when_two_adapters_stated_it():
+    # The cycle is stated by two edges, one from each dialect's record.
+    # Naming either would attribute the whole statement to half of it.
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("a", "b", started=1.0)]),
+            (OTHER, [a_span("b", "a", started=2.0)]),
+        ]
+    )
+    cycle = next(d for d in graph.diagnostics if d.code == codes.ORDERING_CYCLE)
+    assert cycle.adapter is None

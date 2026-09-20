@@ -37,9 +37,12 @@ directly from that.
 - **No filesystem writes** except the output the user explicitly requested.
   Nothing is written to temp directories, caches, or the input's directory.
 - **No crash on malformed input.** Parsing failures produce **diagnostics**, not
-  exceptions. The only hard errors are structural impossibilities (duplicate
-  span ids, id collisions) where continuing would produce a *silently wrong*
-  graph — and failing loudly is the safer outcome.
+  exceptions. The only hard errors are structural impossibilities (a node id
+  collision, an input no adapter can be trusted to read) where continuing would
+  produce a *silently wrong* graph — and failing loudly is the safer outcome. A
+  duplicated span id used to be one of them; since `SPEC.md` §3.6 rule 3 both
+  records are kept with an id each and the duplication is a diagnostic, so no
+  trace file reaches the id collision any more.
 - **No unbounded recursion.** Traversal is iterative; cycles are detected and
   diagnosed, never followed (`SPEC.md` §5.2).
 - **No payload interpretation.** The library does not scan payloads for secrets,

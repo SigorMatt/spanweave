@@ -284,3 +284,73 @@ def test_the_ordering_cycle_source_is_node_ids_the_library_computed():
         assert set(entry["source"]) <= ids, (
             "ordering_cycle's source must be node ids of this graph, not source content"
         )
+
+
+# --------------------------------------------------------------------------
+# What `CONTRACTS.md` says about that table (September 2026 audit, batch A7)
+# --------------------------------------------------------------------------
+#
+# `CONTRACTS.md`'s `diagnostics[].source` row counts the table and names the
+# codes whose declared shape no fixture has ever produced. Both halves went
+# stale within one run of the audit series -- the table gained rows and A3
+# gave `duplicate_source_id` a fixture -- and `make check` stayed green,
+# because a count in prose is exactly the kind of claim nothing asserts. It is
+# derivable from the spec and the corpus, so it is derived here instead.
+
+CONTRACTS = (pathlib.Path(__file__).resolve().parent.parent / "CONTRACTS.md").read_text(
+    encoding="utf-8"
+)
+
+NUMBER_WORDS = {
+    0: "no",
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+}
+
+
+def contracts_source_row() -> str:
+    """The one bullet in `CONTRACTS.md` about `diagnostics[].source`."""
+    start = CONTRACTS.index("- `diagnostics[].source`")
+    return CONTRACTS[start : CONTRACTS.index("\n- `", start + 1)]
+
+
+def test_contracts_counts_the_source_rows_the_spec_states():
+    row = contracts_source_row()
+    stated = NUMBER_WORDS[len(source_shapes())]
+    assert f"True for the {stated} rows now stated" in row, (
+        f"SPEC.md §3.7 states {len(source_shapes())} `source` rows and "
+        f"CONTRACTS.md's `diagnostics[].source` row does not say so. A count "
+        f"in prose goes stale the first time the table grows"
+    )
+
+
+def test_contracts_names_the_codes_whose_source_shape_no_fixture_measures():
+    stated = set(source_shapes())
+    catch_all = set(diagnostics.CODES) - stated
+    unmeasured = sorted(catch_all - set(observed_sources()))
+    claim = re.search(
+        r"covers (\w+) codes no fixture emits \(([^)]*)\)",
+        contracts_source_row().replace("\n", " "),
+    )
+    assert claim is not None, (
+        "CONTRACTS.md's `diagnostics[].source` row no longer states which "
+        "codes under §3.7's catch-all no fixture emits, in the shape this "
+        "check reads. The claim is the thing being kept true; if it moved, "
+        "move this with it rather than deleting either"
+    )
+    named = sorted(re.findall(r"`([a-z_]+)`", claim.group(2)))
+    assert named == unmeasured, (
+        f"CONTRACTS.md names {named} as the codes under §3.7's catch-all that "
+        f"no fixture emits; the corpus says it is {unmeasured}. A code named "
+        f"here that a fixture now emits reads as an untested contract that is "
+        f"in fact tested, and the reverse hides a real gap"
+    )
+    assert claim.group(1) == NUMBER_WORDS[len(unmeasured)]

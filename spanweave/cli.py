@@ -12,19 +12,22 @@ says, so nothing there is a judgement about the trace.
 from __future__ import annotations
 
 import argparse
-import json
 import pathlib
 import sys
 from collections.abc import Iterable, Sequence
 
-from spanweave import api, serialize
+from spanweave import api, jsoncodec, serialize
 from spanweave.adapters import registered
 from spanweave.errors import SpanweaveError
 from spanweave.model import JsonValue
 from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 
-# Exit codes. 0 success, 1 a refusal or an unimplemented path, 2 argparse's own
-# usage error (argparse chooses that one, not us).
+# Exit codes. 0 success, 1 a refusal, 2 argparse's own usage error (argparse
+# chooses that one, not us). They are documented in `SPEC.md` §7 and in the
+# README, not only here: an exit code is the first thing a script branches on
+# and a comment inside the package is the last place its author looks. `1` is
+# never subdivided -- the status says *there is no graph*, and the error code
+# on stderr says why (`SPEC.md` §3.10).
 EXIT_OK = 0
 EXIT_FAILED = 1
 
@@ -40,6 +43,23 @@ _SCHEMA_NOTICE = (
     if not SCHEMA_FROZEN
     else f"Graph schema version {SCHEMA_VERSION}."
 )
+
+# The default spelled out. Per-record classification is what happens with no
+# flag, and has since batch E2; this is the name for it, so a script can say
+# what it relies on rather than rely on an absent flag meaning something
+# (`SPEC.md` §6.1). It is resolved here, above the library, because the library
+# takes an adapter id and `auto` is not one -- which also makes it a reserved
+# id no adapter may register, guarded in `tests/test_cli.py`.
+#
+# There is deliberately no `mixed`: a mixed input is what `auto` does, not a
+# mode a caller selects. Nobody can know before reading a file whether it is
+# one, so a flag that had to be right about it would be a trap.
+AUTO = "auto"
+
+#: The label for nodes no adapter produced, in the per-adapter tally below. A
+#: word rather than a blank, because `provenance.adapter_id` is `None` there on
+#: purpose (`SPEC.md` §3.5) and an empty cell reads like a missing count.
+_NO_ADAPTER = "(no adapter)"
 
 _DESCRIPTION = (
     "Normalize agentic-system execution telemetry into one deterministic, "
@@ -118,8 +138,13 @@ def _build_parser() -> argparse.ArgumentParser:
     build.add_argument("trace", help="path to a trace file, or '-' for stdin")
     build.add_argument(
         "--adapter",
-        metavar="ID",
-        help="skip detection and use this adapter (see 'spanweave adapters')",
+        metavar="auto|ID",
+        default=AUTO,
+        help=(
+            f"{AUTO} (the default) classifies every record; naming an adapter "
+            "skips classification and hands it the whole input "
+            "(see 'spanweave adapters')"
+        ),
     )
     build.add_argument(
         "-o",
@@ -137,16 +162,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "inspect",
         help="summarize a trace or a built graph",
         description=(
-            "Print a human summary: counts by node kind, edges by kind and "
-            "warrant, diagnostics grouped by code. Informational; not a "
-            "stable contract."
+            "Print a human summary: counts by node kind, nodes by the adapter "
+            "that produced them, edges by kind and warrant, diagnostics "
+            "grouped by code. Informational; not a stable contract."
         ),
     )
     inspect.add_argument("path", help="a trace file or a built graph.json")
     inspect.add_argument(
         "--adapter",
-        metavar="ID",
-        help="skip detection and use this adapter (traces only)",
+        metavar="auto|ID",
+        default=AUTO,
+        help=f"as for 'build'; {AUTO} is the default (traces only)",
     )
 
     validate = subcommands.add_parser(
@@ -165,18 +191,35 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _named(adapter: str | None) -> str | None:
+    """The adapter the caller named, or ``None`` when they named ``auto``.
+
+    ``None`` is what the library reads as *classify every record*, so this is
+    a spelling translated at the edge and nowhere else: nothing below the CLI
+    learns that the word exists (`SPEC.md` §6.1).
+    """
+    return None if adapter == AUTO else adapter
+
+
 def _read_document(path: str) -> JsonValue | None:
     """A built graph, if that is what this file is. Otherwise ``None``.
 
     Told apart by content rather than by extension: a graph document is a
     single JSON object carrying a ``schema_version``. Anything else is a
     trace, and is handed to the reader, which knows two container formats.
+
+    Every way of failing here means the same thing -- *this is not a graph
+    document* -- and none of them is this function's to report. ``RecursionError``
+    is one of them: the sniff is a ``json.loads`` like any other, and nesting
+    it will not descend is exactly what the reader one layer down turns into a
+    ``malformed_record`` (`SPEC.md` §7). Left out of this tuple it killed
+    ``inspect`` on a file ``build`` reads without complaint.
     """
     if path == "-":
         return None
     try:
-        document = json.loads(pathlib.Path(path).read_bytes())
-    except (ValueError, OSError):
+        document = jsoncodec.loads(pathlib.Path(path).read_bytes())
+    except (ValueError, OSError, RecursionError):
         return None
     if isinstance(document, dict) and "schema_version" in document:
         return document
@@ -184,7 +227,9 @@ def _read_document(path: str) -> JsonValue | None:
 
 
 def _do_build(args: argparse.Namespace) -> int:
-    graph = api.build(args.trace, adapter=args.adapter, temporal=not args.no_temporal)
+    graph = api.build(
+        args.trace, adapter=_named(args.adapter), temporal=not args.no_temporal
+    )
     if args.output:
         serialize.dump(graph, pathlib.Path(args.output))
         print(f"wrote {args.output}", file=sys.stderr)
@@ -196,17 +241,41 @@ def _do_build(args: argparse.Namespace) -> int:
 def _do_inspect(args: argparse.Namespace) -> int:
     document = _read_document(args.path)
     if document is None:
-        graph = api.build(args.path, adapter=args.adapter)
+        graph = api.build(args.path, adapter=_named(args.adapter))
         document = serialize.to_document(graph)
     for line in _summarize(document):
         print(line)
     return EXIT_OK
 
 
+def _refuse_the_constant(token: str) -> float:
+    """``NaN``, ``Infinity``, ``-Infinity``: Python's extension, not JSON.
+
+    ``json.loads`` reads all three by default. This library's encoder writes
+    none of them (`serialize.canonical_bytes`, ``allow_nan=False``), so a
+    graph document carrying one is a document this library could not have
+    written and a strict parser on the other end cannot read -- and a
+    ``validate`` that read it would bless a file ``build`` refuses, with both
+    commands claiming to be about the same thing (`SPEC.md` §7).
+
+    Raised as a ``ValueError`` because that is what the caller already treats
+    as *this file is not readable JSON*: it is the same finding as a syntax
+    error and it is reported as one.
+    """
+    raise ValueError(f"{token} is not JSON: RFC 8259 has no such token")
+
+
 def _do_validate(args: argparse.Namespace) -> int:
     try:
-        document = json.loads(pathlib.Path(args.graph).read_bytes())
-    except ValueError as failure:
+        document = jsoncodec.loads(
+            pathlib.Path(args.graph).read_bytes(),
+            parse_constant=_refuse_the_constant,
+        )
+    # RecursionError is how `json` reports nesting it will not descend. It is
+    # the same finding as a syntax error -- this file is not readable JSON --
+    # and reporting it as one is the difference between an exit code and a
+    # traceback (`SPEC.md` §7).
+    except (ValueError, RecursionError) as failure:
         print(f"{args.graph}: not valid JSON ({failure})", file=sys.stderr)
         return EXIT_FAILED
     problems = serialize.validate(document)
@@ -247,6 +316,12 @@ def _summarize(document: JsonValue) -> list[str]:
     ]
     lines.extend(_tally("  ", (str(node.get("kind")) for node in nodes)))
 
+    # Which adapter produced which nodes -- the one thing `adapters:` above
+    # cannot say. It names every contributor but not the split, so an adapter
+    # that read one record of four looks exactly like one that read three.
+    lines.append("nodes by adapter:")
+    lines.extend(_tally("  ", (_producer(node) for node in nodes)))
+
     lines.append(f"edges: {len(edges)}")
     lines.extend(
         _tally(
@@ -270,6 +345,18 @@ def _summarize(document: JsonValue) -> list[str]:
     lines.append(f"diagnostics: {len(diagnostics)}")
     lines.extend(_tally("  ", (str(item.get("code")) for item in diagnostics)))
     return lines
+
+
+def _producer(node: JsonValue) -> str:
+    """The adapter named on a node, or the label for none.
+
+    Read off `provenance.adapter_id`, which is `None` on a node no adapter
+    produced -- a record no registered adapter claimed (`SPEC.md` §3.5, §6.1).
+    Filing that under the adapter that read the rest of the input would say a
+    dialect read a record it declined.
+    """
+    named = (node.get("provenance") or {}).get("adapter_id")
+    return str(named) if isinstance(named, str) else _NO_ADAPTER
 
 
 def _tally(indent: str, values: Iterable[str]) -> list[str]:
@@ -301,7 +388,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SpanweaveError as failure:
         # The deliberate refusals: an ambiguous input, a duplicate id. They
         # are messages, not tracebacks -- the caller can act on them.
-        print(f"spanweave {args.command}: {failure}", file=sys.stderr)
+        #
+        # The `code` leads, in brackets, because `SPEC.md` §3.10's rule is
+        # *match on the code, never on the message* and a caller running this
+        # as a subprocess has nothing else: without it `adapter_unconfident`
+        # and `graph_not_serializable` are both "exit 1 and a sentence", and
+        # the only way to tell them apart is the English nobody promised to
+        # keep. An `OSError` below gets no bracket from the CLI -- it is the
+        # operating system's answer and has no code in that table to print.
+        # Its line is still Python's own `OSError.__str__`, which opens with
+        # `[Errno N]`, and that bracket is the operating system's `errno`, not
+        # a `SPEC.md` §3.10 code.
+        print(
+            f"spanweave {args.command}: [{failure.code}] {failure}",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
     except OSError as failure:
         # This line is the contract-shaped half and does not move: it is what

@@ -6,12 +6,19 @@ of these assert a `None`, an `absent`, or a diagnostic.
 
 import json
 import pathlib
+from collections import Counter
 
 import pytest
 
 from spanweave import diagnostics as codes
 from spanweave.adapters.openinference import OpenInferenceAdapter
-from spanweave.model import NodeKind, PayloadState, Status
+from spanweave.build import (
+    DATA_BASIS,
+    DATA_LATER_BASIS,
+    DATA_TIED_BASIS,
+    build_graph,
+)
+from spanweave.model import AdapterInfo, EdgeKind, NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
 
@@ -70,13 +77,15 @@ def test_the_worked_example_parses_exactly_as_the_scenario_describes():
     assert spans[3].call_role is None
 
     # Real telemetry carries more than this library normalizes, and those keys
-    # are reported rather than dropped. Including the echoed ids.
+    # are reported rather than dropped. Including the echoed request id -- but
+    # NOT `llm.input_messages.2.message.tool_call_id`, which is the result this
+    # span was given and is mapped to `received_call_ids` (SPEC.md §4.2.1).
     echoed = [key for key in spans[3].unmapped if "tool_call" in key]
     assert echoed == [
         "llm.input_messages.1.message.tool_calls.0.tool_call.function.name",
         "llm.input_messages.1.message.tool_calls.0.tool_call.id",
-        "llm.input_messages.2.message.tool_call_id",
     ]
+    assert spans[3].received_call_ids == ("call_a",)
     assert [d.code for d in spans[3].diagnostics] == [codes.UNMAPPED_ATTRIBUTES]
 
 
@@ -187,6 +196,54 @@ def test_unparseable_json_stays_present_and_is_diagnosed():
     assert span.outputs.value is None
     assert span.outputs.raw == "{not json"
     assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
+
+
+def test_a_deeply_nested_payload_stays_present_and_is_diagnosed():
+    # Audit finding 3. Deep nesting is answered by `json.loads` with
+    # RecursionError, not ValueError, so it escaped the guard above and took
+    # the whole build down. 100k brackets is far past any interpreter's limit
+    # and costs microseconds: the parser gives up at its own limit, not at the
+    # end of the string.
+    deep = "[" * 100_000 + "]" * 100_000
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "output.value": deep,
+            "output.mime_type": "application/json",
+        }
+    )
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.value is None
+    assert span.outputs.raw == deep
+    assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
+
+
+def _nest(depth):
+    """A list nested `depth` deep, built without recursing to build it."""
+    value = []
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
+    # The other half of finding 3 (batch A6): an exporter that carries nested
+    # attributes hands the adapter a value it never had to parse, and the
+    # adapter renders it back to text with `json.dumps` -- which answers
+    # nesting it will not descend the same way `json.loads` does. The text is
+    # what could not be produced, so `raw` is None and the record itself is
+    # where the value survives (`SPEC.md` §3.5).
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "output.value": _nest(100_000),
+            "output.mime_type": "application/json",
+        }
+    )
+    assert span.outputs.state is PayloadState.PRESENT
+    assert span.outputs.value is None
+    assert span.outputs.raw is None
+    assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
 def test_a_non_json_mime_keeps_the_text_as_the_value():
@@ -482,6 +539,33 @@ def test_an_unreadable_timestamp_becomes_none_rather_than_a_guess():
     assert span.started_at is None
 
 
+def test_a_parent_id_is_taken_as_the_reference_the_record_states():
+    span = span_of({"openinference.span.kind": "TOOL"}, parent_id="s0")
+    assert span.parent_id == "s0"
+
+
+def test_an_empty_parent_id_is_no_parent_rather_than_an_empty_reference():
+    # `SPEC.md` §4.0: a record spells "no parent" two ways -- the field absent,
+    # or the field present and empty -- and an OTLP export writes the second on
+    # every root (`parentSpanId` is a proto3 `bytes` field holding its default).
+    # Read as a reference it would name a span no input can contain, so every
+    # root would draw `orphan_parent`. It is normalized here, at the seam, so
+    # the builder never has to ask whether an id is really an id.
+    span = span_of({"openinference.span.kind": "AGENT"}, parent_id="")
+    assert span.parent_id is None
+    # Losslessness (`CLAUDE.md` 2): what the record wrote is still there, and
+    # the fact was read to decide something, so it is not reported as unmapped.
+    assert span.raw.source["parent_id"] == ""
+    assert span.unmapped == ()
+
+
+def test_only_the_empty_string_is_no_parent():
+    # Exactly the empty string. Trimming or decoding any other id would be
+    # deciding what the telemetry meant (`SPEC.md` §4.0).
+    for stated in (" ", "0000000000000000", "null"):
+        assert span_of({"openinference.span.kind": "TOOL"}, parent_id=stated).parent_id
+
+
 def test_span_links_are_transcribed_including_cross_trace_ones():
     span = span_of(
         {"openinference.span.kind": "AGENT"},
@@ -619,3 +703,377 @@ def test_an_echoed_call_name_in_input_context_is_not_read():
     )
     assert span.call_ids == ()
     assert span.call_names == {}
+
+
+# --------------------------------------------------------------------------
+# The keys a decision reads (SPEC.md 3.7)
+# --------------------------------------------------------------------------
+
+
+def test_the_role_that_recognizes_a_tool_result_is_consumed_with_its_id():
+    # `role == "tool"` is what separates a result this span was GIVEN from an
+    # echo of a request it did not make. The adapter reads it and acts on it,
+    # so it is mapped -- reporting it as unmapped would say the adapter did
+    # not understand a key it decided with.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.2.message.role": "tool",
+            "llm.input_messages.2.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ("call_a",)
+    assert span.unmapped == ()
+    assert span.diagnostics == ()
+
+
+def test_a_result_id_repeated_on_one_span_is_consumed_every_time():
+    # The id is recorded once; both keys stating it were read and mapped.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.2.message.role": "tool",
+            "llm.input_messages.2.message.tool_call_id": "call_a",
+            "llm.input_messages.3.message.role": "tool",
+            "llm.input_messages.3.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ("call_a",)
+    assert span.unmapped == ()
+
+
+def test_a_role_that_is_not_tool_leaves_the_id_it_decided_about_reported():
+    # The rule runs in both directions: the role was read and acted on, so it
+    # is mapped; the id it decided against was not mapped to anything, so it
+    # is still reported.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.role": "assistant",
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
+
+
+@pytest.mark.parametrize("role", [7, None, {"role": "tool"}, [], True])
+def test_a_role_the_adapter_cannot_read_decides_nothing_and_stays_reported(role):
+    # The rule's floor: `unmapped` names what the adapter did not map, and a
+    # role it cannot read as a string mapped nothing. The id beside it is left
+    # reported by the DEFAULT, not by a decision -- so the role is reported
+    # too. A `role` never becomes a field, so the report is the only trace
+    # that an unreadable one arrived (SPEC.md 3.7).
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.role": role,
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == (
+        "llm.input_messages.1.message.role",
+        "llm.input_messages.1.message.tool_call_id",
+    )
+
+
+def test_an_id_with_no_role_beside_it_reports_only_the_id():
+    # No role key, nothing read, nothing to consume: unchanged by the above.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.1.message.tool_call_id": "call_a",
+        }
+    )
+    assert span.received_call_ids == ()
+    assert span.unmapped == ("llm.input_messages.1.message.tool_call_id",)
+
+
+@pytest.mark.parametrize("key", ["tool.name", "llm.model_name", "embedding.model_name"])
+@pytest.mark.parametrize("value", [7, None, {"name": "lookup"}, [], True])
+def test_a_name_the_adapter_cannot_read_decides_nothing_and_stays_reported(key, value):
+    # The same rule one function over: `_operation` used to mark all three
+    # name keys consumed BEFORE reading any of them, so a name it could not
+    # read as a string left `operation` None and vanished from `unmapped`
+    # anyway. A key that decided nothing was not acted on (SPEC.md 3.7).
+    span = span_of({"openinference.span.kind": "TOOL", key: value})
+    assert span.operation is None
+    assert span.attributes.get("model") is None
+    assert span.unmapped == (key,)
+
+
+def test_a_readable_name_is_still_consumed_even_where_another_key_won():
+    # The other direction, unchanged: both names were read, `tool.name` won
+    # `operation` and `llm.model_name` still became `model`, so neither is a
+    # gap. The model key is read whether or not the tool key decided first.
+    span = span_of(
+        {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "lookup",
+            "llm.model_name": "m",
+            "embedding.model_name": "e",
+        }
+    )
+    assert span.operation == "lookup"
+    assert span.attributes["model"] == "m"
+    assert span.unmapped == ()
+
+
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_fulfilling_call_id_the_adapter_cannot_read_stays_reported(value):
+    # `tool_call.id` was consumed before it was read, so a span whose id the
+    # adapter could not read fulfilled nothing AND reported nothing -- the
+    # one key that says this span answered a call disappeared.
+    span = span_of({"openinference.span.kind": "TOOL", "tool_call.id": value})
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == ("tool_call.id",)
+
+
+def test_an_unreadable_fulfilling_id_does_not_hide_the_calls_the_span_requested():
+    # The fall-through is the requester scan, and it still runs: the span is
+    # a requester, and the id it could not read is reported beside it.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "tool_call.id": 7,
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.call_role is CallRole.REQUESTER
+    assert span.unmapped == ("tool_call.id",)
+
+
+@pytest.mark.parametrize("value", [7, None, {"id": "call_a"}, [], True])
+def test_a_requested_call_id_the_adapter_cannot_read_stays_reported(value):
+    # Same key in its other rendering, same rule: the id was not recovered,
+    # so the key that stated it is a gap and is reported.
+    key = "llm.output_messages.0.message.tool_calls.0.tool_call.id"
+    span = span_of({"openinference.span.kind": "LLM", key: value})
+    assert span.call_ids == ()
+    assert span.call_role is None
+    assert span.unmapped == (key,)
+
+
+def test_a_requested_id_repeated_in_one_output_is_consumed_every_time():
+    # Unchanged: the second key stating the id was read and acted on -- the
+    # id is recorded once -- so neither key is reported.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call_a",
+            "llm.output_messages.0.message.tool_calls.1.tool_call.id": "call_a",
+        }
+    )
+    assert span.call_ids == ("call_a",)
+    assert span.unmapped == ()
+
+
+@pytest.mark.parametrize("value", [7, None, {"type": "json"}, [], True])
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_mime_type_the_adapter_cannot_read_decides_nothing_and_stays_reported(
+    stem, value
+):
+    # `_payload` marked both of its keys consumed before reading either, so a
+    # mime type it could not read as a string typed nothing -- the payload is
+    # `present` with no mime, exactly as if the key had never been sent -- and
+    # vanished from `unmapped` as well (SPEC.md 3.7).
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.value": "hello",
+            f"{stem}.mime_type": value,
+        }
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.state is PayloadState.PRESENT
+    assert payload.mime is None
+    assert span.unmapped == (f"{stem}.mime_type",)
+
+
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_mime_type_with_no_value_beside_it_was_never_read(stem):
+    # The same rule for a key that is readable and still decides nothing: the
+    # payload is `absent`, `Payload.absent()` carries no mime, so the mime the
+    # instrumentor stated was never read and is not consumed.
+    span = span_of(
+        {"openinference.span.kind": "LLM", f"{stem}.mime_type": "text/plain"}
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.state is PayloadState.ABSENT
+    assert payload.mime is None
+    assert span.unmapped == (f"{stem}.mime_type",)
+
+
+@pytest.mark.parametrize("stem", ["input", "output"])
+def test_a_readable_mime_is_consumed_with_the_value_it_typed(stem):
+    # The other direction, unchanged: the mime was read and it decided how the
+    # value is read, so neither key is a gap.
+    span = span_of(
+        {
+            "openinference.span.kind": "LLM",
+            f"{stem}.value": '{"a": 1}',
+            f"{stem}.mime_type": "application/json",
+        }
+    )
+    payload = span.inputs if stem == "input" else span.outputs
+    assert payload.mime == "application/json"
+    assert payload.value == {"a": 1}
+    assert span.unmapped == ()
+
+
+def test_a_span_kind_reported_as_null_is_present_and_the_diagnostic_says_so():
+    # `attributes.get(SPAN_KIND)` answers `None` for a key that is absent and
+    # for one whose value is `null`, and the message said "no attribute" for
+    # both. The key was present and could not be read: it is reported, and the
+    # message says what actually happened (SPEC.md 3.7).
+    span = span_of({"openinference.span.kind": None})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes.get("reported_kind") is None
+    assert span.unmapped == ("openinference.span.kind",)
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no openinference.span.kind attribute" not in kind_diagnostic.message
+    assert "null" in kind_diagnostic.message
+
+
+def test_a_span_kind_the_dialect_omits_is_an_absence_and_says_that_instead():
+    # The pin on the other half: nothing was sent, so nothing is reported and
+    # the message is the one it always was.
+    span = span_of({})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.unmapped == ()
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert "no openinference.span.kind attribute" in kind_diagnostic.message
+
+
+@pytest.mark.parametrize("value", [7, True, ["GUARDRAIL"]])
+def test_a_span_kind_that_is_not_a_string_is_still_read_and_still_consumed(value):
+    # What "readable" means at this key, pinned: the kind is rendered with
+    # `str()`, so anything but `null` is read, is preserved verbatim as
+    # `reported_kind`, and is therefore mapped rather than reported.
+    span = span_of({"openinference.span.kind": value})
+    assert span.kind is NodeKind.UNKNOWN
+    assert span.attributes["reported_kind"] == str(value)
+    assert span.unmapped == ()
+
+
+def _echo_loop(turns):
+    """The agent loop of `tests/audit/probe2.py` case B, in miniature.
+
+    Each turn's llm span carries every earlier tool result in its input,
+    because the protocol requires the history to be resent.
+    """
+    records = []
+    for turn in range(turns):
+        attributes = {
+            "openinference.span.kind": "LLM",
+            "llm.input_messages.0.message.role": "user",
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": f"c{turn}",
+        }
+        for earlier in range(turn):
+            attributes[f"llm.input_messages.{earlier + 1}.message.role"] = "tool"
+            attributes[f"llm.input_messages.{earlier + 1}.message.tool_call_id"] = (
+                f"c{earlier}"
+            )
+        records.append({"span_id": f"l{turn}", "name": "llm", "attributes": attributes})
+    return records
+
+
+@pytest.mark.parametrize("turns", [8, 32])
+def test_a_resent_history_does_not_grow_the_diagnostics_quadratically(turns):
+    # The audit's volume finding: every echoed tool-result message put two
+    # keys into `unmapped_attributes`, so a 400-turn trace reported ~160,000
+    # keys the adapter had in fact read. What is left is the one key per span
+    # nothing reads -- the opening user message's role -- which is linear.
+    spans = list(ADAPTER.parse(_echo_loop(turns)))
+    assert [len(span.unmapped) for span in spans] == [1] * turns
+    assert {key for span in spans for key in span.unmapped} == {
+        "llm.input_messages.0.message.role"
+    }
+    # Every earlier turn's result is still recorded (in key order, which is
+    # lexicographic and deterministic -- not turn order).
+    last = spans[-1].received_call_ids
+    assert sorted(last) == sorted(f"c{i}" for i in range(turns - 1))
+
+
+def _echo_loop_trace(turns):
+    """The whole of `tests/audit/probe2.py` case B: llm/tool turns under a root.
+
+    `_echo_loop` above is the adapter half -- llm spans only, no clock. This
+    one is the shape the audit measured: each turn's tool span fulfils that
+    turn's call, so every echoed receipt in a later turn's input resolves to a
+    producer and becomes a `data` edge.
+    """
+    records = [
+        {
+            "trace_id": "t1",
+            "span_id": "s0",
+            "parent_id": None,
+            "name": "agent",
+            "start_time": 1000.0,
+            "end_time": 1000.0 + turns,
+            "attributes": {"openinference.span.kind": "AGENT"},
+        }
+    ]
+    for turn, record in enumerate(_echo_loop(turns)):
+        start = 1000.0 + turn
+        records.append(
+            {
+                "trace_id": "t1",
+                "parent_id": "s0",
+                "start_time": start + 0.1,
+                "end_time": start + 0.4,
+                **record,
+            }
+        )
+        records.append(
+            {
+                "trace_id": "t1",
+                "span_id": f"t{turn}",
+                "parent_id": "s0",
+                "name": "tool",
+                "start_time": start + 0.5,
+                "end_time": start + 0.9,
+                "attributes": {
+                    "openinference.span.kind": "TOOL",
+                    "tool.name": "t",
+                    "tool_call.id": f"c{turn}",
+                    "output.value": "{}",
+                },
+            }
+        )
+    return records
+
+
+@pytest.mark.parametrize("turns", [8, 50])
+def test_a_resent_history_declares_every_receipt_and_the_graph_ranks_them(turns):
+    # The audit's edge finding (batch D2). The count is the *declaration*
+    # count -- turn i is given the results of calls c0..c(i-1), so the file
+    # states n(n-1)/2 receipts and the graph carries n(n-1)/2 edges. None is
+    # dropped; each says whether it is the first time that result was declared
+    # received (`SPEC.md` §4.2.1).
+    graph = build_graph(
+        list(ADAPTER.parse(_echo_loop_trace(turns))),
+        adapter=AdapterInfo(
+            id=ADAPTER.id, version=ADAPTER.version, declared_confidence=None
+        ),
+    )
+    data = [edge for edge in graph.edges() if edge.kind is EdgeKind.DATA]
+    assert len(data) == turns * (turns - 1) // 2
+    split = Counter(edge.basis for edge in data)
+    # One earliest per call id that anything received: c0..c(n-2). The rest of
+    # the quadratic is the echo, and it is labelled rather than removed.
+    assert split == Counter(
+        {
+            DATA_BASIS: turns - 1,
+            DATA_LATER_BASIS: (turns - 1) * (turns - 2) // 2,
+        }
+    )
+    # Timestamps strictly increase, so no rank here was decided by node id.
+    assert DATA_TIED_BASIS not in split

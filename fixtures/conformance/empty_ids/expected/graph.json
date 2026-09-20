@@ -1,0 +1,63 @@
+{
+  "diagnostics": [],
+  "edges": [
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s2",
+      "kind": "temporal",
+      "src": "n0",
+      "warrant": "derived"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 0,
+    "edge_count": 1,
+    "node_count": 2,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {},
+      "ended_at": 1003.0,
+      "id": "n0",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "agent",
+      "operation": null,
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.0,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1001.0,
+      "id": "s2",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "tool",
+      "operation": "lookup",
+      "outputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "started_at": 1000.5,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    }
+  ]
+}

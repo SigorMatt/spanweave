@@ -11,6 +11,7 @@ library.
 """
 
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -77,10 +78,42 @@ def test_ci_runs_the_same_harness_rather_than_its_own():
 
 
 def test_ci_still_covers_every_supported_python():
-    # A library underneath other people's tools must not narrow their runtime
-    # (ENVIRONMENT.md).
-    for version in ("3.11", "3.12", "3.13"):
-        assert f'"{version}"' in WORKFLOW
+    """The matrix is DERIVED from the classifiers, never listed twice.
+
+    A library underneath other people's tools must not narrow their runtime
+    (ENVIRONMENT.md), and the classifiers are what an index renders as the
+    range it supports. Held equal rather than hard-coded because a hard-coded
+    list is exactly how these two drifted: CI ran 3.11-3.13 while
+    `requires-python` said `>=3.11`, and every version in that list happened
+    to be one where `json.loads` and `json.dumps` give out at the same depth.
+    The one version that diverges -- and that a local `uv run` picks in a
+    fresh checkout -- was the one nothing tested, which left `SPEC.md` §7
+    asserting a universal that is false there (run-3 review F1). A list
+    written down twice goes stale in one of the two places; a derived one
+    cannot.
+    """
+    classifiers = set(
+        re.findall(
+            r"Programming Language :: Python :: (\d+\.\d+)",
+            (REPO / "pyproject.toml").read_text(encoding="utf-8"),
+        )
+    )
+    assert classifiers, "pyproject.toml names no Python version classifier"
+    matrix = set(re.findall(r'"(\d+\.\d+)"', _matrix_line()))
+    assert matrix == classifiers, (
+        f"CI's matrix runs {sorted(matrix)} and pyproject.toml advertises "
+        f"{sorted(classifiers)}. An index renders the classifiers; CI proves "
+        f"them. A version in one list and not the other is either untested "
+        f"support or unadvertised work."
+    )
+
+
+def _matrix_line():
+    """The `python-version:` line of CI's check matrix."""
+    for line in WORKFLOW.splitlines():
+        if line.strip().startswith("python-version:"):
+            return line
+    raise AssertionError("ci.yml declares no python-version matrix")
 
 
 # --------------------------------------------------------------------------
@@ -155,6 +188,93 @@ def test_the_sdist_contents_are_declared_rather_than_defaulted():
     metadata = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     sdist = metadata["tool"]["hatch"]["build"]["targets"]["sdist"]
     assert "/spanweave" in sdist["include"]
+
+
+def test_the_citation_guard_sees_a_top_level_directory_citation():
+    """`reviews/` is the form the guard was written for and could not see.
+
+    `audit-R15` added the "ships every tracked path its own documents cite"
+    check and a comment saying a whole missing `reviews/` must be visible too.
+    Its pattern required two segments, so a top-level directory citation
+    matched nothing — the check fired only because the two review *files* are
+    cited by full path as well, and deleting `/.github` from the sdist
+    allowlist would have been caught by zero citations. Pinned here because a
+    pattern that has gone blind again is otherwise invisible.
+    """
+    from tests import install_check
+
+    for citation in (
+        "reviews/",
+        ".github/",
+        "fixtures/conformance/",
+        "fixtures/conformance",
+        "reviews/2026-09-10-run1.md",
+    ):
+        assert install_check.CITED_PATH.findall(citation) == [citation], citation
+
+
+def test_the_citation_guard_cannot_see_a_root_name_written_without_a_slash():
+    """The stated limit, planted, so the sentence stays earned.
+
+    `Makefile` and `.gitignore` are tracked root files and `tests` is a tracked
+    root directory, and each is also an ordinary word a code span uses for
+    something else. The guard's docstring says it cannot see them; this is what
+    makes that sentence a fact rather than a hedge.
+    """
+    from tests import install_check
+
+    for word in ("Makefile", "pyproject.toml", "LICENSE", ".gitignore", "tests"):
+        assert install_check.CITED_PATH.findall(word) == [], word
+
+
+def test_the_citation_guard_reports_a_cited_directory_the_sdist_omits():
+    """The resolution half: a tracked directory, cited, absent from the sdist.
+
+    Three cases in one, because the guard's scope claims all three: a
+    single-segment directory citation is reported and names its citers; the
+    same directory written without its slash is not a different question; and a
+    path the repository does not track stays skipped rather than becoming a new
+    failure the moment the pattern widened.
+    """
+    from tests import install_check
+
+    tracked = {
+        "reviews/2026-09-10-run1.md",
+        "reviews/2026-09-11-run3.md",
+        "spanweave/model.py",
+        "TASKS.md",
+    }
+    members = {"spanweave/model.py", "TASKS.md"}
+    cited = {
+        "reviews/": {"CHANGELOG.md", "TASKS.md"},
+        "spanweave/model.py": {"DESIGN.md"},
+        "patches/REVIEW.md": {"TASKS.md"},
+        "out/graph.json": {"README.md"},
+    }
+
+    assert install_check._unresolved_citations(cited, members, tracked) == {
+        "reviews/": ["CHANGELOG.md", "TASKS.md"]
+    }
+    assert install_check._unresolved_citations(
+        {"reviews": {"TASKS.md"}}, members, tracked
+    ) == {"reviews": ["TASKS.md"]}
+
+
+def test_the_citation_guard_does_not_check_every_file_of_a_cited_directory():
+    """The other stated limit, planted.
+
+    The directory rule asks that *something* ship beneath the path, because the
+    defect it exists for is a directory omitted whole. A `reviews/` missing one
+    review resolves, and the docstring says so.
+    """
+    from tests import install_check
+
+    tracked = {"reviews/one.md", "reviews/two.md"}
+    members = {"reviews/one.md"}
+
+    assert not install_check._unresolved_citations(
+        {"reviews/": {"TASKS.md"}}, members, tracked
+    )
 
 
 # --------------------------------------------------------------------------

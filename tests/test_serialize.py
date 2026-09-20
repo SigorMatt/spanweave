@@ -1,12 +1,23 @@
 """Serialization and validation (TASKS.md 1.8)."""
 
+import decimal
 import json
 import pathlib
 
 import pytest
 
 import spanweave
-from spanweave.serialize import ROOT_KEYS, dumps, to_document, validate
+from spanweave import jsoncodec
+from spanweave.jsoncodec import DIGIT_LIMIT
+from spanweave.serialize import ROOT_KEYS, canonical_bytes, dumps, to_document, validate
+from tests.json_depth import (
+    MEASUREMENT_NOISE,
+    deepest_accepted,
+    dicts_text,
+    lists_text,
+    nested_dicts,
+    nested_lists,
+)
 
 FIXTURE = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -63,6 +74,21 @@ def test_the_verbatim_source_round_trips_byte_for_byte(document):
         )
 
 
+def test_an_integer_timestamp_is_written_as_the_integer_it_was_reported_as():
+    # Round-tripping (batch C3): a time reported as an integer literal comes
+    # back out as the identical literal, so a consumer can compare the graph
+    # against its own input without re-reading `raw.source`. Written from a
+    # trace rather than a hand-built node so the whole path is under test.
+    reported = 1700000000100000100
+    trace = (
+        b'{"trace_id":"t1","span_id":"s0","name":"op","start_time":'
+        + str(reported).encode()
+        + b',"attributes":{"openinference.span.kind":"CHAIN"}}\n'
+    )
+    body = dumps(spanweave.build(trace))
+    assert b'"started_at":1700000000100000100' in body
+
+
 def test_the_line_number_is_not_written_out(document):
     # It depends on where a record sat in one file, and the graph must not.
     assert "line_number" not in document["nodes"][0]["raw"]
@@ -100,6 +126,423 @@ def test_annotations_round_trip_through_the_file():
     graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "note", {"n": [1, 2]})
     reread = json.loads(dumps(graph))
     assert reread["annotations"][0]["value"] == {"n": [1, 2]}
+
+
+# The run-6 review, S8.2. Since batch S8 the encoder writes an integer of any
+# length whole under every interpreter setting, while the reader refuses a
+# literal of more than `DIGIT_LIMIT` digits (`SPEC.md` §5.3). An annotation
+# holding a longer one was accepted, written, and then refused by the
+# library's own reader, so `check_serializable` refuses it up front; one of
+# exactly `DIGIT_LIMIT` digits must still go all the way round. Both sides are
+# derived from the library's constant, and converted through `Decimal`, as
+# `tests/digit_limit.py` requires.
+
+
+def _integer(text):
+    return int(decimal.Decimal(text))
+
+
+def _placed(number):
+    """The integer alone, as a dict value, as a list item, and deep in both."""
+    return {
+        "alone": number,
+        "dict value": {"n": number},
+        "list item": [1, number],
+        "nested": {"a": [{"b": [number]}]},
+    }
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_integer_past_the_digit_limit_is_refused_when_annotated(
+    sign, where
+):
+    from tests import digit_limit
+
+    past = sign * _integer(digit_limit.past())
+    graph = spanweave.build(FIXTURE)
+    expected = (
+        f"must be JSON-serializable so they survive serialization; .* is not "
+        f"\\(an integer of {DIGIT_LIMIT + 1} digits is longer than the "
+        f"{DIGIT_LIMIT} digits spanweave reads"
+    )
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate("s2", "my_evals", "k", _placed(past)[where])
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate_many([("s2", "my_evals", "k", _placed(past)[where])])
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+def test_an_annotation_integer_at_the_digit_limit_round_trips(tmp_path, capsys, sign):
+    from spanweave.cli import main
+    from tests import digit_limit
+
+    inside = sign * _integer(digit_limit.inside())
+    value = _placed(inside)
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    written = dumps(graph)
+    reread = jsoncodec.loads(written)
+    assert validate(reread) == ()
+    assert reread["annotations"][0]["value"] == value
+    path = tmp_path / "graph.json"
+    path.write_bytes(written)
+    assert main(["validate", str(path)]) == 0, capsys.readouterr().err
+
+
+#: Annotates the integers either side of the limit and writes what survives.
+_ANNOTATE_BOTH_SIDES = (
+    "import decimal, sys, spanweave\n"
+    "from spanweave import jsoncodec\n"
+    "from tests import digit_limit\n"
+    "graph = spanweave.build(sys.argv[1])\n"
+    "past = int(decimal.Decimal(digit_limit.past()))\n"
+    "inside = int(decimal.Decimal(digit_limit.inside()))\n"
+    "try:\n"
+    "    graph.annotate('s2', 'my_evals', 'k', {'n': [past]})\n"
+    "except ValueError:\n"
+    "    pass\n"
+    "else:\n"
+    "    raise SystemExit('accepted an integer the reader refuses')\n"
+    "written = spanweave.dumps(graph.annotate('s2', 'my_evals', 'k', [inside]))\n"
+    "assert jsoncodec.loads(written)['annotations'][0]['value'] == [inside]\n"
+    "sys.stdout.buffer.write(written)\n"
+)
+
+
+def test_the_annotation_digit_rule_is_the_same_under_every_setting():
+    # The refusal counts digits rather than asking the interpreter, so a
+    # lowered or disabled `PYTHONINTMAXSTRDIGITS` moves neither side of it.
+    import os
+    import subprocess
+    import sys
+
+    written = set()
+    for setting in (None, "0", "640"):
+        environment = dict(os.environ)
+        environment.pop("PYTHONINTMAXSTRDIGITS", None)
+        if setting is not None:
+            environment["PYTHONINTMAXSTRDIGITS"] = setting
+        finished = subprocess.run(
+            [sys.executable, "-c", _ANNOTATE_BOTH_SIDES, str(FIXTURE)],
+            capture_output=True,
+            env=environment,
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+            check=False,
+        )
+        assert finished.returncode == 0, (setting, finished.stderr.decode()[-2000:])
+        written.add(finished.stdout)
+    assert len(written) == 1
+
+
+# The run-6 review, S8.4. `check_serializable` probed the value with a laxer
+# encoder than the one a graph file is written with -- `sort_keys=True` alone,
+# against `serialize`'s `sort_keys=True, ensure_ascii=False,
+# separators=(",", ":"), allow_nan=False` -- so two shapes the writer refuses
+# were accepted at annotate time and the caller was left holding a graph that
+# could not be written: a non-finite number, which only `allow_nan=False`
+# refuses; and a dict key that is not a string, which `json` silently coerces,
+# so the annotation does not come back as it went in, and which, when the key
+# is an integer the interpreter's own `str()` will not render, reached the
+# writer as a bare `ValueError` and was reported there as a cycle. Both are
+# refused by `annotate` and `annotate_many` now, in the existing wording. The
+# probe runs `jsoncodec.canonical_dump`, which is that policy stated once.
+
+#: The opening of every `check_serializable` refusal.
+_REFUSED = "must be JSON-serializable so they survive serialization"
+
+
+@pytest.mark.parametrize(
+    "number",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=["nan", "inf", "-inf"],
+)
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_holding_a_non_finite_number_is_refused_when_annotated(
+    number, where
+):
+    graph = spanweave.build(FIXTURE)
+    value = _placed(number)[where]
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate("s2", "my_evals", "k", value)
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate_many([("s2", "my_evals", "k", value)])
+
+
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_the_non_finite_refusal_is_what_the_graph_file_would_have_refused(where):
+    # The point of the stricter probe: what `annotate` now refuses is exactly
+    # what writing the graph refuses, rather than being accepted here and
+    # failing at `dumps` with the graph already in the caller's hands.
+    from spanweave.errors import GraphNotSerializableError
+
+    value = _placed(float("nan"))[where]
+    with pytest.raises(GraphNotSerializableError, match="no way to write"):
+        canonical_bytes({"annotations": [{"value": value}]})
+
+
+@pytest.mark.parametrize(
+    "key",
+    [10, 10**700],
+    ids=["small", "longer than a lowered interpreter renders"],
+)
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_whose_dict_key_is_not_a_string_is_refused(key, where):
+    graph = spanweave.build(FIXTURE)
+    value = _placed({key: 1})[where]
+    expected = f"{_REFUSED}; .* is not \\(a mapping key of type int is not a string"
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate("s2", "my_evals", "k", value)
+    with pytest.raises(ValueError, match=expected):
+        graph.annotate_many([("s2", "my_evals", "k", value)])
+
+
+#: Annotates a value keyed by an integer this interpreter's `str()` refuses,
+#: and prints whatever the refusal says.
+_ANNOTATE_A_LONG_KEY = (
+    "import sys, spanweave\n"
+    "graph = spanweave.build(sys.argv[1])\n"
+    "try:\n"
+    "    graph.annotate('s2', 'my_evals', 'k', {10**700: 1})\n"
+    "except ValueError as failure:\n"
+    "    sys.stdout.write(str(failure))\n"
+    "else:\n"
+    "    raise SystemExit('accepted a key the graph file cannot carry')\n"
+)
+
+
+def test_a_dict_key_the_interpreter_cannot_render_is_named_as_a_key():
+    # 10**700 is well inside the library's digit limit and outside a
+    # 640-digit interpreter's, so `str()` of it raises there -- the failure
+    # `serialize` used to meet and report as a value that refers back to
+    # itself, because `json.dumps` answers both facts with `ValueError`. It is
+    # refused at annotate time now, and said to be what it is.
+    import os
+    import subprocess
+    import sys
+
+    environment = dict(os.environ)
+    environment["PYTHONINTMAXSTRDIGITS"] = "640"
+    finished = subprocess.run(
+        [sys.executable, "-c", _ANNOTATE_A_LONG_KEY, str(FIXTURE)],
+        capture_output=True,
+        env=environment,
+        cwd=pathlib.Path(__file__).resolve().parent.parent,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr.decode()[-2000:]
+    said = finished.stdout.decode()
+    assert "a mapping key of type int is not a string" in said, said
+    assert "refers back to itself" not in said, said
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+def test_the_stricter_probe_still_accepts_an_integer_at_the_digit_limit(sign):
+    # The guard on what must *not* move: the stricter encoder narrows nothing
+    # about integers. An integer of exactly `DIGIT_LIMIT` digits is still
+    # annotated, written and read back equal -- the full path, through the CLI
+    # and `validate`, is `test_an_annotation_integer_at_the_digit_limit_
+    # round_trips` above.
+    from tests import digit_limit
+
+    value = {"n": [sign * _integer(digit_limit.inside())]}
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(graph))["annotations"][0]["value"] == value
+
+
+# The run-7 review, T3 / T1 / T2. A lone surrogate is a code point `str`
+# carries and UTF-8 cannot, and `json.loads` produces one from a `\uD800`
+# escape nothing pairs with. It reached three `.encode("utf-8")` calls as an
+# interpreter traceback out of values the library had already accepted: the
+# record digest (`read.py`), the writer (`serialize.py`, outside the `try`, so
+# not even wrapped as `GraphNotSerializableError`) and a derived node id
+# (`ids.py`). It is written as its JSON escape now, in `jsoncodec`, which
+# every one of those three goes through. And because the writer accepts it,
+# `annotate` does -- which left depth as the only shape the probe still
+# disagreed with the writer about, and that one is position rather than
+# policy: the probe now wraps the value where the document puts it.
+
+#: A lone surrogate: the low end of the range, and the one both the review and
+#: RFC 8259's §7/§8.1 disagreement are about.
+_LONE_SURROGATE = "\ud800"
+
+
+def _record_holding(value):
+    """A minimal OpenInference span whose `output.value` is `value`."""
+    return {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "llm.call",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {
+            "openinference.span.kind": "LLM",
+            "output.value": value,
+        },
+    }
+
+
+def test_a_lone_surrogate_is_written_as_its_escape_and_read_back_identical():
+    # Lower-case, six characters, which is what `json.dumps` itself emits
+    # under `ensure_ascii=True` -- so a strict parser reads it, and reading it
+    # returns the identical string. The escape is the *only* thing that moved:
+    # nothing else in the text is touched, and escaping twice changes nothing.
+    text = jsoncodec.canonical_dump({"s": _LONE_SURROGATE, "é": "é"})
+    assert text == '{"s":"\\ud800","é":"é"}'
+    assert json.loads(text) == {"s": _LONE_SURROGATE, "é": "é"}
+    assert text.encode("utf-8").decode("utf-8") == text
+    assert jsoncodec.escape_lone_surrogates(text) == text
+
+
+def test_a_trace_record_holding_a_lone_surrogate_builds_and_round_trips(tmp_path):
+    # T3. `spanweave.build` raised `UnicodeEncodeError` out of
+    # `hashlib.sha256(text.encode("utf-8"))` in `record_digest` -- no
+    # diagnostic, no `unknown` node, no refusal, which is `CLAUDE.md` 2's
+    # *degrade honestly* failing on untrusted input (`SECURITY.md`).
+    record = _record_holding(_LONE_SURROGATE)
+    trace = tmp_path / "surrogate.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(trace)
+    written = dumps(graph)
+
+    assert [node.id for node in graph.nodes()] == ["s0"]
+    assert graph.diagnostics == ()
+    # Losslessness: the record comes back out of the file identical, the lone
+    # surrogate included, rather than replaced or dropped to get past it.
+    reread = json.loads(written.decode("utf-8"))
+    assert reread["nodes"][0]["raw"]["source"] == record
+    assert reread["nodes"][0]["raw"]["source"]["attributes"]["output.value"] == (
+        _LONE_SURROGATE
+    )
+    assert validate(reread) == ()
+    assert b'"\\ud800"' in written
+
+
+def test_a_lone_surrogate_in_a_derived_ids_material_is_not_a_traceback(tmp_path):
+    # The third `.encode("utf-8")`. A record that states no span id is named
+    # by a SHA-256 over the adapter id, the trace id and its source key
+    # (`SPEC.md` §3.6), and the trace id is text the input stated.
+    record = _record_holding("plain")
+    del record["span_id"]
+    record["trace_id"] = _LONE_SURROGATE
+    trace = tmp_path / "surrogate_id.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(trace)
+    assert graph.trace_id == _LONE_SURROGATE
+    assert [node.id.startswith("sw_") for node in graph.nodes()] == [True]
+    assert validate(json.loads(dumps(graph).decode("utf-8"))) == ()
+
+
+@pytest.mark.parametrize("where", sorted(_placed(0)))
+def test_an_annotation_holding_a_lone_surrogate_is_accepted_and_written(where):
+    # T1. It was accepted before this too -- and then `dumps` raised a bare
+    # `UnicodeEncodeError` from the `.encode("utf-8")` that is outside
+    # `canonical_bytes`'s `try`, so the caller did not even get
+    # `GraphNotSerializableError`. Accepted is the right answer; writable is
+    # what was missing.
+    value = _placed(_LONE_SURROGATE)[where]
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(graph))["annotations"][0]["value"] == value
+    assert spanweave.build(FIXTURE).annotate_many(
+        [("s2", "my_evals", "k", value)]
+    ).annotations_for("s2", "my_evals") == {"k": value}
+
+
+def test_a_long_integer_and_a_lone_surrogate_survive_the_same_encode():
+    # T12's path, exercised rather than read. `encode` writes a long integer
+    # by swapping it for a placeholder, encoding, and replacing the encoded
+    # placeholder with the digits -- so the needle it looks for has to be
+    # spelled by the same encoder that wrote the haystack. It is spelled by
+    # calling `canonical_dump`, which is also the encoder that escapes, and
+    # this is the value that would notice if the two ever disagreed.
+    value = {"n": 10 ** (DIGIT_LIMIT - 1), "s": _LONE_SURROGATE}
+    text = jsoncodec.encode(value, jsoncodec.canonical_dump)
+    assert json.loads(text) == value
+    assert '"\\ud800"' in text
+    assert "spanweave-integer" not in text
+
+
+def _unchecked_annotation(graph, value):
+    """`graph` carrying `value`, with `check_serializable` never consulted.
+
+    The writer's own ceiling is what this measures, so the probe under test
+    must not be in the way of measuring it.
+    """
+    from spanweave.annotate import Annotation, AnnotationStore
+
+    entry = Annotation(namespace="my_evals", node_id="s2", key="k", value=value)
+    return graph._with_annotations(AnnotationStore(entries=(entry,)))
+
+
+def test_annotate_refuses_exactly_the_nesting_the_writer_refuses(record_property):
+    """T2. Two measured ceilings, and the claim is that they are one.
+
+    `check_serializable` probed the bare value while the graph file wraps it
+    in three containers, so the three deepest values the probe accepted were
+    three the writer then refused -- accepted-then-refused, which is the whole
+    defect the S8.4 commit existed to remove, surviving in the one shape that
+    depends on *where* the value sits rather than on what it is.
+
+    Both ceilings are measured by bisection in this process rather than
+    pinned: the number belongs to the interpreter's C recursion budget and
+    differs by version (`SPEC.md` §7, and 9,993 here against 37,231 on
+    CPython 3.14.6). What is the library's is that the two agree, and that is
+    all this asserts.
+    """
+    graph = spanweave.build(FIXTURE)
+
+    def writing(depth):
+        dumps(_unchecked_annotation(graph, nested_dicts(depth)))
+
+    def annotating(depth):
+        try:
+            graph.annotate("s2", "my_evals", "k", nested_dicts(depth))
+        # `deepest_accepted` knows the two exceptions depth arrives as;
+        # `annotate` reports the same fact as the `ValueError` its whole
+        # refusal family uses.
+        except ValueError as failure:
+            raise spanweave.GraphNotSerializableError(str(failure)) from failure
+
+    writable = deepest_accepted(writing)
+    annotatable = deepest_accepted(annotating)
+    record_property(
+        "annotation_depth", f"writable={writable} annotatable={annotatable}"
+    )
+    assert annotatable == writable, (
+        f"`annotate` accepts an annotation nested {annotatable} deep and the "
+        f"graph file carries one nested {writable} deep, so {annotatable - writable} "
+        f"depths are accepted at annotate time and refused at `dumps` with the "
+        f"graph already in the caller's hands"
+    )
+    # Both ends of that agreement, exercised: the deepest one goes all the way
+    # round, and one past it is refused *before* the graph exists.
+    value = nested_dicts(writable)
+    annotated = graph.annotate("s2", "my_evals", "k", value)
+    assert jsoncodec.loads(dumps(annotated))["annotations"][0]["value"] == value
+    with pytest.raises(ValueError, match=_REFUSED):
+        graph.annotate("s2", "my_evals", "k", nested_dicts(writable + 1))
+
+
+def test_the_probe_wraps_an_annotation_where_the_document_puts_it():
+    # The wrapping derived from `serialize` rather than counted by hand: a
+    # document puts an annotation's value under `annotations`, in an entry,
+    # under `value`. `annotate` restates that shape because importing
+    # `serialize` from it would be the upward import `DESIGN.md` §2 forbids,
+    # and this is what stops the restatement drifting. 40 levels so the
+    # annotation is deeper than anything else the fixture's document holds.
+    from spanweave.annotate import _where_the_document_puts_it
+
+    value = nested_dicts(40)
+    graph = spanweave.build(FIXTURE).annotate("s2", "my_evals", "k", value)
+    document = to_document(graph)
+    # Three: the document, the `annotations` array, the entry.
+    assert _deepest_nesting(document) - _deepest_nesting(value) == 3
+    assert _deepest_nesting(_where_the_document_puts_it(value)) == (
+        _deepest_nesting(document)
+    )
 
 
 # --------------------------------------------------------------------------
@@ -171,3 +614,251 @@ def test_a_foreign_schema_version_is_flagged_not_rejected(document):
     document["schema_version"] = "0.0-from-the-future"
     problems = validate(document)
     assert any("not frozen" in problem for problem in problems)
+
+
+# --------------------------------------------------------------------------
+# The encoder's own containment (September 2026 audit, finding 3, batch A6;
+# the claim about *why* it is reachable corrected in batch R6)
+# --------------------------------------------------------------------------
+
+
+def test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback():
+    # `json.dumps` answers nesting it will not descend with RecursionError,
+    # exactly as `json.loads` does, and this is the one encoder every byte
+    # this library writes goes through. Uncontained it took down a build that
+    # had already read its input without complaint -- a graph the library
+    # holds and cannot write is a structural impossibility (`SPEC.md` §3.10),
+    # so it is named rather than raised as an interpreter's traceback.
+    with pytest.raises(spanweave.SpanweaveError) as failure:
+        canonical_bytes({"deep": nested_dicts(100_000)})
+    assert failure.value.code == "graph_not_serializable"
+
+
+def test_the_refusal_is_the_librarys_own_error_type():
+    # A consumer routes on the library's error, per `SPEC.md` §3.10, and a
+    # bare RecursionError is not routable: it is indistinguishable from a bug
+    # in the consumer's own recursion.
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        canonical_bytes(nested_dicts(100_000))
+
+
+def test_the_two_json_depth_ceilings_are_measured_and_neither_is_this_librarys(
+    record_property,
+):
+    """Record where the parser and the encoder give out. Assert containment.
+
+    This test deliberately asserts **no direction**. Which of `json.loads` and
+    `json.dumps` gives out first is a property of the interpreter *and of the
+    container shape*, and this library controls neither: on CPython 3.11-3.13
+    the two coincide, while on 3.14.6 the encoder gives out ~2,900 levels
+    earlier for **dicts** and ~34,000 levels later for **lists**
+    (`SPEC.md` §7 carries the table). Three consecutive attempts to state this
+    quantity as a fact -- A6, the run-2 review, R6 -- each measured one
+    interpreter and wrote a universal, and R6's pin was green on 3.14 only
+    because it nested lists where a graph document nests dicts (run-3 review
+    F1). So both shapes are measured, both are recorded, and the assertions
+    are confined to what is the library's own: that one level past whatever
+    ceiling this interpreter has, the failure is the library's named refusal
+    and not a bare `RecursionError`, and that where a readable-but-unwritable
+    band exists it is that same refusal rather than a traceback.
+    """
+    observed = {}
+    for shape, text, build in (
+        ("dicts", dicts_text, nested_dicts),
+        ("lists", lists_text, nested_lists),
+    ):
+        parser = deepest_accepted(lambda depth, fn=text: json.loads(fn(depth)))
+        encoder = deepest_accepted(lambda depth, fn=build: canonical_bytes(fn(depth)))
+        observed[shape] = (parser, encoder)
+        record_property(
+            f"json_depth_{shape}",
+            f"parser={parser} encoder={encoder} ratio={encoder / parser:.3f}",
+        )
+
+    # The shape a graph document has at every level, and so the only row of
+    # the two that says anything about this library's own output.
+    parser, encoder = observed["dicts"]
+
+    # Up to the measured ceiling the encoder writes, which is what makes the
+    # bisection above a measurement rather than a coincidence.
+    assert canonical_bytes(nested_dicts(encoder)).endswith(b"\n"), (
+        f"the bisection says the encoder writes {encoder} levels and it does "
+        f"not (parser {parser}, shapes {observed})"
+    )
+    # Past it, the refusal is the library's and is named. This is the whole of
+    # what the library controls here, and it is red if the `RecursionError`
+    # arm of `canonical_bytes` is ever dropped -- on every interpreter, under
+    # either direction, because the ceiling it steps past is measured and not
+    # assumed.
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        canonical_bytes(nested_dicts(encoder + MEASUREMENT_NOISE))
+
+    # The band that the parser reads and the encoder cannot write: empty
+    # wherever the two coincide, thousands of levels wide on CPython 3.14.
+    # Exercised where it exists, recorded as empty where it does not -- the
+    # test never asserts which of the two it got.
+    band = parser - encoder
+    record_property("readable_but_unwritable_dict_levels", band)
+    if band > 2 * MEASUREMENT_NOISE:
+        with pytest.raises(spanweave.GraphNotSerializableError):
+            canonical_bytes(json.loads(dicts_text((encoder + parser) // 2)))
+
+
+def _deepest_nesting(value):
+    """How many containers deep the deepest value in `value` sits.
+
+    Iterative, because the things this file measures are deeper than the
+    interpreter would let a recursive walk go.
+    """
+    deepest = 0
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict):
+            deepest = max(deepest, depth)
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            deepest = max(deepest, depth)
+            stack.extend((child, depth + 1) for child in item)
+    return deepest
+
+
+def test_the_document_puts_a_records_value_four_levels_below_where_it_was_read(
+    tmp_path,
+):
+    # What makes the refusal reachable at all is position, not limit: a value
+    # the reader met two containers into a trace record -- the record, its
+    # `attributes` -- is met by the encoder six containers into the graph
+    # document: `nodes`, the node, `raw`, `source`, `attributes`. Those four
+    # levels are the whole of the gap (`SPEC.md` §7), so they are measured
+    # here rather than asserted in prose, and a document shape that moved
+    # them would say so.
+    nested = 1
+    for _ in range(40):
+        nested = {"a": nested}
+    record = {
+        "trace_id": "t1",
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "n",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "TOOL", "deep": nested},
+    }
+    trace = tmp_path / "deep.jsonl"
+    trace.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    document = to_document(spanweave.build(trace))
+    assert _deepest_nesting(record) == 42  # the record, `attributes`, 40 more
+    assert _deepest_nesting(document) - _deepest_nesting(record) == 4
+
+
+# --------------------------------------------------------------------------
+# The encoder writes JSON, and a non-finite number is not JSON (batch R1)
+# --------------------------------------------------------------------------
+#
+# `SPEC.md` §7: `Infinity`, `-Infinity` and `NaN` are Python's extension to
+# JSON rather than JSON, and a strict parser on the other end rejects a
+# document carrying one. Writing it is the worst outcome available -- the
+# graph is produced, looks written, and cannot be read back -- so the encoder
+# runs with `allow_nan=False` and the refusal is the library's own.
+
+NON_FINITE = (float("inf"), float("-inf"), float("nan"))
+
+
+@pytest.mark.parametrize("value", NON_FINITE, ids=repr)
+def test_a_non_finite_number_is_a_refusal_not_a_bare_infinity_token(value):
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {"source": {"start_time": value}}})
+    assert failure.value.code == "graph_not_serializable"
+
+
+@pytest.mark.parametrize("value", NON_FINITE, ids=repr)
+def test_nothing_this_library_writes_can_contain_infinity_or_nan(value):
+    # The gate, stated as the property rather than as the call: whatever
+    # reaches the one encoder, the bytes that come out parse under a strict
+    # JSON parser or there are no bytes at all.
+    try:
+        written = canonical_bytes({"v": value})
+    except spanweave.GraphNotSerializableError:
+        return
+    json.loads(written, parse_constant=_no_constants)  # pragma: no cover
+    raise AssertionError("a non-finite value was written")  # pragma: no cover
+
+
+def _no_constants(token):
+    raise AssertionError(f"the output carried a bare {token} token")
+
+
+def test_a_trace_carrying_an_unquoted_infinity_refuses_rather_than_writing_it(
+    tmp_path,
+):
+    # End to end, because this is how it reaches the encoder in practice: the
+    # timestamp field itself is refused (`SPEC.md` §3.1), but `raw.source` is
+    # verbatim and still holds the `inf` the parser produced.
+    trace = tmp_path / "infinite.jsonl"
+    trace.write_bytes(
+        b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
+        b'"start_time":1e400,"end_time":2.0,"status":"OK",'
+        b'"attributes":{"openinference.span.kind":"AGENT"}}\n'
+    )
+    graph = spanweave.build(trace)
+    node = next(iter(graph.nodes()))
+    assert node.started_at is None
+    assert with_code(graph, "missing_timestamp")
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        dumps(graph)
+
+
+def with_code(graph, code):
+    return [item for item in graph.diagnostics if item.code == code]
+
+
+# --------------------------------------------------------------------------
+# One exception type, two facts (run-3 review F4, batch R16)
+# --------------------------------------------------------------------------
+#
+# `json.dumps` answers a non-finite number and a value that refers back to
+# itself with the same `ValueError`. The refusal names which of the two it
+# found, because a caller sent looking for a number that is not there is a
+# caller the message misled (`SPEC.md` §7, *Outputs*).
+
+
+def _self_referential():
+    source = {"attributes": {}}
+    source["attributes"]["itself"] = source
+    return {"raw": {"source": source}}
+
+
+def test_a_circular_reference_is_refused_as_a_circular_reference():
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes(_self_referential())
+    message = str(failure.value)
+    assert failure.value.code == "graph_not_serializable"
+    assert "refers back to itself" in message
+    assert "number" not in message, message
+
+
+def test_the_non_finite_refusal_still_names_the_number():
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {"source": {"start_time": float("nan")}}})
+    assert "number JSON has no way to write" in str(failure.value)
+
+
+def test_a_value_that_is_both_is_reported_as_the_number_it_holds():
+    # Both facts are true of this value; the message names the one a caller
+    # can find by looking, and says nothing false about the other.
+    value = _self_referential()
+    value["raw"]["source"]["start_time"] = float("inf")
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes(value)
+    assert "number JSON has no way to write" in str(failure.value)
+
+
+def test_a_mapping_keyed_by_a_non_finite_number_is_reported_as_the_number():
+    # The walk looks at keys too. A mapping keyed by `nan` defeats the encoder
+    # the same way a value does, and reporting it as a cycle would be the
+    # original defect with the two facts swapped.
+    with pytest.raises(spanweave.GraphNotSerializableError) as failure:
+        canonical_bytes({"raw": {float("nan"): "keyed by a number"}})
+    assert "number JSON has no way to write" in str(failure.value)

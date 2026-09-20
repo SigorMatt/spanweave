@@ -1,0 +1,85 @@
+{
+  "_note": "This rendering's own values for the payloads expected/comparison.json declares dialect-varying (FIXTURES.md 4.4). The rendering is one trace carrying two instrumentors' records, so s1 and s3 are read by the otel_genai adapter and their values are that dialect's -- copied verbatim from llm_tool_llm/expected/payloads/otel_genai.json, which is where the same four records are pinned. s0 and s2 are read by the openinference adapter and agree with expected/graph.json, so they are not overridden here. Claim 1 still pins every one of these values; only the cross-scenario comparison against llm_tool_llm sets them aside.",
+  "s1.inputs": {
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Look up the order status.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "s1.outputs": {
+    "value": [
+      {
+        "finish_reason": "tool_calls",
+        "parts": [
+          {
+            "arguments": {
+              "order": "A-1"
+            },
+            "id": "call_a",
+            "name": "lookup",
+            "type": "tool_call"
+          }
+        ],
+        "role": "assistant"
+      }
+    ]
+  },
+  "s3.inputs": {
+    "value": [
+      {
+        "parts": [
+          {
+            "content": "Look up the order status.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "finish_reason": "tool_calls",
+        "parts": [
+          {
+            "arguments": {
+              "order": "A-1"
+            },
+            "id": "call_a",
+            "name": "lookup",
+            "type": "tool_call"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "parts": [
+          {
+            "id": "call_a",
+            "response": "{\"status\": \"shipped\"}",
+            "type": "tool_call_response"
+          }
+        ],
+        "role": "tool"
+      }
+    ]
+  },
+  "s3.outputs": {
+    "value": [
+      {
+        "finish_reason": "stop",
+        "parts": [
+          {
+            "content": "Your order has shipped.",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      }
+    ]
+  }
+}

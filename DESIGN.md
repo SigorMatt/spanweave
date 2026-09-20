@@ -56,7 +56,7 @@ redrawn later around whatever happened to occur.
 ├═════════════════════════════════════════════════┤  ← the seam (§3)
 │ Adapters  (adapters/*.py)                       │  all dialect mess
 ├─────────────────────────────────────────────────┤
-│ Reader  (read.py)                               │  bytes -> JSON records
+│ Reader  (read.py, jsoncodec.py)                 │  bytes -> JSON records
 └─────────────────────────────────────────────────┘
 ```
 
@@ -96,6 +96,36 @@ the model is wrong and that is a spec conversation, not a patch.
 two schemas would double the versioning burden for no consumer benefit, and the
 seam exists to be refactored.
 
+### 3.2 Dispatch is per record, and it happens above the seam
+
+A dialect is a property of a **record**, not of a file. One process can run a
+framework instrumentor and an SDK instrumentor at once; they share a
+`TracerProvider` and their spans share an export. Choosing one adapter per file
+was an approximation of the common case, and where it fails it fails silently:
+the losing dialect's spans become `unknown`, their payloads report `absent`,
+and every relation that joined the two dialects disappears while the graph
+still looks complete.
+
+So the registry classifies each record and each adapter parses only the records
+it claims. This does not move the seam — it *narrows* what crosses it. Nothing
+changes below:
+
+- **The builder still never learns a dialect name.** It receives spans and an
+  opaque `AdapterInfo` per span, copies it into `Provenance`, and sorts the
+  distinct ones into `Meta.adapters`. It never branches on one.
+  `no_dialect_outside_adapters` (`tests/gates.py`) is unchanged and stays
+  green.
+- **Classification stays inside `adapters/`.** The registry asks each adapter
+  `detect([record])`; no marker table lives outside the adapter that owns the
+  marker.
+- **The partition happens in `api.py`**, one of the two modules
+  `no_adapter_imports_below_the_top` already permits to reach the registry.
+
+Consequence, and it is the same one as §3: a new dialect is still a new file
+under `adapters/` plus fixtures. It now also composes with every existing
+dialect in one trace, for free, because composition is a property of the
+dispatcher rather than of any adapter.
+
 ## 4. Identity and ordering
 
 Determinism is not a nice property here; it is the reason a downstream tool can
@@ -132,8 +162,18 @@ Parsing rules:
 ## 6. Memory and scale
 
 v1 targets traces up to ~10⁵ spans, which comfortably fits in memory as frozen
-dataclasses. The build is a single pass plus a sort; no quadratic edge
-construction (hence the consecutive-siblings-only temporal rule, `SPEC.md` §4.3).
+dataclasses. The build is a single pass plus a sort; no *rule* here constructs
+edges quadratically — hence the consecutive-siblings-only temporal rule,
+`SPEC.md` §4.3.
+
+**That is a claim about the rules, not about the edge count.** `data` edges are
+one per declaration (`SPEC.md` §4.2.1), and a conversational protocol resends
+the whole history, so an `n`-turn agent loop *declares* receipt `n(n-1)/2`
+times and gets that many edges. The builder is O(1) per declaration and the
+input file is already quadratic for the same reason; the growth is the
+telemetry's, and narrowing it here would mean dropping relations the
+instrumentor stated. Per turn, therefore, the edge set is quadratic and says
+so.
 
 **Streaming readiness (cheap insurance, binding now).** Live/tail mode is a
 north-star item, not promised. Two constraints keep it additive:
@@ -163,7 +203,10 @@ to the north star itself — do not build them now.
   explicit tie-break; a single-pass group-by for sibling temporal edges; a dict
   join for `call_result` pairing.
 - **Serialization:** stdlib `json`, `sort_keys=True`, `ensure_ascii=False`,
-  compact separators — enforced by a test, not convention.
+  compact separators — enforced by a test, not convention. Plus the one thing
+  `ensure_ascii=False` cannot be left to decide: a surrogate code point is
+  written as its `\uXXXX` escape, because it is the one code point a `str`
+  holds and UTF-8 cannot encode (`SPEC.md` §3.6, §5.2).
 - **No YAML in core.** There is no human-edited config; the catalog-style
   tunability that would justify YAML lives in consumers, not here.
 - **Reading:** stdlib only. `json.loads` per line. **Never `pickle`, never

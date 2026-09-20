@@ -16,12 +16,14 @@ anything a consumer asked for.
 
 from __future__ import annotations
 
-import json
+import math
 import pathlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from spanweave import jsoncodec
 from spanweave.annotate import AnnotationStore
+from spanweave.errors import GraphNotSerializableError
 from spanweave.graph import Graph
 from spanweave.model import (
     Diagnostic,
@@ -47,9 +49,109 @@ ROOT_KEYS = (
 )
 
 
+def _a_non_finite_number(value: object) -> float | None:
+    """A non-finite number inside ``value``, or ``None`` if it holds none.
+
+    ``json.dumps`` answers two entirely different facts with one
+    ``ValueError``: a number RFC 8259 cannot write, and a value that refers
+    back to itself. The refusal below has to say which it met, and it decides
+    by looking at the value rather than by reading the interpreter's message,
+    which is no more a contract than any other message (`SPEC.md` §3.10).
+
+    Iterative, and it remembers the containers it is already inside -- so the
+    self-referential value, which is the other case, ends the walk instead of
+    running forever.
+    """
+    seen: set[int] = set()
+    stack: list[object] = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, float):
+            if not math.isfinite(current):
+                return current
+            continue
+        if isinstance(current, Mapping):
+            # Keys as well as values: a mapping keyed by a non-finite float
+            # defeats the encoder in exactly the same way, and a walk that
+            # looked only at values would report that one as a cycle.
+            inside: Iterable[object] = [*current, *current.values()]
+        elif isinstance(current, Sequence) and not isinstance(current, str | bytes):
+            inside = current
+        else:
+            continue
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        stack.extend(inside)
+    return None
+
+
 def canonical_bytes(value: JsonValue) -> bytes:
-    """The one encoder. Everything written by this library goes through it."""
-    text = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    """The one encoder. Everything written by this library goes through it.
+
+    Deep nesting is the one input that can defeat it. The reader contains what
+    the *parser* will not descend (`SPEC.md` §7); the encoder meets the value
+    four levels lower down -- inside the document, inside a node, inside a
+    payload -- so a value that arrived intact can still fail to leave. How
+    much room there is for those four levels is the interpreter's answer and
+    not this library's, and it differs by container shape: §7 carries the
+    measured table, in which CPython 3.11-3.13 give the parser and the
+    encoder the same ceiling while 3.14 gives the encoder ~2,900 levels
+    *less* for nested dicts -- the shape a graph document has at every level.
+    The guard depends on none of that: `json.dumps` reports depth as
+    ``RecursionError``, which is not a ``ValueError``, and uncontained it
+    escapes as an interpreter traceback from a build that had read its input
+    without complaint. The ``ValueError`` arm is two facts wearing one
+    exception type -- a number RFC 8259 cannot write, and a value that refers
+    back to itself -- and the refusal names which of them it actually met.
+
+    It becomes a refusal rather than a diagnostic because there is nothing to
+    degrade to: the offending value may be a node's verbatim source record, and
+    dropping it to get past this is the one thing losslessness forbids
+    (`CLAUDE.md` 2). Naming it (`SPEC.md` §3.10) is what a caller can act on.
+
+    The ``.encode`` on the last line is **outside** that guard, and stays
+    outside it, because nothing it can be handed raises: ``str.encode("utf-8")``
+    fails on exactly one thing, a surrogate code point, and the encoder writes
+    those as their escape (`SPEC.md` §5.2). It raised a bare
+    ``UnicodeEncodeError`` -- not even wrapped as ``GraphNotSerializableError``
+    -- until it did (run-7 review T1).
+    """
+    try:
+        # Through `jsoncodec.encode`, so that an integer the library read is
+        # written whole whatever the interpreter's own digit limit is set to
+        # (`SPEC.md` §5.3). The encoder and its arguments are unchanged;
+        # `canonical_dump` states them, and `annotate` refuses against the
+        # same statement so that nothing is accepted here that cannot be
+        # written here.
+        text = jsoncodec.encode(value, jsoncodec.canonical_dump)
+    except ValueError as failure:
+        if _a_non_finite_number(value) is None:
+            # The other thing `json.dumps` raises `ValueError` for. Nothing
+            # the reader parses can hold a cycle -- JSON has no way to write
+            # one -- so this graph was assembled in memory, and a refusal that
+            # named the wrong fact would send its caller looking for a value
+            # that is not there.
+            raise GraphNotSerializableError(
+                f"the graph could not be encoded: a value refers back to "
+                f"itself ({failure}), and JSON has no way to write that. "
+                f"Nothing was written, and nothing was dropped to try -- the "
+                f"record a node carries is verbatim or it is nothing"
+            ) from failure
+        raise GraphNotSerializableError(
+            f"the graph could not be encoded: it holds a number JSON has no "
+            f"way to write ({failure}). A timestamp is never carried in that "
+            f"state (`SPEC.md` §3.1), so this is a value inside a node's "
+            f"verbatim source record -- and that record is verbatim or it is "
+            f"nothing. Nothing was written"
+        ) from failure
+    except RecursionError as failure:
+        raise GraphNotSerializableError(
+            f"the graph could not be encoded: a value nests deeper than this "
+            f"interpreter's JSON encoder will descend ({failure}). Nothing was "
+            f"written, and nothing was dropped to try -- the record a node "
+            f"carries is verbatim or it is nothing"
+        ) from failure
     return (text + "\n").encode("utf-8")
 
 

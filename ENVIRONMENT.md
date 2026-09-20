@@ -8,8 +8,28 @@ fix one deliberately, don't let them drift.
 
 - Python **3.11+**.
 - OS: Linux or macOS. CI runs on `ubuntu-latest`.
-- CI additionally runs the test matrix on **3.11, 3.12, and 3.13**. A library
-  meant to sit underneath other people's tools must not narrow their runtime.
+- CI additionally runs the test matrix on **3.11, 3.12, 3.13 and 3.14** — one
+  job per `Programming Language :: Python` classifier in `pyproject.toml`, and
+  `tests/test_acceptance.py` fails if the two lists disagree. A library meant
+  to sit underneath other people's tools must not narrow their runtime, and a
+  matrix that quietly stops short of the declared range is how that happens:
+  3.14 is the only interpreter on which the JSON encoder and parser give out
+  at different depths (`SPEC.md` §7), and it was the one version CI skipped.
+- **The interpreter's integer-string digit limit is not part of the runtime
+  contract, because the graph does not depend on it.** CPython refuses to
+  convert an integer *string* longer than `sys.get_int_max_str_digits()` —
+  4300 digits by default, moved by `PYTHONINTMAXSTRDIGITS`,
+  `-X int_max_str_digits` or `sys.set_int_max_str_digits`, and disabled
+  entirely by `0`. spanweave neither reads that setting nor sets it: it owns a
+  digit limit of its own, 4300 digits, applied by counting digits before any
+  conversion, and converts the integers it reads by a path the interpreter's
+  limit does not govern (`SPEC.md` §5.3). Any legal setting builds the same
+  graph from the same bytes. CI, `make check` and `make conformance` run at
+  the interpreter default, and one test runs a build under the default, `=0`
+  and `=640` and asserts the three graphs are byte-identical
+  (`tests/test_determinism.py`); the whole suite is green under all three.
+  No test hard-codes 4300: every digit-limit boundary is derived from the
+  library's constant (`tests/digit_limit.py`).
 
 ## Toolchain
 
