@@ -902,6 +902,39 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A diagnostic's `adapter` names an adapter only when that adapter read what
+  the diagnostic is about, which `missing_timestamp` and a partly-read input
+  did not.** Two holes in the rule `SPEC.md` §3.7 states, one at each scope.
+  `missing_timestamp` was the only node-scoped report in the builder that
+  passed no `adapter`, so one OpenInference record with no timestamps produced
+  `missing_timestamp` with `adapter: null` beside an `unmapped_attributes`
+  reading `adapter: "openinference"` about the same node, whose `provenance`
+  named `openinference` all along; it now carries its record's adapter like
+  every sibling. And a record the **reader** skipped -- a line that is not
+  JSON, `malformed_record` -- never reaches an adapter, so it is in no
+  `Contribution` and `_sole_contributor` could not see that it existed: an
+  OpenInference record with no trace id followed by one unparseable line
+  reported `missing_trace_id` with `adapter: "openinference"` while one
+  record's contents were unknown. `RecordStream` now counts what never became
+  a record and the count travels to the builder beside the digest, as an
+  explicit `skipped_records` argument rather than a re-reading of the
+  collector; a `duplicate_record` is deliberately not counted, because an
+  identical copy was read. `SPEC.md` §3.7 now says *every record the input
+  contained, skipped ones included*, and adds `ordering_cycle` to the two
+  whole-input diagnostics it enumerated -- it names no node either, so it now
+  takes the same whole-input value instead of an unconditional `null`. The
+  question *"did one adapter produce all of these"* is spelled **once**, with
+  its empty and its all-unclaimed clauses written out rather than falling out
+  of a set's length, and `_sole_contributor` and `_edge_adapter` both call it;
+  `Edge.adapter` does not move, a dangling link still names the adapter of the
+  span that stated it. Five of the 56 traces in the tree move, each by exactly
+  the line that was disagreeing with its neighbours: `missing_timestamp` in
+  `clock_skew` and `timestamp_units` in both dialects, and `ordering_cycle` in
+  `cyclic_parents`. No corpus expectation and no serialized shape moves --
+  `canonical()` compares diagnostics by code and count -- and `meta.adapters`,
+  per-node `provenance` and per-edge `adapter` are byte-identical on all 56.
+  (cold-review findings B1, B2, T5, T7; `SPEC.md` §3.7)
+
 - **An OTLP `Status` that writes no `code` is read as code 0, `"UNSET"`,
   instead of vanishing from the record.** The reader flattened a plain
   `status` object field by field and wrote `status` only when a `code` was

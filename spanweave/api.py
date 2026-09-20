@@ -33,6 +33,11 @@ def build(
 
     The partition happens here, above the seam and above the builder: nothing
     below learns that more than one adapter exists, let alone which.
+
+    A record the reader could not read at all never reaches the partition, so
+    how many of those there were travels to the builder beside the digest. It
+    is the one fact about the input that no `Contribution` can carry, and a
+    statement about the whole input needs it (`SPEC.md` §3.7).
     """
     stream = read_trace(source)
     records = list(stream)
@@ -62,6 +67,7 @@ def build(
         contributions,
         collector=stream.diagnostics,
         source_digest=stream.digest,
+        skipped_records=stream.skipped_records,
         temporal=temporal,
     )
 

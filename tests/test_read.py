@@ -76,6 +76,27 @@ def test_an_unparseable_array_is_diagnosed_rather_than_raised():
     assert [d.code for d in stream.diagnostics.collected()] == [codes.MALFORMED_RECORD]
 
 
+def test_the_stream_counts_what_never_became_a_record():
+    # One per `malformed_record`, and the builder's only way to know that a
+    # record existed which no adapter ever saw (`SPEC.md` §3.7). A whole
+    # container that will not parse counts as one, because how many records
+    # it held is precisely what could not be read.
+    for data, expected in [
+        (JSONL, 0),
+        (ARRAY, 0),
+        (b'{"span_id":"s0"}\n{not json\n{"span_id":"s1"}\n', 1),
+        (b'{not json\n{"a":\n', 2),
+        (b'[{"span_id":"s0"},', 1),
+        (b'{"span_id":"s0"}', 0),
+        # A repeat is skipped too, and is deliberately not counted: an
+        # identical copy was read, so nothing about it is unknown (§7).
+        (b'{"span_id":"s0"}\n{"span_id":"s0"}\n', 0),
+    ]:
+        stream = read_trace(data)
+        list(stream)
+        assert stream.skipped_records == expected, data
+
+
 #: Nesting far past any interpreter's recursion limit. Cheap to build (200 KB
 #: of brackets) and cheap to reject: the parser gives up at its own limit, not
 #: at the end of the string, so these tests cost microseconds.

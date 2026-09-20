@@ -542,13 +542,21 @@ name is fixed here rather than after `0.9.x` ships it as a serialized key.
 `adapter` names whose records the diagnostic was made from, so a diagnostic
 about **one record** carries the adapter that read that record, and `null`
 where no adapter claimed it (§6.1). A diagnostic about the **whole input** —
-`missing_trace_id` and `duplicate_source_id`, which name no node because what
-they report is a property of everything that arrived (§7) — names an adapter
-only when a single adapter read **every** record: it is `null` for a mixed
-input, and `null` when any record was unclaimed, because attributing a fact
-about the whole input to one dialect when another, or none, contributed to it
-is a false attribution. That is §3.8's rule for an edge whose ends came from
-different adapters, applied to a statement whose ends are the whole file.
+`missing_trace_id`, `duplicate_source_id` and `ordering_cycle`, which name no
+node because what they report is a property of everything that arrived (§7) —
+names an adapter only when a single adapter read **every record the input
+contained, skipped ones included**: it is `null` for a mixed input, `null`
+when any record was unclaimed, and `null` when any record was skipped before
+an adapter could read it (`malformed_record`, §7), because attributing a fact
+about the whole input to one dialect when another, or none, or a record nobody
+could read contributed to it is a false attribution. That is §3.8's rule for an
+edge whose ends came from different adapters, applied to a statement whose ends
+are the whole file.
+
+`ordering_cycle` lists the nodes it could not order in `source`, and that does
+not make it record-scoped: it carries no `node_id`, a topological order is a
+property of the whole graph, and the cycle can be stated by edges two adapters'
+records made. So it takes the whole-input value like the other two.
 
 Seed codes (extend deliberately; codes are a public contract once frozen):
 

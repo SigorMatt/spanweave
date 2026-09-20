@@ -78,10 +78,10 @@ STDIN = "-"
 class RecordStream:
     """Lazily yields the records of one trace input.
 
-    ``diagnostics`` and ``digest`` are complete once iteration has finished;
-    reading them earlier gives what is known so far. That is the honest
-    consequence of streaming, and the builder consumes the stream fully before
-    it asks.
+    ``diagnostics``, ``digest`` and ``skipped_records`` are complete once
+    iteration has finished; reading them earlier gives what is known so far.
+    That is the honest consequence of streaming, and the builder consumes the
+    stream fully before it asks.
     """
 
     def __init__(self, name: str, chunks: Iterator[bytes]) -> None:
@@ -90,6 +90,7 @@ class RecordStream:
         self._collector = DiagnosticCollector()
         self._hash = hashlib.sha256()
         self._consumed = False
+        self._skipped = 0
 
     @property
     def name(self) -> str:
@@ -99,6 +100,24 @@ class RecordStream:
     @property
     def diagnostics(self) -> DiagnosticCollector:
         return self._collector
+
+    @property
+    def skipped_records(self) -> int:
+        """How much of the input never became a record, once read.
+
+        One per ``malformed_record``: a line that would not parse, and a whole
+        container that would not parse, which counts as **one** because how
+        many records it held is precisely what could not be read. So the
+        number is a lower bound on records lost, and its one honest use is the
+        question `build_contributed_graph` asks of it -- was any record of this
+        input never read at all (`SPEC.md` §3.7). Complete once iteration has
+        finished, like ``diagnostics``.
+
+        A ``duplicate_record`` is deliberately not counted. That copy is
+        skipped, but an identical one was read, so nothing about its contents
+        is unknown (`SPEC.md` §7).
+        """
+        return self._skipped
 
     @property
     def digest(self) -> str | None:
@@ -218,6 +237,7 @@ class RecordStream:
         # RecursionError is how `json` reports nesting it will not descend;
         # unreadable is unreadable, and neither may leave this layer (§7).
         except (ValueError, RecursionError) as failure:
+            self._skipped += 1
             self._collector.add(
                 codes.MALFORMED_RECORD,
                 f"the input begins with '[' but could not be read as a JSON "
@@ -226,6 +246,7 @@ class RecordStream:
             )
             return
         if not isinstance(document, list):
+            self._skipped += 1
             self._collector.add(
                 codes.MALFORMED_RECORD,
                 "the input begins with '[' but did not parse to an array",
@@ -288,6 +309,7 @@ class RecordStream:
         # RecursionError: see `_read_array`. Nesting the parser will not
         # descend is a property of the record, and is reported as one.
         except (ValueError, RecursionError) as failure:
+            self._skipped += 1
             self._collector.add(
                 codes.MALFORMED_RECORD,
                 f"line {number} could not be read as JSON ({failure}); it was "

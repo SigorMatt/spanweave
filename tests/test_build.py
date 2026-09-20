@@ -9,6 +9,7 @@ import dataclasses
 
 import pytest
 
+import spanweave
 from spanweave import diagnostics as codes
 from spanweave.build import (
     DATA_BASIS,
@@ -1121,6 +1122,46 @@ def test_a_whole_input_diagnostic_names_nobody_when_no_record_arrived():
     assert graph.nodes() == ()
     assert [(d.code, d.adapter) for d in graph.diagnostics] == [
         (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_a_record_was_never_read():
+    # The clause the contributions cannot supply. A record the reader could
+    # not parse is in nobody's `Contribution`, so the builder has to be told
+    # that it existed; otherwise the adapter that read the rest is named for
+    # a statement about an input one record of which is unknown.
+    spans = [a_span("s0", trace=None)]
+    wholly_read = mixed_build([(ADAPTER, spans)])
+    assert [(d.code, d.adapter) for d in wholly_read.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    partly_read = mixed_build([(ADAPTER, spans)], skipped_records=1)
+    assert [(d.code, d.adapter) for d in partly_read.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_an_unreadable_line_stops_the_dialect_being_named_for_the_whole_input():
+    # The same rule end to end, which is where it was found: one readable
+    # OpenInference record carrying no trace id, and one line that is not
+    # JSON at all. The graph reports no trace id, and half of that fact is a
+    # record nobody read.
+    graph = spanweave.build(
+        b'{"span_id":"s0","name":"chain.one","start_time":1000.0,'
+        b'"end_time":1001.0,"attributes":{"openinference.span.kind":"CHAIN"}}\n'
+        b"{not json\n"
+    )
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MALFORMED_RECORD, None),
+        (codes.MISSING_TRACE_ID, None),
+    ]
+    # The one record that *was* read still names its dialect everywhere the
+    # statement is about that record alone.
+    assert [(n.id, n.provenance.adapter_id) for n in graph.nodes()] == [
+        ("s0", "openinference")
+    ]
+    assert [(a.id, a.version) for a in graph.meta.adapters] == [
+        ("openinference", "0.1.0")
     ]
 
 

@@ -153,6 +153,7 @@ def build_contributed_graph(
     *,
     collector: DiagnosticCollector | None = None,
     source_digest: str | None = None,
+    skipped_records: int = 0,
     temporal: bool = True,
 ) -> Graph:
     """Turn several producers' normalized spans into **one** graph.
@@ -160,6 +161,18 @@ def build_contributed_graph(
     ``collector`` carries diagnostics raised before this point -- by the
     reader, typically -- so that a malformed line and an unpaired call end up
     in the same list. They are the same kind of statement about the input.
+
+    ``skipped_records`` is how much of the input never became a record at all,
+    from ``RecordStream.skipped_records``. The contributions cannot say: a
+    record the reader could not parse never reached an adapter and so is in
+    nobody's ``Contribution``, which would leave a statement about the whole
+    input naming one adapter while one record's contents are unknown
+    (`SPEC.md` §3.7). Only whether it is zero is used. It is a parameter
+    rather than a count of `malformed_record` diagnostics already in
+    ``collector`` because the collector is a list anyone may add to, and
+    reading a caller's fact back out of it would make this depend on who
+    else wrote there. Zero is the honest default for a caller that built its
+    spans from something other than a file.
 
     ``temporal=False`` omits the one derived edge kind, for a consumer that
     wants only what the telemetry stated.
@@ -189,9 +202,10 @@ def build_contributed_graph(
     }
     # What a statement about the **whole input** can honestly be attributed
     # to: the one adapter that read every record of it, or nobody when
-    # several did, or when any record was claimed by none. A wholly-claimed
-    # single-dialect input therefore reports exactly what it always did.
-    whole_input = _sole_contributor(producers)
+    # several did, when any record was claimed by none, or when any record
+    # was never read at all. A wholly-claimed, wholly-read single-dialect
+    # input therefore reports exactly what it always did.
+    whole_input = _sole_contributor(producers, skipped_records)
     for duplicated in assignment.duplicate_source_ids:
         collected.add(
             codes.DUPLICATE_SOURCE_ID,
@@ -216,9 +230,11 @@ def build_contributed_graph(
 
     edges = _explicit_edges(ordered, ids, by_span_id, collected, by_node)
     if temporal:
-        edges = _deduplicated([*edges, *_temporal_edges(nodes, edges, collected)])
+        edges = _deduplicated(
+            [*edges, *_temporal_edges(nodes, edges, collected, by_node)]
+        )
 
-    nodes = _in_order(nodes, edges, collected)
+    nodes = _in_order(nodes, edges, collected, whole_input)
 
     return Graph.of(
         trace_id=trace_id or "",
@@ -241,13 +257,48 @@ def _id_of(producer: AdapterInfo | None) -> str | None:
     return producer.id if producer is not None else None
 
 
-def _sole_contributor(producers: Sequence[AdapterInfo | None]) -> str | None:
+def _produced_by_one(adapter_ids: Sequence[str | None]) -> str | None:
+    """Did **one** adapter produce all of these, and which one.
+
+    The single question behind both `adapter` fields the builder fills in,
+    spelled once. An id only when the sequence is non-empty and every entry
+    is that same non-`None` id; `None` for anything else -- nothing to
+    attribute to, more than one producer, or a producer that is nobody.
+
+    All three clauses are written out rather than left to fall out of a set
+    having length one. An empty sequence and a sequence of nothing but `None`
+    both used to answer correctly by accident -- the first because an empty
+    set is not of length one, the second because the set's sole element
+    happened to be `None` -- and an accident that gives the right answer is
+    not a decision.
+    """
+    if not adapter_ids:
+        return None
+    distinct = set(adapter_ids)
+    if len(distinct) != 1:
+        return None
+    only = next(iter(distinct))
+    if only is None:
+        return None
+    return only
+
+
+def _sole_contributor(
+    producers: Sequence[AdapterInfo | None], skipped_records: int = 0
+) -> str | None:
     """Whose records a statement about the whole input was made from.
 
-    An id only when there is at least one record and **every** one of them was
-    produced by that same adapter. `None` when the records came from more than
-    one adapter, when any of them was produced by no adapter at all
-    (`SPEC.md` §6.1), and when there are no records to attribute anything to.
+    An id only when **every** record the input contained was produced by that
+    same adapter. `None` when the records came from more than one adapter,
+    when any of them was produced by no adapter at all (`SPEC.md` §6.1), when
+    any of them was skipped before an adapter could read it, and when there
+    are no records to attribute anything to.
+
+    ``skipped_records`` is the clause the contributions cannot supply. A
+    record the reader could not parse is reported as `malformed_record` and
+    reaches no adapter, so it is in no `Contribution` and `producers` has no
+    entry for it; without being told, this would name an adapter for a
+    statement about an input one record of which is unknown.
 
     This is `_edge_adapter`'s reasoning one level up: a diagnostic such as
     `missing_trace_id` is one statement about everything that arrived
@@ -256,10 +307,9 @@ def _sole_contributor(producers: Sequence[AdapterInfo | None]) -> str | None:
     naming one dialect for a relation two of them made would be
     (`SPEC.md` §3.7, §3.8).
     """
-    if not producers:
+    if skipped_records:
         return None
-    named = {_id_of(producer) for producer in producers}
-    return next(iter(named)) if len(named) == 1 else None
+    return _produced_by_one([_id_of(producer) for producer in producers])
 
 
 def _contributors(producers: Sequence[AdapterInfo | None]) -> tuple[AdapterInfo, ...]:
@@ -287,9 +337,11 @@ def _edge_adapter(by_node: Mapping[NodeId, str | None], *ends: NodeId) -> str | 
     An end that is not a node in this graph -- a `link` pointing outside the
     trace (`SPEC.md` §4.0) -- is not consulted, so a dangling link still
     reports the adapter of the span that stated it.
+
+    Same question as `_sole_contributor`'s, one level down, and now the same
+    spelling: `_produced_by_one` over the ends this graph has.
     """
-    named = {by_node[end] for end in ends if end in by_node}
-    return next(iter(named)) if len(named) == 1 else None
+    return _produced_by_one([by_node[end] for end in ends if end in by_node])
 
 
 def _tie_break(node: Node) -> tuple[int | float, str]:
@@ -769,6 +821,7 @@ def _temporal_edges(
     nodes: Sequence[Node],
     edges: Sequence[Edge],
     collected: DiagnosticCollector,
+    by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
     """Consecutive siblings only (`SPEC.md` §4.3).
 
@@ -795,6 +848,7 @@ def _temporal_edges(
                 "no start time, so this node takes part in no temporal edges",
                 node_id=node.id,
                 level=DiagnosticLevel.INFO,
+                adapter=by_node[node.id],
             )
             continue
         # Nodes with no parent are siblings of each other at trace root --
@@ -820,7 +874,10 @@ def _temporal_edges(
 
 
 def _in_order(
-    nodes: Sequence[Node], edges: Sequence[Edge], collected: DiagnosticCollector
+    nodes: Sequence[Node],
+    edges: Sequence[Edge],
+    collected: DiagnosticCollector,
+    adapter: str | None,
 ) -> tuple[Node, ...]:
     """Kahn's topological sort, with an explicit tie-break (`SPEC.md` §5.2).
 
@@ -858,6 +915,13 @@ def _in_order(
     # Malformed telemetry can state a cycle. The graph is still produced:
     # what is left is ordered by the tie-break alone, and the cycle is
     # reported rather than allowed to hang or crash the build.
+    #
+    # `adapter` is the whole-input value, the same one `missing_trace_id` and
+    # `duplicate_source_id` take, because this diagnostic names no node
+    # either: the order is a property of the whole graph, the residual nodes
+    # it lists are where that property failed rather than what it is about,
+    # and the cycle can be stated by edges two adapters' records made
+    # (`SPEC.md` §3.7).
     placed = {node.id for node in ordered}
     residual = sorted((node for node in nodes if node.id not in placed), key=_tie_break)
     named = ", ".join(node.id for node in residual)
@@ -867,5 +931,6 @@ def _in_order(
         f"be ordered topologically and are ordered by start time and id "
         f"instead: {named}",
         source=[node.id for node in residual],
+        adapter=adapter,
     )
     return (*ordered, *residual)
