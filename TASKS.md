@@ -11265,6 +11265,169 @@ threads: the widening in thread 59 is **accepted** (§3), so that thread is
 closed, and thread 58 is **confirmed and widened** (S9.1, S9.2) and stays open,
 cross-referenced to threads 64 and 65.
 
+### Qodo review of PR #2 — 2026-09-20
+
+**Not a run, and it did not reopen the series.** This is a bot review of the
+pull request that carries the audit branch, plus a cold read of the four
+commits that answered it. There is no `WORKPLAN.md`, no batch and no row in
+*The batches, with final status*; the run-6 accounting paragraph below still
+reads 52 open threads, which is run 6's number and stays it. It is recorded
+here because the commits that answered it sit on this branch and cite it by
+number, and a citation whose referent is not in the tree is the defect batch
+`R2` fixed for the run-1 review.
+
+Two files, both tracked:
+
+- `reviews/2026-09-20-qodo-bot.md` — the **nine items as received**, from the
+  `qodo-code-review[bot]` comment of 2026-09-19T16:39:06Z on pull request #2,
+  comment id `5743555759`, rendered against `96366d7`. Each item carries its
+  severity and category and the bot's own description, evidence, recommended
+  fix and issue description, transcribed with the HTML markup removed and
+  nothing reworded. A first comment from the same bot that day is a PR summary
+  and carries no findings. This file is written here rather than copied,
+  because there was no scratch drop of the comment: the archive is the
+  transcription, and it says so at its head.
+- `reviews/2026-09-20-qodo.md` — the **cold review** of the four commits
+  (`f0802e3`, `e6394e2`, `208c7e2`, `96366d7`), archived byte-for-byte from the
+  untracked scratch drop, where the file was named `REVIEW-2026-09-20-qodo.md`
+  directly under `patches/`: `cmp` clean, and `sha256`
+  `dde3b0d61b84aa46a2e3a7fd84256615a01e9ebbcfd7742b29a1d37063849d4c` on both
+  sides. As for runs 5 and 6, the scratch name and the whole digest are written
+  here and not in the archive, which is kept byte-for-byte; the name is
+  provenance and not a path to open, because `patches/` is absent from a clean
+  checkout and the doc-truth guard refuses a durable citation into it.
+
+**The nine items, and what answered each.** The `#` column is the number the
+comment renders, which is what the archive is filed under. The last column is
+how this repository's durable citations spell it, and the two rows where the
+two disagree are the whole of the disagreement.
+
+| # | Item | Disposition | Cited here as |
+|---|---|---|---|
+| 1 | Annotations can create undumpable graphs | closed by `f0802e3` | 1 |
+| 2 | Core adapters use role vocabulary | **declined**, reason below | — |
+| 3 | Unclaimed nodes lose exact source bytes | **declined**, reason below | — |
+| 4 | A digest test uses dynamic import | closed by `96366d7` | 4 |
+| 5 | Core comments add judgment terms | closed by `96366d7` | 5 |
+| 6 | One JSON encoding omits key sorting | closed by `96366d7` | 6 |
+| 7 | Empty statuses disappear from exports | closed by `208c7e2` | **9** |
+| 8 | Long integer keys become unwritable | closed by `f0802e3` | 8 |
+| 9 | Mixed inputs get false attribution | closed by `e6394e2`, widened by `ee6b533` | **7** |
+
+**The two declines**, in the words posted to the pull request, recorded so a
+clean checkout can see they were judged rather than lost:
+
+> **3 — "unclaimed nodes lose exact source bytes."** `RawRecord.source` is
+> the *parsed* record for every node this library produces, not only
+> unclaimed ones; SPEC §3.5 defines losslessness as "round-tripping `raw`
+> through the serializer reproduces the input record", and byte-level
+> fidelity (whitespace, key order, escape spelling) is explicitly not part
+> of the model — it cannot be, because the graph document is canonical JSON.
+> The rule as generated conflates the two.
+>
+> **2 — "core adapters use role vocabulary."** `role` here is the
+> OpenInference attribute key `llm.input_messages.N.message.role`, the
+> dialect's own name for the message author. The neutrality non-goal
+> (SPEC §9) forbids *spanweave* assigning roles such as source, sink or
+> severity; reading an instrumentor's attribute by its own name is the
+> adapter's job. The repo's neutrality gate (`tests/test_gates.py`) passes
+> on this code.
+
+The reply labels them `3` and `2` and names each by its title; by title they
+are the comment's item 3 and item 2, which is how they are filed.
+
+**The numbering, resolved rather than papered over.** The comment renders
+`7` as *Empty statuses disappear from exports* — the OTLP status finding —
+and `9` as *Mixed inputs get false attribution*, the adapter-attribution one.
+Three durable citations and two commit bodies have them the other way round:
+`208c7e2`'s body and its `CHANGELOG.md` entry said *Qodo finding 9* for the
+status fix, and `e6394e2`'s body, its `CHANGELOG.md` entry and a section
+comment in `tests/test_build.py` said *Qodo finding 7* for the attribution
+fix. The comment was re-read at the source before anything was decided: the
+nine `<summary>` lines of comment `5743555759` are numbered 1 to 9 in the
+order the archive lists them, and `7` and `9` are as above.
+
+Three things were done, and nothing was renumbered silently. The archive is
+filed under **the comment's numbering**, because "as received" is the only
+thing an archive can honestly be. The **two citations that can be edited**
+were corrected in place, with a dated note naming the number they used to
+carry — `CHANGELOG.md` twice and `tests/test_build.py` once — on the same
+argument the run-6 close used for the `audit-S8` sentence: a durable document
+that can be made true is made true, and the correction is dated rather than
+swapped in. The **two commit bodies cannot be amended**, so they are thread 76
+below, which is `T8`'s class exactly: a number in a commit body is wrong, the
+body is immutable, and the correct one is recorded where a reader will meet
+it. The table above is the map for anyone who reads an unamended body.
+
+**The cold review.** It is scoped to the four commits, one sub-agent per
+commit against a detached parent worktree, and its verdict is **three blocks
+and twelve open threads**. What closed each, all on this branch:
+
+- **B1**, **B2** and **T5** — `ee6b533`. `missing_timestamp` now carries
+  `adapter=by_node[node_id]` like every other record-scoped diagnostic; a
+  whole-input diagnostic names an adapter only when one adapter read every
+  record the input contained, records the reader skipped before the seam
+  included; and the question *did one adapter produce all of these* is spelled
+  once, as `_produced_by_one`, with its emptiness and non-`None` clauses
+  written out, and both `_sole_contributor` and `_edge_adapter` call it.
+- **T7** — `ee6b533` as well, and it is **not** an open thread. `SPEC.md`
+  §3.7's enumeration of whole-input diagnostics now names `ordering_cycle`
+  beside `missing_trace_id` and `duplicate_source_id`, and a paragraph says why
+  it takes the whole-input value rather than an unconditional `None`: it
+  carries no `node_id`, a topological order is a property of the whole graph,
+  and the cycle can be stated by edges two adapters' records made.
+- **T1**, **T2**, **T3** and **T12** — `6855055`. A lone surrogate is written
+  as its `\uXXXX` escape in `jsoncodec`, so the three `.encode` calls that
+  could raise on input the reader had already accepted no longer can;
+  `annotate` probes a value at the depth the graph document puts it, which
+  closed the 9995–9997 gap the review measured; and the placeholder path calls
+  `canonical_dump` instead of restating two of its four arguments. Two facts
+  from that commit are recorded here as facts rather than threads, because
+  they are closed: it found and fixed a **third** `.encode`, `spanweave/ids.py`
+  in `derive`, which the review did not name, and it disclosed in `SPEC.md`
+  §3.6 that the surrogate escape is **not injective**, so two records landing
+  on one node id are refused rather than merged.
+- **B3**, **T6**, **T10** and **T11** — the commit that archived this review,
+  *docs: archive the Qodo round and its cold review, and account for every
+  finding*. A commit cannot name its own sha, so, as thread 57 has
+  `audit-S12`'s row do and thread 60 has the run-6 archive's, it is described
+  and its subject line finds it in `git log`. **B3** is this subsection and the
+  two files above. **T6**: `CONTRACTS.md`'s `diagnostics[].adapter` row and its
+  *Relies on* paragraph keep the 3.2 measurement, which is a human's to re-run,
+  and gain a dated note that `SPEC.md` §3.7 has stated the field since
+  `e6394e2` and tests have asserted it since; a new check,
+  `tests/test_doc_truth.py::test_no_contracts_row_calls_a_field_unstated_that_the_spec_now_states`,
+  reads the two documents against each other, and it found that one row and no
+  other. **T10**: `SPEC.md` §7 now states that `status.message` has no proto3
+  default and that an absent one stays absent, beside the `status.code`
+  default — the asymmetry `208c7e2` turned on, which `grep -n status_message
+  SPEC.md` could not find anywhere in the spec before this. **T11**: the figure
+  *51 conformance dialect fixtures* in `96366d7`'s body is what `*.jsonl`
+  matches; `git ls-files 'fixtures/conformance/*/dialects/*'` counts **53** at
+  `96366d7` and at this commit, the two extra being
+  `fixtures/conformance/otlp_container/dialects/openinference.json` and
+  `fixtures/conformance/otlp_container/dialects/otel_genai.json`.
+  `CHANGELOG.md`'s entry carries the corrected count as a dated correction;
+  the body cannot be amended.
+- **T4**, **T8**, **T9** and the review's *also recorded, not filed* note that
+  a **tuple value passed to `annotate` comes back as a `list`** are open, as
+  threads 72–75, with the review's ready-made sentences verbatim. Thread 76 is
+  the numbering above.
+
+**One thing the archive changed about a gate, stated because a gate that moves
+quietly is worth less than one that does not.**
+`tests/test_doc_truth.py::test_every_make_target_a_document_names_exists`
+scanned every markdown file in the tree. The cold review's *What this review
+did not check* names a `demo` target, which this `Makefile` has never had, so
+tracking the review would have made that gate fail in every clean checkout
+from the moment the file landed. The scan now reads `durable_documents()`,
+whose exclusion — `reviews/` and `patches/` hold text copied verbatim, and a
+review reporting what it saw is reporting, not citing — is the same argument
+about the same text, and covers a make target exactly as it covers a path. The
+exclusion is two directories and nothing else: a non-existent target named by
+any document that speaks for the project today is still red, proved by
+planting one in `CONTRIBUTING.md`.
+
 ### The lesson the series ends on
 
 Recorded in the review's own words, because paraphrasing a criticism is how it
@@ -12184,6 +12347,67 @@ open. After it the list holds 71 threads, and 52 of them are open.
     re-measurement of `5e8a40f`, a second, docs-only concern; accept it as part
     of the batch or record the exception (run-6 review S10.3).
     (`reviews/2026-09-13-run6.md` §3, S10.3.)
+
+**The Qodo round's accounting.** Threads **72–76** come from the cold review of
+the four commits that answered the Qodo bot review of pull request #2
+(`reviews/2026-09-20-qodo.md`, and the items themselves at
+`reviews/2026-09-20-qodo-bot.md`), registered by the commit that archived them.
+They are **not** a run of this series, and the run-6 paragraph above keeps run
+6's count. Four of the five are the review's own: `T4`, `T8` and `T9` are its
+ready-made sentences pasted as it wrote them, reflowed and not reworded, each
+followed by the finding id that reproduces it, and 75 is the note it records as
+*also recorded, not filed*, which has no ready-made sentence — one is written
+here and marked as written here. Thread 76 is not the review's at all: it is
+the numbering disagreement the archive uncovered, filed as a thread because it
+is `T8`'s class — a number in a commit body that is wrong and cannot be
+amended. The review's other nine findings are closed by named commits under
+*Qodo review of PR #2 — 2026-09-20* above. Five added, none closed: after this
+the list holds **76** threads, and **57** of them are open (52 of 71 before).
+
+72. A mapping key that is not a string is found wherever it is reachable, even
+    when the container holding it is reached through a path the walk has
+    already visited. (`reviews/2026-09-20-qodo.md` *Open threads*, Q1, T4.)
+    Latent rather than live: every adversarial shared-container shape the
+    review built fired correctly, and the shape that returns `None` instead of
+    the key's type is a `Mapping` whose `values()` differ between visits, which
+    `json.dumps` then refuses with `TypeError` because it is not a `dict`.
+    Recorded because `f0802e3`'s body asserts the walk is correct in the
+    presence of repeats. `spanweave/annotate.py`, `_non_string_key`'s memo.
+73. A quoted failure location in a commit body is the location the tool
+    printed. (`reviews/2026-09-20-qodo.md` *Open threads*, Q2, T8.)
+    `e6394e2`'s body gives its third quoted parent failure as
+    `tests/test_build.py:1140`; the tool printed `:1142`. Line 1139–1141 is the
+    `meta.adapters` assertion, which passed. The correct line is `:1142`,
+    recorded here because a commit body cannot be amended — the same reason
+    thread 60 records a correction rather than making one.
+74. An unreadable `status.code` keeps the record distinguishable from a
+    `status` that was never an object, so a consumer can tell a malformed
+    `Status` from a malformed `status` field.
+    (`reviews/2026-09-20-qodo.md` *Open threads*, Q3, T9.) Measured by the
+    review at `208c7e2`: `{"status": {"code": 99}}` and `{"status": 99}` both
+    yield `status: 99` and compare equal as whole records, and likewise
+    `{"code": null}` against `null` and `{"code": true}` against `true`. The
+    same indistinguishability that commit fixed, one shape over; pre-existing
+    and unmoved across it.
+75. An annotation value that is a `tuple` is accepted and read back as a
+    `list`, which is the accepted-then-changed class `f0802e3` closed for a
+    non-`str` mapping key, one shape over; refuse it at `annotate` time or
+    state in `SPEC.md` §8 that the round-trip promise is up to JSON's own
+    types. (`reviews/2026-09-20-qodo.md` *Open threads*, Q1, *also recorded,
+    not filed*.) The sentence is written here rather than quoted: the review
+    recorded the shape in one clause and filed no registry sentence for it, and
+    the close brief asked for it to be filed.
+76. `208c7e2`'s and `e6394e2`'s commit bodies number the two Qodo findings they
+    answer the other way round from the comment that raised them — the bodies
+    say `9` for the OTLP status fix and `7` for the adapter-attribution fix,
+    the comment renders `7` and `9` — and a commit body cannot be amended, so
+    the correct numbers are recorded here and mapped in the disposition table
+    under *Qodo review of PR #2 — 2026-09-20*. The sentence is written here,
+    not quoted: the discrepancy is not in the review, which cites the bodies'
+    numbering throughout and had no reason to doubt it. `T8`'s class, one level
+    up — a wrong number in an immutable body — and the three citations that
+    *could* be edited (`CHANGELOG.md` twice, `tests/test_build.py` once) were,
+    with dated notes, which is why this thread is about the bodies alone.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

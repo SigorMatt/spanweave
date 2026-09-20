@@ -1789,6 +1789,14 @@ declares reaches `0.5`.
     absence — so it is read as code `0`, `"UNSET"`, and the status the export
     wrote survives into the record instead of leaving it indistinguishable
     from a span that carried no `status` at all.
+    **`status.message` has no default, and that asymmetry is deliberate.**
+    proto3 gives a scalar a default because there is a value the field can be
+    said to hold; there is no string a `Status` that wrote no `message` can be
+    said to have stated, so an absent one stays absent and no `status_message`
+    key is made up. A `{"code": 2}` with no `message` and a `{"code": 2,
+    "message": ""}` therefore stay distinguishable in the record, which is the
+    same argument as the one above, applied to the field that has no default
+    rather than to the one that does.
   - **Resource and scope are preserved, not dropped.** Each record carries
     `resource_spans` — its `ResourceSpans` entry without `scopeSpans` — and
     `scope_spans` — its `ScopeSpans` entry without `spans` — verbatim, and each

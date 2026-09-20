@@ -188,6 +188,13 @@ green fields are cross-checked against this table by the test.
 | `diagnostics[].source` | `JsonValue` | `SPEC.md` §3.7 | `tests/test_codes.py::test_the_unpaired_codes_emit_the_object_the_spec_declares`, `tests/test_conformance.py::test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect` | stated + asserted |
 | `diagnostics[].adapter` | `str \| None` | — | — | unstated, unmeasured |
 
+*Appended 2026-09-20, the row left as the reading it is:*
+`diagnostics[].adapter` is **stated by SPEC §3.7 and asserted by tests since
+`e6394e2`**, widened by `ee6b533`; the `TASKS.md` 3.2 measurement above
+predates it. The Status cell is derived from its own two cells by
+`tests/test_contracts.py`, so the note sits beside the row rather than inside
+it. See the `diagnostics[].adapter` entry under *Relies on* below.
+
 ### `annotations[]`
 
 | Path | Type | Stated | Asserted | Status |
@@ -367,6 +374,20 @@ the library rely on that no document states and no test asserts?*
 - `diagnostics[].adapter` — that it names the adapter that raised the
   diagnostic. Nothing states it, nothing asserts it, and the value can be
   invented at the boundary with the suite green.
+  **No longer true, and the sentence above is kept as the 3.2 reading it was.**
+  It is stated by SPEC §3.7 and asserted by tests since `e6394e2`, which added
+  the paragraph saying what `adapter` means on a record-scoped and on a
+  whole-input diagnostic, and widened by `ee6b533`, which made
+  `missing_timestamp` name the adapter that read the record and made a
+  whole-input diagnostic name none when any record was skipped before an
+  adapter could read it. The 3.2 measurement above predates both and is a
+  human's to re-run; it is not rewritten here, because a dated reading
+  overwritten is a reading lost rather than corrected. Nothing in this file
+  had to disagree with `SPEC.md` for either commit to be green, which is the
+  drift itself;
+  `tests/test_doc_truth.py::test_no_contracts_row_calls_a_field_unstated_that_the_spec_now_states`
+  now reads the two documents against each other (2026-09-20,
+  `reviews/2026-09-20-qodo.md` T6).
 - `annotations[].namespace` — that the consumer chose it and that `spanweave` is
   reserved (§8). The reservation is enforced at the API
   (`tests/test_graph.py::test_the_library_namespace_is_reserved`); the serialized

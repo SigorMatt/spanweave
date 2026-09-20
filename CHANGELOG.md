@@ -298,6 +298,42 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The Qodo round is archived and every finding of it is accounted for.** The
+  bot review of pull request #2 raised nine items and the four commits after
+  `574c53f` answered seven of them, citing the items by number in three
+  durable places while the thing being cited existed only on GitHub -- the
+  `R2` defect of the September 2026 audit series, returned. The items as
+  received are now `reviews/2026-09-20-qodo-bot.md`, each with the bot's own
+  description, evidence, recommended fix and issue description, its severity
+  and category, and a disposition table; the cold review of the four fixes is
+  `reviews/2026-09-20-qodo.md`, byte-for-byte from the untracked scratch drop,
+  `sha256` `dde3b0d61b84aa46...`. **Items 2 and 3 were declined**, and the
+  reasons posted to the pull request are recorded with them so a clean
+  checkout can see they were judged rather than lost: `RawRecord.source` is
+  the *parsed* record for every node, and byte-level fidelity is explicitly
+  not part of the model; and `role` in the OpenInference adapter is the
+  dialect's own attribute name, which reading is the adapter's job. **The
+  numbering is corrected rather than renumbered**: the live comment renders
+  `7` as the empty-OTLP-status finding and `9` as the false-attribution one,
+  the reverse of what `208c7e2`'s and `e6394e2`'s bodies say, so the two
+  citations that can be edited -- this file and `tests/test_build.py` -- now
+  carry the comment's number with a dated note naming the one they had, the
+  two commit bodies cannot be amended and are covered by an open thread, and
+  `TASKS.md` holds the mapping. `CONTRACTS.md`'s `diagnostics[].adapter` row
+  keeps its `TASKS.md` 3.2 measurement and gains a dated note that `SPEC.md`
+  §3.7 has stated the field since `e6394e2`, and a new doc-truth check reads
+  the two documents against each other so the next such row cannot go stale
+  silently. `SPEC.md` §7 now states that `status.message` has no proto3
+  default, the asymmetry `208c7e2` turned on, which until now lived only in a
+  code comment. `TASKS.md` gains the subsection *Qodo review of PR #2 --
+  2026-09-20*, which closes the cold review's `B1`, `B2`, `T1`, `T2`, `T3`,
+  `T5`, `T6`, `T7`, `T10`, `T11` and `T12` against named commits and registers
+  five open threads, **72-76**. `tests/test_doc_truth.py`'s make-target scan
+  reads `durable_documents()` rather than every markdown file, for the reason
+  that exclusion already gives: a review naming a `demo` target this project
+  does not have is reporting what a reviewer wrote, not claiming the target
+  exists. No behaviour changed.
+
 - **Three review nits: one encoder argument, one test import, three
   comments.** `jsoncodec.encode` re-spells a placeholder string to find it in
   the text the caller's `dump` produced, and that `json.dumps` call now passes
@@ -317,7 +353,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   and `_BOM`'s ("leaves the file's FIRST record unparseable"). **No behaviour
   changed**: every conformance dialect fixture builds byte-identically across
   the change, and so does `encode` on the long-integer path the fixtures do
-  not reach. (Qodo findings 4, 5 and 6)
+  not reach. (Qodo findings 4, 5 and 6. Corrected 2026-09-20 by the commit
+  that archived the Qodo round: `96366d7`'s body puts the number of those
+  fixtures at **51**, which is what `*.jsonl` matches; `git ls-files
+  'fixtures/conformance/*/dialects/*'` counts **53** at that commit and at
+  this one -- 51 `.jsonl` and the two `.json` renderings of
+  `otlp_container`, which are the only exercise of the OTLP container path
+  that commit touched. All 53 were built on both sides; the evidence is
+  wider than the figure, and the figure did not reproduce.)
 
 - **The run-6 cold review is archived and every finding it raised is
   registered.** The review read run 6's three code batches -- `S8`
@@ -1007,7 +1050,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   normalized `status` moves -- both adapters already read an absent status as
   `Status.UNSET` -- so no corpus expectation and no serialized shape moves
   either; every `otlp_container` fixture span carries `STATUS_CODE_OK`.
-  (Qodo finding 9; `SPEC.md` §7)
+  (Qodo finding **7**, as the review comment numbers it; written as 9 here
+  and in `208c7e2`'s body, corrected 2026-09-20 --
+  `reviews/2026-09-20-qodo-bot.md`; `SPEC.md` §7)
 
 - **A diagnostic about the whole input names an adapter only when a single
   adapter read every record, so a part-unclaimed input names none.**
@@ -1028,8 +1073,9 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   of an input whose diagnostic can name nobody. Per-node `provenance` and
   per-edge `adapter` are unchanged. No corpus expectation and no serialized
   shape moves: `canonical()` compares diagnostics by code and count, and no
-  conformance fixture carries an unclaimed record. (Qodo finding 7;
-  `SPEC.md` §3.7)
+  conformance fixture carries an unclaimed record. (Qodo finding **9**, as
+  the review comment numbers it; written as 7 here and in `e6394e2`'s body,
+  corrected 2026-09-20 -- `reviews/2026-09-20-qodo-bot.md`; `SPEC.md` §3.7)
 
 - **An annotation is refused at annotate time for anything the graph file
   cannot carry, because the probe is now the encoder the file is written

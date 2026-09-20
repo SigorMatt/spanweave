@@ -292,10 +292,29 @@ def makefile_targets() -> set[str]:
 
 
 def test_every_make_target_a_document_names_exists():
+    """`durable_documents()`, not `documents()`, and for the stated reason.
+
+    The exclusion `durable_documents()` applies is that `reviews/` and
+    `patches/` hold text copied **verbatim**, so what they say is a record of
+    a moment rather than a claim made now. That argument is about the text,
+    not about the shape of the thing it names, so it covers a make target
+    exactly as it covers a path: the cold review of the Qodo round
+    (`reviews/2026-09-20-qodo.md`) says what it *did not* check, and one of
+    the things it names is a `demo` target this Makefile has never had.
+    Archiving that sentence is reporting what a reviewer wrote. Editing it to
+    make a gate green would be forging a review, and leaving the gate reading
+    it would fail every clean checkout from the moment the file was tracked.
+
+    The exclusion stays narrow on purpose. It is two directories, both of
+    which exist to hold quoted text, and every other document -- `README.md`,
+    `SPEC.md`, `TASKS.md`, `CONTRIBUTING.md`, the Makefile's own neighbours --
+    is still scanned, so a target that does not exist, named by anything that
+    is speaking for the project today, is still red.
+    """
     targets = makefile_targets()
     assert {"check", "conformance"} <= targets, "Makefile parse produced nothing"
     named: dict[str, set[str]] = {}
-    for path in documents():
+    for path in durable_documents():
         for span in code_spans(path.read_text(encoding="utf-8")):
             for match in re.finditer(r"\bmake\s+([a-z][a-z-]+)", span):
                 named.setdefault(match.group(1), set()).add(str(path.relative_to(ROOT)))
@@ -424,6 +443,118 @@ def test_every_review_a_document_cites_is_in_the_repository():
         if not (ROOT / review).is_file()
     }
     assert not missing, f"documents cite reviews that are not in the tree: {missing}"
+
+
+# -- `CONTRACTS.md` against `SPEC.md` --------------------------------------
+#
+# `CONTRACTS.md` is an enumeration, not a set of contracts: each row records
+# what *states* and what *asserts* one serialized field, and says `unstated,
+# unmeasured` where nothing does (`AGENT.md`). A row is therefore a claim
+# about `SPEC.md`, and it goes stale the moment `SPEC.md` states the field --
+# silently, because the inventory is prose and the spec is prose.
+#
+# It did. `e6394e2` added the paragraph to `SPEC.md` §3.7 that states what
+# `diagnostics[].adapter` means, and added tests asserting it, while
+# `CONTRACTS.md` went on saying "nothing states it, nothing asserts it, and
+# the value can be invented at the boundary with the suite green". The cold
+# review of that commit found it by reading both files; nothing in the suite
+# could have (`reviews/2026-09-20-qodo.md`, T6).
+
+#: A paragraph that opens by naming a field in a code span is `SPEC.md`
+#: stating that field: "`adapter` names whose records...", "`basis` records
+#: what rule made it". Bold is allowed around it -- the spec emphasizes some
+#: of these -- and nothing else is: a name inside a sentence, in a type
+#: sketch, or in a table cell is the field being *mentioned*, which is not
+#: the same act.
+SPEC_STATEMENT = re.compile(
+    r"^(?:\*\*)?`([A-Za-z_][A-Za-z0-9_.]*)`(?:\*\*)?\s+[a-zA-Z]", re.M
+)
+
+#: What must stand beside a row that keeps saying `unstated` about a field
+#: the spec states: a note saying when that stopped being true. It is beside
+#: the row and not in it because the Status cell is derived from the row's own
+#: two cells by `tests/test_contracts.py`, which is a different guard and a
+#: good one -- text appended to that cell makes it stop following from them.
+STATED_SINCE = "stated by SPEC §"
+
+
+def spec_stated_fields() -> set[str]:
+    """Field names `SPEC.md` opens a paragraph to state."""
+    return {match.group(1) for match in SPEC_STATEMENT.finditer(read("SPEC.md"))}
+
+
+def contracts_noted_fields() -> set[str]:
+    """Fields `CONTRACTS.md` carries a `STATED_SINCE` note about.
+
+    Read per block, where a block is a paragraph or one `- ` bullet, so a note
+    counts for the field it actually names and not for its neighbour.
+    """
+    blocks = re.split(r"\n\s*\n|\n(?=- )", read("CONTRACTS.md"))
+    noted: set[str] = set()
+    for block in blocks:
+        if STATED_SINCE not in block:
+            continue
+        noted.update(re.findall(r"`([A-Za-z_][A-Za-z0-9_.\[\]]*)`", block))
+    return noted
+
+
+def contracts_rows() -> list[tuple[str, str]]:
+    """Each `CONTRACTS.md` inventory row as `(field path, status cell)`."""
+    rows = []
+    for line in read("CONTRACTS.md").splitlines():
+        # `str \| None` is one cell: in a GitHub table a pipe inside a cell is
+        # escaped, and splitting on it unescaped turns a five-column row into
+        # a six-column one -- which is how the first spelling of this check
+        # read the `diagnostics[].adapter` row as no row at all and passed.
+        cells = [cell.strip() for cell in line.replace(r"\|", "\x00").split("|")]
+        if len(cells) == 7 and cells[1].startswith("`") and cells[1].endswith("`"):
+            rows.append((cells[1].strip("`"), cells[5]))
+    return rows
+
+
+def test_no_contracts_row_calls_a_field_unstated_that_the_spec_now_states():
+    """The check the `diagnostics[].adapter` drift needed, kept narrow.
+
+    It reads the two documents against each other rather than either against
+    itself, which is the only way this class of drift is visible: both files
+    were internally consistent the whole time.
+
+    It does **not** demand the row be rewritten. A row's `Stated` and
+    `Asserted` columns are a *measurement*, taken at `TASKS.md` 3.2 and a
+    human's to re-run; overwriting one because the spec moved would destroy
+    the dated reading rather than correct it. What it demands is a note
+    naming the spec section and the commit, standing beside the row -- beside
+    and not inside, because `tests/test_contracts.py` derives the Status cell
+    from the row's own two cells, and a cell with a note appended stops
+    following from them.
+
+    The match is on the field's **leaf** name, because that is what `SPEC.md`
+    writes: §3.7 says "`adapter` names whose records...", not
+    "`diagnostics[].adapter`". A leaf shared by two structures therefore
+    reads as a match for both, which is a prompt to re-read the row, not a
+    verdict on it; the failure names the row and the reader decides.
+    """
+    rows = contracts_rows()
+    assert rows, "CONTRACTS.md parsed to no rows; the scan found nothing"
+    stated = spec_stated_fields()
+    assert "adapter" in stated, (
+        "SPEC.md no longer opens a paragraph stating `adapter`, so this "
+        "check's reading of what 'the spec states a field' looks like has "
+        "gone stale. Move it with the spec rather than deleting either"
+    )
+    noted = contracts_noted_fields()
+    stale = sorted(
+        path
+        for path, status in rows
+        if "unstated" in status and path.split(".")[-1] in stated and path not in noted
+    )
+    assert not stale, (
+        "CONTRACTS.md calls a field `unstated` that SPEC.md now states in a "
+        "paragraph of its own. The row is an enumeration and its measurement "
+        f"stands; add a note saying {STATED_SINCE!r} and which commit, so the "
+        "row records when it stopped being true instead of asserting "
+        f"something false about the repository:\n  {stale}"
+    )
 
 
 # -- Status: what ships, in the present tense ------------------------------

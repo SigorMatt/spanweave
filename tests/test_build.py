@@ -1046,7 +1046,9 @@ def test_two_adapters_reusing_one_span_id_keep_both_records_and_report_it():
 
 
 # --------------------------------------------------------------------------
-# What a whole-input diagnostic may name (Qodo finding 7; SPEC.md 3.7)
+# What a whole-input diagnostic may name (Qodo finding 9; SPEC.md 3.7)
+# -- 9 as the review comment numbers it; written as 7 here and in `e6394e2`'s
+# -- body, corrected 2026-09-20 (`reviews/2026-09-20-qodo-bot.md`).
 # --------------------------------------------------------------------------
 #
 # `missing_trace_id` and `duplicate_source_id` are the two diagnostics about
