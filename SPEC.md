@@ -462,10 +462,19 @@ rather than producing bytes. So the digest is taken over the text with those
 code points escaped, which is what JSON already offers for them and what a
 strict parser reads back as the identical string. It changes no id that does
 not hold one, and an id that does had none before: the encode raised. The
-escaping is not injective — a `\uD800` code point and the six literal
-characters `\ud800` give one digest — which is the same bounded property the
-`\x00` separator already has, and two records that land on one node id are
-refused rather than merged (rule 3's collision rule).
+escaping is not injective, and **where that bites is rule 2's and rule 3's
+id material, not the record digest** — a `\uD800` code point and the six
+literal characters `\ud800` give one *material*, and so one derived id, which
+is the same bounded property the `\x00` separator already has. The bound is
+the refusal below: two records that land on one node id are refused rather
+than merged (*Id collisions within a trace are a hard error*). The **record
+digest** cannot collide by this route, because the escape runs *after*
+`json.dumps`, which has already doubled a literal backslash: the record
+holding the code point canonicalizes to `{"v":"\ud800"}` and the record
+holding the six characters to `{"v":"\\ud800"}`, two texts and two digests.
+Which is the distinction and not a nicety — a digest collision would never
+reach that refusal at all, since §7 keeps one of two records that share a
+digest and reports the rest as `duplicate_record`.
 `tests/test_ids.py` derives an id from this text and compares it against the
 library's, and pins two `sw_` literals so neither side can drift quietly.
 
@@ -565,9 +574,12 @@ contained, skipped ones included**: it is `null` for a mixed input, `null`
 when any record was unclaimed, and `null` when any record was skipped before
 an adapter could read it (`malformed_record`, §7), because attributing a fact
 about the whole input to one dialect when another, or none, or a record nobody
-could read contributed to it is a false attribution. That is §3.8's rule for an
-edge whose ends came from different adapters, applied to a statement whose ends
-are the whole file.
+could read contributed to it is a false attribution. A `duplicate_record` skip
+is **not** a skip for this purpose, though §7 calls it one: an identical copy
+*was* read, so nothing about that record's contents is unknown, and what this
+sentence guards against is a fact stated about content nobody read. That is
+§3.8's rule for an edge whose ends came from different adapters, applied to a
+statement whose ends are the whole file.
 
 `ordering_cycle` lists the nodes it could not order in `source`, and that does
 not make it record-scoped: it carries no `node_id`, a topological order is a
@@ -1970,11 +1982,19 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
   a document of one value: an annotation's value sits under the `annotations`
   key, in an entry, under `value` — three containers — and depth is the one
   thing the encoder refuses that depends on *where* a value sits rather than
-  on what it is. Probing the bare value therefore accepted the three deepest
-  nestings the writer then refused. Two shapes, then, that `annotate` settles
-  and that this bullet and the one above state in full:
-  - a value **nested within three levels of the encoder's ceiling** is refused
-    by `annotate` and `annotate_many`, because the graph file could not carry
+  on what it is. Probing the bare value therefore accepted nestings the writer
+  then refused — **how many is the interpreter's answer, not this library's**.
+  Measured by probing the bare value against the writer the way the old spelling
+  did: three on CPython 3.12.3, in all three runs, and on 3.14.6 two or three,
+  three runs of eight giving two and five giving three, because 3.14's encoder
+  tests the C stack pointer rather than counting frames and so does not answer
+  the same in two processes. The three containers are structural and hold
+  everywhere; the depths they cost do not, which is why no number is stated
+  below. Two shapes, then, that `annotate` settles and that
+  this bullet and the one above state in full:
+  - a value nested deeper than the graph document could carry it — **at the
+    depth the graph document wraps an annotation's value** — is refused by
+    `annotate` and `annotate_many`, because the graph file could not carry
     it. Where that ceiling is belongs to the interpreter, not to this library
     (§7); that `annotate` and `dumps` agree on it is the library's.
   - a value holding a **lone surrogate** is **accepted**, and written as the

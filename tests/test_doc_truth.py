@@ -523,10 +523,29 @@ def test_no_contracts_row_calls_a_field_unstated_that_the_spec_now_states():
     `Asserted` columns are a *measurement*, taken at `TASKS.md` 3.2 and a
     human's to re-run; overwriting one because the spec moved would destroy
     the dated reading rather than correct it. What it demands is a note
-    naming the spec section and the commit, standing beside the row -- beside
-    and not inside, because `tests/test_contracts.py` derives the Status cell
-    from the row's own two cells, and a cell with a note appended stops
-    following from them.
+    naming the spec section and the commit, **somewhere in `CONTRACTS.md`**:
+    `contracts_noted_fields` splits the whole file into blocks and takes the
+    union, so any one block naming the field satisfies this check, wherever
+    it sits. That the note stands *beside* the row rather than inside it is a
+    separate and true constraint, and it is
+    `tests/test_contracts.py::test_each_row_s_status_follows_from_its_own_cells`
+    that imposes it: that test derives the Status cell from the row's own two
+    cells, so a cell with a note appended stops following from them.
+
+    Narrowed 2026-09-27, closing-review finding `F9`, which measured what the
+    earlier sentence claimed. `cf6346f`'s body said "It bites: with the note
+    removed it fails naming `['diagnostics[].adapter']`", and this docstring
+    said the same thing about the row's note. Measured by deleting each note
+    in turn in a scratch worktree: the row-adjacent note alone removed, `1
+    passed`; the *Relies on* note alone removed, `1 passed`; **both** removed,
+    `1 failed` naming `['diagnostics[].adapter']`. And with the note moved
+    inside the row's Status cell and both beside-notes deleted, this check
+    passes while `test_each_row_s_status_follows_from_its_own_cells` fails --
+    which is the division of labour the paragraph above now states. The guard
+    protects the *claim*, not the row's note; the sentence is narrowed rather
+    than the guard extended, because the narrowed sentence is true and the
+    placement already has a guard of its own. `cf6346f`'s body cannot be
+    amended, so `TASKS.md` thread 79 records it.
 
     The match is on the field's **leaf** name, because that is what `SPEC.md`
     writes: §3.7 says "`adapter` names whose records...", not

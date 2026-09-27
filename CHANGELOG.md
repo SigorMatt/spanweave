@@ -298,6 +298,47 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The closing review of the Qodo round is archived, every one of its eleven
+  findings is accounted for, and three spec sentences now say what was
+  measured.** The cold read of `ee6b533`, `6855055` and `cf6346f` is
+  `reviews/2026-09-20-close.md`, byte-for-byte from the untracked scratch
+  drop, `sha256` `a6319642c24454a1…`. Its one blocker, `F1`, was closed by
+  `247dfc6`; `F5`, `F7` and `F9` are open threads **77-79**; the rest are
+  closed here. **`SPEC.md` §3.6's non-injectivity disclosure is kept and made
+  exact**: what a `\uD800` code point and the six literal characters `\ud800`
+  collide in is rules 2 and 3's *id material*, not the record digest, which
+  cannot collide by that route because the escape runs after `json.dumps` has
+  doubled the literal backslash -- re-measured, `derive` gives one
+  `sw_208458696be8868c` for both and the two records canonicalize to
+  `{"v":"\ud800"}` and `{"v":"\\ud800"}` -- and the bound is the *Id
+  collisions within a trace are a hard error* refusal, not "rule 3's collision
+  rule", which a digest collision would never reach at all. **`SPEC.md` §8
+  stops predicting an interpreter's number**: "nested within three levels of
+  the encoder's ceiling" now reads "at the depth the graph document wraps an
+  annotation's value", because the gap it named measured 3 on CPython 3.12.3
+  in three runs and 2 or 3 on 3.14.6 across eight, 3.14 testing the C stack
+  pointer rather than counting frames; the *three containers* in the sentence
+  above it is the document's structure, holds on both, and stays. **`SPEC.md`
+  §3.7 gains one clause** saying a `duplicate_record` skip is not a skip for
+  the whole-input attribution rule, because an identical copy *was* read -- the
+  reasoning lived only in `spanweave/read.py` and a commit body. `TASKS.md`'s
+  Qodo subsection is corrected twice, both slips the archiving commit made in
+  its own accounting: *two* citations that can be edited becomes *three*, and
+  the *Cited here as* column is described as what that commit left it, the two
+  unamendable bodies' numbering. `reviews/2026-09-20-qodo-bot.md`'s provenance
+  sentence -- correctable because that file is a transcription and says so,
+  unlike the byte-for-byte archives beside it -- now says the `<b><i>`
+  emphasis was converted to code spans where it wrapped an identifier and
+  dropped elsewhere; *"nothing reworded"* is unchanged, and nothing
+  transcribed moved. And `tests/test_doc_truth.py`'s `CONTRACTS.md` check has
+  its **docstring** narrowed to what it demands -- a note anywhere in
+  `CONTRACTS.md`, not one standing beside the row -- measured by deleting each
+  note in turn: either alone leaves the check green, both together turn it
+  red, and the beside-not-inside placement is `tests/test_contracts.py`'s
+  constraint, which still bites. The guard was deliberately **not** extended.
+  No behaviour changed; nothing under `spanweave/` is touched.
+  (closing review, findings `F2`-`F4`, `F6`, `F8`, `F10`, `F11`; `F9` in part)
+
 - **The Qodo round is archived and every finding of it is accounted for.** The
   bot review of pull request #2 raised nine items and the four commits after
   `574c53f` answered seven of them, citing the items by number in three

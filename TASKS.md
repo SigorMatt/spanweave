@@ -11299,8 +11299,13 @@ Two files, both tracked:
 
 **The nine items, and what answered each.** The `#` column is the number the
 comment renders, which is what the archive is filed under. The last column is
-how this repository's durable citations spell it, and the two rows where the
-two disagree are the whole of the disagreement.
+how this repository's **commit bodies** spell it — the citations that cannot
+be amended — and the two rows where the two disagree are the whole of the
+disagreement. *Corrected 2026-09-27 (closing-review finding `F11`): it read
+"how this repository's durable citations spell it", a state the commit that
+wrote it had already ended, since it corrected the three citations that can be
+edited in the same change. The column is true of the unamendable bodies and of
+nothing else; the two rows that disagree are `208c7e2`'s and `e6394e2`'s.*
 
 | # | Item | Disposition | Cited here as |
 |---|---|---|---|
@@ -11349,7 +11354,7 @@ order the archive lists them, and `7` and `9` are as above.
 
 Three things were done, and nothing was renumbered silently. The archive is
 filed under **the comment's numbering**, because "as received" is the only
-thing an archive can honestly be. The **two citations that can be edited**
+thing an archive can honestly be. The **three citations that can be edited**
 were corrected in place, with a dated note naming the number they used to
 carry — `CHANGELOG.md` twice and `tests/test_build.py` once — on the same
 argument the run-6 close used for the `audit-S8` sentence: a durable document
@@ -11427,6 +11432,161 @@ about the same text, and covers a make target exactly as it covers a path. The
 exclusion is two directories and nothing else: a non-existent target named by
 any document that speaks for the project today is still red, proved by
 planting one in `CONTRIBUTING.md`.
+
+### Closing review of the Qodo round — 2026-09-21
+
+**Also not a run, and it did not reopen the series.** A cold read of the three
+commits that answered the Qodo round's own cold review — `ee6b533` (C1,
+build-stage adapter attribution) and `6855055` (C2, lone surrogates) read as
+code, and `cf6346f` (C3, the archive) read for hygiene — one sub-agent per
+commit, no shared context, every failure shown from a `git worktree` on the
+parent rather than from a stash or a partial checkout. There is no
+`WORKPLAN.md`, no batch and no row in *The batches, with final status*, and
+the run-6 accounting paragraph below still reads 52 open threads, which is run
+6's number and stays it.
+
+`reviews/2026-09-20-close.md` is that review, archived **byte-for-byte** from
+the untracked scratch drop, where the file was named REVIEW-2026-09-20-close.md
+directly under `patches/`: `cmp` clean, and `sha256`
+`a6319642c24454a1f870ee05f5df7193c25ada930ac850eb10d86dec0bf2f301` on both
+sides. As for runs 5 and 6 and for the Qodo round, the scratch name and the
+whole digest are written here and not in the archive, which is kept
+byte-for-byte; the name is provenance and not a path to open, because
+`patches/` is absent from a clean checkout and the doc-truth guard refuses a
+durable citation into it. The review was read on 2026-09-21 and files itself
+under the round's date. Every interpreter-sensitive claim in it was run on
+CPython **3.12.3** and **3.14.6**; its verdict is **one blocker and ten open
+items**, `F1`–`F11`, and it measured `make check` at `cf6346f` with `patches/`
+present as **2655 passed, 2 skipped**, gate run **82 passed**.
+
+**The eleven findings, and what answered each.** Nothing here is deferred
+silently: each is closed by a named commit or carried as a thread below.
+
+| # | Finding | Disposition |
+|---|---|---|
+| `F1` | `spanweave inspect` tracebacks on a lone surrogate, on a file `build` wrote | **blocker**, closed by `247dfc6` |
+| `F2` | §3.6's non-injectivity example is wrong for the half it names | closed by this commit |
+| `F3` | the boundedness clause in the same sentence cites the wrong refusal | closed by this commit |
+| `F4` | §8's *within three levels of the encoder's ceiling* is exact only on 3.12 | closed by this commit |
+| `F5` | C2 resolves `T1` opposite to the registry sentence written for it | **thread 77** |
+| `F6` | §3.7 never says a `duplicate_record` skip is not a skip | closed by this commit |
+| `F7` | two of C1's three `_skipped` sites are not load-bearing | **thread 78** |
+| `F8` | `TASKS.md` miscounts its own corrections | closed by this commit |
+| `F9` | C3's body overstates the `T6` guard's grip | narrowed by this commit; **thread 79** |
+| `F10` | the transcription's emphasis disclosure is imprecise | closed by this commit |
+| `F11` | the disposition table's *Cited here as* column went stale in the commit that created it | closed by this commit |
+
+*"This commit"* throughout is the one that archived this review, *docs: the
+closing review archived, and the spec says what was measured*: a commit cannot
+name its own sha, so, as thread 57 has `audit-S12`'s row do and thread 60 the
+run-6 archive's, it is described and its subject line finds it in `git log`.
+
+**`F1`, the blocker — `247dfc6`.** `6855055` made the library write a lone
+surrogate as its JSON escape and said in its subject that nothing about it can
+raise; `print` has an implicit encode of its own, in the process's text
+stream, owned by no encoder in this library, and that one was still strict, so
+`spanweave build` wrote a graph file, `spanweave validate` called it valid and
+`spanweave inspect` of the same bytes was an interpreter traceback. The CLI
+now sets `errors="backslashreplace"` on both text streams before anything is
+printed, and the overclaiming docstrings and `CHANGELOG.md` headline are
+narrowed to what the library can keep on its own. That commit's body carries
+the sixteen-run measurement, and its `CHANGELOG.md` entry states plainly that
+`6855055`'s subject overclaims as written and cannot be amended, so the change
+is what makes the sentence true. Nothing about `F1` is left to this commit.
+
+**`F2` and `F3` — `SPEC.md` §3.6, one sentence, two errors, and the disclosure
+kept.** The sentence said *"a `\uD800` code point and the six literal
+characters `\ud800` give one **digest**"* and bounded it with *"rule 3's
+collision rule"*. Both halves are re-measured here rather than taken from the
+review. What collides is rules 2 and 3's **id material**:
+`derive("oi", "\ud800", "s1")` and `derive("oi", "\\ud800", "s1")` are both
+`sw_208458696be8868c`. The **record digest** does not, and by construction
+cannot, because the escape runs after `json.dumps` has already doubled a
+literal backslash: the two records canonicalize to `{"v":"\ud800"}` and
+`{"v":"\\ud800"}`, whose digests are `d2aa26b4…` and `2eeb4121…`. And the
+bound is the *Id collisions within a trace are a hard error* rule, not rule
+3's: the colliding pair reaches `_refuse_collisions` and raises
+`DuplicateNodeIdError: two records resolve to the node id
+'sw_cd20d0f7517b8f26' … Refusing to overwrite one with the other`. A *digest*
+collision would never reach that refusal at all — §7 keeps one of two records
+that share a digest and reports the rest as `duplicate_record` — so had the
+sentence's own half been true, the stated bound would have been the wrong
+bound. The disclosure stays, because it over-discloses and that is the safe
+direction; it is now exact.
+
+**`F4` — `SPEC.md` §8, the number dropped and the structure kept.** Three
+*three*s stand in that bullet and they are not one claim, so each was decided
+separately. *"three containers"* is the document's structural wrapping —
+`annotations`, the entry, `value` — true on every interpreter; it **stays**,
+and now says it is structural. The other two — *"accepted the three deepest
+nestings the writer then refused"* and *"nested within three levels of the
+encoder's ceiling"* — are predictions about depths near the encoder's ceiling,
+which is the interpreter's answer and not this library's. Re-measured here on
+the suite's own `tests/json_depth.py` harness rather than taken from the
+review: the gap between what probing the bare value accepted and what the
+writer refused is **3 on CPython 3.12.3** in all three runs, and **2 or 3 on
+3.14.6** — eight runs, three giving 2 and five giving 3, because 3.14's
+encoder tests the C stack pointer rather than counting frames, so on that
+interpreter the quantity is not even constant between processes. The wrapped
+probe's gap is **0** in all eleven runs, which is the property the fix
+actually holds. So *"within three levels of the encoder's ceiling"* now reads
+*at the depth the graph document wraps an annotation's value*, and the
+bare-probe sentence states what was measured instead of a number.
+`CONTRIBUTING.md`'s bar — no test green because of a choice it made about its
+own fixture — is the reason one level out: a document that states an
+interpreter's constant as its own is the same defect without the test.
+
+**`F6` — `SPEC.md` §3.7, one clause.** A whole-input diagnostic names an
+adapter only when one adapter read *every record the input contained, skipped
+ones included*, and the sentence narrowed with the parenthetical
+`` (`malformed_record`, §7) ``. But §7's own text for `duplicate_record` also
+uses *skipped*, so a reader holding only the spec had to infer the exclusion
+from a parenthetical naming one code. The clause now says a `duplicate_record`
+skip is not a skip for this purpose, and why: an identical copy *was* read, so
+nothing about that record's contents is unknown. The behaviour was already
+right and is pinned by
+`tests/test_read.py::test_the_stream_counts_what_never_became_a_record`; the
+reasoning lived only in `spanweave/read.py` and in `ee6b533`'s body.
+
+**`F8` — the miscount, corrected to three.** The paragraph above that begins
+*"Three things were done"* said *the **two** citations that can be edited* and
+then enumerated three of them. `cf6346f`'s own body, thread 76 and the
+paragraph two lines above all say three; the word is now *three*. A one-word
+slip in the paragraph a reader lands on first, in a subsection whose whole
+subject is a miscount.
+
+**`F11` — the *Cited here as* column, described as what it now is.** The
+header sentence introduced the column as *"how this repository's durable
+citations spell it"*, and `cf6346f` ended that state in the same commit: it
+corrected `CHANGELOG.md` twice and `tests/test_build.py` once to the comment's
+numbering, so the column is true of the **commit bodies** — the citations that
+cannot be amended, and for the two rows that disagree those are `208c7e2`'s
+and `e6394e2`'s — and of nothing else. The header now says that, with a dated
+note naming what it said before.
+
+**`F10` — the transcription's provenance sentence, and the line between an
+archive that may be corrected and one that may not.**
+`reviews/2026-09-20-qodo-bot.md` said the `<b><i>` emphasis around identifiers
+*is dropped*. Most of it was **converted to markdown code spans**: in item 7's
+Description four such runs became backticked and one bare mid-sentence
+`<b><i>status</i></b>` was dropped. The sentence now says converted where it
+wrapped an identifier and dropped elsewhere, and warns that a backtick in that
+file may be the transcription's rather than the bot's. *"Nothing reworded"*
+holds and is untouched. This file is a **transcription**, which `cf6346f`
+filed it as and which it discloses at its head and again at its Disposition
+table; correcting the sentence that describes the transcription is therefore
+in bounds, and nothing transcribed moved. `reviews/2026-09-20-qodo.md` and
+`reviews/2026-09-20-close.md` are byte-for-byte archives and are not
+correctable at all.
+
+**`F5`, `F7` and `F9` are threads 77, 78 and 79**, each carrying the review's
+own sentences so a clean checkout can read the concern without the archive
+open. `F9` is half closed here and half registered: the overstating sentence
+that *can* be edited — the guard's own docstring — is narrowed to what the
+check demands, and the deletion experiment behind that narrowing was re-run
+rather than read off the review. The guard was **deliberately not extended**;
+thread 79 says so, and says that the identical sentence in `cf6346f`'s body
+cannot be amended.
 
 ### The lesson the series ends on
 
@@ -12408,6 +12568,73 @@ the list holds **76** threads, and **57** of them are open (52 of 71 before).
     up — a wrong number in an immutable body — and the three citations that
     *could* be edited (`CHANGELOG.md` twice, `tests/test_build.py` once) were,
     with dated notes, which is why this thread is about the bodies alone.
+
+**The closing review's accounting.** Threads **77–79** come from the cold read
+of the three commits that answered the Qodo round's own review
+(`reviews/2026-09-20-close.md`), registered by the commit that archived it.
+They are **not** a run of this series either, and the run-6 paragraph above
+keeps run 6's count. All three are the review's own sentences, reflowed and
+not reworded, each followed by the finding id that reproduces it; 79 carries
+one paragraph written here rather than quoted, marked as written here, because
+it records what the answering commit decided and the review had no way to
+know. The review's other eight findings are closed by named commits under
+*Closing review of the Qodo round — 2026-09-21* above. Three added, none
+closed: after this the list holds **79** threads, and **60** of them are open
+(57 of 76 before).
+
+77. `C2` (`6855055`) resolves `T1` **opposite to the registry sentence written
+    for it**: `reviews/2026-09-20-qodo.md` `T1` says *"an annotation holding a
+    lone surrogate is refused at annotate time, and a graph that holds one is
+    refused by `dumps` as a named `GraphNotSerializableError` rather than a
+    bare `UnicodeEncodeError`"*, and the commit **accepts and writes** it
+    instead, arguing the case well (*"refusing it would have been the mirror
+    error"*, `SPEC.md` §8). The commit's choice is the right one. Flagged only
+    because the registry sentence is the artifact a later reader will grep,
+    and it now records a decision that was deliberately not taken.
+    (`reviews/2026-09-20-close.md` *Findings*, `F5`.) The archive is
+    byte-for-byte and is not corrected; this thread is where the reader meets
+    the outcome.
+78. Two of `C1`'s three `_skipped` sites are **not load-bearing**.
+    `read.py:240` and `read.py:249` (array and non-array container failures)
+    increment the counter, but in both branches the stream yields **zero**
+    records: `producers` is empty, so `_produced_by_one([])` already returns
+    `None` at `build.py:277-278`, and under auto-detection `api.build` raises
+    `AdapterSelectionError` before the builder runs — observing them at all
+    required passing `--adapter` explicitly. Only `read.py:312` (the per-line
+    skip) is a case where a record is skipped while others are read and
+    claimed. The body's *"at all three sites"* is literally true but reads as
+    three independent fixes when it is one fix plus two belt-and-braces. **No
+    test distinguishes them**, so a future change making an array container
+    partially readable would be unguarded there. A note, not a defect.
+    (`reviews/2026-09-20-close.md` *Findings*, `F7`.)
+79. `C3`'s body **overstates the `T6` guard's grip**: *"It bites: with the note
+    removed it fails naming `['diagnostics[].adapter']`."* Measured,
+    `contracts_noted_fields()` (`tests/test_doc_truth.py`) scans the whole of
+    `CONTRACTS.md` per block and takes the union, so the *Relies on* note at
+    `CONTRACTS.md:377` alone satisfies it. Deleting the row-adjacent note at
+    `CONTRACTS.md:191` — the deliverable the `T6` paragraph leads with, placed
+    "beside the row rather than inside it" after a measured argument — leaves
+    the gate **green**. Only removing **both** turns it red. The guard protects
+    the *claim*, not the row's note. This is precisely the class the Qodo cold
+    review's own closing lesson names: *the sentence describing a guard needs
+    the same adversarial read as the guard*.
+    (`reviews/2026-09-20-close.md` *Findings*, `F9`.)
+    **What was decided, written here rather than quoted, because it happened
+    after the review.** The deletion experiment was re-run in a scratch
+    worktree before anything was written: the row-adjacent note alone removed,
+    `1 passed`; the *Relies on* note alone removed, `1 passed`; both removed,
+    `1 failed` naming `['diagnostics[].adapter']`; and the note moved *inside*
+    the row's Status cell with both beside-notes deleted passes this check
+    while failing
+    `tests/test_contracts.py::test_each_row_s_status_follows_from_its_own_cells`,
+    which is the guard that actually owns the placement. The **sentence was
+    narrowed and the guard was deliberately not extended**: the narrowed
+    sentence is true, it is docs-only, and the beside-not-inside placement
+    already has a guard of its own, so extending this one would have been a
+    second guard for a constraint that is already held. The narrowing landed
+    in the check's own docstring. `cf6346f`'s body carries the same
+    overstatement and **cannot be amended**, which is why this stays a thread
+    — `T8`'s class again, one level up.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
