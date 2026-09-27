@@ -7,11 +7,16 @@ caller named, and to nothing else.
 ``inspect``'s output is a human summary and is **not** a stable contract; the
 graph file is. Everything it prints is a count of something the graph already
 says, so nothing there is a judgement about the trace.
+
+Text it prints is written with the escape the graph file uses, so a code point
+the library accepted cannot make a command raise
+(``_print_unencodable_text_as_its_escape`` below, `SPEC.md` §7).
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import pathlib
 import sys
 from collections.abc import Iterable, Sequence
@@ -374,8 +379,47 @@ COMMANDS = {
 }
 
 
+def _print_unencodable_text_as_its_escape() -> None:
+    """Give this process's text streams the escape the graph file already uses.
+
+    Almost everything the CLI prints is text the input stated, or text about
+    it: a trace id in ``inspect``'s summary, a refusal quoting a value, a path
+    a caller named. A **lone surrogate** is the one code point a ``str``
+    carries that UTF-8 cannot encode, which is why the graph file writes it as
+    its six-character ``\\uXXXX`` escape (``jsoncodec.escape_lone_surrogates``,
+    `SPEC.md` §5.2). ``print`` has an encode of its own, implicit in the text
+    stream, and that one was still strict -- so ``build`` wrote a graph file,
+    ``validate`` called that file valid, and ``inspect`` of the same bytes was
+    an interpreter traceback (cold-review F1).
+
+    ``backslashreplace`` fires on exactly what the stream's encoding cannot
+    encode and on nothing else, so no other output moves; and for a surrogate
+    it writes the same six lower-case characters the graph file carries, so
+    the two surfaces spell the code point the same way rather than two ways.
+
+    **Guarded rather than assumed.** ``sys.stdout`` is a ``TextIOWrapper``
+    against a tty, a pipe and a file -- the cases this is for -- but a harness
+    may have replaced it with something else (``io.StringIO``, a capture
+    object), and a CLI that insisted on ``reconfigure`` would fail in the one
+    place it is being watched. Anything that is not a ``TextIOWrapper`` either
+    has no encode to fail or belongs to whoever substituted it.
+
+    Only the error handler is set. The **encoding** the interpreter chose, from
+    ``PYTHONIOENCODING`` or the locale, is left exactly as it was; an ``errors``
+    that variable named is overridden, which is the point -- ``utf-8:strict``
+    describes a stream that raises on input this library accepted.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors="backslashreplace")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI. Returns the process exit code."""
+    # Before any output at all: the help path below prints, every subcommand
+    # prints, and so do the `except` arms at the bottom.
+    _print_unencodable_text_as_its_escape()
+
     parser = _build_parser()
     args = parser.parse_args(argv)
 

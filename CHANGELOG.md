@@ -945,8 +945,41 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
-- **A lone surrogate is written as its `\uXXXX` escape, so nothing about it
-  raises.** `json.loads` produces a surrogate code point from a `\uD800`-
+- **Text the CLI prints is written with the graph file's escape, so no command
+  raises on a code point the library accepted.** `spanweave build` wrote a
+  graph file whose `trace_id` held a lone surrogate, `spanweave validate`
+  called that file `valid`, and `spanweave inspect` of either the trace or the
+  graph was an interpreter `UnicodeEncodeError` out of `print` -- rc 1 with a
+  traceback on CPython 3.12.3 and 3.14.6, under a pipe, with and without
+  `PYTHONIOENCODING=utf-8:strict`. The escape the entry below added is what the
+  **library** encodes with; `print` has an encode of its own in the process's
+  text stream, which is UTF-8 and `strict` for stdout and which no encoder in the
+  library owns or reaches. `main` now sets `errors="backslashreplace"` on
+  `sys.stdout` and `sys.stderr` before any output -- before the help path,
+  before dispatch, and so covering the `except` arms that print to stderr -- so
+  a surrogate reaches a terminal as the same six lower-case characters the
+  graph file carries, and the two surfaces spell it one way. Nothing else
+  moves: the handler fires only on what the encoding cannot encode, and the
+  graph `build` writes to stdout goes out through the binary buffer,
+  byte-identical to the file `-o` writes. Two things stated rather than
+  assumed. `sys.stderr` already defaults to `backslashreplace` on CPython and
+  `PYTHONIOENCODING` does not move it, so that half is measurably a no-op here
+  and is set anyway rather than left as a dependency on an interpreter default
+  the CLI does not choose; and the call is guarded on
+  `isinstance(stream, io.TextIOWrapper)`, because a harness may have
+  substituted a stream that has no `reconfigure` and a CLI that insisted would
+  fail in the
+  one place it is being watched. **`6855055`'s subject line -- *"a lone
+  surrogate is written as its JSON escape, so nothing about it can raise"* --
+  overclaims as written: `inspect` still raised. A commit subject cannot be
+  amended once it is in the history, so this change is what makes that sentence
+  true.** The docstrings that stated the same thing in `jsoncodec` and
+  `serialize` are narrowed to the claim the library can keep on its own -- no
+  *encoder* in it raises on such a value, and the CLI's text stream is configured
+  to match. (cold-review finding F1; `SPEC.md` §7)
+
+- **A lone surrogate is written as its `\uXXXX` escape, so no encoder in the
+  library raises on it.** `json.loads` produces a surrogate code point from a `\uD800`-
   `\uDFFF` escape nothing pairs with, `str` carries it, and
   `str.encode("utf-8")` refuses it -- so a value the library had already
   **accepted** became an interpreter traceback at three `.encode` calls. One

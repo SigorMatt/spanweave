@@ -2,6 +2,8 @@
 
 import json
 import pathlib
+import subprocess
+import sys
 
 import pytest
 
@@ -677,3 +679,162 @@ def test_build_refuses_to_write_the_document_validate_now_refuses_to_read(
     trace.write_text(_NON_FINITE_SPAN)
     assert main(["build", str(trace), "-o", str(tmp_path / "g.json")]) == 1
     assert "graph_not_serializable" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
+# Text the CLI prints carries the graph file's escape (cold-review F1)
+# --------------------------------------------------------------------------
+#
+# A lone surrogate is the one code point a `str` holds and UTF-8 cannot
+# encode, so `print` of a line holding one raised `UnicodeEncodeError` out of
+# the implicit encode in the text stream -- after `build` had written a graph
+# file and `validate` had called that same file valid. `spanweave/cli.py`
+# reconfigures both streams with `errors="backslashreplace"`, which writes the
+# same six lower-case characters the graph file writes (`SPEC.md` §5.2, §7).
+#
+# These run the CLI in its own process with both streams piped, because the
+# defect is in the process's own text stream and nowhere else: under `capsys`
+# `sys.stdout` is the harness's object, and the encode that failed is not the
+# one that would be measured.
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+#: The six characters, as they appear in the graph file and now on stdout.
+_ESCAPE = "\\ud800"
+
+#: The same code point as the bytes UTF-8 would have to refuse. Asserting its
+#: absence is the other half: the escape is written *instead of* the surrogate,
+#: not beside it, and nothing here is writing `surrogatepass` bytes.
+_RAW_SURROGATE_BYTES = b"\xed\xa0\x80"
+
+# One record, with the code point in three places the library treats
+# differently: the trace id (id material, `SPEC.md` §3.6), the span name (a
+# field carried through to the graph), and a payload value.
+_SURROGATE_SPAN = (
+    '{"trace_id":"t\\ud800","span_id":"s0","parent_id":null,'
+    '"name":"n\\ud800","start_time":1.0,"end_time":2.0,"status":"OK",'
+    '"attributes":{"openinference.span.kind":"AGENT",'
+    '"output.value":"v\\ud800"}}\n'
+)
+
+
+def _surrogate_trace(tmp_path):
+    trace = tmp_path / "surrogate.jsonl"
+    # ASCII on disk: the surrogate is the JSON escape, which is what a real
+    # instrumentor writes and what `json.loads` turns into the code point.
+    trace.write_text(_SURROGATE_SPAN, encoding="ascii")
+    return trace
+
+
+def _cli(*argv):
+    """`spanweave` in its own process, both streams pipes, no capture in between.
+
+    `-m spanweave.cli` rather than the console script so the test does not
+    depend on the package having been installed with its entry point; it is
+    the same `main`.
+    """
+    return subprocess.run(
+        [sys.executable, "-m", "spanweave.cli", *argv],
+        capture_output=True,
+        cwd=str(_REPO_ROOT),
+        check=False,
+    )
+
+
+def _no_traceback(finished):
+    assert b"Traceback" not in finished.stderr, finished.stderr.decode(
+        "utf-8", "backslashreplace"
+    )
+    assert b"UnicodeEncodeError" not in finished.stderr
+
+
+def test_inspect_prints_a_surrogate_in_a_trace_as_the_graph_files_escape(tmp_path):
+    finished = _cli("inspect", str(_surrogate_trace(tmp_path)))
+    _no_traceback(finished)
+    assert finished.returncode == 0
+    assert _RAW_SURROGATE_BYTES not in finished.stdout
+    printed = finished.stdout.decode("ascii")
+    assert f"trace: t{_ESCAPE}" in printed, printed
+
+
+def test_inspect_prints_the_same_escape_for_the_graph_build_wrote(tmp_path):
+    out = tmp_path / "g.json"
+    built = _cli("build", str(_surrogate_trace(tmp_path)), "-o", str(out))
+    _no_traceback(built)
+    assert built.returncode == 0
+
+    finished = _cli("inspect", str(out))
+    _no_traceback(finished)
+    assert finished.returncode == 0
+    assert _RAW_SURROGATE_BYTES not in finished.stdout
+    assert f"trace: t{_ESCAPE}" in finished.stdout.decode("ascii")
+
+
+def test_build_to_stdout_writes_the_same_bytes_the_file_gets(tmp_path):
+    # The graph goes out through `sys.stdout.buffer`, which the error handler
+    # does not touch -- asserted rather than assumed, by comparing the piped
+    # bytes with the file `-o` wrote from the same trace.
+    trace = _surrogate_trace(tmp_path)
+    out = tmp_path / "g.json"
+    assert _cli("build", str(trace), "-o", str(out)).returncode == 0
+
+    finished = _cli("build", str(trace))
+    _no_traceback(finished)
+    assert finished.returncode == 0
+    assert finished.stdout == out.read_bytes()
+    assert _RAW_SURROGATE_BYTES not in finished.stdout
+    assert _ESCAPE in finished.stdout.decode("ascii")
+
+
+def test_validate_still_calls_the_surrogate_bearing_graph_valid(tmp_path):
+    out = tmp_path / "g.json"
+    built = _cli("build", str(_surrogate_trace(tmp_path)), "-o", str(out))
+    assert built.returncode == 0
+
+    finished = _cli("validate", str(out))
+    _no_traceback(finished)
+    assert finished.returncode == 0
+    assert finished.stdout.decode("ascii").endswith(": valid\n")
+
+
+def test_a_failure_line_naming_a_surrogate_is_a_line_and_not_a_traceback(tmp_path):
+    # stderr, which is reconfigured for the same reason stdout is. `validate`
+    # reports a dangling edge by naming its kind and its endpoints, and both
+    # are text the document stated.
+    #
+    # The two interpolations are deliberately different and both are asserted.
+    # `{...!r}` on the endpoints was ASCII all along -- `repr` writes a
+    # surrogate as the same six characters -- so those positions were never
+    # part of this defect and must not move. `{edge.get('kind')}` is plain
+    # `str`, and that one reached the stream as the code point.
+    graph = tmp_path / "broken.json"
+    graph.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.1",
+                "trace_id": "t1",
+                "meta": {"node_count": 0, "edge_count": 1, "diagnostic_count": 0},
+                "nodes": [],
+                "edges": [
+                    {
+                        "kind": "parent\ud800",
+                        "src": "s\ud800",
+                        "dst": "s\ud800",
+                        "warrant": "explicit",
+                        "basis": "b",
+                    }
+                ],
+                "diagnostics": [],
+                "annotations": [],
+            },
+            ensure_ascii=True,
+        ),
+        encoding="ascii",
+    )
+    finished = _cli("validate", str(graph))
+    _no_traceback(finished)
+    assert finished.returncode == 1
+    assert _RAW_SURROGATE_BYTES not in finished.stderr
+    printed = finished.stderr.decode("ascii")
+    assert f"edge parent{_ESCAPE} " in printed, printed
+    assert f"'s{_ESCAPE}'" in printed, printed

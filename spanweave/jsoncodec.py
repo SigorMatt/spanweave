@@ -29,6 +29,14 @@ became an interpreter traceback out of the digest and out of the writer.
 ``escape_lone_surrogates`` below writes it as the escape JSON already has for
 it, which every strict parser reads back as the identical string.
 
+What that buys is exactly this: **no encoder in this library can raise on such
+a value.** It is not a claim about every encode a process performs on the
+library's text -- ``print`` has one of its own, in the text stream, which this
+module does not own and cannot reach. That one is the CLI's to set, and it
+sets it to the matching handler (``cli._print_unencodable_text_as_its_escape``,
+`SPEC.md` §7); until it did, ``build`` wrote a graph file, ``validate`` called
+it valid, and ``inspect`` of the same bytes was a traceback.
+
 This is the bottom of the stack: it imports nothing from the package but the
 ``JsonValue`` alias, and everything that reads or writes JSON imports it.
 """
@@ -179,12 +187,20 @@ def escape_lone_surrogates(text: str) -> str:
     from ``encode``, which turned a value the library had *accepted* into an
     interpreter traceback out of a digest and out of the writer.
 
-    So the library writes it the other way JSON offers: as the six-character
-    escape, lower-case, which is what ``json.dumps`` itself emits under
-    ``ensure_ascii=True``. That text is pure ASCII at those positions, every
-    strict parser reads it, and ``json.loads`` of it returns the identical
-    ``str`` -- the round trip is exact, and nothing is lost or replaced.
-    Idempotent by construction: the result holds no surrogate to escape again.
+    So every text this library **encodes** is encoded the other way JSON
+    offers: as the six-character escape, lower-case, which is what
+    ``json.dumps`` itself emits under ``ensure_ascii=True``. That text is pure
+    ASCII at those positions, every strict parser reads it, and ``json.loads``
+    of it returns the identical ``str`` -- the round trip is exact, and nothing
+    is lost or replaced. Idempotent by construction: the result holds no
+    surrogate to escape again.
+
+    *Encodes* is the width of the claim, and the CLI is the reason to say so.
+    Text this library hands to ``print`` is encoded by the **text stream**, not
+    by anything here, and that encode was strict long after this function
+    existed. The CLI configures its streams to write the same six characters
+    (`SPEC.md` §7), so the two surfaces spell the code point one way; nothing
+    in this module could have made them.
     """
     return _LONE_SURROGATE.sub(lambda found: f"\\u{ord(found.group()):04x}", text)
 

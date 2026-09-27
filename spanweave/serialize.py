@@ -116,6 +116,14 @@ def canonical_bytes(value: JsonValue) -> bytes:
     those as their escape (`SPEC.md` §5.2). It raised a bare
     ``UnicodeEncodeError`` -- not even wrapped as ``GraphNotSerializableError``
     -- until it did (run-7 review T1).
+
+    That is a claim about **this encoder**, and about every other encoder in
+    the library, and about nothing else. A ``print`` of the same text is the
+    process's encode in its own text stream, which this module neither owns
+    nor reaches; ``inspect`` raised there on a graph ``dumps`` had just written
+    without complaint, which is how narrow the sentence above has to be read
+    (cold-review F1). The CLI sets that stream to the matching handler
+    (`SPEC.md` §7).
     """
     try:
         # Through `jsoncodec.encode`, so that an integer the library read is

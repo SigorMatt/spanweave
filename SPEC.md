@@ -1868,6 +1868,22 @@ declares reaches `0.5`.
     one of §3.10's values**. A caller routing on a code matches against that
     closed set; *the line carries a bracket* is not the test, because this one
     does.
+- **Text the CLI prints carries the same escape the graph file does.** The
+  graph bytes are ASCII at a surrogate position because §5.2 says so, but
+  `inspect`'s summary and a failure line are `print`ed, and `print` has an
+  encode of its own in the process's text stream — which is UTF-8 and `strict`
+  for stdout, to a tty and to a pipe alike. A trace id, a node kind or an edge
+  kind holding a lone surrogate therefore reached that stream as a code point
+  UTF-8 cannot carry, and the command was an interpreter traceback rather than
+  an exit code — on a file `build` had written and `validate` had called
+  `valid`. So the CLI sets both streams to the `backslashreplace` error handler
+  before it prints anything: a code point the encoding cannot carry is written
+  as its `\uXXXX` escape, which for a surrogate is the six characters §5.2
+  already writes. Nothing else moves, because the handler fires only on what
+  the encoding refuses, and the graph itself goes to stdout through the binary
+  buffer, untouched. This is the CLI's behaviour, not the library's: the
+  library's guarantee is that **no encoder in it raises** on such a value
+  (§3.6, §5.2), and a caller with its own text stream sets its own handler.
 - Output goes to stdout / files **only**. Core never opens a network connection.
 
 ### Invocation
