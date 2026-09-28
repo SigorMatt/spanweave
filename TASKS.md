@@ -10506,6 +10506,28 @@ run-3/4 form, at `git show 64b4f57:WORKPLAN.md` for run 5's, or at
 `git show b44be76:WORKPLAN.md` for run 6's — whose §0 is byte-identical to
 the run-3/4 form in both, because the protocol did not change.
 
+**One sentence the next series must add to §0.1 before it runs it.** Step 8 is
+byte-identical in every archived copy named above, and at
+`git show 15cfab5:WORKPLAN.md` too. It reads:
+
+> 8. `git push origin audit-fixes` (create the branch on the first push). A
+>    run is not finished until the push succeeds; if it fails, report why and
+>    stop.
+
+That sentence is what let nine red pushes count as nine finished runs (*The
+lesson one level up*, below). A series that restores the protocol extends step
+8 with:
+
+> A successful push is not a finished run: the run is finished when CI on the
+> pushed tip is green, or every failure is explained. Check it — `gh pr checks`
+> on the pull request, or `gh run list --branch <branch> --limit 1` — and
+> report the result beside the run's batches.
+
+**§0.4's recovery brief repeats the same push sentence verbatim and needs the
+same extension.** It is the path a resumed run takes to its own close, so
+extending §0.1 alone would leave the hole open on exactly the runs most likely
+to have been interrupted.
+
 This section is the **item registry**. **Statuses were deliberately not
 duplicated here while the series ran** (two places to read a status is one
 place to read a stale one); they land here once, at the close. Batches marked
@@ -11619,6 +11641,89 @@ class as shut, so a future reader would trust the registry and stop checking.
 The practice that follows is to read a close's own claims the way the review
 reads the batches'.
 
+### The lesson one level up: nothing in the series looked at CI  *(recorded 2026-09-28)*
+
+The section above ends on *read a close's own claims the way the review reads
+the batches'*. This is that lesson one level up, and it was not the series that
+found it. **The reviews read the batches' claims adversarially and nobody
+looked at the pushed tip.**
+
+**What happened.** GitHub Actions has been red on **nine consecutive push
+runs** of `audit-fixes`. The last green push run is `34533298034`
+(2026-09-10T21:38Z, head `10ebd5d`, *"plan: R3 decided, run 4 order"*). Every
+push after it failed, and each of the nine has a matching `pull_request` run on
+pull request #2 that failed the same way.
+
+| run | pushed (UTC) | head | failing job(s) |
+|---|---|---|---|
+| `34546117762` | 2026-09-11T00:21 | `b091904` | `check (3.14)` |
+| `34643670149` | 2026-09-11T20:20 | `0533951` | `check (3.14)` |
+| `34650798561` | 2026-09-11T21:44 | `67c7642` | `check (3.14)` |
+| `35436155242` | 2026-09-19T09:59 | `5fd4660` | `check (3.14)` |
+| `35438378792` | 2026-09-19T10:48 | `6eb1762` | `check (3.14)` |
+| `35452595483` | 2026-09-19T15:41 | `574c53f` | `check (3.14)` |
+| `35477271933` | 2026-09-19T23:52 | `96366d7` | `check (3.14)` |
+| `35498830076` | 2026-09-20T08:10 | `cf6346f` | `check (3.11)`, `check (3.14)` |
+| `36349716322` | 2026-09-27T20:53 | `7676f63` | `check (3.11)`, `check (3.14)` |
+
+`check (3.12)`, `check (3.13)` and both `determinism` jobs (`ubuntu-latest`
+and `macos-latest`) passed on all nine.
+
+**Cause one — the `3.14` column, and it indicts this series directly.** The
+streak begins with the first push carrying `1e121d2`, `audit-R13`, *"docs: the
+depth ceiling is a table with an interpreter in every row"* — **the commit that
+added `"3.14"` to the matrix** in `.github/workflows/ci.yml`, under a comment
+saying the list had drifted below `requires-python` and that *"the only version
+that diverges was the one CI did not test"*. The commit that widened the matrix
+to demonstrate that the ceiling differs per interpreter is the commit whose new
+column refutes the hard-coded `100_000` that two earlier batches of this same
+series wrote — A1 (`4d7bb32`) and A6 (`477fe9b`) — under a comment calling it
+"far past any interpreter's limit". On the runner's CPython 3.14 a
+100,000-deep nested list encodes with no `RecursionError`, so four tests that
+assert a refusal got a success and asserted nothing:
+`test_graph.py::test_an_annotation_too_deep_to_encode_is_refused_not_a_traceback`,
+`test_openinference.py::test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised`
+and the two `test_otel_genai.py` tests of that name and of
+`test_a_text_value_too_deep_to_render_is_diagnosed_not_raised`. **The new
+column has been red from the moment it existed**, and the rule those four
+tests break is thread 10's own — a ceiling is a property of an interpreter
+build, its container shape and its stack, never a promise.
+
+**Cause two — the `3.11` column.** It joins at `35498830076`, the push carrying
+`6855055`, which added
+`tests/test_serialize.py::test_annotate_refuses_exactly_the_nesting_the_writer_refuses`,
+asserting that the depth `annotate` accepts and the depth `dumps` writes are
+**equal**. On 3.11 they are **946** and **948**. That is not a defect —
+`946 <= 948` is the safe direction, and nothing accepted at `annotate` is
+refused at `dumps` — the test asserted more than the library promises. Both
+causes are fixed by `546bdfa`, which changes nothing under `spanweave/`.
+
+**Why it survived.** Nine pushes, six cold reviews of the series' runs, two
+further archived review rounds, four closes, and the closing review archived at
+`7676f63`. Not one of them ran `gh pr checks`. What every batch *did* run is
+`make check`, and it was green every time — which is what it should have been.
+`make check` is **one interpreter on one machine**; the matrix is four
+interpreters on GitHub's. On this machine the interpreter is 3.14.6, where the
+nested-list encoder gives out at 74,489, below the `100_000` the four tests
+hard-code, so they pass; the runner's 3.14 has a different stack and a ceiling
+above 100,000, so they fail. 3.11 is not installed here at all, so the other
+half of the failure was not locally observable under any command. **The local
+gate did not miss the failure — it is not an instrument that can see it**, and
+treating it as one is the process defect, not the interpreters.
+
+**The rule now adopted, written as a rule:**
+
+> **A run is not closed and a pull request is not ready until `gh pr checks` on
+> the pushed tip is green, or every failure is explained.** A successful push
+> is not a finished run, and `make check` green is a precondition for pushing,
+> never the evidence that the push was good.
+
+**The series' own close is the sharpest instance of the lesson above.** Three
+of the four closes — `b091904`, `67c7642` and `6eb1762` — were pushed onto a
+branch whose CI was red, and each declared a close while the run that carried
+it was failing. Only the first close, `fcc842d`, was green. *"Closed"* is a
+claim, it was checkable, and the check nobody ran is one command.
+
 ### Cold review of run 1 — 2026-09-10
 
 An independent cold read of the 27 commits in `02e9f6e..911c8c1`, one
@@ -12635,6 +12740,49 @@ closed: after this the list holds **79** threads, and **60** of them are open
     in the check's own docstring. `cf6346f`'s body carries the same
     overstatement and **cannot be amended**, which is why this stays a thread
     — `T8`'s class again, one level up.
+
+**The CI streak's residue.** Thread **80** is the part of the nine-push red
+streak (*The lesson one level up*, above) that `546bdfa` measured and
+deliberately did not fix. It is registered by the commit that recorded the
+streak, which is not a run of this series either, and the run-6 paragraph above
+keeps run 6's count. The sentence is written here rather than quoted: there is
+no review behind it, only a measurement the fixing commit reported. One added,
+none closed: after this the list holds **80** threads, and **61** of them are
+open (60 of 79 before).
+
+80. **Eleven tests carrying a hard-coded `100_000` are green on today's CI only
+    by luck.** `546bdfa` gave the four tests CI was failing a depth measured in
+    the process that asserts it and left these alone. They nest `100_000`
+    levels and stay green only because the ceilings they actually meet —
+    `json.loads`, and `json.dumps` of nested **dicts** — happen to sit below
+    100,000 at the runner's 8 MB stack: on CPython 3.14.6 here, `loads` at
+    ~40,110 and `dumps` of dicts at ~37,240, both of which move by tens of
+    levels between fresh processes because 3.14 tests the C stack pointer
+    rather than counting frames. A runner with a larger stack turns them red,
+    which is not hypothetical: measured by running the suite on 3.14.6 under
+    `ulimit -s 65536`, where all eleven fail. They are
+    - `tests/test_read.py` —
+      `test_a_deeply_nested_record_line_is_diagnosed_rather_than_raised`,
+      `test_a_deeply_nested_array_container_is_diagnosed_rather_than_raised`,
+      `test_a_record_too_deep_to_digest_is_the_librarys_refusal_not_a_traceback`,
+      `test_the_digest_refusal_is_the_one_the_write_side_already_raises`,
+      `test_a_deeply_nested_otlp_document_is_diagnosed_rather_than_raised`;
+    - `tests/test_cli.py` —
+      `test_inspect_survives_a_record_nested_past_the_parsers_limit`,
+      `test_validate_survives_a_file_nested_past_the_parsers_limit`;
+    - `tests/test_serialize.py` —
+      `test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback`,
+      `test_the_refusal_is_the_librarys_own_error_type`;
+    - `tests/test_openinference.py::test_a_deeply_nested_payload_stays_present_and_is_diagnosed`
+      and
+      `tests/test_otel_genai.py::test_a_deeply_nested_message_list_keeps_its_text_and_reports`.
+
+    The thread is to give them the same treatment in their own diff — a depth
+    measured for the **parse** path and for nested **dicts**, which are the
+    shapes these eleven meet, rather than the nested-list measurement
+    `too_deep_for_nested_lists()` already provides. Deliberately not done in
+    `546bdfa` and deliberately not done here: each is its own reading of thread
+    10's rule, and a docs commit is not where a test's constant gets replaced.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

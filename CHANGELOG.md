@@ -298,6 +298,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A run is not closed until CI on the pushed tip is green.** Nothing under
+  `spanweave/` or `tests/` moves; this records a process failure and the rule
+  taken from it. GitHub Actions was red on **nine consecutive push runs** of
+  `audit-fixes`, from `34546117762` (2026-09-11, head `b091904`) through
+  `36349716322` (2026-09-27, head `7676f63`), each with a matching
+  `pull_request` failure on pull request #2; the last green push run is
+  `34533298034` (2026-09-10, head `10ebd5d`). `check (3.14)` failed on all
+  nine and `check (3.11)` joined for the last two, while `check (3.12)`,
+  `check (3.13)` and both `determinism` jobs passed throughout. The two causes
+  are the ones the entry above fixes, and the first is self-indicting: the
+  streak begins with the push carrying `1e121d2`, the commit that **added
+  `"3.14"` to the CI matrix** in order to show that the JSON depth ceiling
+  differs per interpreter -- and the interpreter it added is the one whose
+  ceiling refutes the `100_000` that two earlier batches of the same series,
+  `4d7bb32` and `477fe9b`, had hard-coded. Nine pushes, six cold reviews of
+  the series' runs, four closes and a closing review went past it with
+  `make check` green every time, which is what it should have been:
+  `make check` is one interpreter on one machine, and the failure is only
+  visible on four interpreters on GitHub's. **The rule adopted: a run is not
+  closed and a pull request is not ready until `gh pr checks` on the pushed
+  tip is green, or every failure is explained** -- a successful push is not a
+  finished run. `TASKS.md` carries the run table, both causes, the sentence
+  the next series must add to the operating protocol's §0.1 step 8 and §0.4,
+  and open thread **80**: eleven more tests whose hard-coded `100_000` stays
+  green only because the parse and nested-dict ceilings sit below it at the
+  runner's 8 MB stack.
+
 - **The closing review of the Qodo round is archived, every one of its eleven
   findings is accounted for, and three spec sentences now say what was
   measured.** The cold read of `ee6b533`, `6855055` and `cf6346f` is
