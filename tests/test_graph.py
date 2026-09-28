@@ -10,6 +10,7 @@ import pytest
 from spanweave.build import build_graph
 from spanweave.model import AdapterInfo, EdgeKind, NodeKind, RawRecord, Warrant
 from spanweave.seam import CallRole, NormalizedSpan, SpanLink
+from tests.json_depth import nested_lists, too_deep_for_nested_lists
 
 ADAPTER = AdapterInfo(id="some_dialect", version="0.1.0")
 
@@ -365,11 +366,14 @@ def test_an_annotation_too_deep_to_encode_is_refused_not_a_traceback(graph):
     # RecursionError, which is not a ValueError, so this check -- whose whole
     # job is "will this survive the graph file?" -- let it through and the
     # traceback surfaced later, from the writer.
-    value = []
-    for _ in range(100_000):
-        value = [value]
+    #
+    # The depth is measured in this process, not written down. A constant here
+    # said 100,000 and called it "far past any interpreter's limit"; on
+    # CPython 3.14.6 the encoder takes nested lists 74,481 deep, and deeper
+    # still on a runner with a larger stack, so that constant was a depth the
+    # interpreter was happy with and the test passed nothing.
     with pytest.raises(ValueError, match="JSON-serializable"):
-        graph.annotate("s1", "ns", "k", value)
+        graph.annotate("s1", "ns", "k", nested_lists(too_deep_for_nested_lists()))
 
 
 def test_annotating_a_node_that_is_not_here_is_refused(graph):

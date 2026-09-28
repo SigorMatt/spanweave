@@ -986,6 +986,53 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A recursion ceiling is measured in the process that asserts it, and the
+  probe/writer property is stated as the one-directional guarantee it is.**
+  Nothing in the library moves; five tests assumed a number instead of
+  measuring one, and CI was red on CPython 3.11 and 3.14 while 3.12 and 3.13
+  were green and every local gate passed. Two separate assumptions.
+  **One:** `test_annotate_refuses_exactly_the_nesting_the_writer_refuses`
+  asserted that the depth `annotate` accepts and the depth `dumps` writes are
+  *equal*. That is not the guarantee -- the guarantee is that nothing is
+  accepted at `annotate` and then refused at `dumps`, which is the
+  accepted-then-refused defect `f0802e3` removed -- and on 3.11 equality is
+  false for a reason that is not a defect: the C encoder's recursion counts
+  against the Python recursion limit there, and the probe inside `annotate`
+  runs a few frames deeper in the stack than the writer does, so it gives out
+  first. Measured, `annotate` accepted **946** where `dumps` wrote **948**; on
+  3.12.13 both are **9,978**, on 3.13.14 both **9,979**, on 3.14.6 both
+  **37,228**. The assertion is now `annotatable <= writable` -- a violation of
+  which is the defect, and says so -- bounded above by a new
+  `CALL_PATH_SLACK` (64) so the probe cannot drift far below the writer and
+  quietly refuse annotations the graph file would have carried. It is a new
+  constant rather than a reuse of `MEASUREMENT_NOISE`, which is the distance
+  between two *processes*; this is the distance between two *stack positions
+  in one process*, and a constant here means one thing.
+  **Two:** four tests built `100_000` levels of nested lists and a comment
+  called that "far past any interpreter's limit". It is not: the encoder's
+  ceiling for nested lists is **991** on 3.11.15, **9,996** on 3.12.13,
+  **9,997** on 3.13.14 and **74,489** on 3.14.6 here -- and past 100,000 on
+  the 3.14 CI runner, where `spanweave.build` rendered the value and the tests
+  asserting a `None` or a refusal asserted nothing at all. Each now takes its
+  depth from `too_deep_for_nested_lists()`, which bisects `json.dumps` and
+  `json.loads` of nested lists in the running process and adds
+  `MEASUREMENT_NOISE`, memoized so the four call sites share one measurement
+  (**1,247 / 10,253 / 10,254 / 74,745** on the four interpreters). The
+  bisection's escape hatch is explicit rather than silent: `deepest_accepted`
+  takes a `cap`, now **2,000,000**, and *fails* -- naming the deepest nesting
+  that was accepted -- if nothing under it is refused, because a test that
+  steps past a ceiling is vacuous when there is no ceiling to step past.
+  Verified on 3.11.15, 3.12.13, 3.13.14 and 3.14.6, full suite, at the
+  runner's default 8 MB stack; and on 3.14.6 under `ulimit -s 65536`, where
+  all four now pass and **11 other** tests carrying a `100_000` fail -- across
+  `test_read.py`, `test_cli.py`, `test_serialize.py` and the two adapters'
+  *text* parse paths. Those are green on a stack size they do not measure, and
+  they are left alone rather than swept into this change: each is its own
+  reading of the same lesson and belongs in its own diff.
+  `SPEC.md` §8 said the two ceilings "agree"; it now says which direction is
+  promised and why the other one is not. (`SPEC.md` §7, §8; cold-review
+  finding T2)
+
 - **Text the CLI prints is written with the graph file's escape, so no command
   raises on a code point the library accepted.** `spanweave build` wrote a
   graph file whose `trace_id` held a lone surrogate, `spanweave validate`

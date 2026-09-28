@@ -11,6 +11,7 @@ from spanweave import jsoncodec
 from spanweave.jsoncodec import DIGIT_LIMIT
 from spanweave.serialize import ROOT_KEYS, canonical_bytes, dumps, to_document, validate
 from tests.json_depth import (
+    CALL_PATH_SLACK,
     MEASUREMENT_NOISE,
     deepest_accepted,
     dicts_text,
@@ -478,7 +479,7 @@ def _unchecked_annotation(graph, value):
 
 
 def test_annotate_refuses_exactly_the_nesting_the_writer_refuses(record_property):
-    """T2. Two measured ceilings, and the claim is that they are one.
+    """T2. Two measured ceilings, and the claim is that one never exceeds the other.
 
     `check_serializable` probed the bare value while the graph file wraps it
     in three containers, so the three deepest values the probe accepted were
@@ -489,8 +490,17 @@ def test_annotate_refuses_exactly_the_nesting_the_writer_refuses(record_property
     Both ceilings are measured by bisection in this process rather than
     pinned: the number belongs to the interpreter's C recursion budget and
     differs by version (`SPEC.md` §7, and 9,993 here against 37,231 on
-    CPython 3.14.6). What is the library's is that the two agree, and that is
-    all this asserts.
+    CPython 3.14.6). What is the library's is **one-directional** -- nothing
+    is accepted at `annotate` and then refused at `dumps` -- and equality is
+    not that property. On CPython 3.11 the two are measurably not equal and
+    nothing is wrong: the C encoder's recursion counts against the Python
+    recursion limit there, and the probe runs a few frames deeper in the
+    Python stack than the writer does, so it gives out first. Measured in CI
+    on 3.11, `annotate` accepted 946 where `dumps` wrote 948. That direction
+    is the safe one -- a value the file could have carried is refused before
+    the graph exists, which is a refusal the caller can act on -- so it is
+    allowed, bounded by `CALL_PATH_SLACK` so the probe cannot drift far below
+    the writer and quietly refuse what the file would have taken.
     """
     graph = spanweave.build(FIXTURE)
 
@@ -511,19 +521,40 @@ def test_annotate_refuses_exactly_the_nesting_the_writer_refuses(record_property
     record_property(
         "annotation_depth", f"writable={writable} annotatable={annotatable}"
     )
-    assert annotatable == writable, (
+    assert annotatable <= writable, (
         f"`annotate` accepts an annotation nested {annotatable} deep and the "
         f"graph file carries one nested {writable} deep, so {annotatable - writable} "
         f"depths are accepted at annotate time and refused at `dumps` with the "
         f"graph already in the caller's hands"
     )
-    # Both ends of that agreement, exercised: the deepest one goes all the way
-    # round, and one past it is refused *before* the graph exists.
-    value = nested_dicts(writable)
+    assert writable - annotatable <= CALL_PATH_SLACK, (
+        f"the probe gives out {writable - annotatable} levels below the writer "
+        f"({annotatable} against {writable}), which is further than the call "
+        f"path between them accounts for: `annotate` is refusing annotations "
+        f"the graph file would have carried"
+    )
+    # Both ends of the asserted property, exercised rather than only asserted.
+    # The deepest value `annotate` accepts goes all the way round, so the
+    # left-hand side of `annotatable <= writable` is a depth the writer really
+    # does write and not just a number.
+    value = nested_dicts(annotatable)
     annotated = graph.annotate("s2", "my_evals", "k", value)
     assert jsoncodec.loads(dumps(annotated))["annotations"][0]["value"] == value
+    # Past each ceiling, the refusal each end owns: `annotate`'s before the
+    # graph exists, and -- with the probe bypassed, which is what makes
+    # `writable` a measurement of `dumps` rather than a second reading of
+    # `annotate` -- the writer's own named error. `MEASUREMENT_NOISE` rather
+    # than one level, because on the interpreters where the C encoder counts
+    # against the Python recursion limit the ceiling moves with the caller's
+    # own stack depth, and these two calls are two frames shallower than the
+    # bisection that measured them: `annotatable + 1` is still accepted on
+    # CPython 3.11 from here.
     with pytest.raises(ValueError, match=_REFUSED):
-        graph.annotate("s2", "my_evals", "k", nested_dicts(writable + 1))
+        graph.annotate(
+            "s2", "my_evals", "k", nested_dicts(annotatable + MEASUREMENT_NOISE)
+        )
+    with pytest.raises(spanweave.GraphNotSerializableError):
+        dumps(_unchecked_annotation(graph, nested_dicts(writable + MEASUREMENT_NOISE)))
 
 
 def test_the_probe_wraps_an_annotation_where_the_document_puts_it():

@@ -21,6 +21,7 @@ from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.model import NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
+from tests.json_depth import nested_lists, too_deep_for_nested_lists
 
 CAPTURED = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -296,21 +297,21 @@ def test_a_deeply_nested_message_list_keeps_its_text_and_reports():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
-def _nest(depth):
-    """A list nested `depth` deep, built without recursing to build it."""
-    value = []
-    for _ in range(depth):
-        value = [value]
-    return value
-
-
 def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
     # Finding 3 (batch A6) through this dialect's already-structured branch:
     # an exporter that can carry nested attributes hands the adapter a value
     # it never had to parse, and rendering it back to text with `json.dumps`
     # raises RecursionError. The record is where the value survives.
+    #
+    # The depth is measured here rather than written as 100,000 and called
+    # "far past any interpreter's limit": CPython 3.14.6 renders nested lists
+    # 74,481 deep in this process and past 100,000 on the CI runner, so the
+    # constant named a depth that rendered fine and the test asserted nothing.
     span = span_of(
-        {"gen_ai.operation.name": "chat", "gen_ai.input.messages": _nest(100_000)}
+        {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.input.messages": nested_lists(too_deep_for_nested_lists()),
+        }
     )
     assert span.inputs.state is PayloadState.PRESENT
     assert span.inputs.value is None
@@ -320,11 +321,12 @@ def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
 
 def test_a_text_value_too_deep_to_render_is_diagnosed_not_raised():
     # And through the one attribute the convention states is unstructured:
-    # nothing is parsed there, but a non-string value is still rendered.
+    # nothing is parsed there, but a non-string value is still rendered. Same
+    # measured depth, for the same reason as the test above.
     span = span_of(
         {
             "gen_ai.operation.name": "execute_tool",
-            "gen_ai.tool.call.arguments": _nest(100_000),
+            "gen_ai.tool.call.arguments": nested_lists(too_deep_for_nested_lists()),
         }
     )
     assert span.inputs.state is PayloadState.PRESENT

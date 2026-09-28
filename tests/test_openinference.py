@@ -21,6 +21,7 @@ from spanweave.build import (
 from spanweave.model import AdapterInfo, EdgeKind, NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
+from tests.json_depth import nested_lists, too_deep_for_nested_lists
 
 FIXTURE = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -218,14 +219,6 @@ def test_a_deeply_nested_payload_stays_present_and_is_diagnosed():
     assert codes_of(span) == [codes.PAYLOAD_PARSE_FAILED]
 
 
-def _nest(depth):
-    """A list nested `depth` deep, built without recursing to build it."""
-    value = []
-    for _ in range(depth):
-        value = [value]
-    return value
-
-
 def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
     # The other half of finding 3 (batch A6): an exporter that carries nested
     # attributes hands the adapter a value it never had to parse, and the
@@ -233,10 +226,15 @@ def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
     # nesting it will not descend the same way `json.loads` does. The text is
     # what could not be produced, so `raw` is None and the record itself is
     # where the value survives (`SPEC.md` §3.5).
+    #
+    # The depth comes from this process's own ceiling. It was 100,000, called
+    # "far past any interpreter's limit"; CPython 3.14.6 renders nested lists
+    # 74,481 deep here and more than 100,000 deep on the CI runner, where this
+    # test asserted a `None` that was a rendered string.
     span = span_of(
         {
             "openinference.span.kind": "TOOL",
-            "output.value": _nest(100_000),
+            "output.value": nested_lists(too_deep_for_nested_lists()),
             "output.mime_type": "application/json",
         }
     )

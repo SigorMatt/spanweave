@@ -1996,7 +1996,15 @@ graph.nodes(annotated=(namespace, key, value)) -> tuple[Node, ...]
     depth the graph document wraps an annotation's value** — is refused by
     `annotate` and `annotate_many`, because the graph file could not carry
     it. Where that ceiling is belongs to the interpreter, not to this library
-    (§7); that `annotate` and `dumps` agree on it is the library's.
+    (§7); what is the library's is **one-directional** — nothing `annotate`
+    accepts is refused by `dumps`. The two are not promised to be *equal*, and
+    on CPython 3.11 they measurably are not: the C encoder's recursion counts
+    against the Python recursion limit there, so the probe, which runs from a
+    few frames deeper in the stack than the writer does, gives out first —
+    measured in CI, `annotate` accepted 946 where `dumps` wrote 948. That
+    direction costs a caller a refusal for two values the file would have
+    taken, at a depth the interpreter moves anyway; the other direction is the
+    accepted-then-refused defect, and that is the one ruled out.
   - a value holding a **lone surrogate** is **accepted**, and written as the
     `\uXXXX` escape §5.2 states. It round-trips: reading the file back gives
     the identical string. It is not a shape the graph file cannot carry, so
