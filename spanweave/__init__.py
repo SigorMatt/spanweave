@@ -44,6 +44,7 @@ from spanweave.model import (
     Usage,
     Warrant,
 )
+from spanweave.read import Records, read_records
 from spanweave.serialize import (
     delta_dumps,
     delta_to_document,
@@ -78,6 +79,7 @@ __all__ = [
     "PayloadState",
     "Provenance",
     "RawRecord",
+    "Records",
     "SpanweaveError",
     "Status",
     "UnknownAdapterError",
@@ -89,6 +91,7 @@ __all__ = [
     "delta_to_document",
     "dump",
     "dumps",
+    "read_records",
     "to_document",
     "validate",
 ]

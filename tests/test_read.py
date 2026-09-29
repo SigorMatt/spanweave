@@ -4,6 +4,7 @@ The reader's contract is mostly about what it refuses to do: it does not
 raise, it does not drop, and it does not decide what a record means.
 """
 
+import dataclasses
 import hashlib
 import io
 import json
@@ -1333,3 +1334,107 @@ def test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about(tmp_path
     graph = _built(envelope(NS_OTLP_SPAN, seconds), tmp_path)
     suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
     assert [d.node_id for d in suspect] == ["s0"]
+
+
+# --- Records from bytes in memory (`SPEC.md` §7) -----------------------------
+#
+# The reader's other door, and the one a receiver needs: `OPEN_QUESTIONS.md`
+# §19 asks for the container parsing above on records *in flight* -- an
+# OTLP/HTTP request body, a chunk tailed off an exporter, a message off a
+# queue -- rather than on a path. It is the same function underneath, so an
+# export cannot read one way from a file and another way in memory.
+
+
+def test_read_records_is_on_the_public_api():
+    assert "read_records" in spanweave.__all__
+    assert "Records" in spanweave.__all__
+
+
+def test_read_records_unpacks_an_export_that_never_touched_a_file():
+    data = json.dumps(envelope(OTLP_SPAN)).encode("utf-8")
+    result = spanweave.read_records(data)
+    assert result.records == (
+        {
+            "trace_id": "t1",
+            "span_id": "s0",
+            "parent_id": "",
+            "name": "chat",
+            "start_time": "1700000000000000000",
+            "end_time": "1700000000500000000",
+            "status": "OK",
+            "attributes": {"gen_ai.operation.name": "chat"},
+        },
+    )
+    assert result.diagnostics == ()
+    assert result.skipped_records == 0
+
+
+def test_read_records_reads_every_container_the_path_form_reads():
+    # The four shapes `OPEN_QUESTIONS.md` §16(d) separates, each read by the
+    # one implementation: a difference here would be a second reader.
+    document = json.dumps(envelope(OTLP_SPAN)).encode("utf-8")
+    second = json.dumps(envelope(dict(OTLP_SPAN, spanId="s1"))).encode("utf-8")
+    for data in (JSONL, ARRAY, document, document + b"\n" + second + b"\n"):
+        assert spanweave.read_records(data).records == tuple(read_trace(data))
+
+
+def test_read_records_holds_its_diagnostics_before_anything_is_iterated():
+    # A `RecordStream` fills its diagnostics *while* it is iterated, which is
+    # honest for a file and a trap for a caller handed bytes: the bytes are
+    # already in memory, so there is nothing to stream and nothing to arrive
+    # late. The result is complete when it is returned.
+    result = spanweave.read_records(b'{"span_id":"s0"}\n{oops\n')
+    assert [d.code for d in result.diagnostics] == [codes.MALFORMED_RECORD]
+    assert result.skipped_records == 1
+    assert result.records == ({"span_id": "s0"},)
+
+
+def test_read_records_never_raises_on_bytes_that_are_not_json_at_all():
+    result = spanweave.read_records(b"not json at all\n")
+    assert result.records == ()
+    assert [d.code for d in result.diagnostics] == [codes.MALFORMED_RECORD]
+
+
+def test_read_records_collapses_a_duplicate_exactly_as_a_file_does():
+    data = b'{"span_id":"s0"}\n{"span_id":"s0"}\n'
+    result = spanweave.read_records(data)
+    assert result.records == ({"span_id": "s0"},)
+    assert [d.code for d in result.diagnostics] == [codes.DUPLICATE_RECORD]
+    # A duplicate is not a loss: an identical copy was read (`SPEC.md` §7).
+    assert result.skipped_records == 0
+
+
+def test_read_records_iterates_so_the_result_feeds_a_builder_directly():
+    result = spanweave.read_records(JSONL)
+    assert list(result) == list(result.records) == RECORDS
+
+
+def test_a_records_result_is_frozen_like_every_other_value_the_library_hands_back():
+    result = spanweave.read_records(JSONL)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.records = ()
+
+
+def test_read_records_refuses_a_str_rather_than_reading_it_as_content():
+    with pytest.raises(TypeError) as failure:
+        spanweave.read_records('{"span_id":"s0"}')
+    assert "bytes" in str(failure.value)
+
+
+def test_read_records_does_not_open_the_file_a_str_would_have_named(tmp_path):
+    # The door this refusal closes. Everywhere else in this library a `str` is
+    # a path, so a `read_records` that read one as content would turn
+    # `read_records("trace.jsonl")` into an empty read with no complaint --
+    # and one that passed it through to `read_trace` would read the file, from
+    # a function whose whole contract is that it touches no file.
+    path = tmp_path / "trace.jsonl"
+    path.write_bytes(JSONL)
+    with pytest.raises(TypeError):
+        spanweave.read_records(str(path))
+
+
+def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes():
+    # `SPEC.md` §10.4: a builder fed records carries no `source_digest`, so the
+    # digest has no consumer on this path and is not offered on it.
+    result = spanweave.read_records(JSONL)
+    assert not hasattr(result, "digest")

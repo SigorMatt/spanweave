@@ -1562,7 +1562,38 @@ declares reaches `0.5`.
   break it into two that do not. The consequence is stated rather than hidden:
   a CR-only file is **one line**, and one line that long is one
   `malformed_record` carrying its text — a loud refusal, not a silent misread.
-- Read from a path or from stdin (`-`).
+- Read from a path, from stdin (`-`), or from **bytes already in memory**. A
+  `str` is always a path and never content, in every one of these forms.
+- **`spanweave.read_records(data)` reads records out of bytes and builds
+  nothing**, for a caller holding telemetry in flight rather than a file: an
+  OTLP/HTTP request body, a chunk tailed off an exporter's output, a message
+  taken off a queue (`OPEN_QUESTIONS.md` §19). It returns a `Records` — the
+  records in input order, the diagnostics the read produced, and
+  `skipped_records` — and all three containers above are recognized by the same
+  code the path and stdin forms use, so an export cannot read one way from a
+  file and another way in memory.
+  - It **reads; it does not judge.** No adapter is consulted, no dialect is
+    named, nothing is classified. The records it hands back are the records
+    `build` would have classified, and feeding them to a `Builder` one at a
+    time is the live path §10 specifies.
+  - **Cheap to read is not cheap to absorb.** A whole export read in one call
+    is still one `feed` per span, and a `feed` restates in full every key the
+    record touches (§10.6). Reading is where the container form stops
+    mattering; it is not where absorbing becomes free.
+  - A `Records` is **complete when it is returned**: the bytes were already in
+    memory, so there is nothing to stream and no diagnostic that arrives later.
+    That is the one thing it does not share with the reader behind it, and the
+    reason it is a value rather than a stream — a caller reading diagnostics
+    off a half-consumed stream gets a true answer to a question it did not ask.
+  - It **raises nothing an unreadable input can cause**: a line that is not
+    JSON is a `malformed_record` on the result, a record sent twice is one
+    `duplicate_record` and one record, exactly as on a file.
+  - `data` is bytes, and a `str` is refused with a `TypeError` rather than
+    read. Reading one as content would make `read_records("trace.jsonl")` an
+    empty read with no complaint; passing it through would open that file from
+    the one function whose contract is that it touches none.
+  - It reports **no digest**. `build` is what fingerprints an input (§3.5),
+    and a builder fed records carries none in any case (§10.4).
 - **One input = one trace.** If records carry more than one `trace_id`, the
   builder uses the most common one, emits `multi_trace_input`, and keeps the
   foreign records as nodes with a diagnostic. Splitting multi-trace inputs is
@@ -2062,7 +2093,14 @@ b.version      -> int                                # records absorbed
 b.graph()      -> Graph                              # the prefix graph
 b.delta(since=v) -> Delta                            # what changed since v
 b.retain(versions=N | "all" | 0) -> None             # journal policy
+
+spanweave.read_records(data) -> Records              # bytes in flight -> records
 ```
+
+Records come from wherever the caller gets them. A caller holding bytes rather
+than a file — an exporter's output being appended to, an OTLP/HTTP body — reads
+them with `read_records` (§7), which is the container rules and nothing else: it
+classifies nothing, builds nothing, and touches no file.
 
 ### 10.1 Prefix consistency is the definition
 
@@ -2125,7 +2163,9 @@ the reader's facts about an input: a line that was not JSON (`malformed_record`)
 a record sent twice (`duplicate_record`), a record skipped before any adapter
 saw it. Those belong to whoever read the records (§7), and a builder claiming
 them would be describing an input it never saw. Unpacking a container — an OTLP
-JSON export — is reading, and so is also the caller's.
+JSON export — is reading, and so is also the caller's: `read_records` (§7) is
+that reading, on bytes in flight rather than on a path, and it hands back the
+diagnostics the builder cannot.
 
 ### 10.5 Refusals
 

@@ -772,3 +772,70 @@ def test_feeding_sorts_nothing_and_the_other_paths_sort_a_stated_number_of_times
     assert sorts == [3], "folding sorts once, over the nodes it has just applied"
     sorts.clear()
     assert dumps(folded) == dumps(builder.graph())
+
+
+# --------------------------------------------------------------------------
+# The receiver's path: bytes in flight, records to a builder (§19, §7)
+# --------------------------------------------------------------------------
+
+
+def otlp(span_id, parent="", t0=1700000000000000000):
+    """One OTLP span, in the dialect `otel_genai` reads."""
+    return {
+        "traceId": "t1",
+        "spanId": span_id,
+        "parentSpanId": parent,
+        "name": "chat",
+        "startTimeUnixNano": str(t0),
+        "endTimeUnixNano": str(t0 + 500000000),
+        "status": {"code": 1},
+        "attributes": [
+            {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}
+        ],
+    }
+
+
+def export(*spans):
+    """The body an OTLP/HTTP exporter POSTs, as bytes."""
+    document = {"resourceSpans": [{"scopeSpans": [{"spans": list(spans)}]}]}
+    return json.dumps(document).encode("utf-8")
+
+
+def test_an_export_in_flight_feeds_a_builder_and_is_the_graph_of_its_bytes():
+    """The whole of what `OPEN_QUESTIONS.md` §19 asks spanweave for.
+
+    A receiver holds bytes and a `Builder`: `read_records` turns the first into
+    records and `feed` absorbs them one at a time. The claim is that nothing is
+    lost between the two doors -- the live graph of an export's records is the
+    graph `build` produces from the very same bytes, **except** for the facts
+    §10.4 says a builder cannot carry, which is the digest of an input it never
+    saw.
+    """
+    data = export(otlp("s0"), otlp("s1", parent="s0"), otlp("s2", parent="s0"))
+    records = list(spanweave.read_records(data))
+    assert len(records) == 3
+
+    live = replay(records).graph()
+    batch = spanweave.build(data)
+    assert [node.id for node in live.nodes()] == [node.id for node in batch.nodes()]
+    assert live.nodes() == batch.nodes()
+    assert live.edges() == batch.edges()
+    assert codes_of(live) == codes_of(batch)
+    assert live.meta is not None and batch.meta is not None
+    assert live.meta.source_digest is None
+    assert batch.meta.source_digest is not None
+
+
+def test_a_file_of_one_export_per_line_arrives_as_one_record_per_span():
+    """What a collector's file exporter writes, read the way a tail reads it.
+
+    Each line is a whole export, so a receiver can hand the reader one line or
+    the pair and get the same records either way -- which is the property a
+    tail needs, and it is the container rules' rather than the receiver's.
+    """
+    first, second = export(otlp("s0")), export(otlp("s1"))
+    together = list(spanweave.read_records(first + b"\n" + second + b"\n"))
+    apart = [*spanweave.read_records(first), *spanweave.read_records(second)]
+    assert together == apart
+    assert [record["span_id"] for record in together] == ["s0", "s1"]
+    replay(together)

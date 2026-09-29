@@ -51,6 +51,14 @@ Two things this layer must get right:
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
   itself forces: an array cannot be known complete until its closing bracket.
+* **It has a second door, and it is the same room.** ``read_records`` reads
+  bytes a caller already holds -- an OTLP/HTTP body, a chunk tailed off an
+  exporter, a message off a queue -- and hands back the records plus what the
+  read could not do (`SPEC.md` §7, `OPEN_QUESTIONS.md` §19). It is the *same*
+  `RecordStream` underneath, deliberately: an export that read one way from a
+  file and another way in flight would be two readers wearing one contract.
+  What it does not share is the laziness, which buys nothing once the bytes are
+  in memory and leaves a caller the trap of reading `diagnostics` too early.
 """
 
 from __future__ import annotations
@@ -62,12 +70,13 @@ import pathlib
 import re
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 from spanweave import diagnostics as codes
 from spanweave import jsoncodec
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.errors import GraphNotSerializableError
-from spanweave.model import DiagnosticLevel, JsonValue
+from spanweave.model import Diagnostic, DiagnosticLevel, JsonValue
 
 #: A path, a path-like, ``"-"`` for stdin, or the bytes themselves.
 Source = bytes | str | os.PathLike[str]
@@ -792,3 +801,72 @@ def read_trace(source: Source) -> RecordStream:
         return RecordStream("<stdin>", _chunks_of_stdin())
     path = pathlib.Path(source)
     return RecordStream(str(path), _chunks_of_file(path))
+
+
+@dataclass(frozen=True, slots=True)
+class Records:
+    """What one read of bytes produced: the records, and what it could not read.
+
+    Complete when it is handed over, unlike the stream behind it -- the bytes
+    were already in memory, so there was nothing to stream and there is no
+    diagnostic that can arrive later. Iterating it yields the records, so it
+    goes straight into a loop that feeds a `Builder`.
+    """
+
+    #: The records, in input order, each one exactly what an adapter is given.
+    records: tuple[JsonValue, ...]
+    #: What the read could not do, sorted as every other collection of these
+    #: is (`SPEC.md` §5.2). Empty is the ordinary case.
+    diagnostics: tuple[Diagnostic, ...]
+    #: How much of the input never became a record at all -- one per
+    #: `malformed_record`, and never a duplicate, which was read (`SPEC.md` §7).
+    skipped_records: int
+
+    def __iter__(self) -> Iterator[JsonValue]:
+        return iter(self.records)
+
+
+def read_records(data: bytes) -> Records:
+    """Read records out of bytes, and build nothing (`SPEC.md` §7).
+
+    For a caller holding telemetry *in flight* rather than a file: an OTLP/HTTP
+    request body, a chunk tailed off an exporter's output, a message taken off a
+    queue. All three containers are recognized here, by the same code the path
+    and stdin forms use, so an export cannot read one way from a file and
+    another way in memory (`OPEN_QUESTIONS.md` §19).
+
+    It **reads; it does not judge**: no adapter is consulted, no dialect is
+    named, nothing is classified. The records handed back are the records
+    `build` would have classified, and feeding them to a `Builder` one at a time
+    is the live path (`SPEC.md` §10). Cheap to read is not cheap to absorb --
+    a `feed` restates in full every key the record touches (§10.6), so a large
+    export read in one call is still one `feed` per span.
+
+    ``data`` is bytes. A ``str`` is refused rather than read, because everywhere
+    else in this library a ``str`` is a path: reading one as content would turn
+    ``read_records("trace.jsonl")`` into an empty read with no complaint, and
+    passing it through would open that file from a function whose whole point is
+    that it touches none.
+    """
+    _require_bytes(data)
+    stream = read_trace(data)
+    records = tuple(stream)
+    return Records(
+        records=records,
+        diagnostics=stream.diagnostics.collected(),
+        skipped_records=stream.skipped_records,
+    )
+
+
+def _require_bytes(data: object) -> None:
+    """Typed `object` so the check is reachable rather than merely declared."""
+    if isinstance(data, bytes):
+        return
+    raise TypeError(
+        f"read_records reads bytes already in memory and got "
+        f"{type(data).__name__}. Trace content is bytes here: a `str` is a "
+        f"path everywhere else in this library (`SPEC.md` §7), so reading one "
+        f"as content would make read_records('trace.jsonl') an empty read with "
+        f"no complaint. Encode the text, or build from the path with "
+        f"spanweave.build()"
+    )

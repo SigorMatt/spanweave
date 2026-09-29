@@ -33,6 +33,15 @@ record (`SPEC.md` §6.1, `OPEN_QUESTIONS.md` §16). If the input you want to
 support differs from a supported one only in how the spans are *packed*, you
 want a container, not an adapter, and that is a `SPEC.md` §7 conversation.
 
+**The unpacking is reachable without a file, and it is still not an adapter.**
+`spanweave.read_records(data)` reads bytes a caller already holds — an OTLP/HTTP
+request body, a chunk tailed off an exporter — and hands back records and
+diagnostics (`SPEC.md` §7, `OPEN_QUESTIONS.md` §19). It is the same reader, so
+an export cannot read one way from a file and another way in flight; and it
+consults no adapter, names no dialect, and classifies nothing. A live consumer
+reads with it and then feeds a `Builder` (`SPEC.md` §10) — which is to say the
+dialect question is still asked per record, one layer above this one.
+
 ## 2. The protocol
 
 ```python

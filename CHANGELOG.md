@@ -15,6 +15,31 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Records can now be read out of bytes a caller already holds**, which is the
+  one thing the receiver boundary asked the library for (`OPEN_QUESTIONS.md`
+  §19, `WORKPLAN.md` L6). `spanweave.read_records(data)` returns a `Records`:
+  the records in input order, the diagnostics the read produced, and
+  `skipped_records`. It is for telemetry *in flight* rather than a file — an
+  OTLP/HTTP request body, a chunk tailed off an exporter's output, a message off
+  a queue — and it is the **same reader** underneath, so all three containers
+  (`SPEC.md` §7) are recognized identically and an OTLP export cannot read one
+  way from a file and another way in memory. It reads and does not judge: no
+  adapter is consulted, no dialect named, nothing classified; feeding the
+  records to a `Builder` one at a time is the live path (§10), and the dialect
+  question is still asked per record one layer above.
+  Two things it deliberately does not do. It does not **stream**: a `Records` is
+  complete when it is returned, because the bytes were already in memory and a
+  caller reading diagnostics off a half-consumed stream gets a true answer to a
+  question it did not ask. And it does not take a `str`: everywhere else in this
+  library a `str` is a path, so `read_records("trace.jsonl")` is a `TypeError`
+  rather than an empty read with no complaint — or, worse, a function whose
+  contract is that it touches no file opening one.
+  Nothing else moved: no model type, no serialized field,
+  `tests/serialized_shape.json` byte-identical, and the existing public names
+  behave exactly as before. **Cheap to read is not cheap to absorb**, and §7
+  says so beside the API: a whole export read in one call is still one `feed`
+  per span, and §10.6 states what a `feed` costs.
+
 - **A live builder can now say what changed, and a consumer can fold it
   forward.** `Builder.delta(since=v)` returns a `Delta`, and `delta.fold(graph)`
   applies it: fold the per-record delta onto the previous graph and you get the
