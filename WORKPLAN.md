@@ -156,7 +156,7 @@ never restarts, fixes, or touches anything. Conventions live in
 
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
-| L0 | **Ceilings measured, not assumed — the eleven remaining tests.** Audit thread 80: eleven tests still hard-code `100_000` as "too deep" and pass only because the `loads` and nested-dict ceilings sit below it at an 8 MB stack. Derive each from `tests/json_depth.py` as `546bdfa` did for the first four. Tests only. CI green on the pushed tip. | todo | 10 |
+| L0 | **Ceilings measured, not assumed — the eleven remaining tests.** Audit thread 80: eleven tests still hard-code `100_000` as "too deep" and pass only because the `loads` and nested-dict ceilings sit below it at an 8 MB stack. Derive each from `tests/json_depth.py` as `546bdfa` did for the first four. Tests only. CI green on the pushed tip. | done (`f07b321`) | 10 |
 | L1 | **Memo: prefix-consistent incremental build** (`OPEN_QUESTIONS.md` §18). | awaiting decision | — |
 | L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | awaiting decision | — |
 | L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. | awaiting L1 | 25 |
@@ -201,6 +201,29 @@ decision is recorded here on the commit that takes it.
   row for this file, and the `WORKPLAN.md` exclusion in
   `durable_documents()` (`tests/test_doc_truth.py`) — the same pair every
   previous series removed at its close.
+- 2026-09-29: L0 done (`f07b321`), and the row's own count was wrong in a way
+  worth keeping. The eleven tests are real — at `aac1915` under
+  `ulimit -s 65536` exactly those eleven fail — but they are fed by **nine**
+  literal `100_000` depth sites across five files, and those nine feed
+  **twelve** tests. The twelfth lives in `tests/test_cli.py` and asserts that
+  `inspect` on a deep graph file is a refusal rather than a traceback; it
+  shares `DEEP_VALUE` and kept passing at a 64 MB stack for a reason unrelated
+  to depth, its comment claiming a sniff failure on the file's first byte that
+  does not happen. Count the constants,
+  not the tests. Folded in from the same assumption: `test_cli.py`'s private
+  `_parser_limit()` bisected to a hard-coded `200_000` and *returned that cap*
+  when nothing under it was refused; it now calls `deepest_accepted` and fails
+  instead. New helper `too_deep_for_nested_dicts()` beside the lists one —
+  dicts are measured separately because on 3.14.6 the two ceilings sit about
+  37,000 levels apart. Depths were verified as measurements, not merely green:
+  on 3.11/3.12/3.13/3.14 the derived depth is refused and one level below it
+  is accepted. Pre-existing and not L0's: on 3.11-3.13 the suite crashes under
+  `ulimit -s 2048` in pytest's own frames, at `aac1915` as well.
+- 2026-09-29: run 1 ends here, at the decision point §2 names. Nothing is
+  blocked and nothing failed; L0 needed no spec or model decision, so
+  `OPEN_QUESTIONS.md` carries only §18 and §19 and both are still blank.
+  Run 2 resumes at those two answers: L3 unblocks on §18 alone and L6 on §19
+  alone, so a partial decision is enough to start.
 
 ---
 
