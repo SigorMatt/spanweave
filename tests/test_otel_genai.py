@@ -21,7 +21,7 @@ from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.model import NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
-from tests.json_depth import nested_lists, too_deep_for_nested_lists
+from tests.json_depth import lists_text, nested_lists, too_deep_for_nested_lists
 
 CAPTURED = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -286,10 +286,14 @@ def test_a_payload_that_does_not_parse_keeps_its_text_and_reports():
 def test_a_deeply_nested_message_list_keeps_its_text_and_reports():
     # Audit finding 3, through the message pair: `json.loads` answers deep
     # nesting with RecursionError, not ValueError, so it escaped the guard
-    # above. 100k brackets is far past any interpreter's limit and costs
-    # microseconds -- the parser gives up at its own limit, not at the end of
-    # the string.
-    deep = "[" * 100_000 + "]" * 100_000
+    # above. Cheap to reject whatever the depth -- the parser gives up at its
+    # own limit, not at the end of the string -- and the depth *is* that
+    # limit, measured in this process rather than written as 100,000 and
+    # called "far past any interpreter's limit". It is not: the parser reads
+    # 322,402 levels on CPython 3.14.6 under `ulimit -s 65536`, and there
+    # this payload parsed and the assertions below described a span the
+    # adapter never produced.
+    deep = lists_text(too_deep_for_nested_lists())
     span = span_of({"gen_ai.operation.name": "chat", "gen_ai.input.messages": deep})
     assert span.inputs.state is PayloadState.PRESENT
     assert span.inputs.value is None

@@ -1013,6 +1013,45 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The last eleven tests that wrote a recursion ceiling down now measure
+  it.** `546bdfa` did this for the first four and named, in its own body, the
+  **11 other** tests still carrying a `100_000` under a comment calling it
+  "far past any interpreter's limit" -- left alone there because each was its
+  own reading of the same lesson. This is that diff. Nothing in the library
+  moves. The constant was reachable on the interpreters CI runs and false the
+  moment the stack grew: measured here on CPython 3.14.6, `json.loads` reads
+  **40,106** levels at the runner's 8 MB default and **322,402** under
+  `ulimit -s 65536`, and `json.dumps` writes **37,240** dicts / **74,481**
+  lists at 8 MB and **299,372** / **598,745** at 64 MB. Under that larger
+  stack, at `aac1915`, all eleven fail -- a `malformed_record` that never
+  arrives in `test_read.py`, `test_cli.py` and the two adapters' text parse
+  paths, and a `DID NOT RAISE GraphNotSerializableError` from the digest and
+  the encoder. **Nine** literal sites across five files feed those eleven
+  tests plus a twelfth, `test_inspect_on_a_deep_graph_file_is_a_refusal_not_a_traceback`,
+  which went on passing at 64 MB for a reason that had nothing to do with
+  depth -- its comment says the sniff dies on the file's first byte, and it
+  did not. Each site now derives its depth from `tests/json_depth.py`:
+  `too_deep_for_nested_lists()` where the code under test parses bracket
+  text, and a new **`too_deep_for_nested_dicts()`** -- memoized per shape by
+  a shared `_too_deep` -- where it encodes a record or a graph, because the
+  two shapes' ceilings are **not** the same number (~37,000 levels apart on
+  3.14.6) and assuming they were is exactly how R6's pin came to be green on
+  an interpreter where the sentence it pinned was false (run-3 review F1).
+  `test_cli.py`'s own private `_parser_limit()` went the same way: it
+  bisected up to a hard-coded `200_000` and **returned that cap** where
+  nothing under it was refused, so at 64 MB the nine depths it walks either
+  side of "the parser's limit" were nine depths the parser reads without
+  complaint; it now calls `deepest_accepted`, which fails rather than
+  answers. Verified full-suite on 3.11.15, 3.12.13, 3.13.14 and 3.14.6 at the
+  default stack, and on 3.14.6 under `ulimit -s 65536` -- **2,660 passed**
+  where eleven failed before -- and each derived depth checked directly on
+  all five configurations: the value it produces really is refused by the
+  `json.loads`, `record_digest` or `canonical_bytes` the test reaches, and
+  one level below the measurement is still accepted. `SPEC.md` §7 said an
+  embedder that resizes the stack "moves every number in" its ceiling table;
+  it now carries the measurement showing that it moves them all by about
+  eightfold. (`SPEC.md` §7; `WORKPLAN.md` L0, audit thread 80)
+
 - **A recursion ceiling is measured in the process that asserts it, and the
   probe/writer property is stated as the one-directional guarantee it is.**
   Nothing in the library moves; five tests assumed a number instead of

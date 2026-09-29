@@ -1674,7 +1674,12 @@ declares reaches `0.5`.
     or an embedder that resizes the stack moves every number in it, and three
     successive attempts to state this quantity as a fact about the library
     each measured one interpreter and were falsified on another (`TASKS.md`,
-    the September 2026 audit's open threads).
+    the September 2026 audit's open threads). The stack clause is not
+    hypothetical: the same 3.14.6 build, measured again under
+    `ulimit -s 65536` instead of the 8 MB default, reads **322,402** levels
+    and writes **299,372** for dicts and **598,745** for lists — every figure
+    in the table multiplied by roughly eight, by changing nothing but the
+    stack the process was given.
     **The containment stays regardless**, for reasons that do not depend on
     which of the two an interpreter gives you: the depth at which either
     gives out belongs to the interpreter and not to this library — it moves

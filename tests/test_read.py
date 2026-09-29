@@ -20,7 +20,10 @@ from tests.json_depth import (
     MEASUREMENT_NOISE,
     deepest_accepted,
     dicts_text,
+    lists_text,
     nested_dicts,
+    too_deep_for_nested_dicts,
+    too_deep_for_nested_lists,
 )
 
 JSONL = b'{"span_id":"s0"}\n{"span_id":"s1"}\n'
@@ -97,10 +100,17 @@ def test_the_stream_counts_what_never_became_a_record():
         assert stream.skipped_records == expected, data
 
 
-#: Nesting far past any interpreter's recursion limit. Cheap to build (200 KB
-#: of brackets) and cheap to reject: the parser gives up at its own limit, not
-#: at the end of the string, so these tests cost microseconds.
-DEEP = b"[" * 100_000 + b"]" * 100_000
+#: Nesting past *this* interpreter's recursion limit, measured here rather
+#: than written down. Cheap to build and cheap to reject: the parser gives up
+#: at its own limit, not at the end of the string, so these tests cost
+#: microseconds.
+#:
+#: It was a flat 100,000 and a comment calling that "far past any
+#: interpreter's recursion limit". It is not: `json.loads` reads 40,106 levels
+#: of brackets on CPython 3.14.6 at an 8 MB stack and **322,402** under
+#: `ulimit -s 65536`, where this file parsed cleanly and the two tests below
+#: asserted a `malformed_record` that never came.
+DEEP = lists_text(too_deep_for_nested_lists()).encode()
 
 
 def test_a_deeply_nested_record_line_is_diagnosed_rather_than_raised():
@@ -138,8 +148,14 @@ def test_a_record_too_deep_to_digest_is_the_librarys_refusal_not_a_traceback():
     # interpreter and not only on one where the band exists: the value never
     # goes near `json.loads`, so the parser's ceiling cannot hide the
     # encoder's.
+    #
+    # And deep enough on every interpreter, because the depth is measured in
+    # this process against the shape a record has: 100,000 was under the
+    # encoder's dict ceiling on CPython 3.14.6 whenever the stack was larger
+    # than the runner's 8 MB default (299,372 under `ulimit -s 65536`), and
+    # there the digest simply succeeded.
     with pytest.raises(spanweave.GraphNotSerializableError) as failure:
-        record_digest(nested_dicts(100_000))
+        record_digest(nested_dicts(too_deep_for_nested_dicts()))
     assert failure.value.code == "graph_not_serializable"
     assert "digested" in str(failure.value)
 
@@ -149,7 +165,9 @@ def test_the_digest_refusal_is_the_one_the_write_side_already_raises():
     # too deep to write, so no graph carrying it was ever publishable, and
     # naming the two failures differently would invent a distinction the
     # interpreter does not make and a consumer would have to learn twice.
-    value = nested_dicts(100_000)
+    #
+    # Same measured depth as the test above, for the same reason.
+    value = nested_dicts(too_deep_for_nested_dicts())
     with pytest.raises(spanweave.SpanweaveError) as digesting:
         record_digest(value)
     with pytest.raises(spanweave.SpanweaveError) as writing:
@@ -970,7 +988,10 @@ def test_links_are_flattened_the_same_way_the_span_is():
 
 
 def test_a_deeply_nested_otlp_document_is_diagnosed_rather_than_raised():
-    depth = 100_000
+    # Measured, not assumed: the container is unpacked by the same
+    # `json.loads` as everything else in this module, and its ceiling moves
+    # with the interpreter and with the stack the process was given.
+    depth = too_deep_for_nested_lists()
     data = b'{"resourceSpans":' + b"[" * depth + b"]" * depth + b"}"
     stream = read_trace(data)
     assert list(stream) == []

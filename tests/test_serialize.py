@@ -18,6 +18,7 @@ from tests.json_depth import (
     lists_text,
     nested_dicts,
     nested_lists,
+    too_deep_for_nested_dicts,
 )
 
 FIXTURE = (
@@ -660,8 +661,14 @@ def test_a_value_too_deep_to_encode_is_a_refusal_not_a_traceback():
     # had already read its input without complaint -- a graph the library
     # holds and cannot write is a structural impossibility (`SPEC.md` §3.10),
     # so it is named rather than raised as an interpreter's traceback.
+    #
+    # The depth is this process's own dict ceiling, stepped past. A flat
+    # 100,000 was under it on CPython 3.14.6 at any stack larger than the
+    # runner's 8 MB default -- the encoder writes 299,372 levels of dicts
+    # under `ulimit -s 65536` -- and this test then asserted a refusal that
+    # never came.
     with pytest.raises(spanweave.SpanweaveError) as failure:
-        canonical_bytes({"deep": nested_dicts(100_000)})
+        canonical_bytes({"deep": nested_dicts(too_deep_for_nested_dicts())})
     assert failure.value.code == "graph_not_serializable"
 
 
@@ -669,8 +676,10 @@ def test_the_refusal_is_the_librarys_own_error_type():
     # A consumer routes on the library's error, per `SPEC.md` §3.10, and a
     # bare RecursionError is not routable: it is indistinguishable from a bug
     # in the consumer's own recursion.
+    #
+    # Same measured depth as the test above, for the same reason.
     with pytest.raises(spanweave.GraphNotSerializableError):
-        canonical_bytes(nested_dicts(100_000))
+        canonical_bytes(nested_dicts(too_deep_for_nested_dicts()))
 
 
 def test_the_two_json_depth_ceilings_are_measured_and_neither_is_this_librarys(
