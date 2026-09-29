@@ -160,8 +160,8 @@ never restarts, fixes, or touches anything. Conventions live in
 | L1 | **Memo: prefix-consistent incremental build** (`OPEN_QUESTIONS.md` §18). | done | — |
 | L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | done | — |
 | L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | done (`58d3e69`) | 25 |
-| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | todo | 25 |
-| L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. | awaiting L4 | 15 |
+| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | done (`7f1f40c`) | 25 |
+| L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. Must speed up `delta()`'s two `ordering()` calls, not only `materialize()` — SPEC §10.6 puts `delta(since=v)` at O(n + e). | todo | 15 |
 | L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | todo | 8 |
 | L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
@@ -250,6 +250,35 @@ with both of them available.
   record. Without that, prefix consistency would have failed silently on
   `meta` alone. No incremental case existed in `tests/audit/probe*.py`, so
   nothing was converted out.
+- 2026-09-30: L4 done (`7f1f40c`), CI green, and again no schema movement —
+  `make shape` regenerates `tests/serialized_shape.json` byte-identically, so
+  the graph document gained no key. Gates 2 and 3 are 106 parametrized
+  assertions over all 60 buildable renderings, verified by deliberate
+  breakage: cancellation off fails 25, dropping the order-derived
+  `ordering_cycle` fails 2, not restating whole-input statements fails 4, and
+  a fold that does not recompute order fails 5. Three things later batches
+  must carry. (1) **`SPEC.md` §10.6 is renumbered territory**: the old §10.6
+  "Out of scope here" is now §10.10 and §10.6–§10.9 are the new
+  delta/journal/retention/document sections; nothing outside SPEC cited the
+  old number. (2) The cost split §10.6 now states: `feed` is O(keys touched)
+  but `delta(since=v)` is **O(n + e)**, because it sorts both endpoints to
+  recover canonical order and `ordering_cycle` — so L5's subtree recompute
+  has to reach `delta()`'s two `ordering()` calls
+  (`spanweave/delta.py:ordering`, `api.py:Builder.delta`), not only
+  `materialize()`. (3) `spanweave/incremental.py` now keeps two accountings
+  of the same three collections — its own per-key dicts, which define the
+  graph's byte order, and the journal's `Tally`; their agreement is proven
+  only by conformance gate 2, so a batch that unifies them must keep that
+  gate green. Two departures from the §18 memo's sketch, both stated in SPEC:
+  `Delta` carries no `annotations_*` (a builder never annotates, and `fold`
+  preserves the graph's own) and it does carry `trace_id_*` / `adapters_*`
+  because `meta` moves, with the three `meta` counts recomputed by the fold
+  rather than travelling. Correcting L3's finding (2): neither registered
+  adapter's `declared_confidence` actually moves with the growing sample —
+  both answer 0.9 to any sample holding a record they claim — so the
+  mechanism is carried and tested but the observable change needs a third
+  adapter. New error code `delta_unavailable` (§3.10,
+  `DeltaUnavailableError`).
 
 ---
 
