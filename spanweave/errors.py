@@ -52,11 +52,18 @@ UNKNOWN_ADAPTER = "unknown_adapter"
 # traceback.
 GRAPH_NOT_SERIALIZABLE = "graph_not_serializable"
 
+# A caller asked what changed since a version the journal no longer holds,
+# because the retention policy dropped it (`SPEC.md` §10.8). Refused rather
+# than answered approximately: an incomplete delta is indistinguishable from a
+# complete one, which makes it the worst of the available answers.
+DELTA_UNAVAILABLE = "delta_unavailable"
+
 #: Every code the library raises. A test asserts this matches `SPEC.md` §3.10.
 ERROR_CODES = (
     ADAPTER_AMBIGUOUS,
     ADAPTER_DETECT_FAILED,
     ADAPTER_UNCONFIDENT,
+    DELTA_UNAVAILABLE,
     DUPLICATE_ADAPTER_ID,
     DUPLICATE_NODE_ID,
     GRAPH_NOT_SERIALIZABLE,
@@ -145,3 +152,23 @@ class GraphNotSerializableError(SpanweaveError):
     """
 
     code = GRAPH_NOT_SERIALIZABLE
+
+
+class DeltaUnavailableError(SpanweaveError):
+    """The journal cannot answer what changed since that version.
+
+    Retention is the caller's policy (`SPEC.md` §10.8), and a policy that keeps
+    the last `N` versions is a policy that drops the ones before them. Asking
+    about a dropped version is refused rather than answered with what is left:
+    a delta that is missing part of the difference looks exactly like one that
+    is not, and a consumer folding it would build a graph that is quietly
+    wrong.
+
+    Not a `ValueError`, which is what a `since` that is *not a version at all*
+    raises: one is a question this builder could have answered under a
+    different policy, the other is a question about a version that never
+    existed, and a caller that wants to widen its retention needs to tell them
+    apart from the code alone (§3.10).
+    """
+
+    code = DELTA_UNAVAILABLE

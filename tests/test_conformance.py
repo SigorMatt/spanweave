@@ -39,6 +39,7 @@ from tests.conformance import (
     split_erasures,
     unsupported,
 )
+from tests.delta_oracle import checkpoint_delta
 
 SCENARIOS = scenarios()
 BUILDABLE = [s for s in SCENARIOS if s.dialects and s.expected_error is None]
@@ -1249,3 +1250,88 @@ def test_the_finished_live_graph_is_the_scenario_s_canonical_graph(rendering):
     assert canonical(to_document(builder.graph()), rendering.scenario.erase) == (
         rendering.scenario.expected_graph_for(rendering.dialect)
     )
+
+
+# --------------------------------------------------------------------------
+# Conformance gates 2 and 3: the journal and the fold (SPEC.md 10.6-10.7)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_every_delta_is_the_difference_between_its_two_versions(rendering):
+    """Gate 2, and it writes no new expectation either.
+
+    `SPEC.md` §10.6 defines a delta as the set difference of two prefix graphs,
+    so the oracle is that difference, computed from two materialized graphs by
+    `tests/delta_oracle.py` -- which knows nothing about how the journal is
+    kept and therefore cannot share a mistake with it.
+
+    Every `since` from 0 to the end, not just the adjacent one: cancellation is
+    only visible in a window that holds both the opening and the closing of the
+    same fact, and the degenerate fixtures are full of those -- a call
+    unfulfilled for a record or two, an orphan parent that arrives, a receipt
+    whose basis is rewritten under it.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    builder = spanweave.Builder()
+    built: list[spanweave.Graph | None] = [None]
+    for record in records:
+        builder.feed(record)
+        built.append(builder.graph())
+
+    until = len(records)
+    for since in range(until + 1):
+        actual = builder.delta(since=since)
+        expected = checkpoint_delta(
+            built[since],
+            built[until],
+            since=since,
+            until=until,
+            restated=actual.restated,
+        )
+        assert actual == expected, (
+            f"{rendering.label}: delta(since={since}) is not the difference "
+            f"between version {since} and version {until}"
+        )
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_folding_every_delta_reproduces_the_next_version(rendering):
+    """Gate 3: the fold, byte for byte, per record and over every window.
+
+    Per record is the mode a live consumer runs (`SPEC.md` §10.6:
+    `delta(since=version - 1)`), and the wide windows are what prove the fold
+    is a function of the delta rather than of the arrival that produced it.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    builder = spanweave.Builder()
+    built: list[spanweave.Graph | None] = [None]
+    for version, record in enumerate(records, start=1):
+        builder.feed(record)
+        current = builder.graph()
+        built.append(current)
+        previous = built[version - 1]
+        if previous is not None:
+            folded = builder.delta(since=version - 1).fold(previous)
+            assert dumps(folded) == dumps(current), (
+                f"{rendering.label}: folding delta({version - 1}, {version}) "
+                f"onto version {version - 1} is not version {version}"
+            )
+
+    until = len(records)
+    final = built[until]
+    for since in range(1, until + 1):
+        earlier = built[since]
+        assert earlier is not None and final is not None
+        assert dumps(builder.delta(since=since).fold(earlier)) == dumps(final), (
+            f"{rendering.label}: folding delta({since}, {until}) onto version "
+            f"{since} is not version {until}"
+        )

@@ -52,7 +52,8 @@ redrawn later around whatever happened to occur.
 ├─────────────────────────────────────────────────┤
 │ Graph + Query + Annotate  (graph.py, annotate.py)│  the consumer surface
 ├─────────────────────────────────────────────────┤
-│ Builder  (build.py, ids.py, incremental.py)     │  NormalizedSpan[] -> Graph
+│ Builder  (build.py, ids.py, incremental.py,     │  NormalizedSpan[] -> Graph
+│           delta.py)                             │
 ├═════════════════════════════════════════════════┤  ← the seam (§3)
 │ Adapters  (adapters/*.py)                       │  all dialect mess
 ├─────────────────────────────────────────────────┤
@@ -67,7 +68,11 @@ is in the builder layer for the same reason and under the same rule: it absorbs
 `NormalizedSpan` values one at a time and calls `build.py`'s own rules, so the
 live path knows no more about a dialect than the batch path does (`SPEC.md`
 §10). Feeding it *records* -- classifying and parsing them -- is `api.py`'s job,
-above the seam.
+above the seam. `delta.py` is in the same layer and holds the journal and the
+difference between two versions (`SPEC.md` §10.6-§10.8): it counts nodes, edges
+and diagnostics, which is the vocabulary of this layer and of no other, and it
+folds a difference back into a `Graph` using `build.py`'s own ordering rule so
+that a folded graph cannot be ordered by a second rule.
 
 ## 3. The seam: adapters vs. builder
 

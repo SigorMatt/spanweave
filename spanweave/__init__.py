@@ -18,8 +18,10 @@ exactly that workaround.
 
 from spanweave.annotate import Annotation, AnnotationStore
 from spanweave.api import Builder, build
+from spanweave.delta import BasisRewrite, Delta
 from spanweave.errors import (
     AdapterSelectionError,
+    DeltaUnavailableError,
     DuplicateNodeIdError,
     GraphNotSerializableError,
     SpanweaveError,
@@ -42,7 +44,14 @@ from spanweave.model import (
     Usage,
     Warrant,
 )
-from spanweave.serialize import dump, dumps, to_document, validate
+from spanweave.serialize import (
+    delta_dumps,
+    delta_to_document,
+    dump,
+    dumps,
+    to_document,
+    validate,
+)
 from spanweave.version import SCHEMA_FROZEN, SCHEMA_VERSION, __version__
 
 __all__ = [
@@ -51,7 +60,10 @@ __all__ = [
     "AdapterSelectionError",
     "Annotation",
     "AnnotationStore",
+    "BasisRewrite",
     "Builder",
+    "Delta",
+    "DeltaUnavailableError",
     "Diagnostic",
     "DiagnosticLevel",
     "DuplicateNodeIdError",
@@ -73,6 +85,8 @@ __all__ = [
     "Warrant",
     "__version__",
     "build",
+    "delta_dumps",
+    "delta_to_document",
     "dump",
     "dumps",
     "to_document",

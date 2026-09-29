@@ -302,6 +302,21 @@ def sole_contributor(
     return _produced_by_one([_id_of(producer) for producer in producers])
 
 
+def whole_input_adapter(
+    adapter_ids: Iterable[str | None], skipped_records: int = 0
+) -> str | None:
+    """`sole_contributor`'s answer, from the **distinct** producers alone.
+
+    The same question and the same rule, asked by a builder that keeps the
+    distinct ids as records arrive instead of walking every span again
+    (`SPEC.md` §10). Distinctness changes nothing: `_produced_by_one` already
+    answers from the distinct set, and an empty input is `None` either way.
+    """
+    if skipped_records:
+        return None
+    return _produced_by_one(list(dict.fromkeys(adapter_ids)))
+
+
 def contributors(producers: Sequence[AdapterInfo | None]) -> tuple[AdapterInfo, ...]:
     """Every adapter that produced at least one node, sorted (`SPEC.md` §3.9).
 

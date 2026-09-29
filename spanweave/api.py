@@ -28,11 +28,18 @@ from spanweave.adapters import (
     partition,
 )
 from spanweave.build import Contribution, build_contributed_graph
+from spanweave.delta import (
+    Delta,
+    Journal,
+    Retention,
+    order_moved,
+    ordering,
+)
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.errors import AdapterSelectionError
 from spanweave.graph import Graph
 from spanweave.incremental import SpanAbsorber
-from spanweave.model import AdapterInfo, JsonValue
+from spanweave.model import AdapterInfo, Diagnostic, Edge, JsonValue, Node
 from spanweave.read import Source, read_trace
 from spanweave.seam import NormalizedSpan, unclaimed_span
 
@@ -140,6 +147,7 @@ class Builder:
     def __init__(self, *, adapter: str | None = None, temporal: bool = True) -> None:
         self._named = adapter
         self._absorber = SpanAbsorber(temporal=temporal)
+        self._journal = Journal()
         self._version = 0
         self._claimed = 0
         #: Kept only while **nothing** has been claimed, for the refusal that
@@ -168,11 +176,74 @@ class Builder:
         """
         position = self._version + 1
         producer, spans = self._translate(record, position)
+        self._absorber.begin()
         for span in spans:
             self._absorber.absorb(span, producer)
+        self._journal.record(position, self._absorber.finish())
         self._version = position
         self._graph = None
         return self._version
+
+    def retain(self, versions: Retention = "all") -> None:
+        """How much journal to keep: `N` versions, `0`, or `"all"` (§10.8).
+
+        The caller's policy, because only the caller knows how far behind its
+        consumers run. It applies at once rather than at the next `feed`, so
+        narrowing it frees the entries now.
+        """
+        self._journal.retain(versions, self._version)
+
+    def delta(self, *, since: int) -> Delta:
+        """What changed between version ``since`` and now (`SPEC.md` §10.6).
+
+        The per-record mode is ``delta(since=version - 1)``; `feed` itself
+        returns the new version and never this. ``since=0`` is the difference
+        from an empty builder, so everything absorbed so far is an addition --
+        and there is no graph at version 0 to fold it onto, because an empty
+        builder refuses (§10.5).
+
+        Raises `DeltaUnavailableError` when retention has dropped `since`, and
+        `ValueError` when `since` is not a version this builder has reached.
+        """
+        if not 0 <= since <= self._version:
+            raise ValueError(
+                f"since={since} is not a version this builder has reached: it "
+                f"is at version {self._version}, so `since` runs from 0 to "
+                f"{self._version} (`SPEC.md` §10.6)"
+            )
+        self._journal.held(since, self._version)
+        change = self._journal.fold(since, self._version, self._absorber.facts())
+
+        nodes_now = self._absorber.current_nodes()
+        edges_now = self._absorber.current_edges()
+        nodes_then = _rewound_nodes(nodes_now, change.nodes_added, change.nodes_removed)
+        edges_then = _rewound_edges(edges_now, change.edges_added, change.edges_removed)
+        order_now, cycle_now = ordering(nodes_now, edges_now, change.after.whole_input)
+        order_then, cycle_then = ordering(
+            nodes_then, edges_then, change.before.whole_input
+        )
+        return Delta(
+            since=since,
+            until=self._version,
+            nodes_added=change.nodes_added,
+            nodes_removed=change.nodes_removed,
+            edges_added=change.edges_added,
+            edges_removed=change.edges_removed,
+            diagnostics_opened=(
+                *change.diagnostics_opened,
+                *_missing(cycle_now, cycle_then),
+            ),
+            diagnostics_resolved=(
+                *change.diagnostics_resolved,
+                *_missing(cycle_then, cycle_now),
+            ),
+            trace_id_before=change.before.trace_id,
+            trace_id_after=change.after.trace_id,
+            adapters_before=change.before.adapters,
+            adapters_after=change.after.adapters,
+            order_changed=order_moved(order_then, order_now),
+            restated=change.restated,
+        )
 
     def graph(self) -> Graph:
         """The graph of the records absorbed so far.
@@ -221,6 +292,41 @@ class Builder:
             ),
             _numbered(chosen.parse([record]), position),
         )
+
+
+def _rewound_nodes(
+    now: Sequence[Node], added: Sequence[Node], removed: Sequence[Node]
+) -> tuple[Node, ...]:
+    """The node set as it stood at `since`: undo what the window did to it.
+
+    Rewinding rather than keeping a copy per version, because a copy per
+    version is a graph per version and the whole point of a delta is not
+    paying that (`OPEN_QUESTIONS.md` §18).
+    """
+    kept = {node.id: node for node in now}
+    for node in added:
+        kept.pop(node.id, None)
+    for node in removed:
+        kept[node.id] = node
+    return tuple(kept.values())
+
+
+def _rewound_edges(
+    now: Sequence[Edge], added: Sequence[Edge], removed: Sequence[Edge]
+) -> tuple[Edge, ...]:
+    kept = {edge.identity: edge for edge in now}
+    for edge in added:
+        kept.pop(edge.identity, None)
+    for edge in removed:
+        kept[edge.identity] = edge
+    return tuple(kept.values())
+
+
+def _missing(
+    these: Sequence[Diagnostic], those: Sequence[Diagnostic]
+) -> tuple[Diagnostic, ...]:
+    """The ones `those` does not account for. Both are 0 or 1 item long."""
+    return tuple(item for item in these if item not in those)
 
 
 def _numbered(

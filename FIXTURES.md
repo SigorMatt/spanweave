@@ -176,6 +176,23 @@ differ, and differ in exactly the way the batch builder says. It is enforced by
 finished replay back to claim 1 — so the two builders cannot agree with each
 other and both be wrong.
 
+Claim 3 carries two more assertions, over the same replay and still with no new
+expectation, because a delta is *defined* as the difference between two prefix
+graphs (`SPEC.md` §10.6):
+
+```
+delta(k-1, k)                    == checkpoint diff of graph(k-1), graph(k)
+delta(k-1, k) . fold(graph(k-1)) == graph(k)
+```
+
+The first is the journal measured against its own definition — the oracle in
+`tests/delta_oracle.py` diffs two materialized graphs and knows nothing about
+how the journal is kept — and it is run over wide windows as well as adjacent
+ones, because cancellation is only visible in a window that contains both the
+opening and the closing of the same fact. The second is the fold, compared byte
+for byte. `test_every_delta_is_the_difference_between_its_two_versions` and
+`test_folding_every_delta_reproduces_the_next_version` enforce them.
+
 **How much claim 2 actually covers, counted rather than assumed.** A field that
 every scenario declares is a field claim 2 never tests, and the count is not
 visible from any one scenario. Measured at `TASKS.md` 3.2: **`name` is declared

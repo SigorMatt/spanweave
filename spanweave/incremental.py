@@ -21,6 +21,13 @@ diagnostic that names one. Those three restate everything; every other arrival
 touches only the record's own facts, the references it makes, the call ids it
 names, and the sibling group it joins.
 
+Absorbing also writes the journal. Each arrival opens an entry (``begin``),
+touches the keys it touches, and closes it (``finish``) with exactly what
+changed in the three collections a graph holds -- which ``spanweave.delta``
+then folds into a `Delta` on demand (``SPEC.md`` §10.6-§10.7). A restating
+arrival clears every key, so its entry describes the whole state and says so,
+rather than looking like a small diff.
+
 Below the seam, like the builder: this module is handed ``NormalizedSpan``
 values and never learns that a dialect exists (``DESIGN.md`` §3). Feeding it
 *records* -- classifying, parsing, numbering -- is the top layer's job, in
@@ -33,6 +40,7 @@ from collections.abc import Iterable, Mapping
 from typing import TypeVar
 
 from spanweave import build
+from spanweave.delta import Change, Facts, Tally
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.graph import Graph
 from spanweave.ids import collision, identify
@@ -44,6 +52,11 @@ from spanweave.version import SCHEMA_VERSION, __version__
 #: Trace root is a group like any other, and a node whose stated parent has not
 #: arrived is in it -- because in *this* graph it has no parent.
 ROOT_GROUP = ""
+
+#: The tally's key for the statements that are about the **whole input** and so
+#: have no record and no call id to hang on: `duplicate_source_id` and
+#: `missing_trace_id` (`SPEC.md` §3.7, §7).
+WHOLE_INPUT = ("whole_input",)
 
 _Key = TypeVar("_Key", int, str)
 
@@ -74,11 +87,33 @@ class SpanAbsorber:
     by node id, because a node id is one of the things an arrival can move.
     """
 
-    def __init__(self, *, temporal: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        temporal: bool = True,
+        source_digest: str | None = None,
+        skipped_records: int = 0,
+    ) -> None:
         self.temporal = temporal
+        # Facts about the input the absorber was never shown, carried so that a
+        # caller who *did* read the input can state them (`SPEC.md` §10.4). They
+        # sit here rather than on `materialize` because the journal needs the
+        # same answers between materializations, and a fact that arrives late
+        # would make two versions disagree about one input.
+        self._source_digest = source_digest
+        self._skipped_records = skipped_records
+        #: The journal's accounting of the three collections a graph holds.
+        self._tally = Tally()
+        #: True while the arrival being absorbed restated everything (§10.2).
+        self._restated = False
+        self._before = Facts()
         # The input, in arrival order.
         self._spans: list[NormalizedSpan] = []
         self._producers: list[AdapterInfo | None] = []
+        #: The distinct producers, for the one adapter a statement about the
+        #: whole input may name. A dict rather than a set: nothing here may
+        #: depend on set iteration order (`CLAUDE.md` 4).
+        self._adapter_ids: dict[str | None, None] = {}
         # The newest statement of each producer, by `(id, version)`. Newest
         # rather than first because `declared_confidence` is declared over a
         # sample that grows as records arrive, so the latest statement is the
@@ -88,11 +123,18 @@ class SpanAbsorber:
         self._trace_counts: dict[str, int] = {}
         self._span_id_counts: dict[str, int] = {}
         self._source_key_counts: dict[str, int] = {}
+        #: How many span ids the dialect used more than once -- one
+        #: `duplicate_source_id` each, and the only whole-input statement whose
+        #: count can grow (`SPEC.md` §3.6 rule 3).
+        self._duplicated = 0
         self._trace_id: str | None = None
         self._forget()
 
     def _forget(self) -> None:
         """Clear everything derived. The counts above survive; nothing else."""
+        #: What the whole-input statements were last derived from. `None` means
+        #: "not derived yet", which is what a cleared tally needs to hear.
+        self._whole_input_from: tuple[str | None, int, str | None] | None = None
         self._ids: list[NodeId] = []
         self._nodes: list[Node] = []
         self._by_node: dict[NodeId, str | None] = {}
@@ -127,6 +169,39 @@ class SpanAbsorber:
     # Absorbing
     # ----------------------------------------------------------------------
 
+    def begin(self) -> None:
+        """Open a journal entry: one arrival, however many spans it became."""
+        self._tally.begin()
+        self._restated = False
+        self._before = self.facts()
+
+    def finish(self) -> Change:
+        """Close the entry the last `begin` opened (`SPEC.md` §10.7)."""
+        return self._tally.end(self._before, self.facts(), self._restated)
+
+    def facts(self) -> Facts:
+        """What the graph says that none of its collections hold (§10.6)."""
+        return Facts(
+            trace_id=self._trace_id or "",
+            adapters=tuple(
+                self._producer_latest[key] for key in sorted(self._producer_latest)
+            ),
+            whole_input=self.whole_input,
+        )
+
+    @property
+    def whole_input(self) -> str | None:
+        """The one adapter a statement about the whole input may name (§3.7)."""
+        return build.whole_input_adapter(self._adapter_ids, self._skipped_records)
+
+    def current_nodes(self) -> tuple[Node, ...]:
+        """The node set as the journal accounts for it. Order is not the point."""
+        return tuple(self._tally.nodes.items())
+
+    def current_edges(self) -> tuple[Edge, ...]:
+        """The edge set as the journal accounts for it, deduplicated as §3.8."""
+        return build.deduplicated(self._tally.edges.items())
+
     def absorb(self, span: NormalizedSpan, producer: AdapterInfo | None) -> None:
         """Take one span into the state.
 
@@ -138,6 +213,7 @@ class SpanAbsorber:
         position = len(self._spans)
         self._spans.append(span)
         self._producers.append(producer)
+        self._adapter_ids.setdefault(producer.id if producer is not None else None)
         if producer is not None:
             self._producer_latest[producer.sort_key] = producer
 
@@ -152,6 +228,8 @@ class SpanAbsorber:
             # The second claim is what moves the first record off rule 1; a
             # third moves nobody, because the first two are already derived.
             restate = restate or claims == 2
+            if claims == 2:
+                self._duplicated += 1
         keys = self._source_key_counts.get(span.source_key, 0) + 1
         self._source_key_counts[span.source_key] = keys
         restate = restate or keys == 2
@@ -162,9 +240,11 @@ class SpanAbsorber:
             restate = True
 
         if restate:
+            self._restated = True
             self._restate_every_record()
         else:
             self._absorb_at(position)
+        self._restate_whole_input()
 
     def _restate_every_record(self) -> None:
         """Throw everything derived away and derive it again from the counts.
@@ -174,9 +254,32 @@ class SpanAbsorber:
         by. It is O(n) for the arrival that trips it, and `SPEC.md` §10 says so
         rather than implying every absorb is local.
         """
+        self._tally.clear()
         self._forget()
         for position in range(len(self._spans)):
             self._absorb_at(position)
+
+    def _restate_whole_input(self) -> None:
+        """The statements about the whole input, as they stand now.
+
+        Three inputs and no more: the trace id, how many span ids the dialect
+        reused, and which adapter -- if one -- may be named for a statement
+        about everything that arrived. Skipped when none of them moved, so an
+        ordinary arrival pays nothing for two diagnostics it cannot have
+        changed.
+        """
+        whole_input = self.whole_input
+        derived_from = (self._trace_id, self._duplicated, whole_input)
+        if derived_from == self._whole_input_from:
+            return
+        self._whole_input_from = derived_from
+        collector = DiagnosticCollector()
+        for duplicated in sorted(
+            span_id for span_id, count in self._span_id_counts.items() if count > 1
+        ):
+            build.report_duplicate_source_id(duplicated, collector, whole_input)
+        build.report_missing_trace_id(self._trace_id, collector, whole_input)
+        self._tally.set_diagnostics(WHOLE_INPUT, collector.collected())
 
     def _absorb_at(self, position: int) -> None:
         """Everything one record contributes, and everything it completes."""
@@ -197,7 +300,9 @@ class SpanAbsorber:
             raise collision(node_id, self._spans[self._position_of[node_id]], span)
 
         self._ids.append(node_id)
-        self._nodes.append(build.node_of(span, node_id, producer))
+        node = build.node_of(span, node_id, producer)
+        self._nodes.append(node)
+        self._tally.add_node(node)
         self._by_node[node_id] = adapter
         self._position_of[node_id] = position
         if span.span_id is not None and unique_span_id:
@@ -206,6 +311,9 @@ class SpanAbsorber:
         collector = DiagnosticCollector()
         build.report_record(span, node_id, self._trace_id, collector, adapter)
         self._record_diagnostics[position] = collector.collected()
+        self._tally.set_diagnostics(
+            ("record", str(position)), self._record_diagnostics[position]
+        )
 
         if span.parent_id is not None:
             self._awaiting_parent.setdefault(span.parent_id, set()).add(position)
@@ -265,10 +373,16 @@ class SpanAbsorber:
             self._by_node,
         )
         self._parent_diagnostics[position] = collector.collected()
+        self._tally.set_diagnostics(
+            ("parent", str(position)), self._parent_diagnostics[position]
+        )
         if edge is None:
             self._parent_edges.pop(position, None)
         else:
             self._parent_edges[position] = edge
+        self._tally.set_edges(
+            ("parent", str(position)), () if edge is None else (edge,)
+        )
         # A record just given a parent leaves the root group for its parent's.
         # Only a record already placed moves: the arriving one is placed after.
         if position in self._group_of:
@@ -283,6 +397,7 @@ class SpanAbsorber:
                 self._by_node,
             )
         )
+        self._tally.set_edges(("link", str(position)), self._link_edges[position])
 
     def _restate_calls(self, call_ids: Iterable[str]) -> None:
         for call_id in sorted(call_ids):
@@ -306,6 +421,11 @@ class SpanAbsorber:
                     self._by_node,
                 )
             )
+            self._tally.set_edges(("call", call_id), self._call_edges[call_id])
+            self._tally.set_diagnostics(
+                ("call", call_id), self._call_diagnostics[call_id]
+            )
+            self._tally.set_edges(("data", call_id), self._data_edges[call_id])
 
     def _sole_name(self, call_id: str) -> str | None:
         """The name one call id was given, or `None` where two disagree.
@@ -328,6 +448,9 @@ class SpanAbsorber:
             collector = DiagnosticCollector()
             build.report_missing_timestamp(node.id, collector, self._by_node[node.id])
             self._missing_timestamp[position] = collector.collected()
+            self._tally.set_diagnostics(
+                ("no_start_time", str(position)), self._missing_timestamp[position]
+            )
             return
         group = self._group_key(position)
         self._group_of[position] = group
@@ -354,18 +477,18 @@ class SpanAbsorber:
         if not members:
             self._groups.pop(group, None)
             self._temporal_edges.pop(group, None)
+            self._tally.set_edges(("temporal", group), ())
             return
         self._temporal_edges[group] = tuple(
             build.temporal_chain(self._nodes[position] for position in members)
         )
+        self._tally.set_edges(("temporal", group), self._temporal_edges[group])
 
     # ----------------------------------------------------------------------
     # Materializing
     # ----------------------------------------------------------------------
 
-    def materialize(
-        self, *, source_digest: str | None = None, skipped_records: int = 0
-    ) -> Graph:
+    def materialize(self) -> Graph:
         """The graph the spans absorbed so far make (`SPEC.md` §10).
 
         O(n): the node order is a fresh topological sort and the index a
@@ -374,7 +497,7 @@ class SpanAbsorber:
         so an order kept between arrivals would have to be recomputed anyway.
         """
         collected = DiagnosticCollector()
-        whole_input = build.sole_contributor(self._producers, skipped_records)
+        whole_input = self.whole_input
         for duplicated in sorted(
             span_id for span_id, count in self._span_id_counts.items() if count > 1
         ):
@@ -410,7 +533,7 @@ class SpanAbsorber:
                 adapters=tuple(
                     self._producer_latest[key] for key in sorted(self._producer_latest)
                 ),
-                source_digest=source_digest,
+                source_digest=self._source_digest,
                 node_count=len(nodes),
                 edge_count=len(edges),
                 diagnostic_count=len(collected),

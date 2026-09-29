@@ -985,6 +985,7 @@ SpanweaveError:
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
+| `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -2059,6 +2060,8 @@ b = spanweave.Builder(adapter=None, temporal=True)   # same wiring as build()
 b.feed(record) -> int                                # the new version
 b.version      -> int                                # records absorbed
 b.graph()      -> Graph                              # the prefix graph
+b.delta(since=v) -> Delta                            # what changed since v
+b.retain(versions=N | "all" | 0) -> None             # journal policy
 ```
 
 ### 10.1 Prefix consistency is the definition
@@ -2139,7 +2142,165 @@ A record is classified on its own, as every record in a batch build is (§6.1):
   returning an empty graph, because `build` of an empty input does.
 - **Two records resolving to one node id** — refused as §3.6 refuses it.
 
-### 10.6 Out of scope here
+### 10.6 A delta is the difference between two versions
+
+`b.delta(since=v)` says what changed between version `v` and the current one,
+and the answer is *defined* as the set difference of the two graphs:
+
+```
+delta(a, b) = graph(b) − graph(a)
+```
+
+per collection — nodes, edges, diagnostics — added and removed, plus the two
+facts a graph carries that no collection holds (its `trace_id` and its
+`meta.adapters`) and one flag saying whether canonical order moved. Anything
+that computes it faster is an **implementation** and must agree with that
+definition, which is why the definition is also a test: a checkpoint diff of
+two materialized graphs is the oracle, run against the implementation at every
+version of every rendering in the corpus (`FIXTURES.md` §4, claim 3).
+
+A `Delta` comes **only** from `delta(since=v)`. `feed` returns the new version
+and never a delta (§10); the per-record mode is `delta(since=version - 1)`.
+
+```
+Delta:
+  since, until                  int             the two versions
+  nodes_added / nodes_removed   Node[]          by id
+  edges_added / edges_removed   Edge[]          by (kind, src, dst, basis)
+  diagnostics_opened / _resolved  Diagnostic[]  by (code, node_id, message)
+  trace_id_before / trace_id_after   str
+  adapters_before / adapters_after   AdapterInfo[]
+  order_changed                 bool            canonical order moved
+  restated                      bool            §10.7
+  basis_rewritten               a view over the edge sets, not a fact of its own
+```
+
+Every collection is in the graph's own canonical order (§5.2), so two deltas
+over the same window are equal or they disagree — there is no order to argue
+about.
+
+Three things a delta deliberately is not:
+
+- **It is not a log.** It is the difference between two endpoints, so it
+  **cancels**: an `unpaired_call` opened at version 12 and resolved at 14 is in
+  neither `graph(11)` nor `graph(15)`, so it appears in neither collection of
+  `delta(11, 15)`. The history inside the window is the journal's (§10.7), and
+  a consumer that wants it keeps the per-record deltas.
+- **It carries no annotations.** A builder never annotates, so there is nothing
+  to carry; annotations are the consumer's own facts (§8). `fold` keeps the
+  annotations of the graph it is handed.
+- **It is not a graph.** No version number appears on any graph (§10.1), and
+  none appears on a node or an edge either.
+
+`basis_rewritten` is a **view**, not a field: a `data` edge whose `basis`
+changed because an earlier receiver arrived (§4.2.1) is one edge removed and
+one added, since an edge's identity includes its basis (§3.8). The view names
+those pairs so a consumer need not rediscover them, and it is computed from the
+edge sets so it cannot disagree with them.
+
+**Folding.** `delta.fold(graph)` applies the difference and returns a new graph:
+
+```
+b.delta(since=k-1).fold(graph_at_version_k_minus_1)  ==  b.graph()
+```
+
+byte for byte, which is the third claim the corpus makes about the live builder.
+Canonical order is not carried in the delta: it is a function of the nodes and
+the edges (§5.2), so the fold recomputes it from what it has just applied, and
+so is the `ordering_cycle` diagnostic that the same sort reports. `meta`'s three
+counts are recomputed for the same reason — a count that travelled could
+disagree with the collection it counts.
+
+A graph carries no version, so the fold **cannot** check that it was handed the
+`since` version. What it does check is that the difference applies: a node, edge
+or diagnostic it must remove and cannot find, or one it adds that is already
+there, raises `ValueError` rather than producing a quietly wrong graph.
+
+**What each of the two costs, stated rather than implied.** A `feed` appends an
+entry whose size is the keys the arrival touched, so feeding is what §10.2 says
+it is and no more. Asking for a delta is **O(n + e)**, not O(the changes): the
+two things a delta does not carry are functions of the whole node and edge set,
+so `delta(since=v)` sorts both endpoints to find them, exactly as `graph()`
+sorts once to materialize. The gain over materializing is therefore what the
+*answer* is — a handful of nodes and edges instead of the world resent — and not
+yet the sort. Making the sort incremental is a separate measured change; until
+one is made, a consumer asking for a delta after every record pays one sort per
+record, as one asking for a graph after every record already does.
+
+### 10.7 The journal, and the entries that are not local
+
+Each `feed` appends one **entry** to a journal: the difference that arrival
+made, as added and removed sets over the same three collections.
+`delta(since=v)` folds the entries after `v`, and the fold is where the
+cancellation above happens. The journal is the log; the delta is a summary of
+two endpoints.
+
+Two kinds of entry, and the difference between them is the whole of §10.2:
+
+- **Local.** The arrival touched only its own facts, the references it made,
+  the call ids it named and the sibling group it joined. The entry is that
+  small.
+- **Restated.** The arrival changed one of the three whole-input facts (§10.2),
+  so every node id was derived again and ids already given out may have moved.
+  The entry describes the **whole state**, and it is marked `restated` — which
+  travels onto every `Delta` folded from a window containing one. The sets are
+  still exact and still minimal; what the mark adds is that this was not a
+  small change to a stable graph, and a consumer holding node ids has to know
+  the difference. A journal that reported such an arrival as a local diff would
+  be describing an event that did not happen.
+
+One thing that moves between versions and is **not** a restatement:
+`meta.adapters[].declared_confidence` is declared over a sample that grows as
+records arrive (§6.1), so it changes while the sample fills. No id moves with
+it, which is why the adapter tuple is carried on the delta in its own right
+rather than folded into the meaning of `restated`.
+
+### 10.8 Retention is the caller's policy, and a `since` it dropped raises
+
+`b.retain(versions=N | "all" | 0)`, default `"all"`.
+
+| `versions` | The journal keeps |
+|---|---|
+| `"all"` | every entry, so any version this builder has reached can be a `since` |
+| `N` | the last `N` entries, so `since` may be as old as `version - N` |
+| `0` | nothing: `delta(since=version)` is the empty delta and any earlier `since` raises |
+
+Retention is applied when it is set and after every `feed`, so a policy takes
+effect at once rather than at some later convenient moment.
+
+A `since` the journal no longer holds raises `DeltaUnavailableError`, code
+`delta_unavailable` (§3.10). It is never a truncated delta, never an
+approximate one, and never a full graph offered in its place: a caller that
+asked what changed and was handed something else could not tell. A `since` that
+is not a version this builder has reached — negative, or greater than `version`
+— is a caller error and raises `ValueError`, as an annotation with no namespace
+does (§8).
+
+### 10.9 The delta document form is additive
+
+A delta serializes to its **own** top-level document. The graph document does
+not move for this: no key is added to it, and
+`tests/serialized_shape.json` is unchanged — which is the same promise §10.1
+makes and the reason lifecycle option (a) was taken.
+
+```
+{"schema_version": "...", "kind": "delta", "since": 11, "until": 15,
+ "nodes_added": [...], "nodes_removed": [...],
+ "edges_added": [...], "edges_removed": [...],
+ "diagnostics_opened": [...], "diagnostics_resolved": [...],
+ "basis_rewritten": [...], "trace_id_before": "...", "trace_id_after": "...",
+ "adapters_before": [...], "adapters_after": [...],
+ "order_changed": false, "restated": false}
+```
+
+Nodes, edges and diagnostics are written by exactly the same functions that
+write them into a graph document, so a consumer that can read one can read the
+other. `kind` is the discriminator, and it is on the **delta** rather than on
+the graph because adding a key to the graph document would move a shape that
+`0.9.x` consumers already read. Encoding is §5.2's, unchanged: sorted keys,
+compact separators, one trailing newline.
+
+### 10.10 Out of scope here
 
 One builder per trace: records of two traces in one builder are kept and
 reported as a multi-trace input is (§7), and partitioning a stream by trace is

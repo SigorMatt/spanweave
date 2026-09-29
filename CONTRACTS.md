@@ -65,6 +65,19 @@ species of gap as the rows below, in a differently-typed field. It belongs to th
 Phase 4 audit, and it is out of *this* enumeration only because widening the rule
 to catch it would make the rule a judgement instead of a type test.
 
+**One whole document is outside the rule and named for the same reason.** The
+scope above says *a graph document*, and a **delta** document (`SPEC.md` §10.9)
+is its own top-level shape rather than a change to that one. Its own fields —
+`kind`, `trace_id_before`, `trace_id_after`, `basis_rewritten[].before` and
+`.after` — are free `str`s and would take rows under the rule if the rule
+reached them; its nodes, edges and diagnostics are written by the very functions
+that write them into a graph document, so those are already enumerated below and
+a row would be the same row twice. Enumerating the five is Phase 4's, with the
+rest of the delta document, and the reason to defer rather than widen is the one
+this whole file is about: a delta document has no consumer yet, so a contract
+stated for it now would be one implementation's behavior written down with
+nothing obliged to agree with it.
+
 `RawRecord.line_number` and `Meta.schema_version` are model fields that are
 **not** serialized at their object's path — the first deliberately (`SPEC.md`
 §3.5: it depends on input order and the graph must not), the second because it is

@@ -15,6 +15,51 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A live builder can now say what changed, and a consumer can fold it
+  forward.** `Builder.delta(since=v)` returns a `Delta`, and `delta.fold(graph)`
+  applies it: fold the per-record delta onto the previous graph and you get the
+  current one, byte for byte. A delta is *defined* as the set difference of two
+  prefix graphs -- `graph(b) - graph(a)`, per collection -- so the definition is
+  also the test oracle: `tests/delta_oracle.py` materializes both graphs and
+  diffs them the slow obvious way, and conformance gates 2 and 3 run it against
+  the implementation at **every** `since` of every rendering in the corpus
+  (`SPEC.md` §10.6-§10.9, `FIXTURES.md` §4, `OPEN_QUESTIONS.md` §18). Neither
+  gate writes a new expectation. Both bite: disabling the fold's cancellation
+  fails 25 corpus assertions, dropping the order-derived `ordering_cycle`
+  diagnostic fails 2 on `cyclic_parents`, never restating the whole-input
+  statements fails 4 on `duplicate_span_ids`, and folding without recomputing
+  canonical order fails 5 on `shuffled_order`.
+  The implementation is a **journal** -- one entry per `feed`, folded on demand --
+  and the fold **cancels**: an `unpaired_call` opened at version 12 and resolved
+  at 14 is in neither endpoint graph, so it is in neither collection of
+  `delta(11, 15)`. A delta is a summary of two endpoints, not a log; the
+  per-record deltas are the log.
+  Two findings from the incremental builder shaped it. Node ids **do** move --
+  a majority trace-id change and a span id that stops being unique each
+  re-derive every id (`SPEC.md` §10.2) -- so such an entry is not local, and
+  rather than pretend otherwise it is marked `restated`, a flag that travels
+  onto every delta folded from a window containing one. And `meta` moves between
+  versions on its own (`declared_confidence` is declared over a growing sample,
+  §6.1), so `trace_id` and `meta.adapters` are carried on the delta in their own
+  right; the three `meta` counts are not, because a count that travelled could
+  disagree with the collection it counts.
+  Retention is the caller's policy: `retain(versions=N | "all" | 0)`, default
+  `"all"`, applied at once rather than at the next `feed`. A `since` the journal
+  has dropped raises `DeltaUnavailableError` -- new error code
+  `delta_unavailable` (§3.10) -- and never a truncated delta, because an
+  incomplete one is indistinguishable from a complete one. A `since` that is not
+  a version at all is a `ValueError`, and so is folding onto a graph that does
+  not hold what the delta removes: a graph carries no version number, so the
+  fold cannot check it was handed the right one, and refusing beats a quietly
+  wrong graph.
+  A delta serializes to its **own** top-level document, `kind: "delta"`, written
+  by the very functions that write nodes, edges and diagnostics into a graph
+  document. **The graph document does not move**: no key added,
+  `tests/serialized_shape.json` byte-identical, which is the same promise §10.1
+  made and the reason diagnostic-lifecycle option (a) was taken. New on the
+  public API: `Delta`, `BasisRewrite`, `DeltaUnavailableError`,
+  `delta_to_document`, `delta_dumps`.
+
 - **A graph can now be built from a stream that has not finished arriving.**
   `spanweave.Builder` takes records one at a time -- `feed(record)` returns the
   new version as an `int`, `graph()` materializes the graph of everything

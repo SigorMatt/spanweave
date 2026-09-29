@@ -17,6 +17,7 @@ from spanweave import diagnostics
 from spanweave.errors import (
     ERROR_CODES,
     AdapterSelectionError,
+    DeltaUnavailableError,
     DuplicateNodeIdError,
     SpanweaveError,
     UnknownAdapterError,
@@ -54,6 +55,7 @@ def test_every_error_type_carries_a_registered_code():
         AdapterSelectionError,
         UnknownAdapterError,
         DuplicateNodeIdError,
+        DeltaUnavailableError,
     ):
         if error_type is SpanweaveError:
             continue  # the base class's placeholder is not a contract
