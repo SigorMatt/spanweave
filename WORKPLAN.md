@@ -161,7 +161,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | done | — |
 | L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | done (`58d3e69`) | 25 |
 | L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | done (`7f1f40c`) | 25 |
-| L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. Must speed up `delta()`'s two `ordering()` calls, not only `materialize()` — SPEC §10.6 puts `delta(since=v)` at O(n + e). | todo | 15 |
+| L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. Must speed up `delta()`'s two `ordering()` calls, not only `materialize()` — SPEC §10.6 puts `delta(since=v)` at O(n + e). | dropped on measurement (`79a63f4`) | 15 |
 | L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | todo | 8 |
 | L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
@@ -279,6 +279,34 @@ with both of them available.
   mechanism is carried and tested but the observable change needs a third
   adapter. New error code `delta_unavailable` (§3.10,
   `DeltaUnavailableError`).
+- 2026-09-30: L5 **dropped on measurement** (`79a63f4`), CI green. Nothing
+  under `spanweave/` moved; what landed is the benchmark (`tests/live_cost.py`,
+  `make bench`), a `SPEC.md` §10.6 cost statement, and one test. The numbers,
+  at `1d7ba8f` on CPython 3.14.6 — **echo** (the audit's 400-turn loop, 801
+  nodes / 81,799 edges): `feed` 75.5 s = 94.2 ms/record, `graph()` 312 ms of
+  which `in_order` 13.8 ms, `delta(since=v-1)` 229 ms of which the two
+  `ordering()` calls 32.4 ms (14%) and endpoint assembly/rewind 140 ms.
+  **wide** (20,000 spans, 20,001 nodes / 39,999 edges): `feed` 1,449 s =
+  72.4 ms/record, `graph()` 391 ms, `delta(since=v-1)` 295 ms of which the two
+  `ordering()` calls 176.6 ms (60%). Why it was dropped rather than kept: the
+  recompute could improve **only `delta()`, and only on the wide shape** —
+  `feed` never sorts at all (`build.in_order` is reached from the batch build,
+  `materialize()` and `delta.ordering`, nowhere else), so a maintained order
+  adds to `feed` and removes nothing. And the wide shape's 60% is not
+  reachable by a *faster* sort — a heap Kahn was measured at an identical
+  sequence and 2.1×, i.e. 3% of `delta()` — but only by *not sorting*, which
+  means carrying canonical order and `ordering_cycle` between versions,
+  reversing what §10.6/§10.7 deliberately promise and adding a second ordering
+  rule beside §5.2's. That is a spec conversation; it is written down in
+  `SPEC.md` §10.6 and `CHANGELOG.md` and deliberately not started. (This repo
+  has no `DEBT.md`; SPEC is where the deferral lives.) **The finding that
+  outlives the batch**, and the one for the cold review to weigh: the two real
+  quadratics in `feed` are not ordering at all — the wide shape rebuilds its
+  one sibling group's whole temporal chain on every arrival, and the echo
+  shape rebuilds a call id's whole `data` edge set per echoed receipt. §10.6
+  now states that a key is restated in full, so "touches only the keys the
+  record names" can no longer be read as "cheap": 8× the records of a wide
+  trace is 116× the feed.
 
 ---
 
