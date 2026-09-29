@@ -17,7 +17,7 @@ exactly that workaround.
 """
 
 from spanweave.annotate import Annotation, AnnotationStore
-from spanweave.api import build
+from spanweave.api import Builder, build
 from spanweave.errors import (
     AdapterSelectionError,
     DuplicateNodeIdError,
@@ -51,6 +51,7 @@ __all__ = [
     "AdapterSelectionError",
     "Annotation",
     "AnnotationStore",
+    "Builder",
     "Diagnostic",
     "DiagnosticLevel",
     "DuplicateNodeIdError",

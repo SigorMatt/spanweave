@@ -195,7 +195,7 @@ def build_contributed_graph(
     assignment = assign(ordered, [_id_of(p) for p in producers], trace_id)
     ids = assignment.ids
     # Which adapter produced each node, for provenance, for a diagnostic's
-    # `adapter`, and for the one question an edge asks (`_edge_adapter`).
+    # `adapter`, and for the one question an edge asks (`edge_adapter`).
     by_node = {
         node_id: _id_of(producer)
         for node_id, producer in zip(ids, producers, strict=True)
@@ -205,36 +205,26 @@ def build_contributed_graph(
     # several did, when any record was claimed by none, or when any record
     # was never read at all. A wholly-claimed, wholly-read single-dialect
     # input therefore reports exactly what it always did.
-    whole_input = _sole_contributor(producers, skipped_records)
+    whole_input = sole_contributor(producers, skipped_records)
     for duplicated in assignment.duplicate_source_ids:
-        collected.add(
-            codes.DUPLICATE_SOURCE_ID,
-            f"the dialect used the span id {duplicated!r} for more than one "
-            f"record; every one of them is kept, with ids derived from the "
-            f"records themselves instead (SPEC.md 3.6 rule 3), and a "
-            f"reference to that id resolves to none of them",
-            source=duplicated,
-            adapter=whole_input,
-        )
+        report_duplicate_source_id(duplicated, collected, whole_input)
 
     by_span_id = _span_id_index(ordered, ids)
     nodes = tuple(
-        _node(span, node_id, producer)
+        node_of(span, node_id, producer)
         for span, node_id, producer in zip(ordered, ids, producers, strict=True)
     )
-    _report_span_diagnostics(ordered, ids, collected)
-    _report_foreign_traces(ordered, ids, trace_id, collected, by_node)
-    _report_missing_trace_id(trace_id, collected, whole_input)
-    _report_nonmonotonic_time(ordered, ids, collected, by_node)
-    _report_timestamp_unit_suspect(ordered, ids, collected, by_node)
+    for span, node_id in zip(ordered, ids, strict=True):
+        report_record(span, node_id, trace_id, collected, by_node[node_id])
+    report_missing_trace_id(trace_id, collected, whole_input)
 
     edges = _explicit_edges(ordered, ids, by_span_id, collected, by_node)
     if temporal:
-        edges = _deduplicated(
+        edges = deduplicated(
             [*edges, *_temporal_edges(nodes, edges, collected, by_node)]
         )
 
-    nodes = _in_order(nodes, edges, collected, whole_input)
+    nodes = in_order(nodes, edges, collected, whole_input)
 
     return Graph.of(
         trace_id=trace_id or "",
@@ -244,7 +234,7 @@ def build_contributed_graph(
         meta=Meta(
             schema_version=SCHEMA_VERSION,
             spanweave_version=__version__,
-            adapters=_contributors(producers),
+            adapters=contributors(producers),
             source_digest=source_digest,
             node_count=len(nodes),
             edge_count=len(edges),
@@ -283,7 +273,7 @@ def _produced_by_one(adapter_ids: Sequence[str | None]) -> str | None:
     return only
 
 
-def _sole_contributor(
+def sole_contributor(
     producers: Sequence[AdapterInfo | None], skipped_records: int = 0
 ) -> str | None:
     """Whose records a statement about the whole input was made from.
@@ -300,7 +290,7 @@ def _sole_contributor(
     entry for it; without being told, this would name an adapter for a
     statement about an input one record of which is unknown.
 
-    This is `_edge_adapter`'s reasoning one level up: a diagnostic such as
+    This is `edge_adapter`'s reasoning one level up: a diagnostic such as
     `missing_trace_id` is one statement about everything that arrived
     (`SPEC.md` §7), so naming one dialect for a fact another dialect -- or
     nobody -- also contributed to would be a false attribution, exactly as
@@ -312,7 +302,7 @@ def _sole_contributor(
     return _produced_by_one([_id_of(producer) for producer in producers])
 
 
-def _contributors(producers: Sequence[AdapterInfo | None]) -> tuple[AdapterInfo, ...]:
+def contributors(producers: Sequence[AdapterInfo | None]) -> tuple[AdapterInfo, ...]:
     """Every adapter that produced at least one node, sorted (`SPEC.md` §3.9).
 
     Distinct on `(id, version)`, which is the order `meta.adapters` is written
@@ -324,7 +314,7 @@ def _contributors(producers: Sequence[AdapterInfo | None]) -> tuple[AdapterInfo,
     return tuple(distinct[key] for key in sorted(distinct))
 
 
-def _edge_adapter(by_node: Mapping[NodeId, str | None], *ends: NodeId) -> str | None:
+def edge_adapter(by_node: Mapping[NodeId, str | None], *ends: NodeId) -> str | None:
     """Whose spans an edge was built from, when one adapter can be named.
 
     `None` when the ends came from **different** adapters, or when either end
@@ -344,21 +334,28 @@ def _edge_adapter(by_node: Mapping[NodeId, str | None], *ends: NodeId) -> str | 
     return _produced_by_one([by_node[end] for end in ends if end in by_node])
 
 
-def _tie_break(node: Node) -> tuple[int | float, str]:
+def tie_break(node: Node) -> tuple[int | float, str]:
     """`(started_at or +inf, node_id)` -- a determinism invariant (§5.2)."""
     return (node.started_at if node.started_at is not None else float("inf"), node.id)
 
 
 def _trace_id_of(spans: Sequence[NormalizedSpan]) -> str | None:
-    """The trace this input is about: the most common id (`SPEC.md` §7).
-
-    Ties break on the id itself, ascending. An arbitrary rule still has to be
-    a *stated* one, or the same input could produce two different graphs.
-    """
+    """The trace this input is about: the most common id (`SPEC.md` §7)."""
     counts: dict[str, int] = {}
     for span in spans:
         if span.trace_id is not None:
             counts[span.trace_id] = counts.get(span.trace_id, 0) + 1
+    return majority_trace_id(counts)
+
+
+def majority_trace_id(counts: Mapping[str, int]) -> str | None:
+    """The most common trace id, ties broken on the id itself, ascending.
+
+    An arbitrary rule still has to be a *stated* one, or the same input could
+    produce two different graphs. Taken as counts rather than as spans because
+    a builder absorbing one record at a time keeps the counts and must break
+    the tie the same way (`SPEC.md` §10).
+    """
     if not counts:
         return None
     return min(counts, key=lambda trace: (-counts[trace], trace))
@@ -385,7 +382,9 @@ def _span_id_index(
     return index
 
 
-def _node(span: NormalizedSpan, node_id: NodeId, producer: AdapterInfo | None) -> Node:
+def node_of(
+    span: NormalizedSpan, node_id: NodeId, producer: AdapterInfo | None
+) -> Node:
     return Node(
         id=node_id,
         kind=span.kind,
@@ -412,43 +411,90 @@ def _node(span: NormalizedSpan, node_id: NodeId, producer: AdapterInfo | None) -
     )
 
 
-def _report_span_diagnostics(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
-    collected: DiagnosticCollector,
-) -> None:
-    """Attach the adapter's own diagnostics to the nodes they belong to."""
-    for span, node_id in zip(spans, ids, strict=True):
-        collected.extend(
-            dataclasses.replace(diagnostic, node_id=node_id)
-            for diagnostic in span.diagnostics
-        )
-
-
-def _report_foreign_traces(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
+def report_record(
+    span: NormalizedSpan,
+    node_id: NodeId,
     trace_id: str | None,
     collected: DiagnosticCollector,
-    by_node: Mapping[NodeId, str | None],
+    adapter: str | None,
 ) -> None:
-    """Records from another trace are kept, and said so (`SPEC.md` §7)."""
-    for span, node_id in zip(spans, ids, strict=True):
-        if span.trace_id is None or span.trace_id == trace_id:
-            continue
-        collected.add(
-            codes.MULTI_TRACE_INPUT,
-            f"this record belongs to trace {span.trace_id!r}, not to "
-            f"{trace_id!r}, which is the most common id in this input; the "
-            f"record is kept. Splitting a multi-trace input is the "
-            f"consumer's call",
-            node_id=node_id,
-            source=span.trace_id,
-            adapter=by_node[node_id],
-        )
+    """Every diagnostic one record draws **on its own**.
+
+    Four statements, one per record and none of them about any other record:
+    what the adapter already said about it, that it belongs to another trace,
+    that its clock ran backwards, and that its timestamps cannot be seconds.
+    Grouped into one function because that independence is what lets a builder
+    absorbing records one at a time keep them (`SPEC.md` §10) -- the collector
+    sorts, so nothing depends on the order they are added in.
+
+    `trace_id` is the graph's, which a later record can change; when it does,
+    every record's `multi_trace_input` is restated.
+    """
+    # The adapter's own diagnostics, attached to the node they belong to.
+    collected.extend(
+        dataclasses.replace(diagnostic, node_id=node_id)
+        for diagnostic in span.diagnostics
+    )
+    _report_foreign_trace(span, node_id, trace_id, collected, adapter)
+    _report_nonmonotonic_time(span, node_id, collected, adapter)
+    _report_timestamp_unit_suspect(span, node_id, collected, adapter)
 
 
-def _report_missing_trace_id(
+def report_duplicate_source_id(
+    duplicated: str, collected: DiagnosticCollector, adapter: str | None
+) -> None:
+    """A span id the dialect used for more than one record (`SPEC.md` §3.6)."""
+    collected.add(
+        codes.DUPLICATE_SOURCE_ID,
+        f"the dialect used the span id {duplicated!r} for more than one "
+        f"record; every one of them is kept, with ids derived from the "
+        f"records themselves instead (SPEC.md 3.6 rule 3), and a "
+        f"reference to that id resolves to none of them",
+        source=duplicated,
+        adapter=adapter,
+    )
+
+
+def report_missing_timestamp(
+    node_id: NodeId, collected: DiagnosticCollector, adapter: str | None
+) -> None:
+    """Excluded from the temporal chain, and told (`SPEC.md` §4.3).
+
+    A consumer that sees no temporal edge on a node should be able to tell
+    "it was last" from "we never knew when it started".
+    """
+    collected.add(
+        codes.MISSING_TIMESTAMP,
+        "no start time, so this node takes part in no temporal edges",
+        node_id=node_id,
+        level=DiagnosticLevel.INFO,
+        adapter=adapter,
+    )
+
+
+def _report_foreign_trace(
+    span: NormalizedSpan,
+    node_id: NodeId,
+    trace_id: str | None,
+    collected: DiagnosticCollector,
+    adapter: str | None,
+) -> None:
+    """A record from another trace is kept, and said so (`SPEC.md` §7)."""
+    if span.trace_id is None or span.trace_id == trace_id:
+        return
+    collected.add(
+        codes.MULTI_TRACE_INPUT,
+        f"this record belongs to trace {span.trace_id!r}, not to "
+        f"{trace_id!r}, which is the most common id in this input; the "
+        f"record is kept. Splitting a multi-trace input is the "
+        f"consumer's call",
+        node_id=node_id,
+        source=span.trace_id,
+        adapter=adapter,
+    )
+
+
+def report_missing_trace_id(
     trace_id: str | None,
     collected: DiagnosticCollector,
     whole_input: str | None,
@@ -476,36 +522,35 @@ def _report_missing_trace_id(
 
 
 def _report_nonmonotonic_time(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
+    span: NormalizedSpan,
+    node_id: NodeId,
     collected: DiagnosticCollector,
-    by_node: Mapping[NodeId, str | None],
+    adapter: str | None,
 ) -> None:
-    for span, node_id in zip(spans, ids, strict=True):
-        if span.started_at is None or span.ended_at is None:
-            continue
-        if span.ended_at >= span.started_at:
-            continue
-        # Reported, never repaired: a clock that ran backwards is a fact
-        # about the trace, and correcting it here would hide it.
-        collected.add(
-            codes.NONMONOTONIC_TIME,
-            # `number_text`, not `str`: a reported integer the library reads
-            # renders the same on every interpreter setting (`SPEC.md` §5.3).
-            f"ended_at ({number_text(span.ended_at)}) precedes "
-            f"started_at ({number_text(span.started_at)}); both are "
-            f"kept as reported",
-            node_id=node_id,
-            source=[span.started_at, span.ended_at],
-            adapter=by_node[node_id],
-        )
+    if span.started_at is None or span.ended_at is None:
+        return
+    if span.ended_at >= span.started_at:
+        return
+    # Reported, never repaired: a clock that ran backwards is a fact
+    # about the trace, and correcting it here would hide it.
+    collected.add(
+        codes.NONMONOTONIC_TIME,
+        # `number_text`, not `str`: a reported integer the library reads
+        # renders the same on every interpreter setting (`SPEC.md` §5.3).
+        f"ended_at ({number_text(span.ended_at)}) precedes "
+        f"started_at ({number_text(span.started_at)}); both are "
+        f"kept as reported",
+        node_id=node_id,
+        source=[span.started_at, span.ended_at],
+        adapter=adapter,
+    )
 
 
 def _report_timestamp_unit_suspect(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
+    span: NormalizedSpan,
+    node_id: NodeId,
     collected: DiagnosticCollector,
-    by_node: Mapping[NodeId, str | None],
+    adapter: str | None,
 ) -> None:
     """A reported time too large to be unix seconds (`SPEC.md` §3.1).
 
@@ -520,27 +565,26 @@ def _report_timestamp_unit_suspect(
     module computed by subtracting two numbers, and whether one of those is
     plausible is a claim about the run rather than about the encoding.
     """
-    for span, node_id in zip(spans, ids, strict=True):
-        over = {
-            field: value
-            for field, value in (
-                ("started_at", span.started_at),
-                ("ended_at", span.ended_at),
-            )
-            if value is not None and value > TIMESTAMP_UNIT_CEILING
-        }
-        if not over:
-            continue
-        collected.add(
-            codes.TIMESTAMP_UNIT_SUSPECT,
-            f"{', '.join(f'{f} ({number_text(v)})' for f, v in over.items())} "
-            f"exceeds {TIMESTAMP_UNIT_CEILING}, which unix seconds cannot "
-            f"reach; the field may be in milliseconds or nanoseconds. Every "
-            f"value is kept exactly as reported and nothing is rescaled",
-            node_id=node_id,
-            source=over,
-            adapter=by_node[node_id],
+    over = {
+        field: value
+        for field, value in (
+            ("started_at", span.started_at),
+            ("ended_at", span.ended_at),
         )
+        if value is not None and value > TIMESTAMP_UNIT_CEILING
+    }
+    if not over:
+        return
+    collected.add(
+        codes.TIMESTAMP_UNIT_SUSPECT,
+        f"{', '.join(f'{f} ({number_text(v)})' for f, v in over.items())} "
+        f"exceeds {TIMESTAMP_UNIT_CEILING}, which unix seconds cannot "
+        f"reach; the field may be in milliseconds or nanoseconds. Every "
+        f"value is kept exactly as reported and nothing is rescaled",
+        node_id=node_id,
+        source=over,
+        adapter=adapter,
+    )
 
 
 def _explicit_edges(
@@ -559,7 +603,7 @@ def _explicit_edges(
     )
     found.extend(_link_edges(spans, ids, by_span_id, by_node))
     found.extend(_data_edges(spans, ids, by_span_id, fulfillers, by_node))
-    return _deduplicated(found)
+    return deduplicated(found)
 
 
 def _call_sides(
@@ -595,6 +639,43 @@ def _call_sides(
     return requesters, fulfillers, names
 
 
+def parent_edge(
+    span: NormalizedSpan,
+    node_id: NodeId,
+    by_span_id: Mapping[str, NodeId],
+    collected: DiagnosticCollector,
+    by_node: Mapping[NodeId, str | None],
+) -> Edge | None:
+    """One record's `parent` edge, or the diagnostic that it has none.
+
+    `None` and an `orphan_parent` where the stated parent is not in the input:
+    the node stays. A trace that starts mid-run is ordinary, and dropping the
+    record would lose more than the missing parent did. A record that states no
+    parent gets neither -- `None` with nothing reported.
+    """
+    if span.parent_id is None:
+        return None
+    parent = by_span_id.get(span.parent_id)
+    if parent is None:
+        collected.add(
+            codes.ORPHAN_PARENT,
+            f"parent span {span.parent_id!r} is not in this input; the "
+            f"node is kept and no parent edge is made",
+            node_id=node_id,
+            source=span.parent_id,
+            adapter=by_node[node_id],
+        )
+        return None
+    return Edge(
+        src=parent,
+        dst=node_id,
+        kind=EdgeKind.PARENT,
+        warrant=Warrant.EXPLICIT,
+        basis=PARENT_BASIS,
+        adapter=edge_adapter(by_node, parent, node_id),
+    )
+
+
 def _parent_edges(
     spans: Sequence[NormalizedSpan],
     ids: Sequence[NodeId],
@@ -602,38 +683,16 @@ def _parent_edges(
     collected: DiagnosticCollector,
     by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
-    edges = []
+    found = []
     for span, node_id in zip(spans, ids, strict=True):
-        if span.parent_id is None:
-            continue
-        parent = by_span_id.get(span.parent_id)
-        if parent is None:
-            # The node stays. A trace that starts mid-run is ordinary, and
-            # dropping the record would lose more than the missing parent did.
-            collected.add(
-                codes.ORPHAN_PARENT,
-                f"parent span {span.parent_id!r} is not in this input; the "
-                f"node is kept and no parent edge is made",
-                node_id=node_id,
-                source=span.parent_id,
-                adapter=by_node[node_id],
-            )
-            continue
-        edges.append(
-            Edge(
-                src=parent,
-                dst=node_id,
-                kind=EdgeKind.PARENT,
-                warrant=Warrant.EXPLICIT,
-                basis=PARENT_BASIS,
-                adapter=_edge_adapter(by_node, parent, node_id),
-            )
-        )
-    return edges
+        edge = parent_edge(span, node_id, by_span_id, collected, by_node)
+        if edge is not None:
+            found.append(edge)
+    return found
 
 
 def _unpaired_source(
-    call_id: str, call_names: dict[str, str | None]
+    call_id: str, call_names: Mapping[str, str | None]
 ) -> dict[str, str | None]:
     """`source` for the two unpaired codes (`SPEC.md` §3.7, `source` per code).
 
@@ -646,6 +705,63 @@ def _unpaired_source(
     return {"call_id": call_id, "operation": call_names.get(call_id)}
 
 
+def call_result_edges(
+    call_id: str,
+    requesters: Iterable[NodeId],
+    fulfillers: Iterable[NodeId],
+    call_names: Mapping[str, str | None],
+    collected: DiagnosticCollector,
+    by_node: Mapping[NodeId, str | None],
+) -> list[Edge]:
+    """Join requester to fulfiller for **one** call id, on the id itself.
+
+    Never on name, proximity, or timing. A guessed pairing is
+    indistinguishable from a real one downstream, which is exactly the harm
+    the warrant system exists to prevent (`SPEC.md` §4.4).
+
+    Everything about one call id is decided by that call id's two sides alone,
+    which is why this takes them rather than the whole input: a builder
+    absorbing one record at a time restates exactly the call ids that record
+    named (`SPEC.md` §10).
+    """
+    asked = sorted(requesters)
+    answered = sorted(fulfillers)
+    if not answered:
+        for node_id in asked:
+            collected.add(
+                codes.UNPAIRED_CALL,
+                f"call {call_id!r} was requested and no span in this input "
+                f"fulfils it; no edge is invented",
+                node_id=node_id,
+                source=_unpaired_source(call_id, call_names),
+                adapter=by_node[node_id],
+            )
+        return []
+    if not asked:
+        for node_id in answered:
+            collected.add(
+                codes.UNPAIRED_RESULT,
+                f"call {call_id!r} was fulfilled but no span in this input "
+                f"requests it; no edge is invented",
+                node_id=node_id,
+                source=_unpaired_source(call_id, call_names),
+                adapter=by_node[node_id],
+            )
+        return []
+    return [
+        Edge(
+            src=source,
+            dst=target,
+            kind=EdgeKind.CALL_RESULT,
+            warrant=Warrant.EXPLICIT,
+            basis=CALL_BASIS,
+            adapter=edge_adapter(by_node, source, target),
+        )
+        for source in asked
+        for target in answered
+    ]
+
+
 def _call_result_edges(
     requesters: dict[str, list[NodeId]],
     fulfillers: dict[str, list[NodeId]],
@@ -653,51 +769,41 @@ def _call_result_edges(
     collected: DiagnosticCollector,
     by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
-    """Join requester to fulfiller on the id the dialect carried.
-
-    Never on name, proximity, or timing. A guessed pairing is
-    indistinguishable from a real one downstream, which is exactly the harm
-    the warrant system exists to prevent (`SPEC.md` §4.4).
-    """
-    edges = []
+    found = []
     for call_id in sorted(set(requesters) | set(fulfillers)):
-        asked = sorted(requesters.get(call_id, ()))
-        answered = sorted(fulfillers.get(call_id, ()))
-        if not answered:
-            for node_id in asked:
-                collected.add(
-                    codes.UNPAIRED_CALL,
-                    f"call {call_id!r} was requested and no span in this input "
-                    f"fulfils it; no edge is invented",
-                    node_id=node_id,
-                    source=_unpaired_source(call_id, call_names),
-                    adapter=by_node[node_id],
-                )
-            continue
-        if not asked:
-            for node_id in answered:
-                collected.add(
-                    codes.UNPAIRED_RESULT,
-                    f"call {call_id!r} was fulfilled but no span in this input "
-                    f"requests it; no edge is invented",
-                    node_id=node_id,
-                    source=_unpaired_source(call_id, call_names),
-                    adapter=by_node[node_id],
-                )
-            continue
-        for source in asked:
-            for target in answered:
-                edges.append(
-                    Edge(
-                        src=source,
-                        dst=target,
-                        kind=EdgeKind.CALL_RESULT,
-                        warrant=Warrant.EXPLICIT,
-                        basis=CALL_BASIS,
-                        adapter=_edge_adapter(by_node, source, target),
-                    )
-                )
-    return edges
+        found.extend(
+            call_result_edges(
+                call_id,
+                requesters.get(call_id, ()),
+                fulfillers.get(call_id, ()),
+                call_names,
+                collected,
+                by_node,
+            )
+        )
+    return found
+
+
+def link_edges(
+    span: NormalizedSpan,
+    node_id: NodeId,
+    by_span_id: Mapping[str, NodeId],
+    by_node: Mapping[NodeId, str | None],
+) -> list[Edge]:
+    """One record's links, transcribed even where they leave the trace (§4)."""
+    return [
+        Edge(
+            src=node_id,
+            dst=by_span_id.get(link.span_id, link.span_id),
+            kind=EdgeKind.LINK,
+            warrant=Warrant.EXPLICIT,
+            basis=link.basis or LINK_BASIS,
+            adapter=edge_adapter(
+                by_node, node_id, by_span_id.get(link.span_id, link.span_id)
+            ),
+        )
+        for link in span.links
+    ]
 
 
 def _link_edges(
@@ -706,29 +812,16 @@ def _link_edges(
     by_span_id: dict[str, NodeId],
     by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
-    """Links are transcribed even when they leave the trace (`SPEC.md` §4)."""
-    edges = []
+    found = []
     for span, node_id in zip(spans, ids, strict=True):
-        for link in span.links:
-            target = by_span_id.get(link.span_id, link.span_id)
-            edges.append(
-                Edge(
-                    src=node_id,
-                    dst=target,
-                    kind=EdgeKind.LINK,
-                    warrant=Warrant.EXPLICIT,
-                    basis=link.basis or LINK_BASIS,
-                    adapter=_edge_adapter(by_node, node_id, target),
-                )
-            )
-    return edges
+        found.extend(link_edges(span, node_id, by_span_id, by_node))
+    return found
 
 
-def _data_edges(
-    spans: Sequence[NormalizedSpan],
-    ids: Sequence[NodeId],
-    by_span_id: dict[str, NodeId],
-    fulfillers: dict[str, list[NodeId]],
+def data_edges(
+    call_id: str,
+    receivers: Iterable[tuple[int | float, NodeId]],
+    fulfillers: Iterable[NodeId],
     by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
     """Only ever the ones the instrumentor declared (`SPEC.md` §4.2).
@@ -748,39 +841,62 @@ def _data_edges(
     instrumentor made about that span's own input -- and the `basis` records
     which declaration came first, so a consumer can ask "which tool output did
     this turn act on" without the library deciding for it.
+
+    Per call id, and `receivers` is every `(started_at, node_id)` that declared
+    receipt of it, because which declaration came first is a fact about the
+    whole set: one arriving record can move the basis of every other
+    (`SPEC.md` §10).
     """
-    earliest, tied = _earliest_receivers(spans, ids)
-    edges = []
-    for span, node_id in zip(spans, ids, strict=True):
-        for call_id in span.received_call_ids:
-            if earliest.get(call_id) != node_id:
-                basis = DATA_LATER_BASIS
-            elif call_id in tied:
-                basis = DATA_TIED_BASIS
-            else:
-                basis = DATA_BASIS
-            for producer in sorted(fulfillers.get(call_id, ())):
-                if producer == node_id:
-                    # A span cannot feed itself. Malformed input rather than a
-                    # relation, and a self-loop would be neither.
-                    continue
-                edges.append(
-                    Edge(
-                        src=producer,
-                        dst=node_id,
-                        kind=EdgeKind.DATA,
-                        warrant=Warrant.EXPLICIT,
-                        basis=basis,
-                        adapter=_edge_adapter(by_node, producer, node_id),
-                    )
+    ranked = sorted(set(receivers))
+    if not ranked:
+        return []
+    earliest, tied = ranked[0][1], len(ranked) > 1 and ranked[0][0] == ranked[1][0]
+    answered = sorted(fulfillers)
+    found = []
+    for _, node_id in ranked:
+        if node_id != earliest:
+            basis = DATA_LATER_BASIS
+        elif tied:
+            basis = DATA_TIED_BASIS
+        else:
+            basis = DATA_BASIS
+        for producer in answered:
+            if producer == node_id:
+                # A span cannot feed itself. Malformed input rather than a
+                # relation, and a self-loop would be neither.
+                continue
+            found.append(
+                Edge(
+                    src=producer,
+                    dst=node_id,
+                    kind=EdgeKind.DATA,
+                    warrant=Warrant.EXPLICIT,
+                    basis=basis,
+                    adapter=edge_adapter(by_node, producer, node_id),
                 )
-    return edges
+            )
+    return found
 
 
-def _earliest_receivers(
+def _data_edges(
+    spans: Sequence[NormalizedSpan],
+    ids: Sequence[NodeId],
+    by_span_id: dict[str, NodeId],
+    fulfillers: dict[str, list[NodeId]],
+    by_node: Mapping[NodeId, str | None],
+) -> list[Edge]:
+    found = []
+    for call_id, receivers in sorted(_receipts(spans, ids).items()):
+        found.extend(
+            data_edges(call_id, receivers, fulfillers.get(call_id, ()), by_node)
+        )
+    return found
+
+
+def _receipts(
     spans: Sequence[NormalizedSpan], ids: Sequence[NodeId]
-) -> tuple[dict[str, NodeId], set[str]]:
-    """Per call id: which span declared receipt first, and was it a tie.
+) -> dict[str, list[tuple[int | float, NodeId]]]:
+    """Per call id, every span that declared receipt of it, ranked.
 
     The spans declaring receipt of one call are a **set**, so ranking them is
     order-independent by construction (`CLAUDE.md` 4) -- input line order
@@ -789,27 +905,16 @@ def _earliest_receivers(
     edges, with an untimed span sorted last: it is never the earliest unless
     no receiving span is timed at all, and it already draws
     `missing_timestamp`.
-
-    A tie is reported separately because breaking it is a **decision**, not an
-    observation, and §4.3 has already ruled that such an edge must say so in
-    its own basis rather than pass as something the telemetry showed.
     """
     ranked: dict[str, list[tuple[int | float, NodeId]]] = {}
     for span, node_id in zip(spans, ids, strict=True):
         start = span.started_at if span.started_at is not None else float("inf")
         for call_id in set(span.received_call_ids):
             ranked.setdefault(call_id, []).append((start, node_id))
-    earliest: dict[str, NodeId] = {}
-    tied: set[str] = set()
-    for call_id, receivers in ranked.items():
-        receivers.sort()
-        earliest[call_id] = receivers[0][1]
-        if len(receivers) > 1 and receivers[0][0] == receivers[1][0]:
-            tied.add(call_id)
-    return earliest, tied
+    return ranked
 
 
-def _deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:
+def deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:
     """Unique on `(src, dst, kind, basis)`, then totally ordered (§3.8, §5.2)."""
     unique: dict[tuple[str, str, str, str], Edge] = {}
     for edge in edges:
@@ -817,13 +922,8 @@ def _deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:
     return tuple(sorted(unique.values(), key=lambda edge: edge.sort_key))
 
 
-def _temporal_edges(
-    nodes: Sequence[Node],
-    edges: Sequence[Edge],
-    collected: DiagnosticCollector,
-    by_node: Mapping[NodeId, str | None],
-) -> list[Edge]:
-    """Consecutive siblings only (`SPEC.md` §4.3).
+def temporal_chain(siblings: Iterable[Node]) -> list[Edge]:
+    """Consecutive siblings only, in one sibling group (`SPEC.md` §4.3).
 
     An edge for every ordered pair would be O(n^2) and would tell a consumer
     nothing it could not compute: the transitive closure is available through
@@ -835,45 +935,57 @@ def _temporal_edges(
     different ``basis``, because "we put these in an order" and "this one
     started first" are different claims and only one of them is an
     observation.
+
+    One group at a time, because that is the scope of the rule: an arriving
+    record changes the chain of the group it joins and of no other
+    (`SPEC.md` §10).
     """
+    found = []
+    for earlier, later in itertools.pairwise(sorted(siblings, key=tie_break)):
+        tied = earlier.started_at == later.started_at
+        found.append(
+            Edge(
+                src=earlier.id,
+                dst=later.id,
+                kind=EdgeKind.TEMPORAL,
+                warrant=Warrant.DERIVED,
+                basis=TEMPORAL_TIED_BASIS if tied else TEMPORAL_BASIS,
+            )
+        )
+    return found
+
+
+def sibling_group(node: Node, parent_of: Mapping[NodeId, NodeId]) -> str:
+    """Which temporal chain a node belongs to (`SPEC.md` §4.3).
+
+    Nodes with no parent are siblings of each other at trace root -- and so is
+    a node whose stated parent is not in this input, because in *this* graph it
+    has none. `""` is that root group, and it is a group like any other.
+    """
+    return parent_of.get(node.id, "")
+
+
+def _temporal_edges(
+    nodes: Sequence[Node],
+    edges: Sequence[Edge],
+    collected: DiagnosticCollector,
+    by_node: Mapping[NodeId, str | None],
+) -> list[Edge]:
     parent_of = {edge.dst: edge.src for edge in edges if edge.kind is EdgeKind.PARENT}
     groups: dict[str, list[Node]] = {}
     for node in nodes:
         if node.started_at is None:
-            # Excluded, and told: a consumer that sees no temporal edge on a
-            # node should be able to tell "it was last" from "we never knew
-            # when it started".
-            collected.add(
-                codes.MISSING_TIMESTAMP,
-                "no start time, so this node takes part in no temporal edges",
-                node_id=node.id,
-                level=DiagnosticLevel.INFO,
-                adapter=by_node[node.id],
-            )
+            report_missing_timestamp(node.id, collected, by_node[node.id])
             continue
-        # Nodes with no parent are siblings of each other at trace root --
-        # and so is a node whose stated parent is not in this input, because
-        # in *this* graph it has none.
-        groups.setdefault(parent_of.get(node.id, ""), []).append(node)
+        groups.setdefault(sibling_group(node, parent_of), []).append(node)
 
     found = []
     for parent in sorted(groups):
-        siblings = sorted(groups[parent], key=_tie_break)
-        for earlier, later in itertools.pairwise(siblings):
-            tied = earlier.started_at == later.started_at
-            found.append(
-                Edge(
-                    src=earlier.id,
-                    dst=later.id,
-                    kind=EdgeKind.TEMPORAL,
-                    warrant=Warrant.DERIVED,
-                    basis=TEMPORAL_TIED_BASIS if tied else TEMPORAL_BASIS,
-                )
-            )
+        found.extend(temporal_chain(groups[parent]))
     return found
 
 
-def _in_order(
+def in_order(
     nodes: Sequence[Node],
     edges: Sequence[Edge],
     collected: DiagnosticCollector,
@@ -896,7 +1008,7 @@ def _in_order(
         outgoing[edge.src].append(edge.dst)
         incoming[edge.dst] += 1
 
-    ready = sorted((by_id[i] for i in by_id if incoming[i] == 0), key=_tie_break)
+    ready = sorted((by_id[i] for i in by_id if incoming[i] == 0), key=tie_break)
     ordered: list[Node] = []
     while ready:
         node = ready.pop(0)
@@ -907,7 +1019,7 @@ def _in_order(
             if incoming[target] == 0:
                 released.append(by_id[target])
         if released:
-            ready = sorted([*ready, *released], key=_tie_break)
+            ready = sorted([*ready, *released], key=tie_break)
 
     if len(ordered) == len(nodes):
         return tuple(ordered)
@@ -923,7 +1035,7 @@ def _in_order(
     # and the cycle can be stated by edges two adapters' records made
     # (`SPEC.md` §3.7).
     placed = {node.id for node in ordered}
-    residual = sorted((node for node in nodes if node.id not in placed), key=_tie_break)
+    residual = sorted((node for node in nodes if node.id not in placed), key=tie_break)
     named = ", ".join(node.id for node in residual)
     collected.add(
         codes.ORDERING_CYCLE,

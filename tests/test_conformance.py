@@ -20,6 +20,7 @@ import json
 import pytest
 
 import spanweave
+from spanweave.api import graph_from_records
 from spanweave.errors import ERROR_CODES, SpanweaveError
 from spanweave.read import read_trace
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
@@ -1187,3 +1188,64 @@ def test_forcing_one_adapter_over_the_mixed_trace_keeps_the_node_count(caplog):
             sum(1 for node in forced.nodes() if node.kind is spanweave.NodeKind.UNKNOWN)
             == 2
         )
+
+
+# --------------------------------------------------------------------------
+# Conformance gate 1: the live builder over the whole corpus (SPEC.md 10)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_live_graph_is_the_batch_graph_at_every_prefix(rendering):
+    """The whole of `SPEC.md` §10, asserted on every fixture the corpus has.
+
+    Prefix consistency is the *definition* of the live graph
+    (`OPEN_QUESTIONS.md` §18), which is why this is a conformance gate and not
+    a unit test: it writes no new expectation. Every scenario already pins one
+    graph, and feeding that scenario's records one at a time must reproduce
+    the batch build of every prefix -- as a value and as the bytes it
+    serializes to.
+
+    The degenerate fixtures are what make it bite. A parent whose child came
+    first, a call nothing fulfils yet, a receipt redeclared, two records
+    claiming one span id, two trace ids, an unknown kind: each is a prefix
+    where the live graph and the finished graph must differ, and differ in
+    exactly the way the batch builder says.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    assert records, f"{rendering.label} has no records to replay"
+    builder = spanweave.Builder()
+    for version, record in enumerate(records, start=1):
+        assert builder.feed(record) == version
+        live = builder.graph()
+        batch = graph_from_records(records[:version])
+        assert dumps(live) == dumps(batch), (
+            f"{rendering.label} at version {version}: the live graph is not "
+            f"the graph of its first {version} records"
+        )
+        # Byte equality cannot see a field the writer does not serialize, so
+        # the value is compared as well -- `raw.line_number` is the one that
+        # would otherwise slip through, and it is exactly what the live path
+        # has to renumber (`SPEC.md` §3.5).
+        assert live == batch
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_finished_live_graph_is_the_scenario_s_canonical_graph(rendering):
+    # The other end of the same claim: gate 1 compares the live builder against
+    # the batch builder, and this compares it against the corpus's own
+    # expectation. Without it, both builders could agree and both be wrong.
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    builder = spanweave.Builder()
+    for record in read_trace(rendering.path):
+        builder.feed(record)
+    assert canonical(to_document(builder.graph()), rendering.scenario.erase) == (
+        rendering.scenario.expected_graph_for(rendering.dialect)
+    )

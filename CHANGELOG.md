@@ -15,6 +15,38 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A graph can now be built from a stream that has not finished arriving.**
+  `spanweave.Builder` takes records one at a time -- `feed(record)` returns the
+  new version as an `int`, `graph()` materializes the graph of everything
+  absorbed so far -- and the contract is that the live graph **is** the batch
+  graph: at version `k` it equals the batch build of the first `k` records, as a
+  value and as the bytes it serializes to (`SPEC.md` §10, `OPEN_QUESTIONS.md`
+  §18). Arrival order indexes versions; inside a version the order is canonical,
+  exactly as §5.2 already stated it. Taking prefix consistency as the
+  *definition* is what keeps this from being a second builder: every invariant
+  transfers unchanged, **the serialized shape does not move at all** (no
+  live-only field, no version on a graph, `tests/serialized_shape.json`
+  untouched), and the conformance corpus becomes the test suite -- every
+  rendering is now replayed record by record and compared at every prefix
+  (`FIXTURES.md` §4, claim 3). No new expectation was written for it.
+  Mechanically, the rules did not move either: `spanweave/build.py`'s per-record,
+  per-call-id and per-sibling-group rules were factored out and the incremental
+  path calls **those**, so an edge, a diagnostic or an id has one definition and
+  cannot drift between the two paths. What the live builder adds is bookkeeping,
+  and the honest part of it is written down: three facts are properties of the
+  whole input rather than of any record -- the most common trace id, whether a
+  dialect span id is unique, whether a source key is -- and because the first is
+  in the material of every derived node id while the other two decide which
+  §3.6 rule an id comes from, an arrival that changes one of them **moves ids
+  already given out** and restates everything. Those arrivals are O(n) and
+  `SPEC.md` §10.2 says so rather than implying the absorb is always local.
+  A live diagnostic is a statement about what has arrived: `unpaired_call` at
+  version 12 and its absence at version 14 are both correct, and a resolved
+  diagnostic is simply absent, as it is in a batch graph. What the builder is
+  fed is records, so it reports no `source_digest` and none of the reader's
+  facts about bytes. Deltas, the journal and retention are **not** here
+  (`WORKPLAN.md` L4).
+
 - **An OTLP JSON export is now read, as a third container format rather than
   as a dialect.** `resourceSpans[].scopeSpans[].spans[]` is unpacked in the
   reader into one flat record per span, so the spans inside it are classified

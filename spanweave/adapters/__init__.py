@@ -43,7 +43,9 @@ __all__ = [
     "AdapterRegistry",
     "Claim",
     "Partition",
+    "ambiguous_claim",
     "classify",
+    "declared",
     "detect",
     "get",
     "partition",
@@ -127,7 +129,7 @@ class AdapterRegistry:
     def confidences(self, sample: Sequence[JsonValue]) -> tuple[tuple[str, float], ...]:
         """Every adapter's confidence in this input, ordered by adapter id."""
         return tuple(
-            (adapter.id, _declared(adapter, sample)) for adapter in self.registered()
+            (adapter.id, declared(adapter, sample)) for adapter in self.registered()
         )
 
     def classify(self, record: JsonValue) -> tuple[str, ...]:
@@ -170,7 +172,9 @@ class AdapterRegistry:
         for position, record in enumerate(records, start=1):
             claimants = self.classify(record)
             if len(claimants) > 1:
-                raise AdapterSelectionError(_ambiguous(position, record, claimants))
+                raise AdapterSelectionError(
+                    ambiguous_claim(position, record, claimants)
+                )
             if not claimants:
                 # Never a discard, and never handed to a designated adapter:
                 # that would put a dialect's name on a node on the strength of
@@ -182,7 +186,7 @@ class AdapterRegistry:
             claims=tuple(
                 Claim(
                     adapter_id=name,
-                    declared_confidence=_declared(
+                    declared_confidence=declared(
                         self.get(name), claimed[name][:DETECTION_SAMPLE_SIZE]
                     ),
                     records=tuple(claimed[name]),
@@ -224,7 +228,15 @@ class AdapterRegistry:
         return self.get(winners[0]), best
 
 
-def _declared(adapter: Adapter, sample: Sequence[JsonValue]) -> float:
+def declared(adapter: Adapter, sample: Sequence[JsonValue]) -> float:
+    """What one adapter declares about one sample, or a refusal naming it.
+
+    Named rather than private because the incremental builder asks the same
+    question one record at a time: `declared_confidence` is declared over the
+    first `DETECTION_SAMPLE_SIZE` records an adapter claimed, so it changes as
+    that sample fills, and a live builder must restate it exactly as a batch
+    build of the same prefix would (`SPEC.md` §10).
+    """
     try:
         return float(adapter.detect(sample))
     except Exception as failure:
@@ -245,7 +257,7 @@ def _report(measured: Sequence[tuple[str, float]]) -> str:
     return f"Confidence declared by each adapter: {listed}."
 
 
-def _ambiguous(position: int, record: JsonValue, claimants: Sequence[str]) -> str:
+def ambiguous_claim(position: int, record: JsonValue, claimants: Sequence[str]) -> str:
     """The refusal, located precisely enough to go and look at the record."""
     where = f"record {position}"
     span_id = _span_id_of(record)

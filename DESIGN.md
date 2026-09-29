@@ -52,7 +52,7 @@ redrawn later around whatever happened to occur.
 ├─────────────────────────────────────────────────┤
 │ Graph + Query + Annotate  (graph.py, annotate.py)│  the consumer surface
 ├─────────────────────────────────────────────────┤
-│ Builder  (build.py, ids.py)                     │  NormalizedSpan[] -> Graph
+│ Builder  (build.py, ids.py, incremental.py)     │  NormalizedSpan[] -> Graph
 ├═════════════════════════════════════════════════┤  ← the seam (§3)
 │ Adapters  (adapters/*.py)                       │  all dialect mess
 ├─────────────────────────────────────────────────┤
@@ -62,7 +62,12 @@ redrawn later around whatever happened to occur.
 
 Dependencies point **downward only**. `build.py` importing from `adapters/` is a
 layering violation; the registry hands the builder an iterator of
-`NormalizedSpan`, never an adapter object it can interrogate.
+`NormalizedSpan`, never an adapter object it can interrogate. `incremental.py`
+is in the builder layer for the same reason and under the same rule: it absorbs
+`NormalizedSpan` values one at a time and calls `build.py`'s own rules, so the
+live path knows no more about a dialect than the batch path does (`SPEC.md`
+§10). Feeding it *records* -- classifying and parsing them -- is `api.py`'s job,
+above the seam.
 
 ## 3. The seam: adapters vs. builder
 

@@ -2043,5 +2043,107 @@ well-implemented.
 - **Execution or unsafe deserialization of trace content** (`SECURITY.md`).
 
 Deferred (not permanent, but not now): §4.3 richer causal edges from frameworks
-that emit real dataflow, streaming/tail mode, cross-trace stitching, OTLP
-protobuf. See `ROADMAP.md` north star.
+that emit real dataflow, cross-trace stitching, OTLP protobuf. See `ROADMAP.md`
+north star. **Tail mode** — a core that watches a file or a socket for records —
+stays deferred and the listener half stays a non-goal above; what §10 adds is a
+builder a caller feeds, which moves neither line.
+
+## 10. Incremental build
+
+A graph can be built from a stream of records that has not finished arriving.
+The class is `Builder`, and it is the batch build taken one record at a time —
+not a second builder with rules of its own.
+
+```
+b = spanweave.Builder(adapter=None, temporal=True)   # same wiring as build()
+b.feed(record) -> int                                # the new version
+b.version      -> int                                # records absorbed
+b.graph()      -> Graph                              # the prefix graph
+```
+
+### 10.1 Prefix consistency is the definition
+
+Let `records[:k]` be the first `k` records **in arrival order**. At version `k`,
+`b.graph()` is *equal to the graph the batch builder produces from those same
+`k` records* — as a value and as the bytes it serializes to. That is the whole
+contract; every other statement below follows from it.
+
+Two orders are in play and they are not the same order. **Arrival order indexes
+versions**: `version` counts records absorbed, and nothing else. **Inside a
+version the order is canonical**, exactly as §5.2 states it — a topological sort
+over `parent` and `call_result`, tie-broken by `(started_at or +inf, node_id)`.
+A parent that arrives after its child is the case that makes the two visibly
+differ, and it is ordinary.
+
+Because the definition is equality with the batch build, every invariant
+transfers unchanged and none is re-proved: determinism (§5) becomes "same
+prefix, same graph"; losslessness, warrant, canonical order and neutrality are
+inherited. It also means the **serialized shape does not move** for this
+feature. There is no live-only field, and no graph carries a version number.
+
+### 10.2 What an arriving record can change
+
+Everything a batch build would say differently about `k` records than about
+`k-1`, and nothing else:
+
+- its own node, and the `parent` or `link` edges it states;
+- an earlier `orphan_parent` becoming false, because the parent has now arrived;
+- a `call_result` edge and the end of an `unpaired_call` / `unpaired_result`;
+- the `basis` of a `data` edge, when this record turns out to be the earliest
+  span to declare receipt of a call (§4.2.1) — which rewrites the basis of every
+  later one;
+- the `temporal` chain of the sibling group it joins, and of the group it leaves
+  when it is given a parent;
+- the canonical position of every node, and — where it changes one of the three
+  facts below — every derived **node id**.
+
+Three facts are properties of the whole input rather than of any record: the
+most common trace id (§7), whether a dialect span id is unique, and whether a
+source key is. The first is in the material of every derived id and the other
+two decide which rule of §3.6 an id comes from, so a record that changes one of
+them moves ids already given out. Those arrivals cost O(n); the rest touch only
+the keys the record names. `graph()` is O(n) either way — it sorts the nodes and
+indexes them afresh — so a loop that feeds without materializing pays for
+bookkeeping only.
+
+### 10.3 A live diagnostic is true when it is made
+
+`unpaired_call` at version 12 and its absence at version 14 are both correct:
+the fulfilling span arrived in between. Nothing on a live graph is a prediction,
+and nothing is a retraction either — the graph at a version says what the
+records up to it support. A graph therefore carries no notion of a *resolved*
+diagnostic: a resolved diagnostic is simply absent, exactly as it is in a batch
+graph (`OPEN_QUESTIONS.md` §18, lifecycle option (a)).
+
+### 10.4 What the builder is not fed, and so cannot report
+
+It is fed records, not bytes. So it reports **no `source_digest`**, and none of
+the reader's facts about an input: a line that was not JSON (`malformed_record`),
+a record sent twice (`duplicate_record`), a record skipped before any adapter
+saw it. Those belong to whoever read the records (§7), and a builder claiming
+them would be describing an input it never saw. Unpacking a container — an OTLP
+JSON export — is reading, and so is also the caller's.
+
+### 10.5 Refusals
+
+A record is classified on its own, as every record in a batch build is (§6.1):
+
+- **Two adapters claim it** — refused, naming the record's arrival index. The
+  record is **not** absorbed and `version` does not move; there is no
+  half-arrival.
+- **Nobody claims it** — kept as an `unknown` node carrying the record verbatim,
+  with `unclaimed_record`, exactly as in a batch build.
+- **No record any adapter claimed** — `graph()` refuses, with the same code and
+  the same declared confidences a whole input nothing claims earns (§6.1).
+  An empty builder is that case, so `Builder().graph()` refuses rather than
+  returning an empty graph, because `build` of an empty input does.
+- **Two records resolving to one node id** — refused as §3.6 refuses it.
+
+### 10.6 Out of scope here
+
+One builder per trace: records of two traces in one builder are kept and
+reported as a multi-trace input is (§7), and partitioning a stream by trace is
+the caller's. **Completion is not the library's**: OTel has no end marker, "this
+trace is finished" is a timeout policy a caller sets, and no diagnostic is
+emitted about it. No threads, no sockets, no clock, no subscription callbacks —
+§9 is unchanged.
