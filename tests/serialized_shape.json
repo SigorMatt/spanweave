@@ -7,8 +7,10 @@
   "everything else": "the offending fragment, as the type it arrived as",
   "malformed_record": "str",
   "missing_timestamp": "null",
+  "missing_trace_id": "null",
   "ordering_cycle": "list[str]",
   "payload_parse_failed": "null",
+  "timestamp_unit_suspect": "{\"started_at\": number, \"ended_at\": number}",
   "unmapped_attributes": "list[str]",
   "unpaired_call": "{\"call_id\": str, \"operation\": str \\| null}",
   "unpaired_result": "{\"call_id\": str, \"operation\": str \\| null}"
@@ -123,7 +125,7 @@
   },
   "Node": {
    "attributes": "Mapping[str, JsonValue]",
-   "ended_at": "float | None",
+   "ended_at": "int | float | None",
    "id": "NodeId",
    "inputs": "Payload",
    "kind": "NodeKind",
@@ -132,7 +134,7 @@
    "outputs": "Payload",
    "provenance": "Provenance",
    "raw": "RawRecord",
-   "started_at": "float | None",
+   "started_at": "int | float | None",
    "status": "Status",
    "status_note": "str | None",
    "usage": "Usage | None"
@@ -144,8 +146,8 @@
    "value": "JsonValue"
   },
   "Provenance": {
-   "adapter_id": "str",
-   "adapter_version": "str",
+   "adapter_id": "str | None",
+   "adapter_version": "str | None",
    "dialect_note": "str | None"
   },
   "RawRecord": {
@@ -208,14 +210,18 @@
    "derived"
   ],
   "diagnostic_codes": [
+   "duplicate_record",
    "duplicate_source_id",
    "malformed_record",
    "missing_timestamp",
+   "missing_trace_id",
    "multi_trace_input",
    "nonmonotonic_time",
    "ordering_cycle",
    "orphan_parent",
    "payload_parse_failed",
+   "timestamp_unit_suspect",
+   "unclaimed_record",
    "unknown_span_kind",
    "unmapped_attributes",
    "unpaired_call",

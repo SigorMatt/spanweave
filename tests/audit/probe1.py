@@ -1,0 +1,129 @@
+"""Audit reproduction script (probe1). Run: python tests/audit/probe1.py
+
+September 2026 audit. Each case prints what spanweave did; lines marked
+!!! UNCAUGHT are contract violations, REFUSED are hard errors, the rest are
+graphs with their diagnostics. See the finding-to-batch map in TASKS.md,
+"September 2026 audit", for the mapping from case to fix batch. Not collected by pytest; batches convert cases into
+regression tests as they fix them.
+"""
+import json, pathlib, sys, traceback
+import spanweave
+from spanweave import SpanweaveError
+
+import tempfile
+OUT = pathlib.Path(tempfile.mkdtemp(prefix="spanweave-audit-"))
+
+def oi(sid, parent, kind, name, t0, t1, attrs=None, status="OK", **extra):
+    r = {"trace_id": "t1", "span_id": sid, "parent_id": parent, "name": name, "start_time": t0, "end_time": t1, "status": status,
+         "attributes": {"openinference.span.kind": kind, **(attrs or {})}}
+    r.update(extra); return r
+
+def genai(sid, parent, name, t0, t1, attrs):
+    return {"trace_id": "t1", "span_id": sid, "parent_id": parent, "name": name, "start_time": t0, "end_time": t1, "status": "OK", "attributes": attrs}
+
+def run(label, records, adapter=None, raw=None):
+    p = OUT / f"{label}.jsonl"
+    if raw is not None:
+        p.write_bytes(raw)
+    else:
+        p.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    print(f"\n=== {label}")
+    try:
+        g = spanweave.build(p, adapter=adapter)
+    except SpanweaveError as e:
+        print(f"  REFUSED {type(e).__name__} [{getattr(e,'code','?')}]: {str(e)[:220]}")
+        return None
+    except Exception as e:
+        print(f"  !!! UNCAUGHT {type(e).__name__}: {str(e)[:200]}")
+        return None
+    kinds = {}
+    for n in g.nodes(): kinds[str(n.kind)] = kinds.get(str(n.kind), 0) + 1
+    ek = {}
+    for e in g.edges(): ek[str(e.kind)] = ek.get(str(e.kind), 0) + 1
+    print(f"  nodes={len(g)} {kinds} edges={ek} trace={g.trace_id!r}")
+    for d in g.diagnostics:
+        if d.code != "unmapped_attributes":
+            print(f"  diag {d.level} {d.code} node={d.node_id}: {d.message[:150]}")
+    return g
+
+# 1. Mixed instrumentation: OpenInference framework spans + OTel GenAI SDK span in one trace.
+mixed = [
+    oi("s0", None, "AGENT", "agent.run", 1000.0, 1003.0),
+    genai("s1", "s0", "chat gpt-x", 1000.1, 1001.0, {"gen_ai.operation.name": "chat", "gen_ai.request.model": "gpt-x",
+          "gen_ai.output.messages": json.dumps([{"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "lookup", "arguments": {}}]}])}),
+    oi("s2", "s0", "TOOL", "tool.lookup", 1001.1, 1001.5, {"tool.name": "lookup", "tool_call.id": "c1", "output.value": "{}"}),
+]
+run("mixed_detect", mixed)
+g = run("mixed_forced_oi", mixed, adapter="openinference")
+run("mixed_forced_otel", mixed, adapter="otel_genai")
+
+# 2. Deep JSON nesting (audit finding 3) is now a regression test, not a probe:
+# tests/test_read.py (record line, array container), tests/test_openinference.py
+# and tests/test_otel_genai.py (payload and message list). Fixed in batch A1.
+# The paths this probe never walked are covered too, by batch A6: the CLI's own
+# `json.loads` in `inspect` and `validate` (tests/test_cli.py) and the write
+# side -- the encoder in serialize.py (tests/test_serialize.py), the annotation
+# check (tests/test_graph.py) and an unrenderable structured attribute in both
+# adapters.
+
+# 3. Parent structure abuse
+run("self_parent", [oi("s0", "s0", "AGENT", "a", 1.0, 2.0)])
+run("parent_cycle", [oi("s0", "s1", "AGENT", "a", 1.0, 2.0), oi("s1", "s0", "CHAIN", "b", 1.1, 1.9)])
+run("orphan_parent", [oi("s0", "nope", "AGENT", "a", 1.0, 2.0)])
+# Two records claiming one span id (audit finding 2) is now a regression test,
+# not a probe: tests/test_build.py, under "Two records claiming one span id",
+# and tests/test_ids.py under "Rule 3". Fixed in batch A3.
+
+# 4. Timestamps
+# Nanosecond timestamps and string timestamps (audit finding 5, the half that
+# was decidable) are now regression tests, not probes: the conformance
+# scenario `timestamp_units` in both dialects, tests/test_build.py under "A
+# timestamp that cannot be in seconds", and tests/test_adapters.py under "How
+# a timestamp is rendered". A value over 1e11 gets `timestamp_unit_suspect`; a
+# numeric string is read as the number it spells; a string that is not a
+# number is named in `unmapped_attributes` instead of vanishing. Fixed in
+# batch C1. The float64 precision half is probe2's case G and is C2's.
+#
+# `nan_timestamps` -- a record whose times are the unquoted `NaN` and
+# `Infinity` tokens -- is now a regression test too: tests/test_adapters.py
+# under "Finite, or not read", tests/test_serialize.py under "The encoder
+# writes JSON, and a non-finite number is not JSON", and tests/test_cli.py
+# under "Numbers no interpreter can hold". The field is refused like any
+# other rendering, and the record -- which is verbatim, `inf` and all -- is a
+# `graph_not_serializable` refusal rather than a bare `Infinity` in the
+# output. Fixed in batch R1, which also took the digit-limit `ValueError`.
+run("end_before_start", [oi("s0", None, "AGENT", "a", 5.0, 1.0)])
+run("equal_starts", [oi("s0", None, "AGENT", "a", 1.0, 3.0), oi("s1", "s0", "TOOL", "t", 1.5, 1.6, {"tool.name": "t"}), oi("s2", "s0", "TOOL", "u", 1.5, 1.7, {"tool.name": "u"})])
+
+# 5. Multi-trace file
+two = [oi("s0", None, "AGENT", "a", 1.0, 2.0)] + [dict(oi("x0", None, "AGENT", "b", 1.0, 2.0), trace_id="t2")]
+run("two_traces", two)
+run("two_traces_first_is_child", [dict(oi("x0", None, "AGENT", "b", 1.0, 2.0), trace_id="t2"), oi("s0", None, "AGENT", "a", 1.0, 2.0), oi("s1", "s0", "TOOL", "t", 1.1, 1.2, {"tool.name": "t"})])
+
+# 6. Degenerate inputs
+run("empty", None, raw=b"")
+run("whitespace", None, raw=b"\n\n   \n")
+# A BOM at the head of the file (audit finding: minor) and CRLF line endings
+# are now regression tests, not probes: tests/test_read.py, under "Encoding and
+# line endings". Fixed in batch A2; batch A8 withdrew A2's lone-CR terminator
+# there, because a lone CR is JSON whitespace inside a record.
+# A record with no trace id (audit finding: minor) is now a regression test,
+# not a probe: tests/test_build.py, under "Trace identity and honest
+# degradation" -- the graph still reports no trace id and now says so with
+# `missing_trace_id`. Fixed in batch A4.
+run("missing_span_id", [{k: v for k, v in oi("s0", None, "AGENT", "a", 1.0, 2.0).items() if k != "span_id"}, oi("s1", None, "TOOL", "t", 1.0, 2.0, {"tool.name": "t"})])
+run("attributes_not_dict", [dict(oi("s0", None, "AGENT", "a", 1.0, 2.0), attributes=["openinference.span.kind"])])
+# An OTLP JSON envelope (audit finding: minor) is now a regression test,
+# not a probe: tests/test_read.py, under "OTLP JSON as a container", and the
+# conformance scenario fixtures/conformance/otlp_container. Fixed in batch F2
+# -- the export is unpacked into one record per span, and the compact form
+# that built one `unknown` node and the indented form that produced 46
+# `malformed_record` diagnostics now build the same graph as the JSONL twin.
+
+# 7. call_result to a span of another kind, and result before request in time
+run("call_result_to_llm", [oi("s0", None, "AGENT", "a", 1.0, 3.0),
+    oi("s1", "s0", "LLM", "l", 1.1, 1.5, {"llm.model_name": "m", "llm.output_messages.0.message.tool_calls.0.tool_call.id": "c1", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "x"}),
+    oi("s2", "s0", "LLM", "l2", 1.6, 1.9, {"llm.model_name": "m", "tool_call.id": "c1"})])
+run("result_before_request", [oi("s0", None, "AGENT", "a", 1.0, 3.0),
+    oi("s1", "s0", "LLM", "l", 2.0, 2.5, {"llm.model_name": "m", "llm.output_messages.0.message.tool_calls.0.tool_call.id": "c1", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "x"}),
+    oi("s2", "s0", "TOOL", "t", 1.1, 1.5, {"tool.name": "x", "tool_call.id": "c1"})])

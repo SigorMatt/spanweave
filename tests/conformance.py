@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from spanweave.adapters import registered
+from spanweave.ids import DERIVED_PREFIX
 
 CORPUS = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
 
@@ -83,6 +84,30 @@ def canonical(
     passes nothing, so every declared field is still pinned there -- which is
     the whole reason a declaration costs the corpus no regression detection.
     """
+    nodes = [_node(node, erase, drop_payloads or {}) for node in document["nodes"]]
+    edges = [_without(edge, ERASED_EDGE_FIELDS) for edge in document["edges"]]
+    labels = _positional_labels(document["nodes"])
+    relabelled_edges = [_relabelled(edge, labels, ("src", "dst")) for edge in edges]
+    if labels:
+        # `SPEC.md` §5.2 sorts edges by `(kind, src, dst, basis)` -- over the
+        # ids the graph actually carries, which for a derived id differ by
+        # adapter by design. So two faithful renderings of a scenario with
+        # two or more edges between derived-id nodes hold the SAME edges in
+        # DIFFERENT orders, and claim 2 would fail on id-generation trivia --
+        # exactly what `_positional_labels` exists to prevent, applied to
+        # only half of what an id decides. Re-sorted on the labels, the order
+        # is the one §5.2 describes, expressed in the only ids that are
+        # comparable here. Untouched where no id was relabelled, so the
+        # library's own edge order stays pinned everywhere it means anything
+        # (`FIXTURES.md` §4.1).
+        relabelled_edges.sort(
+            key=lambda edge: (
+                edge["kind"],
+                edge["src"],
+                edge["dst"],
+                edge["basis"] or "",
+            )
+        )
     return {
         "meta": {
             "schema_version": document["schema_version"],
@@ -91,11 +116,79 @@ def canonical(
             "edge_count": len(document["edges"]),
             "diagnostic_count": len(document["diagnostics"]),
         },
-        "nodes": [
-            _node(node, erase, drop_payloads or {}) for node in document["nodes"]
-        ],
-        "edges": [_without(edge, ERASED_EDGE_FIELDS) for edge in document["edges"]],
+        "nodes": [_relabelled(node, labels, ("id",)) for node in nodes],
+        "edges": relabelled_edges,
         "diagnostics": _by_code(document["diagnostics"]),
+    }
+
+
+def _positional_labels(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """§4.1's second rule: a **derived** id is compared by position, not value.
+
+    `SPEC.md` §3.6 puts the adapter id into the material of a derived node id,
+    so two faithful renderings of one run cannot produce the same one -- and a
+    scenario in which any node gets a derived id would otherwise fail claim 2
+    on id-generation trivia rather than on anything about the model. Positions
+    are what remains comparable, and the node list is already in a
+    deterministic order (`SPEC.md` §5.2).
+
+    A dialect's **own** span id is untouched: renderings share those by
+    convention (§4.1's first rule), and comparing them is the point.
+
+    This mechanism was documented in `FIXTURES.md` §4.1 for two phases before
+    any scenario produced a derived id, and in those two phases it was not
+    implemented. It is now, and `duplicate_span_ids` is what uses it.
+    """
+    return {
+        node["id"]: f"n{index}"
+        for index, node in enumerate(nodes)
+        if str(node["id"]).startswith(DERIVED_PREFIX)
+    }
+
+
+def anonymised(value: Any) -> Any:
+    """§4.1's rule applied to a **consumer's** output rather than a graph.
+
+    The example consumers carry node ids through into their own documents, so
+    a scenario whose nodes get derived ids makes two faithful dialect
+    renderings disagree there for the same reason `canonical()` exists: the
+    adapter id is in the material (`SPEC.md` §3.6). Every `sw_` id is replaced
+    by `n0`, `n1`, ... in order of first appearance -- which, for output that
+    follows node order, is the same label `canonical()` gave it, so a consumer
+    document can be compared against `expected/graph.json` directly.
+
+    A dialect's own span id is left alone: that is the half of §4.1 the corpus
+    still compares by value.
+    """
+    labels: dict[str, str] = {}
+
+    def label(text: str) -> str:
+        if not text.startswith(DERIVED_PREFIX):
+            return text
+        return labels.setdefault(text, f"n{len(labels)}")
+
+    def walk(entry: Any) -> Any:
+        if isinstance(entry, str):
+            return label(entry)
+        if isinstance(entry, Mapping):
+            return {walk(key): walk(value) for key, value in entry.items()}
+        if isinstance(entry, list):
+            return [walk(item) for item in entry]
+        if isinstance(entry, tuple):
+            return tuple(walk(item) for item in entry)
+        return entry
+
+    return walk(value)
+
+
+def _relabelled(
+    entry: dict[str, Any], labels: Mapping[str, str], fields: tuple[str, ...]
+) -> dict[str, Any]:
+    if not labels:
+        return entry
+    return {
+        key: labels.get(value, value) if key in fields else value
+        for key, value in entry.items()
     }
 
 
@@ -161,6 +254,21 @@ def _by_code(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
 #: transitional mechanism left in place outlives its transition, and an empty
 #: exemption list is an invitation to put something in it.
 DIALECTS = ("openinference", "otel_genai")
+
+#: What separates the dialect ids in the stem of a rendering **several**
+#: adapters read: `openinference+otel_genai.jsonl`. A dialect is a property of
+#: a record rather than of a file (`SPEC.md` §6.1), so one file can carry two
+#: instrumentors' records, and the corpus needs a way to name that file's
+#: contents without inventing a dialect for it. `+` is that way, and it is
+#: deliberately **not** a member of `DIALECTS`: nothing is obliged to render a
+#: mix, no adapter answers to the composite name, and the parts are the only
+#: things a registry ever sees.
+COMPOSITE = "+"
+
+
+def dialect_parts(dialect: str) -> tuple[str, ...]:
+    """The dialects a rendering's stem names -- one, or several joined by `+`."""
+    return tuple(dialect.split(COMPOSITE))
 
 
 @dataclass(frozen=True)
@@ -317,7 +425,15 @@ class Rendering:
 
     @property
     def supported(self) -> bool:
-        return self.dialect in adapter_backed()
+        """Can the library read this rendering at all?
+
+        Every dialect the stem names must have an adapter -- one name, or
+        each part of a composite. A mixed rendering is buildable exactly when
+        both of its halves are, which is the same question asked twice and
+        never a new capability of the harness.
+        """
+        backed = adapter_backed()
+        return all(part in backed for part in dialect_parts(self.dialect))
 
     @property
     def skip_reason(self) -> str:

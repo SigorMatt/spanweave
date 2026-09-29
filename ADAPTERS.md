@@ -22,6 +22,17 @@ sort anything, or know that a `Graph` type exists.
 vocabularies. Every time you are tempted to infer something the dialect didn't
 say, the answer is a `Diagnostic` or a `None`.
 
+**A file format is not a dialect, so it is never an adapter.** JSONL, a JSON
+array and an **OTLP JSON export** are containers, and `spanweave/read.py`
+unpacks all three before an adapter sees anything (`SPEC.md` §7). Writing an
+`otlp_json` adapter would look natural and would be wrong: the spans inside an
+export are in whatever dialect their instrumentor speaks — possibly two
+dialects in one export — so the adapter would have to answer the dialect
+question for a whole file, one level below the place that can answer it per
+record (`SPEC.md` §6.1, `OPEN_QUESTIONS.md` §16). If the input you want to
+support differs from a supported one only in how the spans are *packed*, you
+want a container, not an adapter, and that is a `SPEC.md` §7 conversation.
+
 ## 2. The protocol
 
 ```python
@@ -35,8 +46,10 @@ class Adapter(Protocol):
 
 ### `detect(sample) -> float`
 
-Confidence in `[0.0, 1.0]` that this adapter handles the input. Called with up
-to the first 50 records (`SPEC.md` §6.1).
+Confidence in `[0.0, 1.0]` that this adapter handles the input. Called two ways
+(`SPEC.md` §6.1): with **one record** at a time, to decide whose record it is,
+and with up to the first 50 records you claimed, for the number the graph
+records.
 
 It is a **declaration, not a measurement** — nothing in the trace computes it,
 you are asserting it — and the graph records it under that name
@@ -51,8 +64,26 @@ defend to someone reading a graph that came out wrong.
   yours. **Do not return `1.0` defensively** — inflated confidence turns
   detection into a race, and a wrong adapter silently producing a plausible
   graph is far worse than an honest "ambiguous input" error.
+- **Must be decomposable over records.** A sample must reach `0.5` **iff at
+  least one record in it reaches `0.5` on its own**. A per-record scan that
+  returns as soon as it sees its marker — what both shipped adapters do — has
+  this property already. What does not: a rule that wants to see three matching
+  records before it commits, or one that reads a record's neighbours. Neither
+  is a legal adapter, because a dialect is a property of a record and an
+  adapter that needs context to answer cannot say which records are its own.
+  This is a contract, not a new method: the library asks the question it always
+  asked, one record at a time.
 
 ### `parse(records) -> Iterator[NormalizedSpan]`
+
+**You are handed the records you claimed, and only those** — a subset of the
+input, in input order, because a dialect is a property of a record rather than
+of a file (`SPEC.md` §6.1). So number what you were *given*: `raw.line_number`
+counts the sequence you received, and the library puts each span's number back
+where its record sat in the whole input, so a diagnostic points a human at the
+file they have. Never try to guess the input position yourself, and never read
+anything into a gap in what you were handed — the records between yours belong
+to another adapter, and they are not yours to interpret or to count.
 
 - **Pure.** No network, no filesystem, no clock, no randomness, no `eval`.
 - **Never raises on malformed input.** Emit what you can and attach a
@@ -67,9 +98,36 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
 
 **Identity**
 - `source_key` — a stable key within this input. Prefer the dialect's span id;
-  fall back to the 1-based record index.
+  fall back to the record's canonical digest
+  (`from spanweave.read import record_digest`), which is what both shipped
+  adapters do. **Never the record's index.** A key derived from position binds
+  the node id to where the record sat in the file, and shuffling the input MUST
+  NOT change the graph (`SPEC.md` §3.6 rule 2, §5.2).
 - `span_id` / `parent_id` / `trace_id` — verbatim from the dialect, or `None`.
   **Do not synthesize ids** — that is `spanweave/ids.py`'s job.
+- `span_id` and `parent_id` have one shared rule, and it is not optional: fill
+  them with `from spanweave.seam import span_ref, parent_ref`. A dialect
+  spells "no id" two ways — the field absent, or the field present and
+  **empty** — and an OTLP export writes the second as `parentSpanId` on every
+  root it carries. Both must be `None`, or the builder reads an empty
+  reference as a parent this input does not carry and reports every root as an
+  orphan (`SPEC.md` §4.0). **`span_ref` is the same rule at the other end, and
+  it is what makes that one sound:** an empty `span_id` states no id, so the
+  record falls to §3.6 rule 2's content-derived key and no node is ever named
+  `""` — which is the whole reason normalizing an empty reference away loses
+  nothing. Use the shared helpers rather than your own check: two adapters
+  disagreeing about one id is a cross-dialect equivalence failure, not a
+  detail.
+- **The same rule holds at the third reference field, a link's target.** Fill
+  `links` from `from spanweave.seam import span_links`, which reads each
+  entry's `span_id` with `link_ref` — the same rule again — and returns the
+  links together with the `<record>.links[<i>]` keys of the entries that name
+  no span. Add those keys to what you report as `unmapped_attributes`. An
+  empty target is **no link**, exactly as an absent one is: transcribing it
+  gives the builder an `explicit` `link` edge whose `dst` is `""`, a span no
+  input can contain (`SPEC.md` §3.6; batch S3 left this field out, and batch
+  S10 closed it). Unlike the other two it is *reported*, because a link entry
+  that names nothing becomes nothing.
 
 **Classification**
 - `kind` — map to the closed `NodeKind` set (`SPEC.md` §3.2). If the dialect's
@@ -110,8 +168,33 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   step. Then the evidence exists, and the question is a fresh one rather than a
   re-derivation.
 - `name` — as reported. Do not prettify or rewrite.
-- `operation` — the tool/model/retriever name when the dialect distinguishes it
-  from `name`.
+- `operation` — the tool or model name, when the dialect states one in a
+  dedicated attribute. Never an agent's, a chain's or a retriever's own
+  name: no dialect read today states a retriever's, and the one that states
+  an agent's is declined rather than normalized (`SPEC.md` §3.1).
+
+**Timestamps** — `started_at` / `ended_at`, unix seconds, **as reported**.
+- Never rescale and never infer a unit, whatever the dialect calls its field.
+  A value too large to be seconds is the builder's business: it emits
+  `timestamp_unit_suspect` and the number is kept untouched (`SPEC.md` §3.1).
+  A conformant OTLP JSON export therefore draws that warning on **every** span,
+  which is documented expected output rather than a defect: it reports the
+  field contract, not the run (`SPEC.md` §7, `OPEN_QUESTIONS.md` §17).
+- Read a JSON number, and a **string that is exactly a JSON number literal** —
+  OTLP JSON encodes 64-bit integers as decimal strings. Read nothing else: not
+  a trimmed string, not a leading `+`, not a date. The rule is one sentence,
+  *the string, unquoted, would be a valid JSON number*, because every
+  tolerated spelling beyond it is a small normalization.
+- Carry an **integer** literal as an `int` and a fractional or exponent one as
+  a `float` (`int | float | None`, `SPEC.md` §3.1). Never call `float()` on a
+  timestamp: float64's spacing at epoch-nanosecond magnitude is 256 ns, so it
+  would merge spans the record kept apart. The type follows the *literal*, so
+  a quoted integer and a bare one land as one `int`.
+- A value in a rendering you do not read must **not** become a silent `None`.
+  Name the field in `unmapped` as `<record>.<field>`; the builder then adds
+  `missing_timestamp` on its own. Two adapters ship with a `_timestamps()`
+  helper doing exactly this — copy it rather than re-deriving it, and
+  `tests/test_adapters.py` holds the rendering table both must answer alike.
 
 **Payloads** — the part most adapters get wrong.
 - Distinguish all five states (`SPEC.md` §3.3). The distinction between
@@ -182,7 +265,9 @@ The builder constructs every edge and supplies every `basis`, because `basis`
 describes how an edge came to be and the builder is what brings edges into
 being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
 
-- `links` — span links, when present. Leave `SpanLink.basis` as `None`: your
+- `links` — span links, when present, read with `span_links` (above) so an
+  entry that names no span is no link and is reported. Leave
+  `SpanLink.basis` as `None`: your
   dialect saying a link *exists* is not your dialect saying *why*, and the
   builder names the relation. Set it **only** if the dialect states the
   reason — a retry, a continuation, a fan-in — in which case the builder
@@ -209,13 +294,27 @@ being (`SPEC.md` §3.8). Nothing you fill in below is an edge.
 **Losslessness**
 - `unmapped` — the attribute **keys** you saw and did not normalize. Keys only;
   values are already in `raw` (`SPEC.md` §3.7).
-- `raw` — the source record, verbatim and unmodified, plus its line number.
+- **Mark every key you read and acted on as consumed**, including one you read
+  only to *decide* — a message's `role`, a part's `type`. It never becomes a
+  field, but the decision is the mapping, and reporting it says you failed to
+  understand a key you used. Mark it where you read it, and make sure that
+  runs **before** `unmapped` is tallied. A key you read and could not use is
+  the other case: leave that one reported — including a deciding key whose
+  value you could not read at all, since a key that decided nothing was not
+  acted on (`SPEC.md` §3.7).
+- `raw` — the source record, verbatim and unmodified, plus its line number:
+  1-based over the records you were handed, per §2.
 
 ## 4. Registering
 
 Add to the registry in `spanweave/adapters/__init__.py`. Registration order must
 not affect selection: ties are a hard error, not a first-wins race
 (`SPEC.md` §6.1).
+
+**`auto` is a reserved id.** `--adapter auto` is the default spelled out and is
+resolved at the CLI before the registry is asked, so an adapter registering that
+id would be unreachable through the flag that names it — silently, and only for
+that one adapter. Pick a dialect name.
 
 ## 5. Fixtures — not optional
 
@@ -287,10 +386,16 @@ neither is a payload spelling.
 
 - [ ] Single file under `spanweave/adapters/`; nothing else in the package touched.
 - [ ] `detect()` pure, non-raising, keyed on distinctive markers, honestly scored.
+- [ ] `detect()` decomposable over records: a sample reaches `0.5` iff one
+      record in it does alone (§2). Classification asks it one record at a time.
 - [ ] `parse()` pure, lazy, non-raising, order-independent.
 - [ ] All five payload states distinguished; absent ≠ empty.
 - [ ] No inferred pairings, no inferred data edges, no invented ids.
-- [ ] `unmapped` keys recorded; `raw` preserved verbatim.
+- [ ] `unmapped` keys recorded; `raw` preserved verbatim — including a
+      timestamp in a rendering §3.1 does not read, which is `<record>.<field>`
+      and never a silent `None`.
+- [ ] Timestamps read from a JSON number or a JSON-number string, and from
+      nothing else; never rescaled.
 - [ ] Renderings derived from **observed instrumentor output**, not from a
       reading of the dialect's spec.
 - [ ] No `NodeKind` mapped from a convention value **no instrumentor can

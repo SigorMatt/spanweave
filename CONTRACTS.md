@@ -40,9 +40,22 @@ annotation permits an open set of values:
 
 Out of scope, and it is a type-level fact rather than a judgement: the closed
 enums (`NodeKind`, `EdgeKind`, `Warrant`, `Status`, `PayloadState`,
-`DiagnosticLevel`), and `int` / `float` / `bool` fields. `tests/test_contracts.py`
+`DiagnosticLevel`), and `int` / `float` / `bool` fields — **including a closed
+union of them**. `tests/test_contracts.py`
 applies exactly this rule to the model and fails if a field appears on either
 side of it without a row here.
+
+**One relaxation of that rule, named because a gate that moves quietly is worth
+less than one that does not.** The September 2026 audit's batch C3 made
+`Node.started_at` and `Node.ended_at` `int | float | None` (`TASKS.md`,
+*September 2026 audit*; `OPEN_QUESTIONS.md` §10). A union of number types is
+not an open vocabulary — it constrains a consumer exactly as one of its members
+does — so `tests/test_contracts.py` was taught to read `int | float | None` as
+the `int | float` it is, and those two fields take no row here. Before that
+change the gate demanded rows typed `UnionType[int, float, NoneType] | None`,
+which would have recorded a type the model does not have. The relaxation is
+type-level, like the rule it extends: it admits no field whose *vocabulary* is
+open.
 
 **One field is excluded by the rule and named anyway, so its absence is not
 mistaken for coverage:** `meta.adapters[].declared_confidence` is `float | None`,
@@ -152,8 +165,8 @@ green fields are cross-checked against this table by the test.
 | `nodes[].usage.extra` | `Mapping[str, int]` | — | corpus pin | unstated + pinned |
 | `nodes[].raw.source` | `JsonValue` | `SPEC.md` §3.5 | `tests/test_serialize.py::test_the_verbatim_source_round_trips_byte_for_byte`, `tests/test_determinism.py::test_every_record_of_the_worked_example_is_accounted_for`, `tests/test_conformance.py::test_every_rendering_accounts_for_every_record` | stated + asserted |
 | `nodes[].raw.source_id` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
-| `nodes[].provenance.adapter_id` | `str` | `SPEC.md` §3.5 | corpus pin | stated + pinned |
-| `nodes[].provenance.adapter_version` | `str` | — | — | unstated, unmeasured |
+| `nodes[].provenance.adapter_id` | `str \| None` | `SPEC.md` §3.5 | corpus pin | stated + pinned |
+| `nodes[].provenance.adapter_version` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
 | `nodes[].provenance.dialect_note` | `str \| None` | `SPEC.md` §3.5 | — | stated, unasserted |
 
 ### `edges[]`
@@ -174,6 +187,13 @@ green fields are cross-checked against this table by the test.
 | `diagnostics[].node_id` | `str \| None` | `SPEC.md` §3.7 | `tests/test_conformance.py::test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect` | stated + asserted |
 | `diagnostics[].source` | `JsonValue` | `SPEC.md` §3.7 | `tests/test_codes.py::test_the_unpaired_codes_emit_the_object_the_spec_declares`, `tests/test_conformance.py::test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect` | stated + asserted |
 | `diagnostics[].adapter` | `str \| None` | — | — | unstated, unmeasured |
+
+*Appended 2026-09-20, the row left as the reading it is:*
+`diagnostics[].adapter` is **stated by SPEC §3.7 and asserted by tests since
+`e6394e2`**, widened by `ee6b533`; the `TASKS.md` 3.2 measurement above
+predates it. The Status cell is derived from its own two cells by
+`tests/test_contracts.py`, so the note sits beside the row rather than inside
+it. See the `diagnostics[].adapter` entry under *Relies on* below.
 
 ### `annotations[]`
 
@@ -255,7 +275,7 @@ the library rely on that no document states and no test asserts?*
   two dialects, and the 17th produces no graph — so `name` has **never** been
   compared across dialects, in any scenario, at any point in this project. Four
   renderings pin it. Nothing else touches it.
-- `nodes[].operation` — that the tool, model or retriever name is written
+- `nodes[].operation` — that the tool or model name is written
   verbatim in the dialect's own spelling. Two dialects agree on it in 15 of 16
   compared scenarios, which is the strongest evidence any unstated field here
   has. What is unstated is the *name-space*: one captured trace carries
@@ -300,10 +320,13 @@ the library rely on that no document states and no test asserts?*
   therefore the thing `duplicate_source_id` is about. Present and non-null on
   every node of every fixture; erased by `canonical()`; asserted nowhere.
 - `nodes[].provenance.adapter_id` — that it names the adapter that parsed *this*
-  record, which is what makes a mixed-adapter graph readable. Pinned by one
-  fixture literal.
-- `nodes[].provenance.adapter_version` — that it is the adapter's version. No
-  document states it, no test asserts it, and it duplicates
+  record, which is what makes a mixed-adapter graph readable, and that it is
+  `null` where no adapter did (`SPEC.md` §3.5, §6.1). Pinned by one fixture
+  literal; the null half is asserted by
+  `tests/test_detection.py::test_a_record_no_adapter_claims_becomes_an_unknown_node`.
+- `nodes[].provenance.adapter_version` — that it is the adapter's version, and
+  `null` beside a `null` id. §3.5 states it since batch E3 of the September
+  2026 audit series; no test asserts the version itself, and it duplicates
   `meta.adapters[].version` with nothing relating the two.
 - `nodes[].provenance.dialect_note` — stated as deliberately free-form
   ("anything the adapter wants a human to know"), which is a real contract and
@@ -338,13 +361,33 @@ the library rely on that no document states and no test asserts?*
   what "done" looks like *for two codes*, and its catch-all over the other ten
   was false for three of them until this session corrected and asserted it.
   What is still relied on: that a consumer can branch on `code` to know
-  `source`'s shape. True for the seven rows now stated; the catch-all still
-  covers three codes no fixture emits (`duplicate_source_id`,
-  `multi_trace_input`, `malformed_record`), so for those it is stated and
-  unmeasured.
+  `source`'s shape. True for the nine rows now stated; the catch-all still
+  covers three codes no fixture emits (`duplicate_record`, `multi_trace_input`,
+  `unclaimed_record`), so for those it is stated and unmeasured. Both halves of that sentence said
+  something else — "seven rows", and `duplicate_source_id` and
+  `malformed_record` among the unmeasured — until batch A7 of the September
+  2026 audit series: the table gained rows, and A3 gave `duplicate_source_id`
+  a fixture. Nothing asserted either half, so nothing went red; both are
+  derived from `SPEC.md` and the corpus now
+  (`tests/test_codes.py::test_contracts_counts_the_source_rows_the_spec_states`
+  and its neighbour).
 - `diagnostics[].adapter` — that it names the adapter that raised the
   diagnostic. Nothing states it, nothing asserts it, and the value can be
   invented at the boundary with the suite green.
+  **No longer true, and the sentence above is kept as the 3.2 reading it was.**
+  It is stated by SPEC §3.7 and asserted by tests since `e6394e2`, which added
+  the paragraph saying what `adapter` means on a record-scoped and on a
+  whole-input diagnostic, and widened by `ee6b533`, which made
+  `missing_timestamp` name the adapter that read the record and made a
+  whole-input diagnostic name none when any record was skipped before an
+  adapter could read it. The 3.2 measurement above predates both and is a
+  human's to re-run; it is not rewritten here, because a dated reading
+  overwritten is a reading lost rather than corrected. Nothing in this file
+  had to disagree with `SPEC.md` for either commit to be green, which is the
+  drift itself;
+  `tests/test_doc_truth.py::test_no_contracts_row_calls_a_field_unstated_that_the_spec_now_states`
+  now reads the two documents against each other (2026-09-20,
+  `reviews/2026-09-20-qodo.md` T6).
 - `annotations[].namespace` — that the consumer chose it and that `spanweave` is
   reserved (§8). The reservation is enforced at the API
   (`tests/test_graph.py::test_the_library_namespace_is_reserved`); the serialized
@@ -448,7 +491,9 @@ them.
 `canonical()` compares it. Sixteen of the seventeen scenarios rendered in both
 dialects declare it dialect-varying in `expected/comparison.json`; the
 seventeenth (`duplicate_span_ids`) is a scenario that must *not* build, so it
-produces no graph to compare. The library's central claim — the same run,
+produces no graph to compare. (Since batch A3 it builds — `SPEC.md` §3.6 rule
+3 — and declares `name` like the other sixteen. Seventeen of seventeen: the
+finding is unchanged and is now unanimous.) The library's central claim — the same run,
 described by any supported instrumentor, produces the same canonical graph —
 has therefore never once been tested on `name`.
 

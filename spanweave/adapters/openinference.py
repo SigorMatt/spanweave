@@ -23,8 +23,11 @@ Two things it deliberately does **not** do:
 from __future__ import annotations
 
 import json
+import math
+import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
+from spanweave import jsoncodec
 from spanweave.diagnostics import (
     PAYLOAD_PARSE_FAILED,
     UNKNOWN_SPAN_KIND,
@@ -41,7 +44,15 @@ from spanweave.model import (
     Status,
     Usage,
 )
-from spanweave.seam import CallRole, NormalizedSpan, SpanLink
+from spanweave.read import record_digest
+from spanweave.seam import (
+    CallRole,
+    NormalizedSpan,
+    parent_ref,
+    span_links,
+    span_ref,
+    unreadable_fields,
+)
 
 ADAPTER_ID = "openinference"
 ADAPTER_VERSION = "0.1.0"
@@ -172,7 +183,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         # node carrying the record verbatim: "we did not understand it" is a
         # reportable outcome, "it vanished" is a bug.
         return NormalizedSpan(
-            source_key=str(index),
+            source_key=record_digest(record),
             kind=NodeKind.UNKNOWN,
             name="",
             raw=raw,
@@ -194,8 +205,18 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     consumed: set[str] = set()
     diagnostics: list[Diagnostic] = []
 
-    span_id = _as_str(record.get("span_id"))
-    source_key = span_id if span_id is not None else str(index)
+    # `span_ref` rather than `_as_str`, because `""` is not a span id: a
+    # record that states one is stating no id, exactly as one that omits the
+    # field is (`SPEC.md` §3.6). It is read at the seam so the two adapters
+    # cannot drift, and so the *reference* rule `parent_ref` applies below
+    # keeps the ground it stands on -- no node can be named `""`.
+    span_id = span_ref(record.get("span_id"))
+    # The dialect's own id where there is one, and otherwise the record's
+    # canonical digest -- content, never position. The index is right there
+    # and it is wrong: it would bind the node id to where the record sat in
+    # the file, and a re-export with the lines swapped would rename every
+    # span (`SPEC.md` §3.6 rule 2).
+    source_key = span_id if span_id is not None else record_digest(record)
 
     kind, normalized = _kind_of(attributes, consumed, diagnostics, record)
     inputs = _payload(attributes, INPUT_VALUE, INPUT_MIME, consumed, diagnostics)
@@ -205,11 +226,23 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     if model is not None:
         normalized["model"] = model
     call_ids, call_role, call_names = _call(attributes, consumed, operation)
+    # Before `unmapped` is computed, because this reads attributes and marks
+    # what it read: a key consumed after the tally is a key still reported.
+    received_call_ids = _received_results(attributes, consumed)
     status, status_note = _status(record)
+
+    started_at, ended_at, unreadable_times = _timestamps(record)
+    # Read at the seam, beside the record's own id and its parent: a link
+    # target is the third reference field and `""` names no span there either
+    # (`SPEC.md` §3.6). An entry that names none is no link, and is reported.
+    links, unread_links = span_links(record)
 
     unmapped = sorted(
         [str(key) for key in attributes if str(key) not in consumed]
         + [f"<record>.{key}" for key in record if key not in KNOWN_RECORD_KEYS]
+        + unreadable_times
+        + unreadable_fields(record)
+        + unread_links
     )
     if unmapped:
         diagnostics.append(
@@ -231,13 +264,13 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     return NormalizedSpan(
         source_key=source_key,
         span_id=span_id,
-        parent_id=_as_str(record.get("parent_id")),
+        parent_id=parent_ref(record.get("parent_id")),
         trace_id=_as_str(record.get("trace_id")),
         kind=kind,
         name=_as_str(record.get("name")) or "",
         operation=operation,
-        started_at=_as_time(record.get("start_time")),
-        ended_at=_as_time(record.get("end_time")),
+        started_at=started_at,
+        ended_at=ended_at,
         status=status,
         status_note=status_note,
         inputs=inputs,
@@ -246,8 +279,8 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         call_ids=call_ids,
         call_role=call_role,
         call_names=call_names,
-        links=_links(record),
-        received_call_ids=_received_results(attributes, consumed),
+        links=links,
+        received_call_ids=received_call_ids,
         attributes=normalized,
         unmapped=tuple(unmapped),
         raw=RawRecord(source=record, source_id=span_id, line_number=index),
@@ -263,14 +296,24 @@ def _kind_of(
 ) -> tuple[NodeKind, dict[str, JsonValue]]:
     normalized: dict[str, JsonValue] = {}
     reported = attributes.get(SPAN_KIND)
-    consumed.add(SPAN_KIND)
     if reported is None:
+        # `get` answers `None` twice over -- for a key the span never carried
+        # and for one carrying `null` -- and those are different facts. The
+        # kind is unknown either way, but only the second is something the
+        # adapter was told and could not read, so only the second is a key
+        # that decided nothing and stays reported (`SPEC.md` §3.7). The
+        # message says which one happened, because one that says "no
+        # attribute" of a key that was sent is untrue.
         diagnostics.append(
             Diagnostic(
                 code=UNKNOWN_SPAN_KIND,
                 message=(
-                    f"no {SPAN_KIND} attribute, so the kind is unknown; the "
-                    f"span is kept and the record is preserved verbatim"
+                    f"{SPAN_KIND} was reported as null, so the kind is "
+                    f"unknown; the span is kept, the record is preserved "
+                    f"verbatim, and the key stays reported as unmapped"
+                    if SPAN_KIND in attributes
+                    else f"no {SPAN_KIND} attribute, so the kind is unknown; "
+                    f"the span is kept and the record is preserved verbatim"
                 ),
                 source=record,
                 adapter=ADAPTER_ID,
@@ -278,7 +321,12 @@ def _kind_of(
         )
         return NodeKind.UNKNOWN, normalized
 
-    text = str(reported)
+    # Anything else was read: `str` renders it -- the library's rendering,
+    # which writes a long integer whole on every interpreter setting -- and
+    # whatever it renders is kept verbatim as `reported_kind` below when it
+    # maps to no `NodeKind`.
+    consumed.add(SPAN_KIND)
+    text = jsoncodec.python_text(reported)
     mapped = KINDS.get(text.upper())
     if mapped is not None:
         return mapped, normalized
@@ -308,24 +356,54 @@ def _payload(
     consumed: set[str],
     diagnostics: list[Diagnostic],
 ) -> Payload:
-    consumed.add(value_key)
-    consumed.add(mime_key)
     if value_key not in attributes:
         # The instrumentor emitted nothing. Not the same as emitting nothing
-        # *in* something (SPEC.md §3.3).
+        # *in* something (SPEC.md §3.3). An `absent` payload carries no mime
+        # either, so a mime type stated beside no value is never read here and
+        # is not consumed: it stays reported (`SPEC.md` §3.7).
         return Payload.absent()
 
+    consumed.add(value_key)
     mime = _as_str(attributes.get(mime_key))
+    if mime is not None:
+        # Consumed where it is READ. A mime the adapter cannot read as a
+        # string types nothing -- the payload is `present` with no mime,
+        # exactly as if the key had never been sent -- so it decided nothing
+        # and stays reported (`SPEC.md` §3.7).
+        consumed.add(mime_key)
     reported = attributes[value_key]
-    text = reported if isinstance(reported, str) else json.dumps(reported)
+    text = _as_text(reported)
+    if text is None:
+        # The value arrived structured -- an exporter that can carry nested
+        # attributes -- and nests deeper than `json.dumps` will descend, so
+        # there is no text to keep. Reported rather than raised, for the same
+        # reason the parse failure below is (`SPEC.md` §7); the value itself
+        # still survives verbatim in the node's raw record (§3.5), which is
+        # the only place it was ever going to.
+        diagnostics.append(
+            Diagnostic(
+                code=PAYLOAD_PARSE_FAILED,
+                message=(
+                    f"{value_key} was reported as a structured value that "
+                    f"nests deeper than the JSON encoder will descend, so no "
+                    f"text form of it could be produced; it survives verbatim "
+                    f"on the node's raw record"
+                ),
+                adapter=ADAPTER_ID,
+            )
+        )
+        return Payload(state=PayloadState.PRESENT, mime=mime, value=None, raw=None)
 
     if text == REDACTED_MARKER:
         return Payload(state=PayloadState.REDACTED, mime=mime, raw=text)
 
     if mime is not None and "json" in mime.lower():
         try:
-            value = json.loads(text)
-        except ValueError as failure:
+            value = jsoncodec.loads(text)
+        # RecursionError is `json`'s answer to nesting it will not descend.
+        # A payload that cannot be read is `present` either way (`SPEC.md` §7);
+        # letting one of the two escape would take the whole build down.
+        except (ValueError, RecursionError) as failure:
             diagnostics.append(
                 Diagnostic(
                     code=PAYLOAD_PARSE_FAILED,
@@ -342,6 +420,22 @@ def _payload(
         return Payload(state=_state_of(value), mime=mime, value=value, raw=text)
 
     return Payload(state=_state_of(text), mime=mime, value=text, raw=text)
+
+
+def _as_text(reported: JsonValue) -> str | None:
+    """The reported value as text, or ``None`` when it cannot be rendered.
+
+    `json.dumps` answers nesting it will not descend with ``RecursionError``,
+    the mirror image of what `json.loads` does to a too-deep string, and it is
+    not a ``ValueError``. An adapter never raises on a payload (`SPEC.md` §7),
+    so the failure comes back as a value the caller reports.
+    """
+    if isinstance(reported, str):
+        return reported
+    try:
+        return jsoncodec.encode(reported, json.dumps)
+    except RecursionError:
+        return None
 
 
 def _state_of(value: JsonValue) -> PayloadState:
@@ -378,12 +472,32 @@ def _usage(attributes: Mapping[str, JsonValue], consumed: set[str]) -> Usage | N
 def _operation(
     attributes: Mapping[str, JsonValue], consumed: set[str]
 ) -> tuple[str | None, str | None]:
-    """The tool / model / retriever name, when the dialect names one."""
-    consumed.update({TOOL_NAME, LLM_MODEL, EMBEDDING_MODEL})
+    """The tool / model / retriever name, when the dialect names one.
+
+    Each key is consumed where it is READ, not before (`SPEC.md` §3.7): a name
+    the adapter cannot read as a string contributes nothing of its own, so it
+    stays in `unmapped` rather than being claimed as mapped, and each of
+    `operation` and `model` is `None` only where no readable name for that
+    field is left. `model` is `llm.model_name` when that reads as a non-empty
+    string, else `embedding.model_name` when that reads as a string, else
+    `None` (so an empty `llm.model_name` counts as no name for `model`);
+    `operation` is `tool.name` when that reads as a string, else `model`. All
+    three are read even though at most two are used, because a
+    readable name that merely lost to another key was still read and acted on.
+    """
     tool = _as_str(attributes.get(TOOL_NAME))
-    model = _as_str(attributes.get(LLM_MODEL)) or _as_str(
-        attributes.get(EMBEDDING_MODEL)
+    llm = _as_str(attributes.get(LLM_MODEL))
+    embedding = _as_str(attributes.get(EMBEDDING_MODEL))
+    consumed.update(
+        key
+        for key, value in (
+            (TOOL_NAME, tool),
+            (LLM_MODEL, llm),
+            (EMBEDDING_MODEL, embedding),
+        )
+        if value is not None
     )
+    model = llm or embedding
     if tool is not None:
         return tool, model
     return model, model
@@ -409,10 +523,14 @@ def _call(
     Ids echoed in input context are left unconsumed, so they surface in
     `unmapped` and are reported rather than dropped. They are evidence of
     context, and the library has no edge kind for that.
+
+    An id the adapter cannot read is not an id: it states no call, and it is
+    consumed only where it is read (`SPEC.md` §3.7), so it stays reported like
+    any other key read and not usable.
     """
-    consumed.add(TOOL_CALL_ID)
     fulfilling = _as_str(attributes.get(TOOL_CALL_ID))
     if fulfilling is not None:
+        consumed.add(TOOL_CALL_ID)
         # A fulfiller's own `operation` already names the tool; carrying it
         # here too is what lets both unpaired codes share one `source` shape.
         named = {fulfilling: operation} if operation is not None else {}
@@ -423,9 +541,15 @@ def _call(
     for key in sorted(str(k) for k in attributes):
         if not key.startswith(OUTPUT_MESSAGES) or not key.endswith(CALL_ID_SUFFIX):
             continue
-        consumed.add(key)
         found = _as_str(attributes[key])
-        if found is None or found in requested:
+        if found is None:
+            # Nothing was recovered here, so nothing was mapped: the key that
+            # stated an unreadable id stays reported (`SPEC.md` §3.7).
+            continue
+        consumed.add(key)
+        if found in requested:
+            # Read and acted on -- the id is already recorded once -- so the
+            # second key stating it is not a gap.
             continue
         requested.append(found)
         # The name sits beside the id under the same `...tool_calls.M.` stem,
@@ -454,28 +578,6 @@ def _status(record: Mapping[str, JsonValue]) -> tuple[Status, str | None]:
     return STATUSES.get(text.upper(), Status.UNSET), note
 
 
-def _links(record: Mapping[str, JsonValue]) -> tuple[SpanLink, ...]:
-    reported = record.get("links")
-    if not isinstance(reported, list):
-        return ()
-    links = []
-    for link in reported:
-        if not isinstance(link, dict):
-            continue
-        span_id = _as_str(link.get("span_id"))
-        if span_id is None:
-            continue
-        attributes = link.get("attributes")
-        links.append(
-            SpanLink(
-                span_id=span_id,
-                trace_id=_as_str(link.get("trace_id")),
-                attributes=attributes if isinstance(attributes, dict) else {},
-            )
-        )
-    return tuple(links)
-
-
 def _received_results(
     attributes: Mapping[str, JsonValue], consumed: set[str]
 ) -> tuple[str, ...]:
@@ -492,17 +594,42 @@ def _received_results(
     different attribute form and is only an echo of the *request*
     (`tool_call_history_echo`). Reading either as the other is a mistake in
     opposite directions.
+
+    A role the adapter could READ is consumed along with the id it decided
+    about, because it was read and acted on and `unmapped` names what the
+    adapter did **not** map (`SPEC.md` §3.7). Reporting it said the adapter had
+    failed to understand the key it decided with -- once per echoed message per
+    turn, which is quadratic in a resent conversation: at 400 turns the
+    September 2026 audit measured 13.19 MB of `unmapped_attributes`
+    diagnostics, nearly all of them these two keys.
+
+    A role it could not read decided nothing, and stays reported: the id below
+    it is then left reported by the default rather than by a decision, and a
+    `role` never becomes a field, so the report is the only trace that an
+    unreadable one arrived.
     """
     received: list[str] = []
     for key in sorted(str(k) for k in attributes):
         if not (key.startswith(INPUT_MESSAGES) and key.endswith(RESULT_ID_SUFFIX)):
             continue
-        message = key[: -len(RESULT_ID_SUFFIX)]
-        if _as_str(attributes.get(message + ROLE_SUFFIX)) != TOOL_ROLE:
+        role_key = key[: -len(RESULT_ID_SUFFIX)] + ROLE_SUFFIX
+        role = _as_str(attributes.get(role_key))
+        if role is None:
+            # No role, or one that is not a string: nothing was decided here,
+            # so nothing is consumed. An absent key is not reported; a present
+            # but unreadable one is, like any key read and not usable.
+            continue
+        consumed.add(role_key)
+        if role != TOOL_ROLE:
+            # The id was not mapped, so it stays reported. The role that
+            # decided so was.
             continue
         found = _as_str(attributes[key])
-        if found is not None and found not in received:
-            consumed.add(key)
+        if found is None:
+            # Read and unusable, which is a real gap: leave it reported.
+            continue
+        consumed.add(key)
+        if found not in received:
             received.append(found)
     return tuple(received)
 
@@ -523,10 +650,98 @@ def _as_int(value: JsonValue) -> int | None:
     return None
 
 
-def _as_time(value: JsonValue) -> float | None:
-    """Unix seconds, as reported. Never rescaled, never guessed at."""
+#: A JSON number literal, exactly as RFC 8259 writes one. The rule for a
+#: quoted timestamp is *the string, unquoted, would be a valid JSON number*
+#: (`SPEC.md` §3.1) rather than a list of tolerated spellings: OTLP JSON
+#: encodes 64-bit integers as decimal strings, so a quoted timestamp is a
+#: real exporter's output -- but every tolerated spelling beyond that is a
+#: small normalization, and a library that trims whitespace here has started
+#: deciding what the telemetry meant.
+_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
+
+#: The integer subset of the above: no fraction, no exponent. §3.1 reads an
+#: integer literal as an `int` and every other literal as a `float`, and the
+#: rule is about the *literal* rather than the value, so a quoted timestamp
+#: is typed by the same test as an unquoted one.
+_JSON_INTEGER = re.compile(r"-?(?:0|[1-9][0-9]*)")
+
+
+def _finite(value: int | float) -> int | float | None:
+    """`value`, unless it is `inf` or `nan` -- neither of which is a time.
+
+    Python's JSON parser produces those for the non-standard `NaN` /
+    `Infinity` tokens and for a literal no float64 can hold (`1e400`), and a
+    library that carried one would write it back out as a bare `Infinity`
+    that no strict JSON parser will read (`SPEC.md` §3.1, §7).
+
+    The `isinstance` is the guard rather than a style choice: an `int` is
+    always finite, and `math.isfinite` on one too large for a float raises
+    `OverflowError` instead of answering.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def _as_time(value: JsonValue) -> int | float | None:
+    """Unix seconds, as reported. Never rescaled, never guessed at.
+
+    An integer literal is kept as an `int` (`SPEC.md` §3.1). float64's
+    spacing at epoch-nanosecond magnitude is 256 ns, so `float()` here would
+    spend digits the exporter wrote and merge spans a record kept apart.
+    Keeping them is not a unit conversion: nothing is scaled, and the adapter
+    still does not know what unit the field is in.
+
+    Returns `None` both for a field the record omits and for one in a
+    rendering this adapter does not read; `_timestamps` is what tells the two
+    apart, because only the second is something to report.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        # `json.loads` already draws §3.1's line: an `int` for an integer
+        # literal, a `float` for one with a fraction or an exponent.
+        return _finite(value)
+    if isinstance(value, str) and _JSON_NUMBER.fullmatch(value):
+        # Read as the identical value the same literal would have produced
+        # unquoted: `"1700000000"` and `1700000000` are one timestamp, and
+        # `"1e9"` is the same float `1e9` is.
+        try:
+            parsed: int | float = (
+                jsoncodec.parse_integer(value)
+                if _JSON_INTEGER.fullmatch(value)
+                else float(value)
+            )
+        except ValueError:
+            # Longer than the library's digit limit (`SPEC.md` §5.3): a
+            # constant, and the digits are counted before anything converts
+            # them, so this answer does not depend on how the interpreter's
+            # own limit is set. An unquoted literal that long never gets
+            # here -- the reader refuses the line -- but a *quoted* one is an
+            # ordinary JSON string until this call (`SPEC.md` §3.1).
+            return None
+        return _finite(parsed)
     return None
+
+
+def _timestamps(
+    record: Mapping[str, JsonValue],
+) -> tuple[int | float | None, int | float | None, list[str]]:
+    """`(started_at, ended_at, the time fields this adapter could not read)`.
+
+    A value in a rendering §3.1 does not accept must never become a silent
+    `None`: it stays verbatim in `raw`, and its field is named among the
+    unmapped ones, which is `unmapped_attributes`' whole job. A field the
+    record omits -- or reports as `null`, which is how both dialects say "no
+    start time" -- is an absence and is not named: there is nothing the
+    adapter failed to read.
+    """
+    times: list[int | float | None] = []
+    refused: list[str] = []
+    for field in ("start_time", "end_time"):
+        reported = record.get(field)
+        parsed = _as_time(reported)
+        times.append(parsed)
+        if parsed is None and reported is not None:
+            refused.append(f"<record>.{field}")
+    return times[0], times[1], refused

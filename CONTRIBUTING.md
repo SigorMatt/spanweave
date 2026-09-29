@@ -55,6 +55,14 @@ A mergeable PR:
       optional dependency is green in CI and red on the developer's machine —
       it passes in every environment where it cannot catch anything. Assert
       both branches, and drive them from the test.
+- [ ] Has no test that is green because of a choice it made about its own
+      fixture. The same defect one level in: a pin on the JSON depth ceiling
+      measured nested **lists** where every level of a graph document is a
+      **dict**, and so was green on the one interpreter where the sentence it
+      pinned is false (`TASKS.md`, September 2026 audit, open thread 10). If a
+      test measures something the library does not control, measure every
+      shape the library actually produces, record what you observed, and
+      assert only the part that is the library's.
 
 ## Adding an adapter — the short version
 

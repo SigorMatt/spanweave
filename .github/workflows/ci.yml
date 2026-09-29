@@ -19,8 +19,14 @@ jobs:
       fail-fast: false
       matrix:
         # A library that sits underneath other people's tools must not narrow
-        # their runtime (ENVIRONMENT.md).
-        python-version: ["3.11", "3.12", "3.13"]
+        # their runtime (ENVIRONMENT.md). This list and the `Programming
+        # Language :: Python` classifiers in pyproject.toml are held equal by
+        # `tests/test_acceptance.py`, because they drifted apart once and it
+        # cost a whole release's worth of wrong documentation: every version
+        # tested here happened to be one where `json.loads` and `json.dumps`
+        # give out at the same depth, and the only version that diverges was
+        # the one CI did not test and a local `uv run` picks (run-3 review F1).
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - name: Install uv

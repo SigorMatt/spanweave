@@ -1,0 +1,313 @@
+{
+  "diagnostics": [
+    {
+      "code": "unmapped_attributes",
+      "count": 3
+    }
+  ],
+  "edges": [
+    {
+      "basis": "tool_call_id",
+      "dst": "s2",
+      "kind": "call_result",
+      "src": "s1",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "tool_call_id",
+      "dst": "s4",
+      "kind": "call_result",
+      "src": "s3",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "tool_call_id in tool-result message",
+      "dst": "s3",
+      "kind": "data",
+      "src": "s2",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "tool_call_id in tool-result message (not the earliest receiving span)",
+      "dst": "s5",
+      "kind": "data",
+      "src": "s2",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "tool_call_id in tool-result message",
+      "dst": "s5",
+      "kind": "data",
+      "src": "s4",
+      "warrant": "explicit"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s2",
+      "kind": "temporal",
+      "src": "s1",
+      "warrant": "derived"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s3",
+      "kind": "temporal",
+      "src": "s2",
+      "warrant": "derived"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s4",
+      "kind": "temporal",
+      "src": "s3",
+      "warrant": "derived"
+    },
+    {
+      "basis": "sibling start_time ordering",
+      "dst": "s5",
+      "kind": "temporal",
+      "src": "s4",
+      "warrant": "derived"
+    }
+  ],
+  "meta": {
+    "diagnostic_count": 3,
+    "edge_count": 9,
+    "node_count": 5,
+    "schema_version": "0.1",
+    "trace_id": "t1"
+  },
+  "nodes": [
+    {
+      "attributes": {
+        "model": "demo-model"
+      },
+      "ended_at": 1000.1,
+      "id": "s1",
+      "inputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "messages": [
+            {
+              "content": "Look up the order status.",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "kind": "llm",
+      "operation": "demo-model",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "message": {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "function": {
+                      "name": "lookup"
+                    },
+                    "id": "call_a"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "started_at": 1000.0,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1000.3,
+      "id": "s2",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "tool",
+      "operation": "lookup",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "status": "shipped"
+        }
+      },
+      "started_at": 1000.2,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {
+        "model": "demo-model"
+      },
+      "ended_at": 1000.5,
+      "id": "s3",
+      "inputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "messages": [
+            {
+              "content": "Look up the order status.",
+              "role": "user"
+            },
+            {
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "arguments": {
+                    "order": "A-1"
+                  },
+                  "id": "call_a",
+                  "name": "lookup"
+                }
+              ]
+            },
+            {
+              "content": "{\"status\":\"shipped\"}",
+              "role": "tool",
+              "tool_call_id": "call_a"
+            }
+          ]
+        }
+      },
+      "kind": "llm",
+      "operation": "demo-model",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "message": {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "function": {
+                      "name": "eta"
+                    },
+                    "id": "call_b"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "started_at": 1000.4,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {},
+      "ended_at": 1000.7,
+      "id": "s4",
+      "inputs": {
+        "mime": null,
+        "state": "absent",
+        "value": null
+      },
+      "kind": "tool",
+      "operation": "eta",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "eta": "2026-09-12"
+        }
+      },
+      "started_at": 1000.6,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    },
+    {
+      "attributes": {
+        "model": "demo-model"
+      },
+      "ended_at": 1000.9,
+      "id": "s5",
+      "inputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "messages": [
+            {
+              "content": "Look up the order status.",
+              "role": "user"
+            },
+            {
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "arguments": {
+                    "order": "A-1"
+                  },
+                  "id": "call_a",
+                  "name": "lookup"
+                }
+              ]
+            },
+            {
+              "content": "{\"status\":\"shipped\"}",
+              "role": "tool",
+              "tool_call_id": "call_a"
+            },
+            {
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "arguments": {
+                    "order": "A-1"
+                  },
+                  "id": "call_b",
+                  "name": "eta"
+                }
+              ]
+            },
+            {
+              "content": "{\"eta\":\"2026-09-12\"}",
+              "role": "tool",
+              "tool_call_id": "call_b"
+            }
+          ]
+        }
+      },
+      "kind": "llm",
+      "operation": "demo-model",
+      "outputs": {
+        "mime": "application/json",
+        "state": "present",
+        "value": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "message": {
+                "content": "Your order has shipped, arriving 2026-09-12.",
+                "role": "assistant"
+              }
+            }
+          ]
+        }
+      },
+      "started_at": 1000.8,
+      "status": "ok",
+      "status_note": null,
+      "usage": null
+    }
+  ]
+}

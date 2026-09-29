@@ -9,12 +9,23 @@ import dataclasses
 
 import pytest
 
+import spanweave
 from spanweave import diagnostics as codes
-from spanweave.build import LINK_BASIS, build_graph
+from spanweave.build import (
+    DATA_BASIS,
+    DATA_LATER_BASIS,
+    DATA_TIED_BASIS,
+    LINK_BASIS,
+    TIMESTAMP_UNIT_CEILING,
+    Contribution,
+    build_contributed_graph,
+    build_graph,
+)
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.model import (
     AdapterInfo,
     Diagnostic,
+    DiagnosticLevel,
     EdgeKind,
     NodeKind,
     Payload,
@@ -289,6 +300,135 @@ def test_no_data_edge_appears_from_matching_values():
 
 
 # --------------------------------------------------------------------------
+# Which declaration of a receipt came first (batch D2, audit finding 6)
+# --------------------------------------------------------------------------
+#
+# A conversational protocol resends the whole history, so the same tool-result
+# message reappears in the request of every later span and every occurrence is
+# a declaration the builder transcribes (`SPEC.md` §4.2.1). What the graph adds
+# is the rank: for each call id the declaring spans are ordered by
+# `(started_at, node_id)` and the basis says which one this edge is. It never
+# says *why* there is more than one -- two spans genuinely consuming one result
+# produce the identical shape, and the builder cannot see a protocol.
+
+
+def data_bases(graph):
+    return {(e.src, e.dst): e.basis for e in graph.edges() if e.kind is EdgeKind.DATA}
+
+
+def a_receipt_loop(*receivers):
+    """One fulfilled call, and the spans declaring receipt of it in turn."""
+    return [
+        a_span("p", started_at=0.0, call_ids=("call_a",), call_role=CallRole.FULFILLER),
+        *(
+            a_span(span_id, started_at=started_at, received_call_ids=("call_a",))
+            for span_id, started_at in receivers
+        ),
+    ]
+
+
+def test_the_only_span_declaring_a_receipt_keeps_the_plain_basis():
+    # The corpus's four `data` expectations are all this shape, and this is
+    # what keeps them byte-identical across D2 (`OPEN_QUESTIONS.md` §11(d)).
+    graph = build(a_receipt_loop(("r1", 1.0)))
+    assert data_bases(graph) == {("p", "r1"): DATA_BASIS}
+
+
+def test_a_later_declaration_of_the_same_receipt_says_it_is_not_the_earliest():
+    graph = build(a_receipt_loop(("r1", 1.0), ("r2", 2.0), ("r3", 3.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+        ("p", "r3"): DATA_LATER_BASIS,
+    }
+
+
+def test_the_rank_does_not_depend_on_the_order_the_spans_arrived_in():
+    # The declaring spans are a *set*; any function of a set is order-free.
+    spans = a_receipt_loop(("r1", 1.0), ("r2", 2.0), ("r3", 3.0))
+    assert data_bases(build(spans)) == data_bases(build(list(reversed(spans))))
+
+
+def test_an_earliest_decided_by_node_id_says_so_in_its_own_basis():
+    # Two spans reporting the same start time leave the earliest decided by
+    # the library, not observed -- §4.3's ruling, applied to the same choice.
+    graph = build(a_receipt_loop(("r1", 1.0), ("r2", 1.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_TIED_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+    }
+
+
+def test_an_integer_and_a_float_reporting_the_same_instant_are_a_tie():
+    # `started_at` is `int | float | None` since batch C3, and a tie is about
+    # the instant reported, not the literal that reported it.
+    graph = build(a_receipt_loop(("r1", 1), ("r2", 1.0)))
+    assert data_bases(graph)[("p", "r1")] == DATA_TIED_BASIS
+
+
+def test_an_integer_timestamp_still_ranks_against_a_float_one():
+    graph = build(a_receipt_loop(("r1", 2), ("r2", 1.5)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_LATER_BASIS,
+        ("p", "r2"): DATA_BASIS,
+    }
+
+
+def test_an_untimed_span_is_never_the_earliest_while_anything_is_timed():
+    graph = build(a_receipt_loop(("r1", None), ("r2", 9.0)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_LATER_BASIS,
+        ("p", "r2"): DATA_BASIS,
+    }
+
+
+def test_when_no_receiving_span_is_timed_the_earliest_is_a_tie_break():
+    # Sorting an untimed span as +inf (§5.2's convention) makes every one of
+    # them equal, so the winner is decided by node id and says so.
+    graph = build(a_receipt_loop(("r1", None), ("r2", None)))
+    assert data_bases(graph) == {
+        ("p", "r1"): DATA_TIED_BASIS,
+        ("p", "r2"): DATA_LATER_BASIS,
+    }
+
+
+def test_the_rank_is_per_call_id_not_per_span():
+    # r2 is the second span to be given call_a and the first to be given
+    # call_b. Both are true of it at once.
+    graph = build(
+        [
+            a_span(
+                "p1",
+                started_at=0.0,
+                call_ids=("call_a",),
+                call_role=CallRole.FULFILLER,
+            ),
+            a_span(
+                "p2",
+                started_at=0.0,
+                call_ids=("call_b",),
+                call_role=CallRole.FULFILLER,
+            ),
+            a_span("r1", started_at=1.0, received_call_ids=("call_a",)),
+            a_span("r2", started_at=2.0, received_call_ids=("call_a", "call_b")),
+        ]
+    )
+    assert data_bases(graph) == {
+        ("p1", "r1"): DATA_BASIS,
+        ("p1", "r2"): DATA_LATER_BASIS,
+        ("p2", "r2"): DATA_BASIS,
+    }
+
+
+def test_every_declaration_is_still_an_edge():
+    # The point of the decision (`TASKS.md`, September 2026 audit, D1):
+    # nothing is dropped.
+    # Ten spans declaring one receipt are ten declarations and ten edges.
+    graph = build(a_receipt_loop(*((f"r{i}", float(i)) for i in range(1, 11))))
+    assert len(edges_of(graph, EdgeKind.DATA)) == 10
+
+
+# --------------------------------------------------------------------------
 # Edge set hygiene
 # --------------------------------------------------------------------------
 
@@ -348,6 +488,85 @@ def test_an_input_with_no_trace_id_still_builds():
     assert len(graph.nodes()) == 1
 
 
+# `trace_id == ""` used to be the one degradation the builder did not report:
+# the graph said "no trace" and nothing said why. The September 2026 audit
+# (batch A4) found it; these hold the answer in place.
+
+
+def test_an_input_with_no_trace_id_says_so():
+    graph = build([a_span("s0", trace=None)])
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    reported = graph.diagnostics[0]
+    assert reported.level is DiagnosticLevel.INFO
+    # No node to point at and no fragment to carry: the absence being
+    # reported is the graph's own empty `trace_id` (`SPEC.md` §3.7).
+    assert reported.node_id is None
+    assert reported.source is None
+    assert reported.adapter == "some_dialect"
+
+
+def test_the_missing_trace_id_is_reported_once_for_the_input_not_once_per_span():
+    # Per record, a 10,000-span trace would repeat one sentence 10,000 times
+    # and add nothing on any repeat (`SPEC.md` §7).
+    graph = build([a_span(f"s{index}", trace=None) for index in range(10)])
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    assert len(graph.nodes()) == 10
+
+
+def test_a_trace_id_that_is_the_empty_string_is_no_trace_id():
+    # The dialect reported the field and reported it empty. The graph is in
+    # exactly the state it is in when no record reported one at all, so it
+    # owes the same answer.
+    graph = build([a_span("s0", trace=""), a_span("s1", trace="")])
+    assert graph.trace_id == ""
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+
+
+def test_an_input_with_no_records_reports_no_trace_id_either():
+    graph = build([])
+    assert graph.trace_id == ""
+    assert codes_of(graph) == [codes.MISSING_TRACE_ID]
+    assert graph.meta.diagnostic_count == 1
+
+
+def test_a_trace_that_reports_its_id_is_not_diagnosed():
+    assert codes_of(build([a_span("s0")])) == []
+
+
+def test_one_record_short_of_a_trace_id_is_not_a_missing_trace_id():
+    # The graph has a trace id, so nothing about it is missing. The record
+    # that carried none is not foreign either -- it claims no other trace.
+    graph = build([a_span("s0"), a_span("s1", trace=None)])
+    assert graph.trace_id == "t1"
+    assert codes_of(graph) == []
+
+
+def test_the_audit_case_end_to_end_a_real_record_with_no_trace_id(tmp_path):
+    # The reproduction from tests/audit/probe1.py, which printed a graph with
+    # `trace=''` and no diagnostic at all.
+    import json
+
+    import spanweave
+
+    record = {
+        "span_id": "s0",
+        "parent_id": None,
+        "name": "a",
+        "start_time": 1.0,
+        "end_time": 2.0,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "AGENT"},
+    }
+    path = tmp_path / "no_trace_id.jsonl"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    graph = spanweave.build(path)
+    assert graph.trace_id == ""
+    assert [d.code for d in graph.diagnostics if d.code == codes.MISSING_TRACE_ID] == [
+        codes.MISSING_TRACE_ID
+    ]
+
+
 def test_a_backwards_clock_is_reported_and_left_alone():
     graph = build([a_span("s0", started_at=1002.0, ended_at=1000.0)])
     assert codes_of(graph) == [codes.NONMONOTONIC_TIME]
@@ -359,6 +578,96 @@ def test_a_backwards_clock_is_reported_and_left_alone():
 def test_a_zero_length_span_is_not_skew():
     graph = build([a_span("s0", started_at=1000.0, ended_at=1000.0)])
     assert codes_of(graph) == []
+
+
+# --------------------------------------------------------------------------
+# A timestamp that cannot be in seconds (batch C1, audit finding 5)
+# --------------------------------------------------------------------------
+#
+# 1e11 seconds after the epoch is the year 5138, so a wall-clock time in
+# seconds never reaches it -- while *now* in milliseconds is ~1.8e12 and in
+# nanoseconds ~1.8e18. A value above the line says something about the UNIT
+# of the field and nothing about the run, so it is reported and the number is
+# left exactly as it arrived (`SPEC.md` §3.1).
+
+
+def suspects(graph):
+    return [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
+
+
+def test_a_nanosecond_timestamp_is_reported_and_left_alone():
+    graph = build([a_span("s0", started_at=1.7e18, ended_at=1.7000000002e18)])
+    found = suspects(graph)
+    assert len(found) == 1
+    assert found[0].level is DiagnosticLevel.WARNING
+    assert found[0].node_id == "s0"
+    # Never rescaled: the whole point is that the library does not convert.
+    assert graph.nodes()[0].started_at == 1.7e18
+    assert graph.nodes()[0].ended_at == 1.7000000002e18
+
+
+def test_one_span_gets_one_diagnostic_however_many_of_its_fields_are_over():
+    # Both endpoints of a span share one field encoding, so two diagnostics
+    # would say one thing twice. The fields are named in `source` instead.
+    graph = build([a_span("s0", started_at=1.7e18, ended_at=1.8e18)])
+    found = suspects(graph)
+    assert len(found) == 1
+    assert found[0].source == {"started_at": 1.7e18, "ended_at": 1.8e18}
+
+
+def test_only_the_field_that_is_over_the_line_is_named():
+    graph = build([a_span("s0", started_at=1000.0, ended_at=1.7e18)])
+    assert suspects(graph)[0].source == {"ended_at": 1.7e18}
+
+
+def test_it_is_one_diagnostic_per_node_not_one_per_graph():
+    # Unlike `missing_trace_id` there is a node to point at, and the case the
+    # answer changes is the mixed one: one exporter in seconds, one in
+    # nanoseconds, in a single input.
+    graph = build(
+        [
+            a_span("s0", started_at=1000.0, ended_at=1005.0),
+            a_span("s1", started_at=1.7e18, ended_at=1.7000000002e18),
+            a_span("s2", started_at=1.8e18, ended_at=1.8000000002e18),
+        ]
+    )
+    assert [d.node_id for d in suspects(graph)] == ["s1", "s2"]
+
+
+def test_the_threshold_is_strictly_greater_so_the_bound_itself_is_not_suspect():
+    assert suspects(build([a_span("s0", started_at=1e11, ended_at=1e11)])) == []
+    assert len(suspects(build([a_span("s0", started_at=1e11 + 1.0)]))) == 1
+
+
+def test_a_duration_is_not_checked_only_the_reported_values_are():
+    # A duration is something the library computed by subtracting, and a
+    # claim about whether one is plausible is a claim about the run. Both
+    # endpoints here are ordinary seconds; the span merely lasts forever.
+    graph = build([a_span("s0", started_at=0.0, ended_at=1e10)])
+    assert suspects(graph) == []
+
+
+def test_a_span_with_no_timestamps_is_not_suspect():
+    assert suspects(build([a_span("s0")])) == []
+
+
+def test_the_reported_value_the_diagnostic_shows_is_the_one_the_record_wrote():
+    # C1's message says every value is kept exactly as reported. Batch C3 is
+    # what makes that true of the message itself: an integer time reaches the
+    # node as an `int`, so both `source` and the printed text carry the digits
+    # the record wrote rather than the nearest float64 to them.
+    reported = 1700000000100000100
+    found = suspects(build([a_span("s0", started_at=reported)]))
+    assert found[0].source == {"started_at": reported}
+    assert str(reported) in found[0].message
+
+
+def test_the_ceiling_is_printed_as_the_whole_number_it_is():
+    # `1e11` printed as `100000000000.0`, which reads as a float somebody
+    # chose rather than the year-5138 bound it is (C1 handoff, batch C3).
+    message = suspects(build([a_span("s0", started_at=1.7e18)]))[0].message
+    assert "exceeds 100000000000," in message
+    assert isinstance(TIMESTAMP_UNIT_CEILING, int)
 
 
 def test_a_span_id_used_twice_with_distinct_source_keys_is_reported():
@@ -527,3 +836,355 @@ def test_call_names_are_copied_out_of_the_caller_s_dict():
     span = dataclasses.replace(span, call_names=mutable)
     mutable["call_a"] = "something else"
     assert span.call_names == {"call_a": "lookup"}
+
+
+# --------------------------------------------------------------------------
+# Two records claiming one span id (audit finding 2, batch A3)
+# --------------------------------------------------------------------------
+#
+# The whole file used to be refused for this, and SPEC.md 3.7 has always
+# described the diagnostic that fires instead. The reproduction below is
+# probe1's `duplicate_ids` case, run through the public API.
+
+
+def _duplicated_span_id_trace():
+    import json
+
+    def record(span_id, name, kind, t0, t1, parent=None, tool=None):
+        attributes = {"openinference.span.kind": kind}
+        if tool is not None:
+            attributes["tool.name"] = tool
+        return {
+            "trace_id": "t1",
+            "span_id": span_id,
+            "parent_id": parent,
+            "name": name,
+            "start_time": t0,
+            "end_time": t1,
+            "status": "OK",
+            "attributes": attributes,
+        }
+
+    lines = [
+        record("s0", "a", "AGENT", 1.0, 3.0),
+        record("s1", "t", "TOOL", 1.1, 1.5, parent="s0", tool="t"),
+        record("s1", "t2", "TOOL", 1.6, 1.9, parent="s0", tool="t2"),
+    ]
+    return b"".join(json.dumps(line).encode("utf-8") + b"\n" for line in lines)
+
+
+def test_a_duplicated_span_id_keeps_both_records_and_says_so():
+    import spanweave
+
+    graph = spanweave.build(_duplicated_span_id_trace())
+    assert len(graph) == 3
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [d.source for d in reported] == ["s1"]
+    assert sorted(node.operation or node.name for node in graph.nodes()) == [
+        "a",
+        "t",
+        "t2",
+    ]
+
+
+def test_a_reference_to_a_duplicated_span_id_resolves_to_neither():
+    # Both records answer to `s1`, so a child pointing at it cannot be
+    # resolved to one of them, and picking either would be a guess. The child
+    # is kept and the unresolved reference is reported.
+    import json
+
+    import spanweave
+
+    child = {
+        "trace_id": "t1",
+        "span_id": "s2",
+        "parent_id": "s1",
+        "name": "c",
+        "start_time": 1.7,
+        "end_time": 1.8,
+        "status": "OK",
+        "attributes": {"openinference.span.kind": "CHAIN"},
+    }
+    trace = _duplicated_span_id_trace() + json.dumps(child).encode("utf-8") + b"\n"
+    graph = spanweave.build(trace)
+    assert len(graph) == 4
+    assert [d.source for d in graph.diagnostics if d.code == codes.ORPHAN_PARENT] == [
+        "s1"
+    ]
+    assert ("s1", "s2") not in edges_of(graph, EdgeKind.PARENT)
+
+
+def test_a_duplicated_span_id_builds_the_same_graph_in_any_order():
+    import json
+
+    import spanweave
+
+    lines = _duplicated_span_id_trace().splitlines()
+
+    def document(order):
+        graph = spanweave.build(b"".join(line + b"\n" for line in order))
+        return json.dumps([(n.id, n.name) for n in graph.nodes()], sort_keys=True)
+
+    assert document(lines) == document(list(reversed(lines)))
+
+
+# --------------------------------------------------------------------------
+# Several producers, one graph (batch E3; SPEC.md 6.1)
+# --------------------------------------------------------------------------
+#
+# The builder is handed spans and an `AdapterInfo` beside each. It never
+# learns that "two dialects" is a thing that happened -- these tests use two
+# stub adapters for exactly that reason: what is being asserted is that the
+# builder joins on what the telemetry stated and attributes on who produced
+# what, not that the two shipped dialects interoperate (`test_detection.py`
+# asserts that, over real records).
+
+OTHER = AdapterInfo(id="another_dialect", version="9.9.9", declared_confidence=0.7)
+
+
+def mixed_build(pairs, **kwargs):
+    """`pairs` is (AdapterInfo | None, [spans]), in the order given."""
+    kwargs.setdefault("temporal", False)
+    return build_contributed_graph(
+        [
+            Contribution(adapter=producer, spans=tuple(spans))
+            for producer, spans in pairs
+        ],
+        **kwargs,
+    )
+
+
+def test_each_node_names_the_adapter_that_produced_it():
+    graph = mixed_build(
+        [(ADAPTER, [a_span("s0")]), (OTHER, [a_span("s1", "s0", line=2)])]
+    )
+    assert {n.id: n.provenance.adapter_id for n in graph.nodes()} == {
+        "s0": "some_dialect",
+        "s1": "another_dialect",
+    }
+    assert {n.id: n.provenance.adapter_version for n in graph.nodes()} == {
+        "s0": "0.1.0",
+        "s1": "9.9.9",
+    }
+
+
+def test_meta_lists_every_contributor_with_its_own_declared_confidence():
+    graph = mixed_build(
+        [(OTHER, [a_span("s1", "s0", line=2)]), (ADAPTER, [a_span("s0")])]
+    )
+    # Sorted by (id, version), never by the order the contributions arrived.
+    assert [(a.id, a.declared_confidence) for a in graph.meta.adapters] == [
+        ("another_dialect", 0.7),
+        ("some_dialect", 0.9),
+    ]
+
+
+def test_an_edge_whose_ends_came_from_two_adapters_names_neither():
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0"), a_span("s1", "s0", line=2)]),
+            (OTHER, [a_span("s2", "s0", line=3)]),
+        ]
+    )
+    named = {(e.src, e.dst): e.adapter for e in graph.edges(kind=EdgeKind.PARENT)}
+    assert named == {("s0", "s1"): "some_dialect", ("s0", "s2"): None}
+
+
+def test_a_link_leaving_the_trace_still_names_the_adapter_that_stated_it():
+    # The end that is not a node is not consulted (`SPEC.md` §3.8), so a
+    # dangling link is not silently downgraded to "no adapter".
+    graph = mixed_build(
+        [(ADAPTER, [a_span("s0", links=(SpanLink(span_id="elsewhere"),))])]
+    )
+    assert [e.adapter for e in graph.edges(kind=EdgeKind.LINK)] == ["some_dialect"]
+
+
+def test_a_span_no_adapter_produced_is_a_node_with_no_provenance():
+    graph = mixed_build([(ADAPTER, [a_span("s0")]), (None, [a_span("s9", line=2)])])
+    stranger = next(n for n in graph.nodes() if n.id == "s9")
+    assert stranger.provenance.adapter_id is None
+    assert stranger.provenance.adapter_version is None
+    # And it adds no entry to meta: there is nobody to name.
+    assert [a.id for a in graph.meta.adapters] == ["some_dialect"]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_several_adapters_read_it():
+    # `missing_trace_id` is one statement about the input (`SPEC.md` §7), and
+    # under a mixed build no single adapter made it.
+    one = mixed_build([(ADAPTER, [a_span("s0", trace=None)])])
+    several = mixed_build(
+        [(ADAPTER, [a_span("s0", trace=None)]), (OTHER, [a_span("s1", trace=None)])]
+    )
+    assert [(d.code, d.adapter) for d in one.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    assert [(d.code, d.adapter) for d in several.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_two_adapters_reusing_one_span_id_keep_both_records_and_report_it():
+    """`SPEC.md` §3.6 rule 3 through the door dispatch opens.
+
+    The report is keyed on the reused **span id**, which is the fact about
+    the input; the two node ids are separated by the records' own digests,
+    which is the library's own construct and reports nothing
+    (`OPEN_QUESTIONS.md` §12(f), decided at batch E3).
+    """
+    mine = a_span("s0", name="mine")
+    theirs = dataclasses.replace(
+        a_span("s0", name="theirs", line=2),
+        raw=RawRecord(source={"span_id": "s0", "other": True}, source_id="s0"),
+    )
+    graph = mixed_build([(ADAPTER, [mine]), (OTHER, [theirs])])
+    assert len(graph.nodes()) == 2
+    assert {n.id for n in graph.nodes()} == {n.id for n in graph.nodes()}
+    assert all(n.id.startswith("sw_") for n in graph.nodes())
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert len(reported) == 1
+    assert reported[0].source == "s0"
+
+
+# --------------------------------------------------------------------------
+# What a whole-input diagnostic may name (Qodo finding 9; SPEC.md 3.7)
+# -- 9 as the review comment numbers it; written as 7 here and in `e6394e2`'s
+# -- body, corrected 2026-09-20 (`reviews/2026-09-20-qodo-bot.md`).
+# --------------------------------------------------------------------------
+#
+# `missing_trace_id` and `duplicate_source_id` are the two diagnostics about
+# the input as a whole -- neither names a node -- and both take their
+# `adapter` from the same question: did one adapter read *every* record? The
+# rule these pin is the rule, not the one example: an id only when the input
+# is non-empty and wholly claimed by one adapter, `None` otherwise. An input
+# one adapter read half of was the case that used to name that adapter for a
+# fact the records it never saw also made.
+
+
+def _reused_source_id_pair():
+    """Two records claiming one span id, distinct enough that both are kept."""
+    return a_span("s0", name="mine"), dataclasses.replace(
+        a_span("s0", name="theirs", line=2),
+        raw=RawRecord(source={"span_id": "s0", "other": True}, source_id="s0"),
+    )
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_a_record_was_unclaimed():
+    # One OpenInference-shaped record with no trace id, and one record no
+    # adapter claimed (`SPEC.md` §6.1). The missing trace id is a fact about
+    # both of them, so the adapter that read one of them cannot be named for
+    # it: `some_dialect` here would say a dialect reported something about a
+    # record it never saw.
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0", trace=None)]),
+            (None, [a_span("s9", trace=None, line=2)]),
+        ]
+    )
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_the_duplicate_source_id_report_names_nobody_when_a_record_was_unclaimed():
+    # The same rule at the other call site: the reused span id is a fact
+    # about two records, and only one of them has an adapter to name.
+    mine, stranger = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [mine]), (None, [stranger])])
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", None)]
+
+
+def test_the_duplicate_source_id_report_names_nobody_when_two_adapters_read_it():
+    mine, theirs = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [mine]), (OTHER, [theirs])])
+    reported = [d for d in graph.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", None)]
+
+
+def test_a_wholly_claimed_input_still_names_the_one_adapter_that_read_it():
+    # The must-not-change half. Every record claimed by one adapter, so that
+    # adapter did make the statement and is named -- at both call sites.
+    mine, theirs = _reused_source_id_pair()
+    graph = mixed_build([(ADAPTER, [dataclasses.replace(mine, trace_id=None)])])
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    duplicated = mixed_build([(ADAPTER, [mine, theirs])])
+    reported = [
+        d for d in duplicated.diagnostics if d.code == codes.DUPLICATE_SOURCE_ID
+    ]
+    assert [(d.source, d.adapter) for d in reported] == [("s0", "some_dialect")]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_no_record_arrived():
+    # An adapter that contributed no records read nothing, so there is
+    # nothing to attribute to it. The empty case is decided rather than
+    # falling out of an empty set of names.
+    graph = mixed_build([(ADAPTER, [])])
+    assert graph.nodes() == ()
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_a_whole_input_diagnostic_names_nobody_when_a_record_was_never_read():
+    # The clause the contributions cannot supply. A record the reader could
+    # not parse is in nobody's `Contribution`, so the builder has to be told
+    # that it existed; otherwise the adapter that read the rest is named for
+    # a statement about an input one record of which is unknown.
+    spans = [a_span("s0", trace=None)]
+    wholly_read = mixed_build([(ADAPTER, spans)])
+    assert [(d.code, d.adapter) for d in wholly_read.diagnostics] == [
+        (codes.MISSING_TRACE_ID, "some_dialect")
+    ]
+    partly_read = mixed_build([(ADAPTER, spans)], skipped_records=1)
+    assert [(d.code, d.adapter) for d in partly_read.diagnostics] == [
+        (codes.MISSING_TRACE_ID, None)
+    ]
+
+
+def test_an_unreadable_line_stops_the_dialect_being_named_for_the_whole_input():
+    # The same rule end to end, which is where it was found: one readable
+    # OpenInference record carrying no trace id, and one line that is not
+    # JSON at all. The graph reports no trace id, and half of that fact is a
+    # record nobody read.
+    graph = spanweave.build(
+        b'{"span_id":"s0","name":"chain.one","start_time":1000.0,'
+        b'"end_time":1001.0,"attributes":{"openinference.span.kind":"CHAIN"}}\n'
+        b"{not json\n"
+    )
+    assert [(d.code, d.adapter) for d in graph.diagnostics] == [
+        (codes.MALFORMED_RECORD, None),
+        (codes.MISSING_TRACE_ID, None),
+    ]
+    # The one record that *was* read still names its dialect everywhere the
+    # statement is about that record alone.
+    assert [(n.id, n.provenance.adapter_id) for n in graph.nodes()] == [
+        ("s0", "openinference")
+    ]
+    assert [(a.id, a.version) for a in graph.meta.adapters] == [
+        ("openinference", "0.1.0")
+    ]
+
+
+def test_meta_still_lists_the_adapter_a_whole_input_diagnostic_cannot_name():
+    # `meta.adapters` answers a different question -- who contributed at all
+    # (`SPEC.md` §3.9) -- and is built from `_contributors`, not from the
+    # whole-input attribution. A part-unclaimed input keeps naming its one
+    # real contributor, with its version and declared confidence, while the
+    # diagnostic names nobody.
+    graph = mixed_build(
+        [
+            (ADAPTER, [a_span("s0", trace=None)]),
+            (None, [a_span("s9", trace=None, line=2)]),
+        ]
+    )
+    assert [(a.id, a.version, a.declared_confidence) for a in graph.meta.adapters] == [
+        ("some_dialect", "0.1.0", 0.9)
+    ]
+    assert [d.adapter for d in graph.diagnostics] == [None]
+    # And the per-node attribution is untouched by the same change.
+    assert {n.id: n.provenance.adapter_id for n in graph.nodes()} == {
+        "s0": "some_dialect",
+        "s9": None,
+    }

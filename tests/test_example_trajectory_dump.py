@@ -24,7 +24,7 @@ import pytest
 
 from examples import trajectory_dump
 from spanweave import PayloadState
-from tests.conformance import scenarios
+from tests.conformance import anonymised, scenarios
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 CORPUS = REPO / "fixtures" / "conformance"
@@ -72,7 +72,9 @@ def test_the_transcript_is_the_expected_nodes_in_the_expected_order(scenario):
     for path in scenario.dialects:
         expected = scenario.expected_graph_for(path.stem)
         transcript = trajectory_dump.transcribe(str(path))
-        assert [step.node_id for step in transcript.steps] == [
+        # `anonymised` touches only derived ids (FIXTURES.md 4.1); a dialect's
+        # own span ids still have to match by value.
+        assert anonymised([step.node_id for step in transcript.steps]) == [
             node["id"] for node in expected["nodes"]
         ], f"{scenario.name}[{path.stem}] step order"
         for step, node in zip(transcript.steps, expected["nodes"], strict=True):
@@ -115,7 +117,7 @@ def _comparable(transcript, scenario) -> dict:
                 line.pop("content")
             if "mime" in declared:
                 line.pop("mime")
-    return document
+    return anonymised(document)
 
 
 @pytest.mark.parametrize("scenario", _two_dialect_scenarios(), ids=lambda s: s.name)
@@ -221,10 +223,43 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: adapter can emit it -- OpenInference has no truncation signal
 #: (`spanweave/adapters/openinference.py`) and the GenAI convention states
 #: none either.
+#:
+#: `absent` moved 114 -> 122 at batch A3: `duplicate_span_ids` stopped being a
+#: refusal and became a two-node graph in both dialects, and neither of its
+#: tool spans carries a payload. 122 -> 134 at batch C1, which added
+#: `timestamp_units`: two renderings of three payload-free spans, each with an
+#: `inputs` and an `outputs`.
+#:
+#: `present` moved 94 -> 118 at batch A5, which added the `derived_ids` pair:
+#: two scenarios x two renderings x three tool spans, each with an `inputs`
+#: and an `outputs` that the dialect fills in.
+#:
+#: Batch D2 added `receipt_redeclared`: two renderings of five spans, so ten
+#: nodes with twenty payload slots. `absent` moved 134 -> 138 (the two tool
+#: spans per rendering report an output and no input) and `present` 118 -> 134
+#: (the three llm spans per rendering report both, and each tool span reports
+#: its result).
+#:
+#: Batch E3 added `mixed_instrumentation`: one rendering of `llm_tool_llm`'s
+#: four spans, half read by each adapter. `absent` moved 138 -> 139 (the agent
+#: span reports no output) and `present` 134 -> 141 (the other seven slots).
+#: That the states are `llm_tool_llm`'s exactly is the point of the scenario:
+#: forcing one adapter over the same file reports `absent` where content was
+#: emitted, which is the sharpest harm per-record dispatch removes.
+#:
+#: Batch S3 added `empty_ids`: two renderings of two spans, neither of which
+#: carries a payload attribute, so `absent` moved 139 -> 147 and nothing else
+#: moved. A scenario about identity has nothing to say about payloads, and the
+#: eight `absent` slots are that said in the one place it is counted.
+#:
+#: Batch S10 added `empty_link_target` the same way -- two renderings of two
+#: spans, no payload attribute on either -- so `absent` moved 147 -> 155 and
+#: nothing else moved: a scenario about a link target says nothing about
+#: payloads either.
 CORPUS_STATES = {
-    "absent": 114,
+    "absent": 155,
     "empty": 4,
-    "present": 94,
+    "present": 141,
     "redacted": 2,
     "truncated": 0,
 }
@@ -237,20 +272,29 @@ def test_the_corpus_exercises_four_of_the_five_states():
     assert measured["states_never_seen"] == ["truncated"]
 
 
-def test_the_sweep_reads_every_committed_trace_and_names_what_it_refuses():
-    """A refused trace is a result, not an exit -- and it is named."""
+def test_the_sweep_reads_every_committed_trace_and_refuses_none_of_them():
     traces = _every_committed_trace()
     results = list(trajectory_dump.transcribe_all(traces))
     measured = trajectory_dump.coverage(results)
     assert len(measured["sources_read"]) + len(measured["sources_refused"]) == len(
         traces
     )
-    refused = {entry["source"] for entry in measured["sources_refused"]}
-    assert refused == {
-        str(path) for path in sorted(CORPUS.glob("duplicate_span_ids/dialects/*.jsonl"))
-    }
-    for entry in measured["sources_refused"]:
-        assert entry["code"] == "duplicate_node_id"
+    # **Every committed trace now builds.** `duplicate_span_ids` was the one
+    # that did not, and batch A3 turned it into a graph (`SPEC.md` §3.6 rule
+    # 3). The consumer's ability to name a refusal is tested below, on an
+    # input the library really does refuse.
+    assert measured["sources_refused"] == []
+
+
+def test_a_refused_trace_is_a_result_not_an_exit_and_it_is_named(tmp_path):
+    unreadable = tmp_path / "unreadable.jsonl"
+    unreadable.write_text('{"a": 1}\n{"b": 2}\n', encoding="utf-8")
+    good = str(CORPUS / "llm_tool_llm/dialects/openinference.jsonl")
+    results = list(trajectory_dump.transcribe_all([str(unreadable), good]))
+    measured = trajectory_dump.coverage(results)
+    assert [e["source"] for e in measured["sources_refused"]] == [str(unreadable)]
+    assert measured["sources_refused"][0]["code"] == "adapter_unconfident"
+    assert len(measured["sources_read"]) == 1
 
 
 def test_the_distinctions_record_is_computed_from_the_table():
@@ -373,9 +417,9 @@ def test_the_transcript_compares_diagnostics_per_node_and_they_still_agree():
         per_dialect = {}
         for path in scenario.dialects:
             transcript = trajectory_dump.transcribe(str(path))
-            per_dialect[path.stem] = {
-                step.node_id: step.notes for step in transcript.steps
-            }
+            per_dialect[path.stem] = anonymised(
+                {step.node_id: step.notes for step in transcript.steps}
+            )
         first, *rest = sorted(per_dialect)
         for other in rest:
             assert per_dialect[first] == per_dialect[other], scenario.name

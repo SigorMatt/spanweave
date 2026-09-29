@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import functools
+import operator
 import pathlib
 import re
 import types
@@ -119,6 +121,11 @@ def _strip_optional(annotation: object) -> object:
         rest = [arg for arg in typing.get_args(annotation) if arg is not type(None)]
         if len(rest) == 1:
             return rest[0]
+        if rest:
+            # More than one type survives: keep them as a union rather than
+            # handing back the original, so `int | float | None` is read as
+            # the `int | float` it is (batch C3).
+            return functools.reduce(operator.or_, rest)
     return annotation
 
 
@@ -142,6 +149,14 @@ def _is_permissive(annotation: object) -> bool:
     if base is str:
         return True
     if base in (int, float, bool):
+        return False
+    if typing.get_origin(base) in (types.UnionType, typing.Union) and all(
+        arg in (int, float, bool) for arg in typing.get_args(base)
+    ):
+        # A closed union of number types constrains a consumer exactly as one
+        # of them does: `nodes[].started_at` is `int | float | None`, which is
+        # "a JSON number, or null" and nothing wider (`SPEC.md` §3.1). The
+        # inventory is about open vocabularies, so this is out of its scope.
         return False
     # A Mapping / dict / list / tuple of anything: the key or element
     # vocabulary is open even where the values are typed.

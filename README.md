@@ -23,6 +23,8 @@ nodes: 4
   agent: 1
   llm: 2
   tool: 1
+nodes by adapter:
+  openinference: 4
 edges: 7
   call_result (explicit): 1
   data (explicit): 1
@@ -49,6 +51,13 @@ writing any code against it:
 - **Two attributes could not be mapped, and they are diagnostics, not
   discards.** "We didn't understand it" is a reportable outcome here. Nothing
   vanishes quietly.
+- **Every node says which adapter produced it.** Here one adapter read
+  everything, so the tally is a single line. It stops being one when a trace
+  carries two instrumentors' spans: a dialect is a property of a *record*, not
+  of a file, so one file can hold both and each node still names its own
+  reader (`SPEC.md` §6.1). Nothing about that is a mode you select — it is what
+  `spanweave` does when you name no adapter, and `--adapter auto` is that
+  default spelled out.
 - **The schema is not frozen**, and it says so on every run until `1.0.0`.
 
 Then build one and query it:
@@ -157,13 +166,49 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
 
 ## Guarantees
 
-- **Deterministic.** Same input bytes → byte-identical graph. Sorted adjacency,
-  explicit tie-breaks, no clocks, no randomness, no salted hashing.
+- **Deterministic.** Same input bytes → byte-identical graph, on any machine
+  and under any interpreter configuration. Sorted adjacency, explicit
+  tie-breaks, no clocks, no randomness, no salted hashing, and an integer
+  digit limit of the library's own rather than the interpreter's
+  (`SPEC.md` §5.3).
 - **Lossless.** Every node keeps its verbatim source record. Anything that can't
   be mapped becomes a **diagnostic**, never a silent discard.
 - **Zero runtime dependencies.** Core is stdlib-pure and readable in one sitting.
 - **Dialect-agnostic core.** Adding a dialect is a new *adapter*, never a change
   to the graph model.
+
+## Exit codes
+
+| Exit | Meaning |
+|---|---|
+| `0` | it worked |
+| `1` | a refusal: the library raised, a file could not be read, or a graph did not validate |
+| `2` | a usage error (argparse's own) |
+
+A failure the library **raised** prints its stable error `code` in brackets, so
+a script can tell one refusal from another without matching English. The file
+below **exists** — it holds JSON no adapter recognizes, which is the refusal
+being shown; a name that is not there fails earlier and differently:
+
+```
+$ spanweave build unrecognized.jsonl
+spanweave build: [adapter_unconfident] no adapter is confident enough about
+this input (highest 0.00, minimum 0.50). Confidence declared by each adapter:
+openinference 0.00, otel_genai 0.00. Name one explicitly with --adapter if you
+know the dialect.
+```
+
+Codes are a public contract from `0.9.x` and every one is listed in `SPEC.md`
+§3.10. **The machine-readable part of a failure line, when there is one, is
+the bracket immediately after `spanweave <command>: `, and what it contains is
+one of §3.10's codes** — that closed set is what a caller routes on, and the
+prose after it is for you, and may be reworded in any release. The CLI adds
+**no bracket of its own** to a failure the library did *not* raise: a file that
+is not there prints the operating system's own text, which carries a bracket of
+its own — `spanweave build: [Errno 2] No such file or directory: '...'`. `Errno
+2` is the OS's number, not a spanweave code, and a caller must not match it:
+route on §3.10's codes, never on *there is a bracket*. And `1` is never
+subdivided — the exit status says *there is no graph*, the code says why.
 
 ## Conformance
 
@@ -173,17 +218,22 @@ canonical graph**. That equivalence is the library's entire reason to exist, and
 it is a test, not a claim: `make conformance`.
 
 **What it covers today, in numbers rather than adjectives.** The corpus holds
-**21** scenarios. **17** are rendered in both dialects and compared across them.
+**29** scenarios. **24** are rendered in both dialects and compared across them.
 The other **4** are rendered in one, because the second dialect genuinely cannot
 express them — and each says so in a `coverage.json` file carrying the reason,
 because silence would be indistinguishable from an adapter nobody got round to
-(`FIXTURES.md` §4.3).
+(`FIXTURES.md` §4.3). And **1** is rendered as a single trace carrying **both**
+dialects' records, because a mixed trace is the shape it is about: a dialect is
+a property of a record rather than of a file, so one file can hold two
+instrumentors' spans and still be one run (`SPEC.md` §6.1). Its expected graph
+is the graph the single-dialect renderings of that same run produce — that
+equality is the assertion.
 
 **One field is set aside, said here rather than found later.** A scenario may
 declare a field *dialect-varying* — a reviewable file in the corpus, never a
 branch in the comparison code (`FIXTURES.md` §4.4). One field is declared almost
 everywhere: `name`, the span name, which two instrumentors are least likely to
-spell the same way. **16 of those 17 cross-dialect scenarios declare it**, so
+spell the same way. **24 of those 24 cross-dialect scenarios declare it**, so
 the equivalence claim above is a statement about everything else — ids, kinds,
 operations, timestamps, statuses, payload states and values, usage, and every
 edge with its warrant and basis. **If you are matching nodes by `name` across
@@ -270,6 +320,7 @@ make stranger       # walk and time the install path above, from a clean venv
 | `OPEN_QUESTIONS.md` | Deliberately unresolved decisions. |
 | `PREDICTIONS.md` | Where this model is predicted to be wrong — written before the test. |
 | `SECURITY.md` | Threat model and reporting. |
+| `CHANGELOG.md` | What changed, written when it lands. Starts at the September 2026 audit-fix series. |
 | `CONTRIBUTING.md` | How to contribute. |
 
 ## License

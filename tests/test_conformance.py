@@ -21,6 +21,7 @@ import pytest
 
 import spanweave
 from spanweave.errors import ERROR_CODES, SpanweaveError
+from spanweave.read import read_trace
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
 from tests import determinism
 from tests.conformance import (
@@ -31,6 +32,7 @@ from tests.conformance import (
     Rendering,
     adapter_backed,
     canonical,
+    dialect_parts,
     renderings,
     scenarios,
     split_erasures,
@@ -73,9 +75,53 @@ DEGENERATE = (
     "cyclic_parents",
     "shuffled_order",
     "tool_call_history_echo",
+    # Added at the September 2026 audit's batch C1, not seeded: timestamps in
+    # a unit that is not seconds, and a timestamp in a rendering the library
+    # does not read (`SPEC.md` §3.1).
+    "timestamp_units",
     # Added at 2.10, not seeded: the corpus was 18-of-18 `status: "ok"` while
     # 20 real tool spans were 19 `unset` and 1 `error` (finding F6).
     "unset_and_error_status",
+    # Added at the September 2026 audit's batch A5, not seeded: 177 of 177
+    # corpus records carried a span id, so `SPEC.md` §3.6 rule 2 -- the whole
+    # derived-id path -- was exercised by nothing, and its fallback key was
+    # the record's POSITION. The pair is the shuffle claim made where file
+    # order can actually reach an id.
+    "derived_ids",
+    "derived_ids_shuffled",
+    # Added at the September 2026 audit's batch D2, not seeded: no scenario
+    # and no captured trace had a call id whose result was declared received
+    # by more than one span, so `SPEC.md` §4.2.1's rank -- which declaration
+    # came first -- was exercised by nothing (`OPEN_QUESTIONS.md` §11).
+    "receipt_redeclared",
+    # Added at the September 2026 audit's batch E3, not seeded: no file in the
+    # corpus carried two instrumentors' records, so `SPEC.md` §6.1's mixed
+    # build -- and every edge that joins two dialects -- was exercised by
+    # nothing (audit finding 1, `OPEN_QUESTIONS.md` §12). It is the same run as
+    # `llm_tool_llm` and shares that scenario's expected graph.
+    "mixed_instrumentation",
+    # Added at the September 2026 audit's batch F2, not seeded: every rendering
+    # in the corpus was JSONL, so `SPEC.md` §7's third container -- an OTLP
+    # JSON export, which is what an exporter actually POSTs -- was exercised by
+    # nothing (audit finding "minor: OTLP JSON envelope refused",
+    # `OPEN_QUESTIONS.md` §16). It is `llm_tool_llm`'s run repacked and shares
+    # that scenario's expected graph: a container is not a dialect.
+    "otlp_container",
+    # Added at the September 2026 audit's batch S3, not seeded: no record in
+    # the corpus stated an id **empty**, so `SPEC.md` §4.0's ground -- that an
+    # empty reference names a span no input can contain -- was checkable,
+    # false, and checked by nothing. A `span_id` of `""` was an identity while
+    # `parent_id` of `""` had stopped being a reference, and the `parent` edge
+    # between such a pair was dropped silently.
+    "empty_ids",
+    # Added at the September 2026 audit's batch S10, not seeded: S3 applied
+    # that rule to `span_id` and `parent_id` and not to the third reference
+    # field, so a link stating `span_id: ""` became an explicit `link` edge
+    # whose `dst` was `""` -- a span S3 had just made sure no input can
+    # contain (run-5 review 3.1). No record in the corpus stated a link
+    # target empty, so `SPEC.md` §3.6's "at either end of a relation" was
+    # checked by nothing.
+    "empty_link_target",
 )
 
 
@@ -825,12 +871,14 @@ def test_every_rendering_is_byte_identical_on_a_rebuild(rendering):
 )
 def test_every_rendering_accounts_for_every_record(rendering):
     graph = built(rendering)
-    records = [
-        json.loads(line)
-        for line in rendering.path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    determinism.assert_every_record_accounted_for(records, to_document(graph))
+    # Records come from the reader rather than from `splitlines()`, because
+    # what counts as one record is the *container's* answer and not this
+    # test's (`SPEC.md` §7). A line was the only answer until the corpus held
+    # an OTLP export, where one document carries every span in the scenario
+    # and a line-splitting check would have had nothing to account for.
+    determinism.assert_every_record_accounted_for(
+        list(read_trace(rendering.path)), to_document(graph)
+    )
 
 
 # --------------------------------------------------------------------------
@@ -838,30 +886,60 @@ def test_every_rendering_accounts_for_every_record(rendering):
 # --------------------------------------------------------------------------
 
 
-#: Dialects in which `shuffled_order` and `llm_tool_llm` are BOTH rendered.
-#: Derived, not listed: the pair below is only a determinism check in a dialect
-#: where both halves exist, and a dialect added to one and not the other must
-#: drop out rather than compare a scenario against a missing file.
-TWINNED = sorted(
-    {p.stem for p in (CORPUS / "shuffled_order/dialects").iterdir()}
-    & {p.stem for p in (CORPUS / "llm_tool_llm/dialects").iterdir()}
-    & adapter_backed()
+#: `(shuffled, ordered)`. Two pairs, and they check different halves of the
+#: same claim: in `shuffled_order`/`llm_tool_llm` every node id is a string
+#: the dialect supplied, so file order cannot reach it; in
+#: `derived_ids_shuffled`/`derived_ids` every node id is **computed**, which is
+#: the only place file order ever could reach one -- and until batch A5 it did
+#: (`SPEC.md` §3.6 rule 2).
+SHUFFLE_PAIRS = (
+    ("shuffled_order", "llm_tool_llm"),
+    ("derived_ids_shuffled", "derived_ids"),
 )
 
 
-def test_the_shuffle_pair_is_twinned_in_every_dialect_that_renders_either():
+def _twinned(shuffled, ordered):
+    """Dialects in which BOTH halves of a pair are rendered.
+
+    Derived, not listed: a pair is only a determinism check in a dialect where
+    both halves exist, and a dialect added to one and not the other must drop
+    out rather than compare a scenario against a missing file.
+    """
+    return sorted(
+        {p.stem for p in (CORPUS / shuffled / "dialects").iterdir()}
+        & {p.stem for p in (CORPUS / ordered / "dialects").iterdir()}
+        & adapter_backed()
+    )
+
+
+#: Every `(shuffled, ordered, dialect)` the pairs above can be checked in.
+SHUFFLE_CASES = [
+    (shuffled, ordered, dialect)
+    for shuffled, ordered in SHUFFLE_PAIRS
+    for dialect in _twinned(shuffled, ordered)
+]
+
+
+@pytest.mark.parametrize(("shuffled", "ordered"), SHUFFLE_PAIRS)
+def test_a_shuffle_pair_is_twinned_in_every_dialect_that_renders_either(
+    shuffled, ordered
+):
     # A dialect that renders one half and not the other would silently narrow
-    # the check above to the dialects that happen to be complete.
-    for name in ("shuffled_order", "llm_tool_llm"):
+    # the checks below to the dialects that happen to be complete.
+    twinned = set(_twinned(shuffled, ordered))
+    assert twinned, f"{shuffled}/{ordered} share no buildable dialect"
+    for name in (shuffled, ordered):
         rendered = {p.stem for p in (CORPUS / name / "dialects").iterdir()}
-        assert rendered & adapter_backed() == set(TWINNED), (
+        assert rendered & adapter_backed() == twinned, (
             f"{name} renders {sorted(rendered)}; the shuffle pair must be "
             f"rendered in the same dialects on both sides"
         )
 
 
-@pytest.mark.parametrize("dialect", TWINNED)
-def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(dialect):
+@pytest.mark.parametrize(("shuffled", "ordered", "dialect"), SHUFFLE_CASES)
+def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(
+    shuffled, ordered, dialect
+):
     # Not merely equal: identical bytes. This is the single most valuable
     # determinism check in the corpus (SPEC.md §5.2) -- and it is run per
     # dialect, because "input line order does not matter" is a claim about the
@@ -872,19 +950,38 @@ def test_a_shuffled_trace_is_byte_identical_to_its_ordered_twin(dialect):
         path = CORPUS / name / f"dialects/{dialect}.jsonl"
         return canonical_bytes(canonical(to_document(spanweave.build(path)), erase))
 
-    assert graph("shuffled_order") == graph("llm_tool_llm")
+    assert graph(shuffled) == graph(ordered)
 
 
-@pytest.mark.parametrize("dialect", TWINNED)
-def test_a_shuffled_trace_really_is_a_reordering_of_its_twin(dialect):
+@pytest.mark.parametrize(("shuffled", "ordered", "dialect"), SHUFFLE_CASES)
+def test_a_shuffled_trace_really_is_a_reordering_of_its_twin(
+    shuffled, ordered, dialect
+):
     # Otherwise the test above proves nothing.
     def text(name):
         return (CORPUS / name / f"dialects/{dialect}.jsonl").read_text(encoding="utf-8")
 
-    assert sorted(text("shuffled_order").splitlines()) == sorted(
-        text("llm_tool_llm").splitlines()
-    )
-    assert text("shuffled_order") != text("llm_tool_llm")
+    assert sorted(text(shuffled).splitlines()) == sorted(text(ordered).splitlines())
+    assert text(shuffled) != text(ordered)
+
+
+@pytest.mark.parametrize("dialect", _twinned("derived_ids_shuffled", "derived_ids"))
+def test_a_shuffled_trace_of_derived_ids_keeps_each_id_on_its_own_record(dialect):
+    """The byte-identity above, said the way the defect was found (batch A5).
+
+    Two graphs can be byte-identical while each id names a *different* record
+    in each -- that is precisely what an index-derived key produced, because
+    the ids are assigned in node order and the node order is a fact about the
+    run. So the binding is asserted directly: the id that names the `lookup`
+    span forwards names the `lookup` span reversed.
+    """
+
+    def binding(name):
+        graph = spanweave.build(CORPUS / name / f"dialects/{dialect}.jsonl")
+        return {node.id: node.operation for node in graph.nodes()}
+
+    assert binding("derived_ids_shuffled") == binding("derived_ids")
+    assert all(node.startswith("sw_") for node in binding("derived_ids"))
 
 
 def test_an_unparseable_payload_keeps_its_text_verbatim():
@@ -944,3 +1041,149 @@ def test_the_unpaired_diagnostics_name_the_tool_identically_in_every_dialect():
         ("unpaired_call", "s1"): {"call_id": "call_a", "operation": "lookup"},
         ("unpaired_result", "s2"): {"call_id": "call_b", "operation": "other"},
     }
+
+
+# --------------------------------------------------------------------------
+# Mixed instrumentation (September 2026 audit, batch E3)
+# --------------------------------------------------------------------------
+#
+# `mixed_instrumentation` is the same run as `llm_tool_llm`, described half by
+# each dialect in one file. Its expected graph is that scenario's expected
+# graph, and the equality below is the acceptance test for per-record
+# dispatch: composition is what is being asserted, so a mixed trace that built
+# *a* graph but not *the* graph would be a failure that looks like a pass.
+
+MIXED = "openinference+otel_genai"
+
+
+def _mixed():
+    return next(s for s in BUILDABLE if s.name == "mixed_instrumentation")
+
+
+def _mixed_rendering():
+    scenario = _mixed()
+    return Rendering(scenario=scenario, dialect=MIXED, path=scenario.rendering(MIXED))
+
+
+def test_a_mixed_rendering_is_named_for_every_adapter_that_reads_it():
+    # `+` is not a dialect and must never become one: nothing is obliged to
+    # render a mix, and no adapter answers to the composite name.
+    scenario = _mixed()
+    assert [path.stem for path in scenario.dialects] == [MIXED]
+    assert MIXED not in DIALECTS
+    assert dialect_parts(MIXED) == DIALECTS
+    assert _mixed_rendering().supported
+
+
+def test_the_mixed_scenario_expects_llm_tool_llm_s_graph_byte_for_byte():
+    # The two files, not two built graphs: "one canonical graph" is a claim
+    # about the corpus as well as about the library, and a copy that drifted
+    # would let the assertion below pass against a graph nobody else expects.
+    assert (CORPUS / "mixed_instrumentation/expected/graph.json").read_bytes() == (
+        CORPUS / "llm_tool_llm/expected/graph.json"
+    ).read_bytes()
+
+
+def test_the_otlp_scenario_expects_llm_tool_llm_s_graph_byte_for_byte():
+    # The same rule as the line above, applied to the other axis: repacking a
+    # trace into a different container must not move the graph one byte.
+    assert (CORPUS / "otlp_container/expected/graph.json").read_bytes() == (
+        CORPUS / "llm_tool_llm/expected/graph.json"
+    ).read_bytes()
+
+
+def test_an_otlp_export_produces_the_same_canonical_graph_as_its_jsonl_twin():
+    """CLAIM 2 across containers -- batch F2's acceptance (`SPEC.md` §7).
+
+    A container is not a dialect. `otlp_container` is `llm_tool_llm`'s run
+    packed into an `ExportTraceServiceRequest` once per dialect, so each
+    rendering must produce the canonical graph its JSONL twin produces --
+    under the *reference scenario's own* declarations, because the only thing
+    the two scenarios may disagree about is what the two dialects already
+    disagree about.
+    """
+    reference = _llm_tool_llm()
+    packed = next(s for s in SCENARIOS if s.name == "otlp_container")
+    compared = 0
+    for path in reference.dialects:
+        if path.stem not in adapter_backed():
+            continue
+        export = packed.rendering(path.stem)
+        assert export is not None, f"otlp_container does not render {path.stem}"
+        assert export.suffix == ".json", "an OTLP export is one document"
+        loose = canonical(
+            to_document(spanweave.build(path)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        wrapped = canonical(
+            to_document(spanweave.build(export)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        assert wrapped == loose, (
+            f"{path.stem}'s OTLP export disagrees with its JSONL rendering. "
+            f"The reader unpacks an envelope; it does not interpret one"
+        )
+        compared += 1
+    assert compared > 1, "vacuous: fewer than two dialects were compared"
+
+
+def test_a_mixed_trace_produces_the_same_canonical_graph_as_each_pure_one():
+    """CLAIM 2, across scenarios rather than within one -- batch E3's acceptance.
+
+    A dialect is a property of a record (`SPEC.md` §6.1), so a trace whose
+    records come from two instrumentors describes the same run as either
+    instrumentor describing it alone, and must produce the same graph. The
+    `llm_tool_llm` declarations are applied to **both** sides: the mixed
+    rendering takes s1 and s3's payload values from OTel GenAI, which is
+    exactly the disagreement that scenario already declares.
+    """
+    reference = _llm_tool_llm()
+    forms = {
+        path.stem: canonical(
+            to_document(spanweave.build(path)),
+            reference.erase,
+            reference.drop_payloads,
+        )
+        for path in reference.dialects
+        if path.stem in adapter_backed()
+    }
+    assert len(forms) > 1, "vacuous: only one dialect of the reference built"
+    mixed = canonical(
+        to_document(spanweave.build(_mixed().rendering(MIXED))),
+        reference.erase,
+        reference.drop_payloads,
+    )
+    for dialect in sorted(forms):
+        assert mixed == forms[dialect], (
+            f"the mixed rendering disagrees with {dialect}'s. Per-record "
+            f"dispatch is supposed to recover exactly the graph either "
+            f"instrumentor produces on its own"
+        )
+
+
+def test_forcing_one_adapter_over_the_mixed_trace_keeps_the_node_count(caplog):
+    """What the escape hatch costs, pinned rather than described.
+
+    `--adapter <id>` still parses every record with the named adapter
+    (`SPEC.md` §6.1), and the loss is quiet: the same four nodes, two of them
+    `unknown`, and both edges that join the two dialects gone. The node count
+    is what makes it quiet, so it is the thing asserted -- a mixed build and a
+    forced build of one file differ in *provenance*, never in `node_count`.
+    """
+    path = _mixed().rendering(MIXED)
+    mixed = spanweave.build(path)
+    assert mixed.meta.node_count == 4
+    assert len(mixed.edges()) == 7
+
+    for dialect in DIALECTS:
+        forced = spanweave.build(path, adapter=dialect)
+        assert forced.meta.node_count == mixed.meta.node_count
+        assert len(forced.edges()) == 5
+        assert [str(edge.kind) for edge in forced.edges()].count("call_result") == 0
+        assert [str(edge.kind) for edge in forced.edges()].count("data") == 0
+        assert (
+            sum(1 for node in forced.nodes() if node.kind is spanweave.NodeKind.UNKNOWN)
+            == 2
+        )

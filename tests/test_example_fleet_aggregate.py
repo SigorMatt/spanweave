@@ -121,15 +121,29 @@ def test_counts_match_the_corpus_expectations() -> None:
     assert got["models"] == want["models"]
 
 
-def test_an_unbuildable_trace_is_reported_not_fatal() -> None:
-    """One bad trace in a fleet must not cost you the other 10,000."""
+def test_every_trace_in_the_corpus_fleet_now_builds() -> None:
     got = _rollup()
-    assert got["traces"]["unbuildable"] == 1
-    failure = got["unbuildable"][0]
-    assert failure["code"] == "duplicate_node_id"
-    assert failure["source"].endswith("duplicate_span_ids/dialects/openinference.jsonl")
+    assert got["traces"]["unbuildable"] == 0
+    assert got["traces"]["built"] == len(_traces())
+
+
+def test_an_unbuildable_trace_is_reported_not_fatal(tmp_path) -> None:
+    """One bad trace in a fleet must not cost you the other 10,000.
+
+    `duplicate_span_ids` used to be that trace. Batch A3 made it build
+    (`SPEC.md` §3.6 rule 3), and no committed trace refuses any more -- so the
+    claim is made on an input that does: records no adapter recognizes.
+    """
+    unreadable = tmp_path / "unreadable.jsonl"
+    unreadable.write_text('{"a": 1}\n{"b": 2}\n', encoding="utf-8")
+    good = str(CORPUS / "llm_tool_llm/dialects/openinference.jsonl")
+    rollup = fleet_aggregate.aggregate([str(unreadable), good]).as_dict()
+    assert rollup["traces"]["unbuildable"] == 1
+    failure = rollup["unbuildable"][0]
+    assert failure["code"] == "adapter_unconfident"
+    assert failure["source"] == str(unreadable)
     # ...and the rest of the fleet still rolled up.
-    assert got["traces"]["built"] == len(_traces()) - 1
+    assert rollup["traces"]["built"] == 1
 
 
 def test_trace_id_does_not_identify_a_trace_in_this_corpus() -> None:

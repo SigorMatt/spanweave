@@ -1,0 +1,2 @@
+{"trace_id":"t1","span_id":"","name":"agent.run","start_time":1000.0,"end_time":1003.0,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"","name":"tool.lookup","start_time":1000.5,"end_time":1001.0,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"lookup"}}

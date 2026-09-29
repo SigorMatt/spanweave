@@ -21,6 +21,7 @@ from spanweave.api import build
 from spanweave.errors import (
     AdapterSelectionError,
     DuplicateNodeIdError,
+    GraphNotSerializableError,
     SpanweaveError,
     UnknownAdapterError,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "Edge",
     "EdgeKind",
     "Graph",
+    "GraphNotSerializableError",
     "Meta",
     "Node",
     "NodeKind",

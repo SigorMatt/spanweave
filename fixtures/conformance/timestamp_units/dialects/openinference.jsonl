@@ -1,0 +1,3 @@
+{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"agent.run","start_time":1700000000000000000,"end_time":1700000002000000000,"status":"OK","attributes":{"openinference.span.kind":"AGENT"}}
+{"trace_id":"t1","span_id":"s1","parent_id":"s0","name":"tool.alpha","start_time":1700000000100000000,"end_time":1700000000200000000,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"alpha"}}
+{"trace_id":"t1","span_id":"s2","parent_id":"s0","name":"tool.beta","start_time":"2026-09-05T10:00:00Z","end_time":1700000001000000000,"status":"OK","attributes":{"openinference.span.kind":"TOOL","tool.name":"beta"}}
