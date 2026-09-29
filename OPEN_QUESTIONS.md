@@ -3530,7 +3530,26 @@ audit's 400-turn probe (`tests/audit/probe2.py`).
    `since`.
 4. API shape above, including that `feed` returns nothing by default.
 
-**Decision:**
+**Decision:** taken 2026-09-29 by the maintainer on this memo; `WORKPLAN.md`
+§3 carries the same row. The decision, in the words it was recorded in:
+
+> (1) Prefix-consistency is the definition: at version k the live graph equals
+> `build(records[:k])` byte for byte, arrival order indexing versions,
+> canonical order inside a version. (2) Diagnostic lifecycle option (a): the
+> graph schema does not move; open/resolved history lives only in the journal.
+> (3) Journal implementation with the checkpoint set-difference as the test
+> oracle; the fold must cancel; retention is caller policy
+> (`retain(versions=N | "all" | 0)`, default "all"); a `since` older than
+> retention raises with a code. (4) API as sketched with one refinement:
+> `feed(record)` always returns the new version `int` (never a graph, never a
+> delta); every delta comes from `delta(since=v)`; the per-record mode is
+> `delta(since=version - 1)`. `graph()` materializes on demand. The three-mode
+> conformance gate (silent feed then compare; compare after every record; fold
+> reproduces) is the acceptance test for L3–L4.
+
+The refinement in (4) is the one departure from *Decision needed* item 4 above,
+which asked for a `feed` that returns nothing by default; `WORKPLAN.md` §4
+records it as such.
 
 ---
 
@@ -3619,4 +3638,12 @@ receiver project sits between and owns nothing but plumbing and policy.
 4. The live-rules consumer as the series' showcase, built on agentgolden's rules
    unchanged.
 
-**Decision:**
+**Decision:** taken 2026-09-29 by the maintainer on this memo; `WORKPLAN.md`
+§3 carries the same row. The decision, in the words it was recorded in:
+
+> (1) The receiver is a separate project, `SigorMatt/spanweave-live`, not a
+> subpackage. (2) The only spanweave change L2 needs is the additive
+> envelope-to-records API (L6). (3) Completion is receiver policy; spanweave
+> emits nothing about it. (4) The showcase (L8) is agentgolden's rules
+> evaluated per delta, rules file unchanged, bringing its own trace since no
+> conformance fixture carries the scenario.

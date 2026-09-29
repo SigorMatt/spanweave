@@ -5,7 +5,7 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-09-29 (series opened; run 1 not started).
+Last updated: 2026-09-29 (run 1 done; L1 and L2 decided; run 2 pending).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -157,13 +157,13 @@ never restarts, fixes, or touches anything. Conventions live in
 | # | Batch | Status | Est. calls |
 |---|---|---|---|
 | L0 | **Ceilings measured, not assumed — the eleven remaining tests.** Audit thread 80: eleven tests still hard-code `100_000` as "too deep" and pass only because the `loads` and nested-dict ceilings sit below it at an 8 MB stack. Derive each from `tests/json_depth.py` as `546bdfa` did for the first four. Tests only. CI green on the pushed tip. | done (`f07b321`) | 10 |
-| L1 | **Memo: prefix-consistent incremental build** (`OPEN_QUESTIONS.md` §18). | awaiting decision | — |
-| L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | awaiting decision | — |
-| L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. | awaiting L1 | 25 |
-| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. | awaiting L3 | 25 |
+| L1 | **Memo: prefix-consistent incremental build** (`OPEN_QUESTIONS.md` §18). | done | — |
+| L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | done | — |
+| L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | todo | 25 |
+| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | awaiting L3 | 25 |
 | L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. | awaiting L4 | 15 |
-| L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | awaiting L2 | 8 |
-| L7 | **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
+| L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | todo | 8 |
+| L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
 
 ---
@@ -171,20 +171,27 @@ never restarts, fixes, or touches anything. Conventions live in
 ## 2. Execution order
 
 L0 → L1, L2 (already written) → decisions → L3 → L4 → L5 → L6 → L7 → L8 →
-close. Run 1 = L0 then stop at the decision point.
+close. Run 1 = L0 then stop at the decision point; it ran and stopped there.
 
-L1 and L2 carry no call estimate because they are already written: the two
-memos went in with this commit, so the series opens at the decision point
-rather than working towards it. L3 and L6 are the first batches the
-maintainer's answers unblock, and they unblock independently — L3 needs
-only L1, L6 only L2.
+Run 2 = L3 → L4 → L5 → L6, in the spanweave repo, then stop: L7 and L8 live
+in the receiver repo and start run 3 once it exists. Every batch: CI green on
+the pushed tip before `done`. After run 2: a cold review of L3–L6 (aux), then
+decisions on its findings, then run 3.
+
+L1 and L2 carried no call estimate because they were already written: the two
+memos went in with the series-opening commit, so the series opened at the
+decision point rather than working towards it. Both are now decided (§3), and
+they unblocked independently — L3 needed only L1, L6 only L2 — so run 2 opens
+with both of them available.
 
 ---
 
 ## 3. Decisions log
 
-Empty; the series takes none yet. Both memos are `awaiting decision`, and a
-decision is recorded here on the commit that takes it.
+| Date | Batch | Decision | By |
+|---|---|---|---|
+| 2026-09-29 | L1 | (1) Prefix-consistency is the definition: at version k the live graph equals `build(records[:k])` byte for byte, arrival order indexing versions, canonical order inside a version. (2) Diagnostic lifecycle option (a): the graph schema does not move; open/resolved history lives only in the journal. (3) Journal implementation with the checkpoint set-difference as the test oracle; the fold must cancel; retention is caller policy (`retain(versions=N \| "all" \| 0)`, default "all"); a `since` older than retention raises with a code. (4) API as sketched with one refinement: `feed(record)` always returns the new version `int` (never a graph, never a delta); every delta comes from `delta(since=v)`; the per-record mode is `delta(since=version - 1)`. `graph()` materializes on demand. The three-mode conformance gate (silent feed then compare; compare after every record; fold reproduces) is the acceptance test for L3–L4. | maintainer |
+| 2026-09-29 | L2 | (1) The receiver is a separate project, `SigorMatt/spanweave-live`, not a subpackage. (2) The only spanweave change L2 needs is the additive envelope-to-records API (L6). (3) Completion is receiver policy; spanweave emits nothing about it. (4) The showcase (L8) is agentgolden's rules evaluated per delta, rules file unchanged, bringing its own trace since no conformance fixture carries the scenario. | maintainer |
 
 ---
 
@@ -224,6 +231,9 @@ decision is recorded here on the commit that takes it.
   `OPEN_QUESTIONS.md` carries only §18 and §19 and both are still blank.
   Run 2 resumes at those two answers: L3 unblocks on §18 alone and L6 on §19
   alone, so a partial decision is enough to start.
+- 2026-09-29: L1 and L2 decided; the `feed` return-type refinement is the one
+  departure from the memo's sketch and is recorded in §3. L7 waits on the
+  receiver repo being created by the maintainer.
 
 ---
 
