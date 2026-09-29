@@ -387,24 +387,27 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    One exclusion, because the excluded text is a record of a moment rather
-    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
-    verbatim, and a review that says a file was untracked *when it was read*
-    is reporting, not citing.
+    Two exclusions, both because the excluded text is a record of a moment
+    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
+    copied verbatim, and a review that says a file was untracked *when it was
+    read* is reporting, not citing.
 
-    A second exclusion stood here while the September 2026 audit-fix series
-    ran -- `WORKPLAN.md`, a series' own execution state, which owned
-    `patches/` as its scratch drop and was written to be deleted at series
-    close. That is exactly why nothing durable was allowed to depend on it,
-    and it is gone: the series closed and the file went with it (`TASKS.md`,
-    *September 2026 audit*). It has gone four times now, coming back for
-    each reopening, so the exclusion is a fixture of a **series**, not of a
-    file: a future series' plan file needs it back.
+    `WORKPLAN.md` is the second: a series' own execution state, which owns
+    `patches/` as its scratch drop and is written to be deleted at series
+    close. That is exactly why nothing durable may depend on it. The file has
+    gone and come back repeatedly -- four deletions across the September 2026
+    audit-fix series and its reopenings (`TASKS.md`, *September 2026 audit*),
+    and it is back again for the live-graphs series -- so the exclusion is a
+    fixture of a **series**, not of a file: it travels with whichever plan
+    file is currently live, and leaves with it. A `WORKPLAN.md` in the tree
+    means a series is open; no `WORKPLAN.md` means the clause below matches
+    nothing and costs nothing.
     """
     return [
         path
         for path in documents()
-        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if path.name != "WORKPLAN.md"
+        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 

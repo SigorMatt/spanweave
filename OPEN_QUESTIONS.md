@@ -18,12 +18,17 @@ series** and refer throughout to `WORKPLAN.md`, that series' execution state.
 `WORKPLAN.md` was written to be deleted at series close: batch G4 deleted it on
 2026-09-10, four cold reviews reopened the series and the file came back with
 each of them, batch R7 deleted it again on 2026-09-11, batch S7 on 2026-09-12,
-and batch S12 deleted it on 2026-09-19 at the close that stands.
+and batch S12 deleted it on 2026-09-19 at that series' close.
 Everything of it that outlives the series — the batch list with final statuses,
 the decisions log for all three dates, the cold reviews and the threads the
 series left open — is in `TASKS.md` under *September 2026 audit*. Those references are
 kept as written, because a memo that is re-edited after the fact stops being
 evidence of what was known when it was taken.
+
+**Entries §18–§19 were written as memos opening the live-graphs series**
+(2026-09-29) and refer to a *new* `WORKPLAN.md`, that series' execution state
+and not the audit's. It is in the tree while the series runs and goes the same
+way at its close; what outlives it will land in `TASKS.md` the same way.
 
 ---
 
@@ -3318,3 +3323,300 @@ that moves them is a change to what the spec promises. Nothing else moved: no
 model field, no schema, no stored expectation, no fixture. What **(a)**–**(h)**
 describe stays live as the memo for the reopening conditions in **(h)**, which
 are conditions to watch rather than work to schedule.
+
+---
+
+## 18. L1: Can the graph update as records arrive without giving up an invariant?
+
+### The question
+
+Can spanweave build a graph that updates as records arrive, without giving up
+any invariant the batch builder keeps — and if so, what is the exact definition
+of "the graph so far", what does a change look like, and what has to move in
+the model?
+
+Lettered options below belong to the sub-question they sit under, not to the
+memo as a whole: this memo is structured by headings rather than by the
+**(a)**–**(h)** scheme §10–§17 use, because it asks four separable questions
+and the lifecycle options would collide with a memo-wide lettering.
+
+### The definition that decides everything
+
+Let `records[:k]` be the first `k` records the builder has absorbed, in
+**arrival order**. The live graph at version `k` is *defined* as
+`build(records[:k])` — the batch builder's output for that prefix, byte for
+byte. Call this **prefix-consistency**.
+
+Three things follow, and they are the reason to take this definition rather
+than design a second builder:
+
+1. Every existing invariant transfers unchanged. Determinism (`CLAUDE.md` 4)
+   becomes "same prefix → same graph". Losslessness, no invented relations,
+   warrant, canonical order: all inherited, none re-proved.
+2. The conformance corpus is the streaming test suite. Replay every fixture
+   one record at a time and assert `builder.graph() == build(records[:k])` at
+   every `k`. No new expectations are written; the existing ones are reused at
+   every prefix.
+3. A diagnostic on a live graph is a true statement about what has been seen.
+   `unpaired_call` at version 12 and its absence at version 14 are both
+   correct; the fulfilling span arrived in between. Nothing on the live graph
+   is a prediction.
+
+Arrival order is not `started_at` order. The version index counts arrivals;
+the graph inside a version is still ordered canonically by `started_at` and id,
+as today. A late parent (child arrived first) is the case that makes these two
+orders visibly different, and it is the case that makes canonical order
+non-local (below).
+
+### What absorbing one record can change
+
+Node ids are content-derived (audit A5), so an id never moves. A newly absorbed
+record can:
+
+- add its own node;
+- add its `parent` edge, or make an earlier `orphan_parent` diagnostic false
+  (its child arrived first);
+- fulfil an outstanding request (add a `call_result` edge, resolve an
+  `unpaired_call`) or request something not yet fulfilled (open one);
+- add `data` edges for the receipts it declares, and change the `basis` string
+  of later receipts if it is now the earliest;
+- insert itself into its siblings' `temporal` chain (two edges removed, two
+  added, or one added at an end);
+- reorder canonical order for the subtree it joins, or for the whole graph when
+  it is a late parent.
+
+All but the last are local: they touch the record's own id, the ids it names,
+and its sibling set. Canonical order is the one non-local consequence, and the
+incremental algorithm must recompute it for the affected subtree rather than
+for the graph — or accept an O(n) resort per arrival and say so. The memo
+recommends the subtree recompute with the O(n) resort as the correctness oracle
+in tests.
+
+### The model change: diagnostics need a lifecycle
+
+Batch graphs never retract. A live graph must: `unpaired_call` for `call_3` is
+opened at version 12 and *resolved* at version 14. Where does that history
+live?
+
+- **(a) Only in the journal (below); the graph schema is unchanged.**
+  `graph()` at any version carries exactly the diagnostics `build` would, with
+  no notion of "resolved" — a resolved diagnostic is simply absent, as it is in
+  the batch graph. The open/resolved history is a property of the *sequence of
+  versions*, held by the journal, not by any graph.
+- **(b) Diagnostics gain `opened_at_version` / `resolved_at_version`.** The
+  batch graph would carry `opened_at_version` for every diagnostic (always the
+  record's arrival index) and `resolved_at_version = None` forever. Schema
+  moves for a field that means nothing in batch use.
+- **(c) A separate "resolved diagnostics" section on the live graph only.** Two
+  graph shapes, one for batch and one for live; prefix consistency then has to
+  exclude that section from the equality.
+
+**Recommendation: (a).** It is the only option under which the live graph *is*
+the batch graph. A consumer who wants to know a call was unfulfilled for forty
+seconds keeps journal entries; that is the consumer's history to keep, not the
+graph's. It also means the batch schema does not move for the streaming feature
+at all.
+
+### Versions and deltas
+
+A **delta** is always between two versions: `delta(a, b) = graph(b) − graph(a)`,
+per set — nodes, edges, diagnostics, annotations — added and retracted, plus one
+flag: canonical order changed. Set difference is the definition; anything that
+computes it faster is an implementation and must agree with it.
+
+Two implementations:
+
+- **Checkpoint.** Keep the last materialized graph; diff against it. Exact,
+  O(n) per delta, and only from the last checkpoint.
+- **Journal.** Each feed appends its local change (node added; edges added or
+  removed; diagnostic opened or resolved; basis rewritten; order moved).
+  `delta(since)` folds entries after `since`. O(changes). Any retained version
+  can be `since`. The fold **must cancel**: a diagnostic opened at 12 and
+  resolved at 14 contributes nothing to `delta(11, 15)`, because it is in
+  neither endpoint graph.
+
+**Recommendation: journal, with the checkpoint diff as the test oracle.** The
+gate: for every fixture and every pair of versions, fold the journal from `a` to
+`b` onto `graph(a)` and get `graph(b)` byte for byte. Journal retention is a
+caller-set policy (keep everything, keep the last N versions, keep nothing but
+the current graph); the builder must state which and never silently drop entries
+a `since` could still name — a `since` older than the retention raises with a
+code.
+
+What the delta deliberately does not carry: the history inside the window. It is
+a summary of two endpoints, not a log; the journal entries are the log.
+
+### Why deltas rather than graphs, recorded so the choice is not re-argued
+
+1. Cost: materializing an immutable graph is O(n) (indexes, canonical order,
+   frozen dataclasses); a delta for one arrival is a handful of edges. A
+   thousand spans a second on a fifty-thousand-span trace is the sizing case.
+2. Locality: a live rule engine needs to know *which rules to re-run*, and a
+   delta names the nodes, edges and diagnostics that changed; a full graph says
+   only that something may have.
+3. Transitions: "when did it happen, or almost happen" is a question about the
+   moment a fact entered or left the graph. A graph at version 14 cannot say
+   there was an `unpaired_call` at 12; the delta can, and that is both the
+   alert and its closure.
+4. Transport: a socket or a UI wants changes, not the world resent.
+
+### The three modes
+
+Separating *absorbing* (cheap, mutable internal state) from *materializing*
+(expensive, immutable `Graph`) gives three modes from one class:
+
+- `feed(record)` → nothing. Ingest-loop mode; cost is invalidation only.
+- `graph()` → the current prefix graph, materialized on demand. Where
+  prefix-consistency is defined and tested.
+- `feed(record, delta=True)` → the delta from the previous version, not the
+  graph. Live-consumer mode. (Subscriptions and callbacks are layered outside
+  the core — memo §19.)
+
+Fire-and-forget is where correctness is easiest to lose, because no one observes
+the intermediate states. Therefore the conformance gate runs all three modes
+over every fixture: feed silently and compare at the end; feed and compare after
+every record; feed with deltas and fold. Three modes, one truth.
+
+### Scope boundaries (stay outside this memo)
+
+- One builder per `trace_id`; a live stream interleaves traces, and the
+  per-record dispatch from audit batch E gives the classification
+  (`spanweave.adapters.detect`, which §12(d) states is per-record). The
+  partitioning itself is the receiver's (§19).
+- Trace completion: OTel has no end marker. "Complete" is a timeout policy the
+  caller sets; the builder never decides it and never emits a diagnostic about
+  it.
+- No sockets, no threads, no clock in `spanweave/` — unchanged.
+
+### API sketch (for the decision, not the implementation)
+
+```
+b = spanweave.Builder(adapter=None)        # same detection rules as build()
+b.feed(record)                              # -> None
+b.feed(record, delta=True)                  # -> Delta
+b.version                                   # int, records absorbed
+b.graph()                                   # -> Graph == build(records[:version])
+b.delta(since=v)                            # -> Delta, or raises DeltaUnavailable(code)
+b.retain(versions=N | "all" | 0)            # journal policy; default "all"
+```
+
+`Delta` is a frozen dataclass: `since`, `until`, `nodes_added`, `edges_added`,
+`edges_removed`, `diagnostics_opened`, `diagnostics_resolved`,
+`basis_rewritten`, `order_changed`, `annotations_*`. Serializable; the document
+form is additive (a new top-level `delta` shape, not a change to the graph
+document).
+
+### What moves
+
+| Where | Under the recommendation |
+|---|---|
+| Graph schema (`schema_version`, `tests/serialized_shape.json`) | nothing — that is the point of diagnostic-lifecycle option (a) |
+| `spanweave/__init__.py` `__all__` | `Builder`, `Delta`, one error type for the unavailable `since` |
+| `SPEC.md` | a new section: prefix consistency, delta as set difference, the journal contract, retention |
+| `CONTRACTS.md` | the three-mode gate |
+| `fixtures/conformance/` | no new expectations; three replay gates over the corpus as it stands |
+| `CLAUDE.md` invariants | none — determinism, losslessness, warrant and neutrality are inherited by the definition |
+
+Estimated implementation: four batches (algorithm with O(n) oracle; journal and
+fold; `Delta` document form; conformance gates), plus one for the
+canonical-order subtree recompute if the O(n) resort proves too slow on the
+audit's 400-turn probe (`tests/audit/probe2.py`).
+
+### Decision needed
+
+1. Prefix-consistency as the definition — yes/no.
+2. Diagnostic lifecycle option (a) — or (b)/(c).
+3. Journal with checkpoint oracle; retention as caller policy with a raising
+   `since`.
+4. API shape above, including that `feed` returns nothing by default.
+
+**Decision:**
+
+---
+
+## 19. L2: Where does the live graph meet the network, the clock and the consumer?
+
+### The question
+
+Where does the live graph meet the network, the clock and the consumer, and
+what — if anything — has to change in spanweave to let a separate project own
+those three things?
+
+### What spanweave keeps
+
+Its non-goals: no sockets, no runtime, no enforcement, no clock. The live
+builder (§18) is pure: records in, graphs and deltas out, deterministic. That
+purity is what makes it testable against the corpus and what keeps the batch and
+live worlds one model.
+
+### What a receiver project owns
+
+A separate project — working name `spanweave-live` — that:
+
+1. **Ingests.** Three sources, in order of likelihood: a file being appended
+   (tail of an exporter's JSONL or OTLP-JSON envelope stream), an OTLP/HTTP JSON
+   endpoint, stdin. The container parsing from audit batch F2 is reused.
+2. **Partitions.** One `Builder` per `trace_id`, created on first sight, using
+   spanweave's per-record classification. Records with no trace id go to a
+   builder that will carry `missing_trace_id`, as batch does.
+3. **Completes.** A trace is "complete" by policy: quiet for T seconds, or root
+   span ended plus grace, or a hard cap — the receiver's choice, documented,
+   never spanweave's. On completion it materializes the final graph, optionally
+   writes it with `spanweave.dump`, and releases the builder.
+4. **Subscribes.** Consumers register for deltas per trace; the receiver fans
+   out `feed(record, delta=True)` results. Callbacks live here, not in the core.
+5. **Bounds.** Backpressure and memory: journal retention per builder, maximum
+   concurrent traces, what to do when the cap is hit (refuse with a code, never
+   drop silently — the same rule as the library).
+
+### The one spanweave change L2 needs
+
+F2's container parsing is exposed on *files*. The receiver needs it on *records
+in flight*: a function that takes an OTLP-JSON envelope (or a chunk of one) and
+yields flat records, without a path. That is a small additive API — the code
+exists (`spanweave/read.py`'s `_unpack` and the `_is_an_export` /
+`_opens_an_export` pair, all private today); the surface is what moves.
+Everything else the receiver needs is §18.
+
+### The live consumer, and why it needs no new rules
+
+agentgolden's rules already evaluate a graph. Run them on every delta's graph
+(or, better, only the rules whose inputs the delta names) and record the first
+version at which each rule fails. That gives "when it happened" for free and,
+because of a property of both dialects, "when it almost happened": the LLM span
+carrying a tool request *ends* before the tool span *starts*, so at the moment
+the request is absorbed an ordering rule can fail before the tool executes. The
+support-agent scenario (`skipped_verification`) demonstrates it: the violation is
+flagged at the `llm.plan` span, one version before `issue_refund` runs. That
+scenario is agentgolden's, not one of this repo's conformance fixtures — no
+fixture under `fixtures/conformance/` carries it — so the showcase brings its own
+trace and asserts against agentgolden's rules file, unchanged. Same rules file,
+no changes, which is the demonstration that batch and live are one model.
+
+### What "almost happened" is not
+
+Detection is observation. Acting on a detected intent — holding the tool call,
+refusing it, rewriting it — is enforcement, which belongs to a gate (mcpgate is
+that layer). The layering is: live graph → live rule → gate decision, with
+spanweave never knowing a gate exists and the gate never parsing a dialect. The
+receiver project sits between and owns nothing but plumbing and policy.
+
+### What moves
+
+| Where | What |
+|---|---|
+| `spanweave/` | one additive API: envelope-to-records, on in-memory input rather than a path |
+| `ADAPTERS.md` | the sentence naming it, beside the container rules §16 settled |
+| Graph schema, model, adapters | nothing |
+| The receiver project | everything above, from scratch, in its own repository |
+| The receiver's conformance | replay each corpus fixture through the ingest path with a randomized arrival interleaving of two traces, and assert each trace's final graph equals its batch build |
+
+### Decision needed
+
+1. Receiver as a separate project, not a spanweave subpackage — yes/no.
+2. The envelope-to-records API as the only spanweave-side change.
+3. Completion is receiver policy; spanweave emits nothing about it.
+4. The live-rules consumer as the series' showcase, built on agentgolden's rules
+   unchanged.
+
+**Decision:**
