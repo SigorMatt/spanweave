@@ -5,7 +5,8 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-09-29 (run 1 done; L1 and L2 decided; run 2 pending).
+Last updated: 2026-09-30 (run 2 done: L3, L4, L6 done, L5 dropped on
+measurement; run 3 awaits the receiver repo).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -162,8 +163,8 @@ never restarts, fixes, or touches anything. Conventions live in
 | L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | done (`58d3e69`) | 25 |
 | L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | done (`7f1f40c`) | 25 |
 | L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. Must speed up `delta()`'s two `ordering()` calls, not only `materialize()` — SPEC §10.6 puts `delta(since=v)` at O(n + e). | dropped on measurement (`79a63f4`) | 15 |
-| L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | todo | 8 |
-| L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
+| L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | done (`b5145de`) | 8 |
+| L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting the receiver repo (L6 is done; the repo does not exist yet) | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
 
 ---
@@ -307,6 +308,32 @@ with both of them available.
   now states that a key is restated in full, so "touches only the keys the
   record names" can no longer be read as "cheap": 8× the records of a wide
   trace is 116× the feed.
+- 2026-09-30: L6 done (`b5145de`), CI green, additive and no schema movement.
+  `spanweave.read_records(data) -> Records` with `.records`,
+  `.diagnostics`, `.skipped_records` and `__iter__`; 13 tests, all confirmed
+  failing at `d061268` first. It is eager (complete when returned), takes
+  `bytes` only (a `str` is a `TypeError` and never a path read), consults no
+  adapter and builds nothing. The neutrality gate rejected the word "cost" in
+  a `spanweave/` docstring; it was reworded, not exempted. **Three properties
+  the receiver (L7) must design around**, all measured rather than assumed:
+  (1) there is **no buffering across calls** — a truncated trailing line is one
+  `malformed_record` with `skipped_records=1`, so framing complete records and
+  documents is the receiver's job; (2) **dedup scope is per call** — two calls
+  carrying the same record yield it twice, with no `duplicate_record`; (3)
+  reading an export is cheap and absorbing it is not — N spans is N `feed`
+  calls, at the cost §10.6 and L5's numbers state.
+- 2026-09-30: **run 2 ends here.** L3, L4, L6 done and L5 dropped on
+  measurement, each with CI green on its own pushed tip; nothing blocked and
+  nothing left `awaiting decision`. The schema did not move in any of the four
+  — `tests/serialized_shape.json` is byte-identical to its state at `27ec3db`,
+  which is option (a) from the L1 decision holding across the whole run. Next,
+  per §2: a cold review of L3–L6 by aux (`Review WORKPLAN.md commits since
+  27ec3db`), then decisions on its findings, then run 3. Two things for that
+  review to weigh, both from L5: the two quadratics in `feed` that are not
+  ordering, and the spec conversation about carrying canonical order between
+  versions that §10.6 records and no batch has started. Run 3 (L7, L8) cannot
+  start until the maintainer creates `SigorMatt/spanweave-live`; L7's row now
+  says that rather than `awaiting L6`, which is satisfied.
 
 ---
 
