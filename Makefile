@@ -2,7 +2,7 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance shape stranger capture clean
+.PHONY: check install-check lint types test gates conformance shape stranger bench capture clean
 
 check: lint types test gates
 	uv run spanweave --version
@@ -82,6 +82,20 @@ capture:
 # ARGS passes flags through: make stranger ARGS="--repeat 3 --quiet"
 stranger:
 	uv run python -m tests.stranger_path $(ARGS)
+
+# What a live build costs (WORKPLAN.md L5, `SPEC.md` §10.6). Feeds the two
+# shapes the September 2026 audit measured -- an agent loop that resends its
+# history, and one root with N children -- and prints what `feed`, `graph()` and
+# `delta()` cost on each, plus the share of `delta()` that the canonical-order
+# sort actually is. That share is the number L5 turned on.
+# It asserts NOTHING about the clock, for the reason `stranger` states above: a
+# duration threshold in an automated check is a flake that gets tuned until it
+# means nothing. It prints numbers; a human reads them. Not run by `check`.
+# ARGS passes flags through: make bench ARGS="--only echo --turns 100"
+# The wide shape's `feed` is quadratic in its own right (see the module
+# docstring), so the default width takes tens of minutes.
+bench:
+	uv run python -m tests.live_cost $(ARGS)
 
 # Prove that what SHIPS works (TASKS.md 3.6). Everything `check` runs happens
 # under `uv run`, with the source tree on the path, so every gate it runs

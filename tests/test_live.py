@@ -14,6 +14,7 @@ a corpus file has one order and these need two.
 
 import inspect
 import json
+import sys
 
 import pytest
 
@@ -705,3 +706,69 @@ def test_the_graph_document_gains_no_key_for_the_delta_feature():
     builder = spanweave.Builder()
     builder.feed(oi("s1"))
     assert sorted(spanweave.to_document(builder.graph())) == list(ROOT_KEYS)
+
+
+# -- what each path sorts --------------------------------------------------
+
+
+@pytest.fixture
+def sorts(monkeypatch):
+    """Every canonical-order sort a call performs, by the size it was given.
+
+    `spanweave.build` is patched through `sys.modules` rather than through the
+    package, because the package attribute of that name is the `build()`
+    *function* (`spanweave/__init__.py`) while `spanweave.incremental` and
+    `spanweave.delta` both hold the module. Patching the module reaches both.
+    """
+    module = sys.modules["spanweave.build"]
+    original = module.in_order
+    counted = []
+
+    def counting(nodes, *args, **kwargs):
+        counted.append(len(nodes))
+        return original(nodes, *args, **kwargs)
+
+    monkeypatch.setattr(module, "in_order", counting)
+    return counted
+
+
+def test_feeding_sorts_nothing_and_the_other_paths_sort_a_stated_number_of_times(
+    sorts,
+):
+    """The premise under §10.6's cost statement, and under `tests/live_cost.py`.
+
+    Canonical order is computed when a graph is materialized and when a delta is
+    folded, and **never** while feeding. That is why no incrementally maintained
+    order could make `feed` faster -- it has nothing there to replace -- and why
+    the measurement that dropped `WORKPLAN.md` L5 compared the sort against
+    `delta()` rather than against feeding.
+
+    The counts are the shape of the cost, not an implementation detail: one sort
+    per materialization, **two** per delta because a delta recovers order at
+    both of its endpoints (`SPEC.md` §10.6), and one per fold because a delta
+    carries no order for the fold to trust.
+    """
+    builder = spanweave.Builder()
+    builder.feed(oi("s1"))
+    builder.feed(oi("s2", t0=1001.0))
+    assert sorts == [], "feeding sorted; `SPEC.md` §10.6 says only the other paths do"
+
+    before = builder.graph()
+    assert sorts == [2], "materializing sorts exactly once, over every node"
+    builder.graph()
+    assert sorts == [2], "a materialized graph is kept until the next feed"
+
+    builder.feed(oi("s3", "s1", t0=1002.0))
+    assert sorts == [2], "feeding sorted after all"
+
+    sorts.clear()
+    change = builder.delta(since=2)
+    assert sorts == [3, 2], (
+        "a delta sorts both of its endpoints: the current one, then `since`"
+    )
+
+    sorts.clear()
+    folded = change.fold(before)
+    assert sorts == [3], "folding sorts once, over the nodes it has just applied"
+    sorts.clear()
+    assert dumps(folded) == dumps(builder.graph())

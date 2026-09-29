@@ -2223,9 +2223,41 @@ two things a delta does not carry are functions of the whole node and edge set,
 so `delta(since=v)` sorts both endpoints to find them, exactly as `graph()`
 sorts once to materialize. The gain over materializing is therefore what the
 *answer* is — a handful of nodes and edges instead of the world resent — and not
-yet the sort. Making the sort incremental is a separate measured change; until
-one is made, a consumer asking for a delta after every record pays one sort per
-record, as one asking for a graph after every record already does.
+yet the sort. A consumer asking for a delta after every record pays two sorts
+per record, as one asking for a graph after every record pays one.
+
+What §10.2 does not say, and a reader should not read into it: a key is
+restated **in full**, so what an arrival costs is the *size* of the keys it
+touched and not their number. An arrival that joins a sibling group of `m`
+restates that group's whole temporal chain (§4.3), and a record that declares
+receipt of a call restates that call id's whole `data` edge set (§4.2) — so a
+trace that is one wide sibling group, or one loop resending its history, is
+superlinear in `n` to feed even though every individual arrival is local:
+measured, eight times the records of a wide trace cost a hundred and sixteen
+times the feed. Both shapes occur in real telemetry and both are measured by
+`make bench` (`tests/live_cost.py`).
+
+**Where the sort is and is not the cost, measured rather than argued** (the same
+two shapes; `make bench` prints the numbers and `tests/live_cost.py` records the
+ones this paragraph rests on). `feed` does not sort **at all** — canonical order
+is computed when a graph is materialized and when a delta is folded, and nowhere
+else — so an incrementally maintained order has nothing in `feed` to replace and
+could only add to it. Inside `delta(since=v)` the share depends on the shape: on
+a loop resending its history, whose edge set is quadratic in its nodes, the two
+sorts are a seventh of the call and assembling and rewinding the endpoints is
+most of the rest; on a wide trace, whose edge set is linear, they are three
+fifths of it, and one `delta(since=version - 1)` at the far end of a 20,000-span
+one costs four times the `feed` that produced it.
+
+So the way past that is not a faster sort but **no sort**, and that means
+carrying the two facts the sorts recover — canonical order, and the
+`ordering_cycle` that the same sort reports — between versions instead of
+computing them from the sets. This section and §10.7 take that the other way
+round on purpose: carrying them would make them journalled state, and would put
+a second ordering rule in the library beside the one §5.2 states, which every
+materialized graph and every folded one would then have to agree with. It is a
+spec conversation, not an optimization; until it is had, O(n + e) is what a
+delta costs and this paragraph is why.
 
 ### 10.7 The journal, and the entries that are not local
 

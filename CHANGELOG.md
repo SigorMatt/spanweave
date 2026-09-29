@@ -375,6 +375,43 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **What a live build costs is now measured, and the incremental canonical order
+  it was measured for was dropped.** Nothing under `spanweave/` moves: this is a
+  measurement, a cost statement corrected to match it, and the change the
+  numbers did **not** justify (`WORKPLAN.md` L5, a row that allowed itself to end
+  dropped). New `make bench` (`tests/live_cost.py`) feeds the two shapes the
+  September 2026 audit measured — the 400-turn agent loop that resends its
+  history (801 nodes, 81,799 `data` edges) and one root with 20,000 children —
+  and reports what `feed`, `graph()` and `delta()` each cost, plus the share of
+  `delta()` that the canonical-order sort is. It asserts nothing about the clock,
+  for the reason `make stranger` already gives: a duration threshold in an
+  automated check is a flake that gets tuned until it means nothing.
+  On this machine at `1d7ba8f`, CPython 3.14.6: the loop shape feeds in **75.5 s**
+  (94 ms a record) and its `delta(since=version-1)` costs **229 ms**, of which the
+  two sorts are **32 ms (14%)** and assembling and rewinding the two endpoints'
+  edge sets is **140 ms**; the wide shape feeds in **1,449 s** (72 ms a record)
+  and its delta costs **295 ms**, of which the two sorts are **176.6 ms (60%)**.
+  Three findings, now in `SPEC.md` §10.6. **`feed` does not sort at all** —
+  `build.in_order` is reached from the batch build, from materializing and from
+  `delta`/`fold`, and from nowhere else — so a maintained order has nothing in
+  `feed` to replace and could only add to it; `tests/test_live.py` pins that, and
+  the sort counts of the other three paths, rather than leaving the cost
+  statement resting on a reading of the code. A faster sort is not the lever
+  either: Kahn with a heap emits the same sequence and was measured identical at
+  2.1x the speed, which moves `delta()` by 3% on the loop shape. What the wide
+  shape's 60% points at is therefore **not sorting** at all, which would mean
+  carrying canonical order and `ordering_cycle` between versions instead of
+  computing them from the node and edge sets — a reversal of what §10.6 and
+  §10.7 deliberately promise, and a second ordering rule in the library beside
+  §5.2's. That is a spec conversation, not an optimization, and it is written
+  down as one rather than started.
+  The third finding is about `feed` and not about order: §10.2's "touches only
+  the keys the record names" is true and was being read as "cheap". A key is
+  restated **in full**, so eight times the records of a wide trace cost a
+  hundred and sixteen times the feed — its one sibling group's whole temporal
+  chain is rebuilt on every arrival, and the loop shape rebuilds a call id's
+  whole `data` edge set for every receipt echoed at it. §10.6 now says so.
+
 - **A run is not closed until CI on the pushed tip is green.** Nothing under
   `spanweave/` or `tests/` moves; this records a process failure and the rule
   taken from it. GitHub Actions was red on **nine consecutive push runs** of
