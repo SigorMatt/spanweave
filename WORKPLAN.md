@@ -159,8 +159,8 @@ never restarts, fixes, or touches anything. Conventions live in
 | L0 | **Ceilings measured, not assumed — the eleven remaining tests.** Audit thread 80: eleven tests still hard-code `100_000` as "too deep" and pass only because the `loads` and nested-dict ceilings sit below it at an 8 MB stack. Derive each from `tests/json_depth.py` as `546bdfa` did for the first four. Tests only. CI green on the pushed tip. | done (`f07b321`) | 10 |
 | L1 | **Memo: prefix-consistent incremental build** (`OPEN_QUESTIONS.md` §18). | done | — |
 | L2 | **Memo: the receiver boundary** (`OPEN_QUESTIONS.md` §19). | done | — |
-| L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | todo | 25 |
-| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | awaiting L3 | 25 |
+| L3 | **Incremental builder, correctness first.** `Builder` with `feed`/`graph`/`version`; absorb rules for parent, call_result, data (incl. basis rewrite), temporal, diagnostics open/resolve; canonical order by O(n) resort per arrival (oracle). Conformance gate 1: replay every fixture, `graph()` == `build(prefix)` at every k. SPEC section. `feed` returns the new version `int`; no `delta=` flag. | done (`58d3e69`) | 25 |
+| L4 | **Journal and deltas.** Journal entries per feed; `Delta` dataclass; `delta(since)` fold with cancellation; retention policy and the raising `since`; conformance gates 2 and 3 (compare after every record; fold reproduces). `Delta` document form, additive. `Delta` is produced only by `delta(since)`; add the per-record gate as `delta(since=version-1)` after each feed, folded onto the previous graph, equals `graph()`. | todo | 25 |
 | L5 | **Canonical order without the resort.** Subtree recompute for late parents; measured against the O(n) oracle on the audit's 400-turn probe and a 20k-span wide trace; kept only if faster with the oracle still green. May end `dropped` on measurement. | awaiting L4 | 15 |
 | L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | todo | 8 |
 | L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting L6 | 25 |
@@ -234,6 +234,22 @@ with both of them available.
 - 2026-09-29: L1 and L2 decided; the `feed` return-type refinement is the one
   departure from the memo's sketch and is recorded in §3. L7 waits on the
   receiver repo being created by the maintainer.
+- 2026-09-30: L3 done (`58d3e69`), CI green on the pushed tip, and the
+  schema did not move — option (a) held. Gate 1 (`graph()` ==
+  `graph_from_records(prefix)` at every k, by value *and* `dumps` bytes) runs
+  over all 60 renderings and was verified by deliberate breakage rather than
+  by greenness: disabling the parent, data and temporal absorb rules fails
+  8, 27 and 5 corpus assertions respectively. Two findings L4 and L5 must
+  carry, both departures from the §18 memo's own sketch: (1) "node ids never
+  move" is **false** in two corpus-reachable ways — a majority trace-id
+  change and a span id that stops being unique each move ids already issued.
+  Such an arrival restates the whole state (O(n), `SPEC.md` §10.2), so its
+  journal entry is *not* local and L4 must handle a non-local entry. (2)
+  `meta.adapters[].declared_confidence` is declared over a growing 50-record
+  sample, so it changes between versions; the Builder restates it per claimed
+  record. Without that, prefix consistency would have failed silently on
+  `meta` alone. No incremental case existed in `tests/audit/probe*.py`, so
+  nothing was converted out.
 
 ---
 
