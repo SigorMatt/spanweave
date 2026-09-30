@@ -1166,6 +1166,30 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The two properties a receiver reads bytes against are now pinned, each by a
+  test that bites on its own.** `read_records` is specified to hold nothing
+  between calls (`SPEC.md` §7: a `Records` is complete when it is returned, and
+  a duplicate is a fact about one input), and both halves of that were resting
+  on tests written inside a single call. An unterminated trailing line -- the
+  ordinary last bytes of a tail off an exporter -- had **no** test at all: the
+  nearest one passed a malformed *complete* line. The cross-call duplicate had
+  one, incidentally, and it passed when run alone, because what made it fail was
+  another test having read the same bytes earlier in the same file. Two tests in
+  `tests/test_read.py` now state each property whole and carry their own bytes:
+  the tail is one `malformed_record` with `skipped_records=1` in the call that
+  received it and the next call never yields it; the same record handed over
+  twice is read twice with no `duplicate_record`, while two copies *inside* one
+  call still collapse to one record and one report. Each was run by its own node
+  id in a throwaway worktree, alone, under a mutation that breaks it -- a
+  module-level fragment buffer for the first, a cross-call digest memory (both
+  the form that drops the record and the form that only reports it) for the
+  second -- and each failed there and passes unmutated. Under the fragment
+  buffer the 166 pre-existing tests of `tests/test_read.py` and
+  `tests/test_live.py` all passed, which is what these two are for. Tests only:
+  nothing under `spanweave/` moved, `SPEC.md` did not move, and
+  `tests/serialized_shape.json` is byte-identical. (`WORKPLAN.md` L11, run-2
+  cold review B2 and N1)
+
 - **A record a live `Builder` refuses now leaves the builder as it was.**
   `SPEC.md` §10.5 promised "there is no half-arrival" and the node-id collision
   of §3.6 did not keep it: `absorb` appended the arriving span to its input list

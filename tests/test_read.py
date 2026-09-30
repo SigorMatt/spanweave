@@ -1438,3 +1438,76 @@ def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes
     # digest has no consumer on this path and is not offered on it.
     result = spanweave.read_records(JSONL)
     assert not hasattr(result, "digest")
+
+
+# --- What one call does not carry into the next (`SPEC.md` §7) ---------------
+#
+# The two properties a receiver is designed against (`WORKPLAN.md` L7): a
+# `Records` is complete when it is returned, and dedup is a property of one
+# input. Both are about what the reader does **not** remember between calls,
+# which is exactly what a test written inside one call cannot see. Each of the
+# two below carries its own bytes, asserts the whole property itself, and bites
+# when it is the only test that runs -- verified by running each one alone
+# under a mutation that breaks it (`patches/REVIEW-2026-09-30.md` B2 and N1).
+
+
+def test_an_unterminated_tail_is_diagnosed_in_its_own_call_and_never_the_next():
+    """No buffering across calls: the fragment is a loss, not a pending record.
+
+    A receiver tailing an exporter hands over whatever bytes it has, and the
+    last of them is often half a line. The reader does not hold that half back
+    hoping for the rest: the terminator is the LF (§7), so the tail is the last
+    line, it is one `malformed_record` carrying its text, and it counts once in
+    `skipped_records`. The alternative -- remember the fragment and rejoin it to
+    the next call's first bytes -- would make a `Records` incomplete when it was
+    returned, which §7 says it never is, and would silently invent a record out
+    of two calls a caller may have made about two different streams.
+    """
+    fragment = b'{"span_id":"carry-s1","na'
+    first = spanweave.read_records(b'{"span_id":"carry-s0"}\n' + fragment)
+    assert first.records == ({"span_id": "carry-s0"},)
+    assert [d.code for d in first.diagnostics] == [codes.MALFORMED_RECORD], (
+        "the unterminated tail was not reported in the call that received it"
+    )
+    assert first.diagnostics[0].source == fragment.decode("utf-8")
+    assert first.skipped_records == 1, "the tail is a record that was never read"
+
+    # The rest of that line, as the next call would deliver it. On its own it is
+    # not JSON either, so a reader that had kept the fragment would show it by
+    # producing a *record* here -- and one that had not, by producing none.
+    second = spanweave.read_records(b'me":"x"}\n')
+    assert second.records == (), "a fragment from an earlier call was rejoined here"
+    assert [d.code for d in second.diagnostics] == [codes.MALFORMED_RECORD]
+    assert second.skipped_records == 1
+
+
+def test_the_same_record_in_two_calls_is_read_twice_and_diagnosed_in_neither():
+    """Dedup is a property of one input, and two calls are two inputs.
+
+    An at-least-once exporter resends; a receiver that calls the reader twice
+    with the same span gets it twice, because the reader has no memory to answer
+    the question with. It must not answer it anyway: a cross-call
+    `duplicate_record` would report a fact about the second call's input that is
+    not true of it, and dropping the record would leave a receiver that
+    restarted its builder holding a graph with a hole in it. Deciding whether
+    two arrivals are one operation is the receiver's call, on `feed`.
+    """
+    data = b'{"span_id":"retried-s0"}\n'
+    first = spanweave.read_records(data)
+    second = spanweave.read_records(data)
+    assert first.records == ({"span_id": "retried-s0"},)
+    assert second.records == first.records, "the second call dropped the record"
+    assert first.diagnostics == ()
+    assert second.diagnostics == (), (
+        "a duplicate was reported across calls; the second call's input has "
+        "one copy of one record in it"
+    )
+    assert first.skipped_records == 0
+    assert second.skipped_records == 0
+
+    # And the boundary is the call, not the absence of dedup: the same two
+    # copies inside one call still collapse to one record and one report (§7).
+    together = spanweave.read_records(data + data)
+    assert together.records == first.records
+    assert [d.code for d in together.diagnostics] == [codes.DUPLICATE_RECORD]
+    assert together.skipped_records == 0
