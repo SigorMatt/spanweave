@@ -1419,6 +1419,9 @@ def test_read_records_refuses_a_str_rather_than_reading_it_as_content():
     with pytest.raises(TypeError) as failure:
         spanweave.read_records('{"span_id":"s0"}')
     assert "bytes" in str(failure.value)
+    # The refusal keeps the reason it was made for: a `str` is a path, and the
+    # buffers now accepted beside `bytes` do not change that (`SPEC.md` §7).
+    assert "path" in str(failure.value)
 
 
 def test_read_records_does_not_open_the_file_a_str_would_have_named(tmp_path):
@@ -1431,6 +1434,72 @@ def test_read_records_does_not_open_the_file_a_str_would_have_named(tmp_path):
     path.write_bytes(JSONL)
     with pytest.raises(TypeError):
         spanweave.read_records(str(path))
+
+
+# --- What `data` may be (`SPEC.md` §7) ---------------------------------------
+#
+# A receiver holding bytes in flight holds them in a `bytearray` it appends to,
+# or in a `memoryview` of one. Refusing those made it write `bytes(buf)` on
+# every call -- a copy charged to the caller by a refusal whose stated reason
+# (a `str` is a path) says nothing about either of them (`WORKPLAN.md` L13).
+# The copy, where one is needed at all, is the library's.
+
+
+def test_read_records_reads_a_bytearray_accumulator_in_place():
+    buffer = bytearray()
+    buffer += JSONL
+    assert spanweave.read_records(buffer) == spanweave.read_records(bytes(buffer))
+    assert spanweave.read_records(buffer).records == tuple(RECORDS)
+
+
+def test_read_records_reads_a_memoryview_of_an_accumulator_in_place():
+    buffer = bytearray(JSONL)
+    assert spanweave.read_records(memoryview(buffer)) == spanweave.read_records(
+        bytes(buffer)
+    )
+    # A view of read-only bytes is the same read; `readonly` is not a property
+    # of the bytes, and this layer writes to nothing either way.
+    assert spanweave.read_records(memoryview(JSONL)).records == tuple(RECORDS)
+
+
+def test_read_records_reads_a_multidimensional_byte_view_as_the_run_under_it():
+    # Contiguous and one byte per item, so the bytes it names are the bytes
+    # underneath it in C order -- the same run, differently shaped.
+    buffer = bytearray(JSONL)
+    shaped = memoryview(buffer).cast("B", shape=[2, len(buffer) // 2])
+    assert spanweave.read_records(shaped).records == tuple(RECORDS)
+
+
+def test_a_write_after_the_call_cannot_change_what_the_call_returned():
+    # `read_records` is complete when it returns (`SPEC.md` §7), and a caller
+    # holding a `bytearray` goes on writing into it. The copy that makes the
+    # result independent of that is the library's, not a rule for the caller.
+    buffer = bytearray(JSONL)
+    result = spanweave.read_records(buffer)
+    view = memoryview(buffer)
+    from_view = spanweave.read_records(view)
+    view[:] = b"x" * len(buffer)
+    view.release()
+    buffer += b'{"span_id":"written-after"}\n'
+    assert result.records == tuple(RECORDS)
+    assert from_view.records == tuple(RECORDS)
+
+
+def test_read_records_refuses_a_memoryview_whose_items_are_wider_than_a_byte():
+    # Rendering one to bytes takes the machine's own endianness, so the same
+    # input would read differently on another machine (`CLAUDE.md` 4).
+    wide = memoryview(bytearray(JSONL)).cast("H")
+    with pytest.raises(TypeError) as failure:
+        spanweave.read_records(wide)
+    assert "memoryview" in str(failure.value)
+    assert "one byte per item" in str(failure.value)
+
+
+def test_read_records_refuses_a_memoryview_that_is_not_a_contiguous_run():
+    every_other = memoryview(bytearray(JSONL))[::2]
+    with pytest.raises(TypeError) as failure:
+        spanweave.read_records(every_other)
+    assert "contiguous" in str(failure.value)
 
 
 def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes():

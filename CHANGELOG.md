@@ -15,6 +15,24 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`read_records` now takes a `bytearray` or a `memoryview` beside `bytes`**
+  (`SPEC.md` §7, `WORKPLAN.md` L13, from the run-2 cold review's T13). That is
+  what a receiver actually holds: it appends into one buffer for the life of a
+  connection and reads a view of it, and the old refusal made it write
+  `bytes(buf)` on every call — a copy charged to the caller by a refusal whose
+  stated reason, *a `str` is a path*, says nothing about either type. The copy,
+  where one is needed at all, is now the **library's**, made once as the buffer
+  is read, so the `Records` returned cannot change under a caller that goes on
+  writing into its buffer. A `memoryview` is read where its items are single
+  bytes laid out contiguously; one over **wider items** is refused, because
+  rendering it to bytes would take the machine's own byte order and the same
+  input would then read differently on another machine (`CLAUDE.md` 4), and a
+  **strided** one is refused because it names no run of bytes — gathering it
+  would assemble bytes that exist nowhere in the caller's buffer. Each refusal
+  says which of the two it is. A `str` is still a `TypeError` with the reason it
+  always had. Nothing about *what* is read changes: the same reader, the same
+  containers, the same one decode site.
+
 - **A byte sequence UTF-8 cannot decode is now a diagnostic rather than a silent
   substitution.** New code `undecodable_bytes` (`SPEC.md` §3.7), emitted by every
   reading path — `read_records`, a file, stdin — and at each of the reader's

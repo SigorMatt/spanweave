@@ -1608,10 +1608,20 @@ declares reaches `0.5`.
   - It **raises nothing an unreadable input can cause**: a line that is not
     JSON is a `malformed_record` on the result, a record sent twice is one
     `duplicate_record` and one record, exactly as on a file.
-  - `data` is bytes, and a `str` is refused with a `TypeError` rather than
-    read. Reading one as content would make `read_records("trace.jsonl")` an
-    empty read with no complaint; passing it through would open that file from
-    the one function whose contract is that it touches none.
+  - `data` is **bytes, a `bytearray`, or a `memoryview` of single bytes laid
+    out contiguously** — what a receiver actually holds, since it accumulates
+    into one buffer and reads a view of it. The copy that turns either of the
+    latter two into the bytes the reader takes is the **library's**, made once,
+    so the `Records` returned does not change under a caller that goes on
+    writing into its buffer. A view over items **wider than one byte** is
+    refused, and so is a **strided** one: the first would be read in the
+    machine's own byte order, so the same input would read differently on
+    another machine, and the second names no run of bytes at all — gathering it
+    would assemble bytes that exist nowhere in the caller's buffer. A `str` is
+    refused with a `TypeError` rather than read. Reading one as content would
+    make `read_records("trace.jsonl")` an empty read with no complaint; passing
+    it through would open that file from the one function whose contract is
+    that it touches none.
   - It reports **no digest**. `build` is what fingerprints an input (§3.5),
     and a builder fed records carries none in any case (§10.4).
 - **One input = one trace.** If records carry more than one `trace_id`, the

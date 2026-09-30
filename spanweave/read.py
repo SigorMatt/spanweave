@@ -64,6 +64,10 @@ Two things this layer must get right:
   file and another way in flight would be two readers wearing one contract.
   What it does not share is the laziness, which buys nothing once the bytes are
   in memory and leaves a caller the trap of reading `diagnostics` too early.
+  What it does share is this layer's one decode (`_decoded`), whatever buffer
+  the caller handed over: a `bytearray` and a `memoryview` of one are read
+  beside `bytes` (`SPEC.md` §7), because a receiver accumulates into the first
+  and reads the second, and the copy that gets them here is the library's.
 """
 
 from __future__ import annotations
@@ -880,7 +884,7 @@ class Records:
         return iter(self.records)
 
 
-def read_records(data: bytes) -> Records:
+def read_records(data: bytes | bytearray | memoryview) -> Records:
     """Read records out of bytes, and build nothing (`SPEC.md` §7).
 
     For a caller holding telemetry *in flight* rather than a file: an OTLP/HTTP
@@ -896,14 +900,17 @@ def read_records(data: bytes) -> Records:
     a `feed` restates in full every key the record touches (§10.6), so a large
     export read in one call is still one `feed` per span.
 
-    ``data`` is bytes. A ``str`` is refused rather than read, because everywhere
-    else in this library a ``str`` is a path: reading one as content would turn
-    ``read_records("trace.jsonl")`` into an empty read with no complaint, and
-    passing it through would open that file from a function whose whole point is
-    that it touches none.
+    ``data`` is bytes, a ``bytearray``, or a ``memoryview`` of single bytes --
+    which is what a receiver actually holds, since it accumulates into the
+    second and reads the third. The copy that turns one of those into the bytes
+    this reader takes is made **here**, once, so the result cannot change under
+    a caller that goes on writing into its buffer (`SPEC.md` §7). A ``str`` is
+    refused rather than read, because everywhere else in this library a ``str``
+    is a path: reading one as content would turn ``read_records("trace.jsonl")``
+    into an empty read with no complaint, and passing it through would open that
+    file from a function whose whole point is that it touches none.
     """
-    _require_bytes(data)
-    stream = read_trace(data)
+    stream = read_trace(_as_bytes(data))
     records = tuple(stream)
     return Records(
         records=records,
@@ -912,15 +919,45 @@ def read_records(data: bytes) -> Records:
     )
 
 
-def _require_bytes(data: object) -> None:
-    """Typed `object` so the check is reachable rather than merely declared."""
+def _as_bytes(data: object) -> bytes:
+    """The bytes a caller handed over, copied where a copy is owed.
+
+    Typed `object` so the check is reachable rather than merely declared. Three
+    buffers are read and the difference between them is only who copies: `bytes`
+    is already what the reader wants and is passed through, and a `bytearray` or
+    a `memoryview` is copied once, here. That copy is the library's on purpose
+    (`SPEC.md` §7): a receiver appends to one buffer for the life of the
+    connection, so making *it* write `bytes(buf)` charges it the same copy plus
+    the refusal, and leaves a result whose independence from the next write is a
+    rule the caller has to know rather than something this function guarantees.
+
+    A `memoryview` is read only where its items are **single bytes laid out
+    contiguously** -- i.e. where it names a run of bytes. A view over wider
+    items renders to bytes in the machine's own endianness, so the same input
+    would read differently on another machine, which is the determinism
+    invariant (`CLAUDE.md` 4) rather than a matter of taste; a strided view
+    names no run at all, and gathering one would assemble bytes that exist
+    nowhere in the caller's buffer. Both are refused, saying which.
+    """
     if isinstance(data, bytes):
-        return
+        return data
+    if isinstance(data, memoryview) and (data.itemsize != 1 or not data.c_contiguous):
+        raise TypeError(
+            f"read_records reads a memoryview of one byte per item, laid out "
+            f"contiguously, and got itemsize {data.itemsize} with "
+            f"c_contiguous={data.c_contiguous}. A view over wider items would "
+            f"be read in this machine's byte order, and a strided view names "
+            f"no run of bytes to read (`SPEC.md` §7). Pass `bytes(view)` if "
+            f"those are the bytes you mean -- that is a decision about the "
+            f"input, and it is yours to make"
+        )
+    if isinstance(data, (bytearray, memoryview)):
+        return bytes(data)
     raise TypeError(
-        f"read_records reads bytes already in memory and got "
-        f"{type(data).__name__}. Trace content is bytes here: a `str` is a "
-        f"path everywhere else in this library (`SPEC.md` §7), so reading one "
-        f"as content would make read_records('trace.jsonl') an empty read with "
-        f"no complaint. Encode the text, or build from the path with "
-        f"spanweave.build()"
+        f"read_records reads bytes already in memory -- bytes, a bytearray, or "
+        f"a memoryview of single bytes -- and got {type(data).__name__}. Trace "
+        f"content is bytes here: a `str` is a path everywhere else in this "
+        f"library (`SPEC.md` §7), so reading one as content would make "
+        f"read_records('trace.jsonl') an empty read with no complaint. Encode "
+        f"the text, or build from the path with spanweave.build()"
     )
