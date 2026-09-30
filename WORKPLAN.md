@@ -5,8 +5,8 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-09-30 (run 2 done: L3, L4, L6 done, L5 dropped on
-measurement; run 3 awaits the receiver repo).
+Last updated: 2026-10-01 (run-2 review decided, runs 3 and 4 ordered:
+L9-L19 registered; run 3 next, L7 and L8 to run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -166,6 +166,17 @@ never restarts, fixes, or touches anything. Conventions live in
 | L6 | **Envelope-to-records API.** F2's container parsing exposed on in-memory input; tests; ADAPTERS.md. | done (`b5145de`) | 8 |
 | L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting the receiver repo (L6 is done; the repo does not exist yet) | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
+| L9 | **`patches/` is ignored.** T14: one line in `.gitignore`; verify `git status --porcelain` no longer lists `patches/` and that `git add -A` in a scratch worktree stages nothing from it. Subject `chore: patches/ is ignored`. No test. | todo | 2 |
+| L10 | **A refused record leaves the builder as it was.** B1: in `incremental.py`, every check that can refuse runs before any state is touched — the collision check precedes `self._spans.append`; nothing in `_ids`/`_nodes`/`_record_diagnostics`/the tally/the journal moves on a refusal. Tests red on the parent: after `DuplicateNodeIdError`, `version` unchanged, `graph()` byte-identical to before the refusal, a later `feed` succeeds and `graph()` equals `build` of the records minus the refused one; the same for the two-adapter refusal (already asserted for `version`, extend to `graph()`); both §10.5 bullets carry a test. SPEC §10.5 unchanged (it already promises this). | todo | 8 |
+| L11 | **The two receiver properties are pinned, each by a test that bites alone.** B2, N1, tests only. (a) `read_records` called twice, the first call ending in an unterminated fragment: the fragment is one `malformed_record` with `skipped_records=1`, the second call never yields it, and a mutation that carries the fragment over (the review's `_CARRY`) fails this test **when run alone**. (b) the same record in two calls: yielded twice, no `duplicate_record`; a mutation that dedups across calls or emits a cross-call `duplicate_record` fails **when run alone**. Prove "alone" by `pytest tests/test_read.py::<name>` for each new test under each mutation in a throwaway worktree; record the four results in the commit body. No test in the commit may depend on what an earlier test read. | todo | 8 |
+| L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | todo | 10 |
+| L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | todo | 4 |
+| L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | todo | 6 |
+| L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | todo | 20 |
+| L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | todo | 12 |
+| L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
+| L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
+| L19 | **The run-2 review archived and every finding dispositioned.** `reviews/2026-09-30-live-run2.md` byte-for-byte, sha256 in the body; TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction. CHANGELOG entry. `make check`. | todo | 6 |
 
 ---
 
@@ -174,10 +185,14 @@ never restarts, fixes, or touches anything. Conventions live in
 L0 → L1, L2 (already written) → decisions → L3 → L4 → L5 → L6 → L7 → L8 →
 close. Run 1 = L0 then stop at the decision point; it ran and stopped there.
 
-Run 2 = L3 → L4 → L5 → L6, in the spanweave repo, then stop: L7 and L8 live
-in the receiver repo and start run 3 once it exists. Every batch: CI green on
-the pushed tip before `done`. After run 2: a cold review of L3–L6 (aux), then
-decisions on its findings, then run 3.
+Run 2 = L3 → L4 → L5 → L6, in the spanweave repo, then stop.
+
+Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop: cold
+review of L9–L14 (aux), decisions, then run 4. Run 4 = L15 → L16 → L17 →
+L18 → L19, then stop: cold review, decisions. Run 5 = L7 → L8 in
+`SigorMatt/spanweave-live` once it exists. Every batch: CI green on the
+pushed tip before `done`. The cost batches precede L7 because a receiver is
+not designed against a `feed` that costs 72 ms/record.
 
 L1 and L2 carried no call estimate because they were already written: the two
 memos went in with the series-opening commit, so the series opened at the
@@ -193,6 +208,10 @@ with both of them available.
 |---|---|---|---|
 | 2026-09-29 | L1 | (1) Prefix-consistency is the definition: at version k the live graph equals `build(records[:k])` byte for byte, arrival order indexing versions, canonical order inside a version. (2) Diagnostic lifecycle option (a): the graph schema does not move; open/resolved history lives only in the journal. (3) Journal implementation with the checkpoint set-difference as the test oracle; the fold must cancel; retention is caller policy (`retain(versions=N \| "all" \| 0)`, default "all"); a `since` older than retention raises with a code. (4) API as sketched with one refinement: `feed(record)` always returns the new version `int` (never a graph, never a delta); every delta comes from `delta(since=v)`; the per-record mode is `delta(since=version - 1)`. `graph()` materializes on demand. The three-mode conformance gate (silent feed then compare; compare after every record; fold reproduces) is the acceptance test for L3–L4. | maintainer |
 | 2026-09-29 | L2 | (1) The receiver is a separate project, `SigorMatt/spanweave-live`, not a subpackage. (2) The only spanweave change L2 needs is the additive envelope-to-records API (L6). (3) Completion is receiver policy; spanweave emits nothing about it. (4) The showcase (L8) is agentgolden's rules evaluated per delta, rules file unchanged, bringing its own trace since no conformance fixture carries the scenario. | maintainer |
+| 2026-09-30 | review run 2 | B1 and B2 are accepted as blocking L7 and are fixed before it (L10, L11). N1 is folded into L11. N4 and T9 are one test-only batch (L14). N5 and T7 are corrections to this file, made in this commit. T12 is a behaviour change decided here: an undecodable byte sequence is a diagnostic, never a silent replacement (L12). T13 is accepted (L13). T14 is a one-line chore (L9). T6, T8, T10, T11 are threads, registered in L19. | maintainer |
+| 2026-09-30 | L5 / §10.6 | The review's independent re-measurement (90.2× vs the note's 116×; three superlinear sites, one cubic, one inside a single `feed`) stands as the record. The drop of the *resort* batch holds — ordering is not the cost. The three sites in `feed` are implementation, not spec: §10.1 is the promise, §10.2/§10.6's cost paragraphs describe the implementation and are rewritten on fresh numbers once the sites are fixed (L15–L18). The "no sort" conversation about carrying canonical order between versions stays deferred and gets no batch; it is revisited only after L18's numbers, since `delta()` at a few hundred ms on 20k spans is not what makes the builder unusable — `feed` is. | maintainer |
+| 2026-09-30 | N2, T1–T5 | SPEC states complexity classes as promises and cites `tests/live_cost.py` for numbers with their provenance; bare machine ratios leave SPEC. The heap-Kahn claim is removed from SPEC and reworded in CHANGELOG as "measured in the batch session; harness not retained", because nothing can reproduce it. §10.6 names the rejected subtree-recompute alternative (T2). `make bench` gains a smoke form that `make check` runs (T5); the harness times what the prose attributes (N3, T3, T4). All in L18, after the numbers have changed. | maintainer |
+| 2026-09-30 | runs | Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop for a cold review. Run 4 = L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo, which still does not exist. A receiver is not designed against a `feed` that costs 72 ms/record, so the cost batches precede L7. | maintainer |
 
 ---
 
@@ -238,7 +257,8 @@ with both of them available.
 - 2026-09-30: L3 done (`58d3e69`), CI green on the pushed tip, and the
   schema did not move — option (a) held. Gate 1 (`graph()` ==
   `graph_from_records(prefix)` at every k, by value *and* `dumps` bytes) runs
-  over all 60 renderings and was verified by deliberate breakage rather than
+  over all 53 renderings (106 assertions) and was verified by deliberate
+  breakage rather than
   by greenness: disabling the parent, data and temporal absorb rules fails
   8, 27 and 5 corpus assertions respectively. Two findings L4 and L5 must
   carry, both departures from the §18 memo's own sketch: (1) "node ids never
@@ -254,7 +274,7 @@ with both of them available.
 - 2026-09-30: L4 done (`7f1f40c`), CI green, and again no schema movement —
   `make shape` regenerates `tests/serialized_shape.json` byte-identically, so
   the graph document gained no key. Gates 2 and 3 are 106 parametrized
-  assertions over all 60 buildable renderings, verified by deliberate
+  assertions over all 53 buildable renderings, verified by deliberate
   breakage: cancellation off fails 25, dropping the order-derived
   `ordering_cycle` fails 2, not restating whole-input statements fails 4, and
   a fold that does not recompute order fails 5. Three things later batches
@@ -269,8 +289,9 @@ with both of them available.
   `materialize()`. (3) `spanweave/incremental.py` now keeps two accountings
   of the same three collections — its own per-key dicts, which define the
   graph's byte order, and the journal's `Tally`; their agreement is proven
-  only by conformance gate 2, so a batch that unifies them must keep that
-  gate green. Two departures from the §18 memo's sketch, both stated in SPEC:
+  by conformance gates 2 and 3 (the review showed gate 3 catches it too: 30
+  failures with `Tally.set_edges` skipping `temporal`), so a batch that
+  unifies them must keep those gates green. Two departures from the §18 memo's sketch, both stated in SPEC:
   `Delta` carries no `annotations_*` (a builder never annotates, and `fold`
   preserves the graph's own) and it does carry `trace_id_*` / `adapters_*`
   because `meta` moves, with the three `meta` counts recomputed by the fold
@@ -334,6 +355,14 @@ with both of them available.
   versions that §10.6 records and no batch has started. Run 3 (L7, L8) cannot
   start until the maintainer creates `SigorMatt/spanweave-live`; L7's row now
   says that rather than `awaiting L6`, which is satisfied.
+- 2026-09-30: run-2 cold review read and decided (§3). Two blockers before
+  L7 (a refusal that corrupts the builder; a receiver property with no test),
+  one behaviour decision (undecodable bytes get a diagnostic), and the three
+  superlinear `feed` sites the review confirmed and measured — one cubic, one
+  O(n² log n) inside a single `feed` — become L15–L17. The review's numbers
+  (90.2× at k=1000→8000, not 116×) are the record; §10.6 is rewritten on
+  fresh numbers in L18 after the sites are fixed. Runs 3 and 4 in this repo,
+  run 5 in the receiver repo.
 
 ---
 
