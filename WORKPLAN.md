@@ -5,8 +5,8 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 3 in progress: L9 done; L10-L14 to go, then a
-cold review. L7 and L8 moved to run 5).
+Last updated: 2026-10-01 (run 3 in progress: L9, L10 done; L11-L14 to go,
+then a cold review. L7 and L8 moved to run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -167,7 +167,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L7 | Requires the empty GitHub repo `SigorMatt/spanweave-live` to exist; the builder clones it beside `~/git/spanweave` as `~/git/spanweave-live`. **Receiver project skeleton** (separate repo): file-tail ingest, per-trace builders, completion policy, delta fan-out, interleaving conformance. | awaiting the receiver repo (L6 is done; the repo does not exist yet) | 25 |
 | L8 | **Live rules showcase**: agentgolden rules per delta, first-failure version recorded; `skipped_verification` flagged one version before the refund. | awaiting L7 | 15 |
 | L9 | **`patches/` is ignored.** T14: one line in `.gitignore`; verify `git status --porcelain` no longer lists `patches/` and that `git add -A` in a scratch worktree stages nothing from it. Subject `chore: patches/ is ignored`. No test. | done (`ad257bc`) | 2 |
-| L10 | **A refused record leaves the builder as it was.** B1: in `incremental.py`, every check that can refuse runs before any state is touched — the collision check precedes `self._spans.append`; nothing in `_ids`/`_nodes`/`_record_diagnostics`/the tally/the journal moves on a refusal. Tests red on the parent: after `DuplicateNodeIdError`, `version` unchanged, `graph()` byte-identical to before the refusal, a later `feed` succeeds and `graph()` equals `build` of the records minus the refused one; the same for the two-adapter refusal (already asserted for `version`, extend to `graph()`); both §10.5 bullets carry a test. SPEC §10.5 unchanged (it already promises this). | todo | 8 |
+| L10 | **A refused record leaves the builder as it was.** B1: in `incremental.py`, every check that can refuse runs before any state is touched — the collision check precedes `self._spans.append`; nothing in `_ids`/`_nodes`/`_record_diagnostics`/the tally/the journal moves on a refusal. Tests red on the parent: after `DuplicateNodeIdError`, `version` unchanged, `graph()` byte-identical to before the refusal, a later `feed` succeeds and `graph()` equals `build` of the records minus the refused one; the same for the two-adapter refusal (already asserted for `version`, extend to `graph()`); both §10.5 bullets carry a test. SPEC §10.5 unchanged (it already promises this). | done (`b40dac9`) | 8 |
 | L11 | **The two receiver properties are pinned, each by a test that bites alone.** B2, N1, tests only. (a) `read_records` called twice, the first call ending in an unterminated fragment: the fragment is one `malformed_record` with `skipped_records=1`, the second call never yields it, and a mutation that carries the fragment over (the review's `_CARRY`) fails this test **when run alone**. (b) the same record in two calls: yielded twice, no `duplicate_record`; a mutation that dedups across calls or emits a cross-call `duplicate_record` fails **when run alone**. Prove "alone" by `pytest tests/test_read.py::<name>` for each new test under each mutation in a throwaway worktree; record the four results in the commit body. No test in the commit may depend on what an earlier test read. | todo | 8 |
 | L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | todo | 10 |
 | L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | todo | 4 |
@@ -375,6 +375,22 @@ with both of them available.
   (§0.1 step 7) still works, but its output is now invisible to
   `git status` — a run's patches must be listed with `ls`, not looked for in
   the porcelain.
+- 2026-10-01: L10 done (`b40dac9`), CI green, and the row's "SPEC §10.5
+  unchanged (it already promises this)" was **wrong**, so SPEC moved after
+  all. The promise — not absorbed, `version` does not move, no half-arrival —
+  sat *inside* §10.5's two-adapter bullet rather than over the list, so the
+  node-id collision the batch was fixing was the one refusal §10.5 did not
+  actually cover; it is now stated once for every refusal §10.5 lists. The
+  fix reads the three whole-input counts and derives the arriving id *before*
+  any write, so `_absorb_at` takes the id as a parameter; no arrival pays more
+  than before. Four tests, each proven red in a worktree on `55f0467` with a
+  real crash rather than a wrong answer (`KeyError` at `incremental.py:507`
+  twice, `IndexError` at `:370` twice) — the two-adapter `graph()` extension
+  was already green there, as the row expected. **For L19's thread list**: a
+  record that becomes more than one span is still a partial arrival, because
+  `api.py:feed` loops `absorb` per span and each `absorb` is now atomic while
+  the loop is not. No shipped adapter emits more than one span per record, so
+  it is unreachable rather than fixed.
 
 ---
 
