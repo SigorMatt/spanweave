@@ -400,6 +400,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The live series' scratch drop is ignored, so a stray `git add -A` cannot
+  commit it.** One line in `.gitignore` and its comment; nothing under
+  `spanweave/`, `tests/` or `SPEC.md` moves (`WORKPLAN.md` L9, from the run-2
+  cold review's hygiene finding T14). `WORKPLAN.md` §0.1 writes a
+  `git format-patch` bundle into `patches/` every run and §0.2 writes each cold
+  review there, and the directory was untracked but **not** ignored: every one
+  of those files was a candidate for the next `git add -A`, and the packaging
+  audits could not have caught it — they check that the sdist ships nothing git
+  does not track, which is exactly the property an accidental commit would
+  satisfy. Ignoring it changes no rule about durability: a review that must
+  outlive the series is still copied into the tracked `reviews/` and cited
+  there, and `test_a_durable_document_cites_no_untracked_scratch_path` still
+  fails a document that cites into the scratch drop instead.
+
 - **What a live build costs is now measured, and the incremental canonical order
   it was measured for was dropped.** Nothing under `spanweave/` moves: this is a
   measurement, a cost statement corrected to match it, and the change the
