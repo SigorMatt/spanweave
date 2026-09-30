@@ -448,6 +448,41 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **Both halves of the delta surface are now pinned where a review found they
+  were not.** Tests only: nothing under `spanweave/` moves and `SPEC.md` does
+  not move (`WORKPLAN.md` L14, from the run-2 cold review's N4 and T9).
+  Two gaps, both in what was *checked* rather than in what the library does.
+  **The delta document had no shape tripwire.** `tests/schema_shape.py`
+  specimened a graph, so `tests/serialized_shape.json` could not see
+  `delta_to_document` at all: the only pin on §10.9's document was its root key
+  list, and `basis_rewritten[].before` / `.after` — declared by no other model —
+  had no guard of any kind. That is the exact defect class the tripwire exists
+  for, on a document it could not see. A `Delta` specimen is now constructed
+  beside the graph one, and the artifact carries four new sections of its own:
+  `delta_document` (its key tree), `delta_model` (`Delta` and `BasisRewrite`,
+  field by field) and the two boundary lists, derived from the graph's rather
+  than restated so the two cannot drift. Sections of their own because §10.9's
+  claim is that the delta is *additive*: every pre-existing section of the
+  artifact is **byte-identical**, and only the human note at its head changed,
+  to say that it now records two documents rather than one.
+  **Conformance gate 2 never compared a mid-stream window against the oracle.**
+  Its window always ended at the final version and gate 3's is always
+  `(k - 1, k)`, so a delta that neither starts at the beginning nor ends at the
+  end — the window a consumer asking "what changed while I was away" actually
+  holds — was checked by nothing. The gate now also takes windows with
+  `until < n` and a width above one, inside the feed loop because a builder's
+  delta always ends at the version it has reached: the three named ones
+  (`(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)`) and, while a rendering is short
+  enough for it to be free, every other such window. Gate 2's assertions go from
+  195 to 257. It bites: disabling the fold's cancellation fails **30 of the 62**
+  new assertions against 27 of the 195 old ones. On a one- or two-record
+  rendering there is no such window at all and 23 of the 53 renderings therefore
+  add none, which is a fact about the corpus rather than a gap: a two-record
+  trace has no version that is neither its first nor its last. What the new
+  windows reach that the old ones structurally cannot is a fact **still open at
+  `until`** and resolved before the end — 19 of the 62 report one, and every
+  window ending at the last version cancels it away.
+
 - **The live series' scratch drop is ignored, so a stray `git add -A` cannot
   commit it.** One line in `.gitignore` and its comment; nothing under
   `spanweave/`, `tests/` or `SPEC.md` moves (`WORKPLAN.md` L9, from the run-2

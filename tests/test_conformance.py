@@ -1256,6 +1256,55 @@ def test_the_finished_live_graph_is_the_scenario_s_canonical_graph(rendering):
 # Conformance gates 2 and 3: the journal and the fold (SPEC.md 10.6-10.7)
 # --------------------------------------------------------------------------
 
+#: Above this many records, the mid-stream windows below are the three named
+#: ones rather than every window there is. Nothing in the corpus is near it --
+#: the longest rendering is five records -- and it exists so that a captured
+#: trace of real length, added later, cannot quietly turn one gate into a
+#: quadratic number of O(n + e) deltas. The three named windows are always
+#: included, so this ceiling narrows the set and never empties it.
+MID_STREAM_CEILING = 64
+
+
+def mid_stream_windows(n: int) -> tuple[tuple[int, int], ...]:
+    """Windows `(since, until)` with `until < n` **and** width greater than 1.
+
+    The window the corpus used to test always ended at the final version
+    (`until = n`), and gate 3's per-record window is always `(k - 1, k)`, so a
+    delta that neither starts at the beginning nor ends at the end was never
+    compared against the oracle at all. That is the class of window a consumer
+    asking "what changed while I was away" actually holds, and it is the one
+    where cancellation has both halves inside it *and* a live tail outside it.
+
+    Three windows are named because they are the ones worth naming -- one off
+    the front, one straddling the middle, one off the back -- and every other
+    window is added too while a rendering is short enough for that to be free.
+    A window is kept only if it is a window: `since` at least 0, `until` at
+    most `n - 1`, and at least two versions between them. On a rendering of
+    one or two records that leaves **nothing**, which is a fact about the
+    corpus rather than a gap in the gate: a two-record trace has no version
+    that is neither its first nor its last.
+
+    What this is *not*: a different mechanism. A builder's delta always ends at
+    the version it has reached, so asking mid-stream is the same code at an
+    earlier point of the same stream -- equivalently, the full-prefix loop run
+    on every prefix. The coverage it adds is real all the same, and one thing
+    it reaches is unreachable without it: a fact **still open at `until`** and
+    resolved before the end, which every window ending at the last version
+    cancels away and can therefore never report.
+    """
+    candidates = {(1, n // 2), (n // 4, 3 * n // 4), (n - 3, n - 1)}
+    if n <= MID_STREAM_CEILING:
+        candidates |= {
+            (since, until) for until in range(2, n) for since in range(until - 1)
+        }
+    return tuple(
+        sorted(
+            (since, until)
+            for since, until in candidates
+            if since >= 0 and until <= n - 1 and until - since > 1
+        )
+    )
+
 
 @pytest.mark.parametrize(
     "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
@@ -1273,15 +1322,37 @@ def test_every_delta_is_the_difference_between_its_two_versions(rendering):
     same fact, and the degenerate fixtures are full of those -- a call
     unfulfilled for a record or two, an orphan parent that arrives, a receipt
     whose basis is rewritten under it.
+
+    And every window that ends **before** the end as well
+    (`mid_stream_windows`), which the full prefixes below cannot reach: a
+    builder's delta always runs to the version it has reached, so a window with
+    `until < n` is only askable while the stream is still arriving. That is why
+    they are taken inside the feed loop rather than after it.
     """
     if not rendering.supported:
         pytest.skip(rendering.skip_reason)
     records = list(read_trace(rendering.path))
+    windows: dict[int, list[int]] = {}
+    for since, ends_at in mid_stream_windows(len(records)):
+        windows.setdefault(ends_at, []).append(since)
+
     builder = spanweave.Builder()
     built: list[spanweave.Graph | None] = [None]
-    for record in records:
+    for version, record in enumerate(records, start=1):
         builder.feed(record)
         built.append(builder.graph())
+        for since in windows.get(version, ()):
+            mid = builder.delta(since=since)
+            assert mid == checkpoint_delta(
+                built[since],
+                built[version],
+                since=since,
+                until=version,
+                restated=mid.restated,
+            ), (
+                f"{rendering.label}: delta(since={since}) at version {version} "
+                f"is not the difference between those two versions"
+            )
 
     until = len(records)
     for since in range(until + 1):

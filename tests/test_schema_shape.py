@@ -128,6 +128,33 @@ def test_it_fires_when_a_key_is_added(monkeypatch):
     assert any("$.edges[].weight" in problem for problem in problems), problems
 
 
+def test_it_fires_when_a_key_is_added_to_the_delta_document_alone(monkeypatch):
+    """The delta document is its own serialized surface (`SPEC.md` §10.9).
+
+    A key added there moves nothing in the graph document, so before the delta
+    sections existed this change was invisible to every instrument in the repo
+    -- the root key list in `tests/test_live.py` pins the top level and
+    nothing below it. `basis_rewritten[].before` / `.after` are the fields
+    that had no guard at all, so that is where this plants.
+    """
+    original = serialize.delta_to_document
+
+    def widened(delta):
+        document = original(delta)
+        for rewrite in document["basis_rewritten"]:
+            rewrite["why"] = "planted"
+        return document
+
+    # Both names: the library's, and the one this module bound at import.
+    monkeypatch.setattr(serialize, "delta_to_document", widened)
+    monkeypatch.setattr(schema_shape, "delta_to_document", widened)
+
+    problems = schema_shape.differences(committed(), schema_shape.shape())
+    assert any("$.basis_rewritten[].why" in problem for problem in problems), problems
+    # And the graph half is untouched by it, which is §10.9's whole claim.
+    assert not any(problem.startswith("document:") for problem in problems), problems
+
+
 def test_the_unpaired_source_shape_is_pinned_where_it_is_actually_declared():
     """`9e79658`'s change is caught by section 5, not by the key tree.
 
@@ -213,6 +240,54 @@ def test_the_passthrough_boundary_is_committed_not_just_coded():
     """
     assert committed()["passthrough"] == list(schema_shape.PASSTHROUGH)
     assert committed()["declared_elsewhere"] == list(schema_shape.DECLARED_ELSEWHERE)
+    assert committed()["delta_passthrough"] == list(schema_shape.DELTA_PASSTHROUGH)
+    assert committed()["delta_declared_elsewhere"] == list(
+        schema_shape.DELTA_DECLARED_ELSEWHERE
+    )
+
+
+def test_the_deltas_boundary_is_the_graphs_boundary_respelled():
+    """Derived, not restated, so the two cannot drift (`SPEC.md` §10.9).
+
+    A delta writes nodes and diagnostics with the very functions that write
+    them into a graph, so a region excluded in one is excluded in the other.
+    The one asymmetry is deliberate and asserted: `annotations[].value` has no
+    delta spelling, because a delta carries no annotations (§10.6).
+    """
+    graph_regions = {
+        path.removeprefix("$.nodes[]")
+        for path in schema_shape.PASSTHROUGH
+        if path.startswith("$.nodes[]")
+    }
+    for collection in schema_shape.DELTA_NODE_COLLECTIONS:
+        respelled = {
+            path.removeprefix(f"$.{collection}[]")
+            for path in schema_shape.DELTA_PASSTHROUGH
+            if path.startswith(f"$.{collection}[]")
+        }
+        assert respelled == graph_regions
+    assert "$.annotations[].value" in schema_shape.PASSTHROUGH
+    assert not any("annotations" in p for p in schema_shape.DELTA_PASSTHROUGH)
+
+
+def test_every_delta_boundary_path_is_a_real_serialized_path():
+    """`test_every_passthrough_path_is_a_real_serialized_path`, for §10.9's
+    document: an entry naming a path the delta does not emit watches nothing."""
+    tree = schema_shape.delta_key_tree()
+    for path in (
+        *schema_shape.DELTA_PASSTHROUGH,
+        *schema_shape.DELTA_DECLARED_ELSEWHERE,
+    ):
+        assert path in tree, f"{path} is not a path this library serializes"
+
+
+def test_the_delta_specimen_leaves_no_collection_empty():
+    """An empty array hides every path beneath it, so a specimen that let one
+    collection be empty would record a document with a hole in it and nobody
+    would see the hole."""
+    document = serialize.delta_to_document(schema_shape.delta_specimen())
+    empty = [key for key, value in document.items() if value == []]
+    assert not empty, f"the delta specimen watches nothing under: {empty}"
 
 
 def test_every_passthrough_path_is_a_real_serialized_path():
@@ -236,7 +311,22 @@ def test_every_serialized_model_is_in_the_recorded_set():
     assert recorded == set(committed()["model"])
 
 
-@pytest.mark.parametrize("section", ("document", "model", "vocabularies"))
+def test_every_delta_model_is_in_the_recorded_set():
+    """The same argument for §10.9's document. `Delta`'s collections hold the
+    graph's own models, so what is added here is what the delta declares and
+    nothing else: `BasisRewrite`, whose `before` / `after` are declared by no
+    other model, and `Delta` itself."""
+    recorded = {cls.__name__ for cls in schema_shape.DELTA_MODELS}
+    for cls in schema_shape.DELTA_MODELS:
+        assert dataclasses.is_dataclass(cls)
+    assert recorded == set(committed()["delta_model"])
+    assert not recorded & {cls.__name__ for cls in schema_shape.SERIALIZED_MODELS}
+
+
+@pytest.mark.parametrize(
+    "section",
+    ("document", "model", "vocabularies", "delta_document", "delta_model"),
+)
 def test_no_section_is_empty(section):
     """An instrument that silently starts measuring nothing is worse than none.
 
