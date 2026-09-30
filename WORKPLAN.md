@@ -5,8 +5,8 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 3 in progress: L9, L10, L11 done; L12-L14 to
-go, then a cold review. L7 and L8 moved to run 5).
+Last updated: 2026-10-01 (run 3 in progress: L9-L12 done; L13, L14 to go,
+then a cold review. L7 and L8 moved to run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -169,7 +169,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L9 | **`patches/` is ignored.** T14: one line in `.gitignore`; verify `git status --porcelain` no longer lists `patches/` and that `git add -A` in a scratch worktree stages nothing from it. Subject `chore: patches/ is ignored`. No test. | done (`ad257bc`) | 2 |
 | L10 | **A refused record leaves the builder as it was.** B1: in `incremental.py`, every check that can refuse runs before any state is touched — the collision check precedes `self._spans.append`; nothing in `_ids`/`_nodes`/`_record_diagnostics`/the tally/the journal moves on a refusal. Tests red on the parent: after `DuplicateNodeIdError`, `version` unchanged, `graph()` byte-identical to before the refusal, a later `feed` succeeds and `graph()` equals `build` of the records minus the refused one; the same for the two-adapter refusal (already asserted for `version`, extend to `graph()`); both §10.5 bullets carry a test. SPEC §10.5 unchanged (it already promises this). | done (`b40dac9`) | 8 |
 | L11 | **The two receiver properties are pinned, each by a test that bites alone.** B2, N1, tests only. (a) `read_records` called twice, the first call ending in an unterminated fragment: the fragment is one `malformed_record` with `skipped_records=1`, the second call never yields it, and a mutation that carries the fragment over (the review's `_CARRY`) fails this test **when run alone**. (b) the same record in two calls: yielded twice, no `duplicate_record`; a mutation that dedups across calls or emits a cross-call `duplicate_record` fails **when run alone**. Prove "alone" by `pytest tests/test_read.py::<name>` for each new test under each mutation in a throwaway worktree; record the four results in the commit body. No test in the commit may depend on what an earlier test read. | done (`4807ae6`) | 8 |
-| L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | todo | 10 |
+| L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | done (`be16fa8`) | 10 |
 | L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | todo | 4 |
 | L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | todo | 6 |
 | L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | todo | 20 |
@@ -404,6 +404,26 @@ with both of them available.
   was checked by running the file in reverse collection order and under three
   shuffled orders (112 passed each); `tests/test_read.py` has no fixtures and
   no mutable module state, and neither does `spanweave/read.py`.
+- 2026-10-01: L12 done (`be16fa8`), CI green. The row's three cases became
+  five tests, and the two extra ones are where the batch was larger than the
+  row: the buffered-document branch decodes in *two* places, and its fallback
+  re-decodes per line, so reporting on both would have double-counted — the
+  document branch reports only where it keeps the document, and a test pins
+  that. The row's line numbers (`read.py:243,278,312`) still named the three
+  core sites; the only other `errors=` in the tree is `cli.py`'s
+  `backslashreplace` on stdout, an *encode* of output rather than a decode of
+  trace input, and it is excluded on purpose. **Two censuses existed and both
+  had to move**: `diagnostics.CODES` against SPEC §3.7 (`tests/test_codes.py`)
+  and `CONTRACTS.md`'s `diagnostics[].source` row count (nine → ten). The new
+  code's `source` is `null` and is stated as its own §3.7 row rather than left
+  to the catch-all, which is the F-E defect not repeated.
+  `tests/serialized_shape.json` moved for the first time this series (+2
+  lines: the code in `vocabularies.diagnostic_codes`, its `null` in
+  `diagnostic_source`), regenerated by `make shape`, nothing else in the shape
+  touched. Corpus verified unmoved by decoding all 329 tracked files strictly:
+  zero invalid, so no expected graph gained a diagnostic. **For the receiver
+  (L7)**: `skipped_records` is deliberately *not* moved by this code, so a
+  receiver counting losses must read the code, not the count.
 
 ---
 
