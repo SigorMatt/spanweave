@@ -5,8 +5,8 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 3 in progress: L9-L13 done; L14 to go, then a
-cold review. L7 and L8 moved to run 5).
+Last updated: 2026-10-01 (run 3 done: L9-L14, each with CI green on its own
+pushed tip. Next: cold review of L9-L14, then run 4. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -171,7 +171,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L11 | **The two receiver properties are pinned, each by a test that bites alone.** B2, N1, tests only. (a) `read_records` called twice, the first call ending in an unterminated fragment: the fragment is one `malformed_record` with `skipped_records=1`, the second call never yields it, and a mutation that carries the fragment over (the review's `_CARRY`) fails this test **when run alone**. (b) the same record in two calls: yielded twice, no `duplicate_record`; a mutation that dedups across calls or emits a cross-call `duplicate_record` fails **when run alone**. Prove "alone" by `pytest tests/test_read.py::<name>` for each new test under each mutation in a throwaway worktree; record the four results in the commit body. No test in the commit may depend on what an earlier test read. | done (`4807ae6`) | 8 |
 | L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | done (`be16fa8`) | 10 |
 | L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | done (`6b2e866`) | 4 |
-| L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | todo | 6 |
+| L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | done (`b10c60a`) | 6 |
 | L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | todo | 20 |
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | todo | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
@@ -441,6 +441,46 @@ with both of them available.
   appending to the buffer afterwards), which is L6's eagerness holding for a
   mutable input. No fourth decode path: everything still reaches
   `read_trace` → `_decoded`, so L12's three sites stay in agreement.
+- 2026-10-01: L14 done (`b10c60a`), CI green, tests only and SPEC unmoved. Gate
+  2 goes **195 → 257 assertions** (+62 mid-stream windows over the 53
+  renderings; the parametrized case count stays 53), and
+  `tests/serialized_shape.json` gains four `delta_*` sections. The `Graph` half
+  was verified byte-identical the right way — each pre-existing section of the
+  old and regenerated artifact re-serialized and sha256-compared, all six
+  identical — so the only line that moved outside the new sections is the
+  human note at the head. **The honest result the review must weigh**: the new
+  windows do **not** isolate a bug the old family misses. Cancellation off
+  fails 30 of 62 new and 27 of 195 old; dropping the `since`-endpoint order
+  recompute fails 2 old and **0 new**; and no mutation was found that fails a
+  new window while sparing the old family, because a builder's delta always
+  ends at its current version, so a mid-stream window is the same code earlier
+  in the stream. What the +62 do buy is coverage of state the full-prefix
+  family cannot reach: all 62 answers differ from every full-prefix answer of
+  their rendering, and 19 of 62 report a fact still open at `until` that
+  version n has resolved. The docstring says they are structurally equivalent
+  to running gate 2 on every prefix rather than claiming a new mechanism.
+  **The corpus is the binding limit**: the longest rendering is 5 records, so
+  23 of 53 renderings (n ≤ 2) get no mid-stream window at all, 17 get one, and
+  `(1, n//2)` / `(n-3, n-1)` exist on only 13. Windows were dropped where they
+  collapse, never clamped. `MID_STREAM_CEILING = 64` bounds the exhaustive set
+  if a long captured trace is ever added; nothing in the corpus reaches it
+  today, which makes a real-length captured fixture the first input that would.
+- 2026-10-01: **run 3 ends here.** L9, L10, L11, L12, L13, L14 all done, each
+  with CI green on its own pushed tip; nothing blocked, nothing left
+  `awaiting decision`, and no batch reached `OPEN_QUESTIONS.md`. Two things
+  moved that a tests-only reading of the run would not predict: `SPEC.md`
+  (L10's §10.5 atomicity promise, wrongly assumed already stated; L12's §3.7
+  and §7; L13's §7) and `tests/serialized_shape.json`, twice — L12 (+2 lines,
+  the new diagnostic code) and L14 (four `delta_*` sections) — after three
+  runs in which it never moved. Next, per §2: a cold review of L9–L14 by aux
+  (`Review WORKPLAN.md commits since ce9ff17`), then decisions, then run 4
+  (L15 → L16 → L17 → L18 → L19, the three superlinear `feed` sites and the
+  §10.6 rewrite). Three things for that review to weigh: L14's finding that
+  the mid-stream windows cannot isolate a bug the old family misses and the
+  corpus length that causes it; L10's thread that `api.py:feed` loops `absorb`
+  per span so the loop is not atomic even though each absorb now is; and
+  whether L12's choice of *where* the buffered-document branch reports
+  `undecodable_bytes` is the one a receiver would want.
 
 ---
 
