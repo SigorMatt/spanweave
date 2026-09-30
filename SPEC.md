@@ -2169,11 +2169,16 @@ diagnostics the builder cannot.
 
 ### 10.5 Refusals
 
-A record is classified on its own, as every record in a batch build is (§6.1):
+A record is classified on its own, as every record in a batch build is (§6.1).
+Every refusal below is a refusal of the **record**: it is **not** absorbed,
+`version` does not move, and the builder is left as it was — the next `feed`
+and every later `graph()` and `delta()` answer exactly as they would have had
+the record never arrived. There is no half-arrival. This holds for *all* of
+them, including the node-id collision, which is reached on the path that
+restates every record (§10.2): an exporter resending one span is refused and
+costs nothing else.
 
-- **Two adapters claim it** — refused, naming the record's arrival index. The
-  record is **not** absorbed and `version` does not move; there is no
-  half-arrival.
+- **Two adapters claim it** — refused, naming the record's arrival index.
 - **Nobody claims it** — kept as an `unknown` node carrying the record verbatim,
   with `unclaimed_record`, exactly as in a batch build.
 - **No record any adapter claimed** — `graph()` refuses, with the same code and

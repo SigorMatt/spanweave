@@ -172,7 +172,11 @@ class Builder:
         is (`SPEC.md` §6.1): two adapters claiming it is refused rather than
         guessed, and nobody claiming it makes an `unknown` node carrying the
         record verbatim. A refused record is **not** absorbed and the version
-        does not move -- there is no half-arrival.
+        does not move -- there is no half-arrival. That holds for every refusal
+        `feed` can raise, the node-id collision of `SPEC.md` §3.6 included: the
+        builder is left as it was, so the next `feed` and every later `graph()`
+        and `delta()` answer as they would have had the record never arrived
+        (`SPEC.md` §10.5).
         """
         position = self._version + 1
         producer, spans = self._translate(record, position)

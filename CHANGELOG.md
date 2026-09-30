@@ -1166,6 +1166,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A record a live `Builder` refuses now leaves the builder as it was.**
+  `SPEC.md` §10.5 promised "there is no half-arrival" and the node-id collision
+  of §3.6 did not keep it: `absorb` appended the arriving span to its input list
+  *before* deriving the id that refuses it, so the refused span stayed on while
+  nothing else in the state had an entry for it. From that point the builder
+  answered every later `feed` with a bare `IndexError` and every `graph()` with
+  a bare `KeyError` -- not a `spanweave` error, and not recoverable. The case is
+  an exporter resending one span, which `WORKPLAN.md` L6 recorded as expected
+  input: `read_records` does no cross-call dedup, so a retry reaches `feed`
+  intact. Every check that can refuse now runs before any state moves -- the
+  arriving span's id is derived first, on a *reading* of the three whole-input
+  counts rather than on the counts themselves, and only then is anything
+  appended, counted or journalled. The id that check derives is the id the
+  absorb then uses, so the two cannot disagree, and the restating path (§10.2,
+  where this refusal is actually reached, because a second claim on a source key
+  moves ids already given out) gets its assignment from the same `ids.assign`
+  the batch path calls. Nothing about an accepted record changed, and no
+  arrival pays more than it did: the ordinary path still derives one id, the
+  restating path still derives `n`. Five tests in `tests/test_live.py`, four of
+  them red on `55f0467`: `version` unchanged, `graph()` byte-identical to the
+  graph the accepted prefix makes, the next `feed` landing as the batch build of
+  the records that arrived, no id moved off rule 1, and a `delta` spanning the
+  refusal reporting only the record that landed. The two-adapter bullet, which
+  was already clean, now carries the `graph()` assertion too.
+  `SPEC.md` §10.5 states the promise once for **every** refusal it lists rather
+  than inside the two-adapter bullet, which is where it sat while the bullet
+  three lines below it went uncovered. No model type, no serialized field,
+  `tests/serialized_shape.json` byte-identical. (`WORKPLAN.md` L10, run-2 cold
+  review B1)
+
 - **The last eleven tests that wrote a recursion ceiling down now measure
   it.** `546bdfa` did this for the first four and named, in its own body, the
   **11 other** tests still carrying a `100_000` under a comment calling it

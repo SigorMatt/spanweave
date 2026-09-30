@@ -39,7 +39,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import TypeVar
 
-from spanweave import build
+from spanweave import build, ids
 from spanweave.delta import Change, Facts, Tally
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.graph import Graph
@@ -209,44 +209,115 @@ class SpanAbsorber:
         which case every record's facts are restated from the counts. Both
         paths do the same per-record work, so the second is the first run `n`
         times and cannot disagree with it.
+
+        The one refusal this can raise -- two records resolving to one node id
+        (`SPEC.md` §3.6) -- is decided **before** anything moves, so a refused
+        span leaves the state exactly as it was and the next `absorb` and every
+        `materialize` answer as they would have (`SPEC.md` §10.5). That is why
+        the counts below are read here and written only in the second half: a
+        span appended before its id was checked is a span the rest of the state
+        has no entry for, and every later arrival trips over it.
         """
+        adapter = producer.id if producer is not None else None
+        # What the three whole-input facts would say with this span in them,
+        # read without writing any of them.
+        claims = (
+            0 if span.span_id is None else self._span_id_counts.get(span.span_id, 0) + 1
+        )
+        keys = self._source_key_counts.get(span.source_key, 0) + 1
+        trace_id = self._trace_id_with(span.trace_id)
+        # The second claim on a span id is what moves the first record off rule
+        # 1; a third moves nobody, because the first two are already derived.
+        # The same for a source key, and the trace id moves every derived id.
+        restate = claims == 2 or keys == 2 or trace_id != self._trace_id
+
+        decided = self._decided(span, adapter, trace_id, restate, claims, keys)
+
+        # Nothing below refuses.
         position = len(self._spans)
         self._spans.append(span)
         self._producers.append(producer)
-        self._adapter_ids.setdefault(producer.id if producer is not None else None)
+        self._adapter_ids.setdefault(adapter)
         if producer is not None:
             self._producer_latest[producer.sort_key] = producer
-
-        restate = False
         if span.trace_id is not None:
             self._trace_counts[span.trace_id] = (
                 self._trace_counts.get(span.trace_id, 0) + 1
             )
         if span.span_id is not None:
-            claims = self._span_id_counts.get(span.span_id, 0) + 1
             self._span_id_counts[span.span_id] = claims
-            # The second claim is what moves the first record off rule 1; a
-            # third moves nobody, because the first two are already derived.
-            restate = restate or claims == 2
             if claims == 2:
                 self._duplicated += 1
-        keys = self._source_key_counts.get(span.source_key, 0) + 1
         self._source_key_counts[span.source_key] = keys
-        restate = restate or keys == 2
+        self._trace_id = trace_id
 
-        trace_id = build.majority_trace_id(self._trace_counts)
-        if trace_id != self._trace_id:
-            self._trace_id = trace_id
-            restate = True
-
-        if restate:
+        if isinstance(decided, list):
             self._restated = True
-            self._restate_every_record()
+            self._restate_every_record(decided)
         else:
-            self._absorb_at(position)
+            self._absorb_at(position, decided)
         self._restate_whole_input()
 
-    def _restate_every_record(self) -> None:
+    def _trace_id_with(self, arriving: str | None) -> str | None:
+        """The majority trace id the counts would give with `arriving` in them.
+
+        A span that states no trace id changes no count, so the answer is the
+        one that stands. Otherwise the tie is broken exactly as the batch path
+        breaks it, on a reading of the counts rather than on the counts
+        themselves, because this is asked before the arriving span is absorbed.
+        """
+        if arriving is None:
+            return self._trace_id
+        counts = dict(self._trace_counts)
+        counts[arriving] = counts.get(arriving, 0) + 1
+        return build.majority_trace_id(counts)
+
+    def _decided(
+        self,
+        span: NormalizedSpan,
+        adapter: str | None,
+        trace_id: str | None,
+        restate: bool,
+        claims: int,
+        keys: int,
+    ) -> list[NodeId] | NodeId:
+        """The ids the arriving span implies, or the refusal it earns.
+
+        The ids, not just a yes: they are what the absorb then uses, so the
+        check and the answer are one computation and cannot disagree. A
+        restating arrival can move an id already given out, so there the whole
+        assignment is recomputed -- by the same `assign` the batch path calls,
+        on the same spans, raising the same refusal; the list it returns is one
+        per position. An ordinary arrival moves no id, so only its own is new
+        and only a clash with an id already given out is possible -- one id
+        back, and no list, because copying the ids on every arrival would make
+        an ordinary absorb walk the whole stream to place one span.
+        """
+        if restate:
+            return list(
+                ids.assign(
+                    [*self._spans, span], [*self._adapters(), adapter], trace_id
+                ).ids
+            )
+        node_id = identify(
+            span,
+            adapter,
+            trace_id,
+            span_id_is_unique=span.span_id is not None and claims == 1,
+            source_key_is_unique=keys == 1,
+        )
+        if node_id in self._position_of:
+            raise collision(node_id, self._spans[self._position_of[node_id]], span)
+        return node_id
+
+    def _adapters(self) -> list[str | None]:
+        """The adapter that read each span absorbed so far, in arrival order."""
+        return [
+            producer.id if producer is not None else None
+            for producer in self._producers
+        ]
+
+    def _restate_every_record(self, assigned: list[NodeId]) -> None:
         """Throw everything derived away and derive it again from the counts.
 
         What the three whole-input facts are worth: when one of them moves,
@@ -257,7 +328,7 @@ class SpanAbsorber:
         self._tally.clear()
         self._forget()
         for position in range(len(self._spans)):
-            self._absorb_at(position)
+            self._absorb_at(position, assigned[position])
 
     def _restate_whole_input(self) -> None:
         """The statements about the whole input, as they stand now.
@@ -281,23 +352,20 @@ class SpanAbsorber:
         build.report_missing_trace_id(self._trace_id, collector, whole_input)
         self._tally.set_diagnostics(WHOLE_INPUT, collector.collected())
 
-    def _absorb_at(self, position: int) -> None:
-        """Everything one record contributes, and everything it completes."""
+    def _absorb_at(self, position: int, node_id: NodeId) -> None:
+        """Everything one record contributes, and everything it completes.
+
+        `node_id` is the id `absorb` already derived for this position, under
+        the counts that now stand. It is passed in rather than derived again
+        because deriving it is the check that decides the refusal, and that
+        check has to happen before any of this runs (`SPEC.md` §10.5).
+        """
         span = self._spans[position]
         producer = self._producers[position]
         adapter = producer.id if producer is not None else None
         unique_span_id = (
             span.span_id is not None and self._span_id_counts[span.span_id] == 1
         )
-        node_id = identify(
-            span,
-            adapter,
-            self._trace_id,
-            span_id_is_unique=unique_span_id,
-            source_key_is_unique=self._source_key_counts[span.source_key] == 1,
-        )
-        if node_id in self._position_of:
-            raise collision(node_id, self._spans[self._position_of[node_id]], span)
 
         self._ids.append(node_id)
         node = build.node_of(span, node_id, producer)

@@ -21,7 +21,7 @@ import pytest
 import spanweave
 from spanweave import diagnostics as codes
 from spanweave.api import graph_from_records
-from spanweave.errors import AdapterSelectionError
+from spanweave.errors import AdapterSelectionError, DuplicateNodeIdError
 from spanweave.model import EdgeKind
 from spanweave.serialize import DELTA_ROOT_KEYS, ROOT_KEYS, dumps
 from tests.delta_oracle import checkpoint_delta
@@ -281,13 +281,88 @@ def test_a_stream_nothing_claims_refuses_rather_than_building_unknowns():
 
 def test_a_record_two_adapters_claim_names_its_arrival_index():
     both = oi("s1", **{"gen_ai.operation.name": "chat", "gen_ai.request.model": "m"})
+    kept = oi("s0", kind="AGENT", name="agent", t0=999.0)
     builder = spanweave.Builder()
-    builder.feed(oi("s0", kind="AGENT", name="agent", t0=999.0))
+    builder.feed(kept)
     with pytest.raises(AdapterSelectionError) as refused:
         builder.feed(both)
     assert "record 2" in str(refused.value)
     # The refused record was not absorbed: nothing half-arrived.
     assert builder.version == 1
+    assert dumps(builder.graph()) == dumps(unrefused([kept]))
+
+
+def unrefused(records, **kw):
+    """The graph a builder fed exactly `records` answers with.
+
+    Taken from a *second* builder rather than from `graph()` before the
+    refusal, because materializing caches the graph until the next `feed`
+    (`SPEC.md` §10) -- so a builder left corrupt by a refusal would hand the
+    cached answer back and the comparison would pass on a graph it can no
+    longer produce. Equal to `graph_from_records(records)` by §10.1; the point
+    of asking a builder is that it is the same code path under test.
+    """
+    builder = spanweave.Builder(**kw)
+    for record in records:
+        builder.feed(record)
+    return builder.graph()
+
+
+def test_a_refused_duplicate_node_id_leaves_the_builder_as_it_was():
+    """`SPEC.md` §10.5, fourth bullet: refused as §3.6 refuses it, and refused
+    means the record never arrived -- an exporter that resends one span does
+    not cost the builder every version after it."""
+    builder = spanweave.Builder()
+    builder.feed(oi("s0"))
+    before = dumps(unrefused([oi("s0")]))
+    with pytest.raises(DuplicateNodeIdError) as refused:
+        builder.feed(oi("s0"))
+    assert refused.value.code == "duplicate_node_id"
+    assert builder.version == 1
+    assert dumps(builder.graph()) == before
+
+
+def test_a_feed_after_a_refused_duplicate_is_the_build_without_the_refusal():
+    """The version the refusal did not take is the version the next record
+    does, and the graph at it is the batch build of the records that landed."""
+    builder = spanweave.Builder()
+    builder.feed(oi("s0"))
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(oi("s0"))
+    assert builder.feed(oi("s1", t0=1001.0)) == 2
+    kept = [oi("s0"), oi("s1", t0=1001.0)]
+    assert builder.graph() == graph_from_records(kept)
+    assert dumps(builder.graph()) == dumps(graph_from_records(kept))
+
+
+def test_a_refused_duplicate_moves_no_id_the_builder_had_given_out():
+    """The refusal arrives on the path that restates every record (§10.2): a
+    second claim on one source key moves ids already given out, and the id the
+    arriving record would take is decided before any of them does."""
+    builder = spanweave.Builder()
+    builder.feed(requester("s0", "c1"))
+    builder.feed(fulfiller("s1", "c1", t0=1001.0))
+    before = dumps(unrefused([requester("s0", "c1"), fulfiller("s1", "c1", t0=1001.0)]))
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(fulfiller("s1", "c1", t0=1001.0))
+    assert builder.version == 2
+    assert dumps(builder.graph()) == before
+    assert [node.id for node in builder.graph().nodes()] == ["s0", "s1"]
+
+
+def test_a_refused_duplicate_leaves_the_journal_where_it_was():
+    """A refusal opens no journal entry, so a delta spanning it is the delta
+    of the records that landed (`SPEC.md` §10.6)."""
+    builder = spanweave.Builder()
+    builder.feed(oi("s0"))
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(oi("s0"))
+    builder.feed(oi("s1", t0=1001.0))
+    delta = builder.delta(since=1)
+    assert delta.since == 1
+    assert delta.until == 2
+    assert [node.id for node in delta.nodes_added] == ["s1"]
+    assert delta.nodes_removed == ()
 
 
 # --------------------------------------------------------------------------
