@@ -605,6 +605,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
+| `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
@@ -717,6 +718,7 @@ the library computed rather than something it was given.
 | `missing_trace_id` | `null` — there is no fragment. The absence being reported is the graph's own empty `trace_id`, and there is no node to point at either |
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
+| `undecodable_bytes` | `null` — the offending fragment is a byte sequence, and JSON has no way to write one, so there is nothing of it to carry. The text that stands in its place survives where the record does: on the record itself, or on the `malformed_record` for a line that would not parse |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
@@ -734,6 +736,14 @@ batch A4, registered in `TASKS.md`), for the same reason as `missing_timestamp`:
 it reports something **absent**, so there is no fragment of the input to carry.
 Unlike `missing_timestamp` it carries no `node_id` either — §7 says why it is
 one statement about the input rather than one per record.
+
+`undecodable_bytes` joined the `null` rows later still, with the code itself
+(`WORKPLAN.md` L12), and for a third reason: what it reports is not absent and
+not derived, but **unwritable** — the fragment is a byte sequence, and a
+`source` is a `JsonValue`. Nothing is lost by not carrying it, because the
+replacement text is on the record, or on the `malformed_record` for a line
+that would not parse; there is no reading in which a substitution reaches the
+output with no trace of it.
 
 `duplicate_record` falls under the catch-all and is worth one sentence
 anyway, because its fragment is not *the* offending record but the one copy
@@ -1562,6 +1572,16 @@ declares reaches `0.5`.
   break it into two that do not. The consequence is stated rather than hidden:
   a CR-only file is **one line**, and one line that long is one
   `malformed_record` carrying its text — a loud refusal, not a silent misread.
+- **The encoding is UTF-8, and bytes that are not it are replaced rather than
+  refused.** A byte sequence the decoder cannot read becomes U+FFFD — Unicode's
+  own substitution — and the record is still read, because what did decode is
+  still there and dropping the record would lose it. The replacement is
+  reported as `undecodable_bytes` (§3.7), record-scoped and naming the line
+  where a line produced a record, and `skipped_records` does not count it: the
+  record was read. **The reader neither buffers nor rejoins across calls**, so
+  a multi-byte character split between two chunks is half a character in each —
+  a receiver reading bytes in flight splits them on `\n` and keeps the
+  remainder for its next call, rather than handing over an arbitrary boundary.
 - Read from a path, from stdin (`-`), or from **bytes already in memory**. A
   `str` is always a path and never content, in every one of these forms.
 - **`spanweave.read_records(data)` reads records out of bytes and builds

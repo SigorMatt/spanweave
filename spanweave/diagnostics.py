@@ -75,6 +75,14 @@ MULTI_TRACE_INPUT = "multi_trace_input"
 # carrying its text is the only place it survives.
 MALFORMED_RECORD = "malformed_record"
 
+# Bytes in the input that UTF-8 could not decode. They are replaced with
+# U+FFFD -- Unicode's own substitution -- and the record is still read,
+# because what did decode is still there and discarding it would lose it. What
+# this code reports is the substitution: a record carrying a character nothing
+# in the input wrote, with nothing saying so, is the reader quietly editing its
+# own input (`SPEC.md` §3.7, §7).
+UNDECODABLE_BYTES = "undecodable_bytes"
+
 # No registered adapter claimed this record, so nothing read it: it is kept
 # as an `unknown` node carrying the record verbatim, with no adapter on its
 # provenance (`SPEC.md` §6.1). The honest report of "you are missing an
@@ -101,6 +109,7 @@ CODES = (
     PAYLOAD_PARSE_FAILED,
     TIMESTAMP_UNIT_SUSPECT,
     UNCLAIMED_RECORD,
+    UNDECODABLE_BYTES,
     UNKNOWN_SPAN_KIND,
     UNMAPPED_ATTRIBUTES,
     UNPAIRED_CALL,

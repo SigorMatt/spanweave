@@ -1511,3 +1511,123 @@ def test_the_same_record_in_two_calls_is_read_twice_and_diagnosed_in_neither():
     assert together.records == first.records
     assert [d.code for d in together.diagnostics] == [codes.DUPLICATE_RECORD]
     assert together.skipped_records == 0
+
+
+# --- Bytes UTF-8 cannot decode (`SPEC.md` §3.7, §7) --------------------------
+#
+# The reader decodes with `errors="replace"`, so a byte sequence that is not
+# UTF-8 becomes U+FFFD and the record is read anyway. That is the right
+# outcome -- what did decode is still there, and discarding the record would
+# lose it -- and until this batch it was a *silent* one: the record arrived
+# carrying a character nothing in the input wrote, and no diagnostic said so
+# (`patches/REVIEW-2026-09-30.md` T12). A receiver is where it matters most,
+# because a chunk tailed off an exporter can split a multi-byte sequence in
+# half and the reader does not rejoin across calls (§7).
+
+
+def test_bytes_that_are_not_utf8_are_still_read_and_the_substitution_is_reported():
+    result = spanweave.read_records(b'{"span_id":"\xff\xfe"}\n')
+    # Read, not refused: U+FFFD is Unicode's own substitution, and the rest of
+    # the record is exactly what the input wrote.
+    assert result.records == ({"span_id": "��"},)
+    assert [d.code for d in result.diagnostics] == [codes.UNDECODABLE_BYTES], (
+        "the substitution was made and nothing reported it"
+    )
+    diagnostic = result.diagnostics[0]
+    assert "line 1" in diagnostic.message, "the diagnostic does not name the line"
+    # No fragment: JSON has no bytes to carry, and the text they were replaced
+    # by is on the record itself (`SPEC.md` §3.7).
+    assert diagnostic.source is None
+    # The record was read, so nothing was skipped -- the count is unmoved by
+    # this code, which is the difference between it and `malformed_record`.
+    assert result.skipped_records == 0
+
+
+def test_a_multi_byte_sequence_split_across_two_calls_is_two_reports_not_a_record():
+    """The receiver case, and why §7 tells a receiver to split on `\\n` itself.
+
+    `"\\xc3\\xa9"` is one character in two bytes. A chunk boundary between them
+    leaves each call holding half a character, and the reader neither buffers
+    nor rejoins across calls (§7): each half is one `undecodable_bytes` and one
+    `malformed_record`, and no record is invented out of two calls that may
+    have been about two different streams.
+    """
+    whole = b'{"span_id":"\xc3\xa9"}\n'
+    head, tail = whole[:13], whole[13:]
+    assert head.endswith(b"\xc3") and tail.startswith(b"\xa9"), "the split moved"
+
+    for part, half in (
+        (spanweave.read_records(head), "first"),
+        (spanweave.read_records(tail), "second"),
+    ):
+        assert part.records == (), f"the {half} half of one character became a record"
+        assert sorted(d.code for d in part.diagnostics) == [
+            codes.MALFORMED_RECORD,
+            codes.UNDECODABLE_BYTES,
+        ], f"the {half} half was not reported twice over: unreadable, and not UTF-8"
+        assert part.skipped_records == 1
+
+    # The same bytes in one call are one record with nothing to report, which
+    # is the whole of the advice §7 gives a receiver.
+    together = spanweave.read_records(head + tail)
+    assert together.records == ({"span_id": "é"},)
+    assert together.diagnostics == ()
+    assert together.skipped_records == 0
+
+
+def test_a_file_of_those_bytes_reads_exactly_as_the_bytes_in_memory_did(tmp_path):
+    # Every reading path meets the same decoder, so a file and a body cannot
+    # disagree about what is in them.
+    data = b'{"span_id":"\xff\xfe"}\n'
+    path = tmp_path / "trace.jsonl"
+    path.write_bytes(data)
+
+    stream = read_trace(path)
+    records = list(stream)
+    in_memory = spanweave.read_records(data)
+
+    assert records == list(in_memory.records) == [{"span_id": "��"}]
+    assert [d.code for d in stream.diagnostics.collected()] == [
+        codes.UNDECODABLE_BYTES
+    ], "a file's bytes were replaced with nothing said about it"
+    assert [(d.code, d.message, d.source) for d in stream.diagnostics.collected()] == [
+        (d.code, d.message, d.source) for d in in_memory.diagnostics
+    ]
+    assert stream.skipped_records == in_memory.skipped_records == 0
+
+
+def test_every_container_reports_the_bytes_it_could_not_decode():
+    # Three decode sites, one per container form, and the line reader is the
+    # one above. None of them may replace a byte without saying so.
+    array = spanweave.read_records(b'[{"span_id":"\xff"}]')
+    assert array.records == ({"span_id": "�"},)
+    assert [d.code for d in array.diagnostics] == [codes.UNDECODABLE_BYTES]
+
+    export = spanweave.read_records(
+        b'{"resourceSpans":[{"scopeSpans":[{"spans":[{"spanId":"\xff"}]}]}]}'
+    )
+    assert export.records == ({"span_id": "�"},)
+    assert [d.code for d in export.diagnostics] == [codes.UNDECODABLE_BYTES]
+
+
+def test_the_document_branch_that_falls_back_to_lines_reports_the_bytes_once():
+    """The one path that decodes the same bytes twice must report them once.
+
+    An input whose first member key is `resourceSpans` is buffered and parsed
+    as one document; when that fails it is read line by line instead (§7), so
+    the bytes pass a decoder twice. Two diagnostics for one substitution would
+    report the reader's own second attempt as a second fact about the input.
+    """
+    result = spanweave.read_records(
+        b'{"resourceSpans":[{"a":"\xff"}\n{"resourceSpans":[]}\n'
+    )
+    assert result.records == ()
+    assert [d.code for d in result.diagnostics] == [
+        codes.MALFORMED_RECORD,
+        codes.UNDECODABLE_BYTES,
+    ]
+    undecodable = next(
+        d for d in result.diagnostics if d.code == codes.UNDECODABLE_BYTES
+    )
+    assert "line 1" in undecodable.message, "the surviving report lost the line"
+    assert result.skipped_records == 1

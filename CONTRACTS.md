@@ -374,7 +374,7 @@ the library rely on that no document states and no test asserts?*
   what "done" looks like *for two codes*, and its catch-all over the other ten
   was false for three of them until this session corrected and asserted it.
   What is still relied on: that a consumer can branch on `code` to know
-  `source`'s shape. True for the nine rows now stated; the catch-all still
+  `source`'s shape. True for the ten rows now stated; the catch-all still
   covers three codes no fixture emits (`duplicate_record`, `multi_trace_input`,
   `unclaimed_record`), so for those it is stated and unmeasured. Both halves of that sentence said
   something else — "seven rows", and `duplicate_source_id` and

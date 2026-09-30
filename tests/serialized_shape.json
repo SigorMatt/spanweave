@@ -11,6 +11,7 @@
   "ordering_cycle": "list[str]",
   "payload_parse_failed": "null",
   "timestamp_unit_suspect": "{\"started_at\": number, \"ended_at\": number}",
+  "undecodable_bytes": "null",
   "unmapped_attributes": "list[str]",
   "unpaired_call": "{\"call_id\": str, \"operation\": str \\| null}",
   "unpaired_result": "{\"call_id\": str, \"operation\": str \\| null}"
@@ -222,6 +223,7 @@
    "payload_parse_failed",
    "timestamp_unit_suspect",
    "unclaimed_record",
+   "undecodable_bytes",
    "unknown_span_kind",
    "unmapped_attributes",
    "unpaired_call",

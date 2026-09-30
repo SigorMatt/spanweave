@@ -15,6 +15,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A byte sequence UTF-8 cannot decode is now a diagnostic rather than a silent
+  substitution.** New code `undecodable_bytes` (`SPEC.md` §3.7), emitted by every
+  reading path — `read_records`, a file, stdin — and at each of the reader's
+  three decode sites (`WORKPLAN.md` L12, from the run-2 cold review's T12, a
+  behaviour change decided 2026-09-30). Nothing about what is *read* changes:
+  those bytes are still replaced with U+FFFD, the record is still read, and
+  `skipped_records` still counts only records that were never read at all. What
+  changes is that the substitution is now **reported** — record-scoped and
+  naming the line where a line produced a record — because a record carrying a
+  character nothing in the input wrote, with nothing saying so, is the reader
+  quietly rewriting what it was handed (`CLAUDE.md` 2). `source` is `null`, and
+  §3.7 states why: the offending fragment is bytes, which a `JsonValue` cannot
+  hold, and the text standing in its place survives on the record itself or on
+  the `malformed_record` for a line that would not parse.
+  It matters most to a **receiver**, which is what the reader's second door was
+  opened for: a chunk tailed off an exporter can split a multi-byte character in
+  half, and the reader neither buffers nor rejoins across calls. So each half is
+  one `undecodable_bytes` and one `malformed_record`, never a record invented out
+  of two calls, and `SPEC.md` §7 now says the consequence out loud — a receiver
+  splits its bytes on `\n` and keeps the remainder for its next call.
+  The one path that decodes the same bytes twice — an input whose first member
+  key is `resourceSpans`, buffered, unparseable, and then read line by line —
+  reports them **once**: publishing the reader's own second attempt would be a
+  second fact about the input. No fixture moves: every file `git ls-files`
+  lists decodes strictly as UTF-8 — checked that way rather than by a walk of
+  the working tree, for the reason `tests/corpus_census.py` gives — so no
+  expected graph gains a diagnostic.
+  `tests/serialized_shape.json` moves by exactly two lines, the new code in
+  `vocabularies.diagnostic_codes` and its `null` in `diagnostic_source`.
+
 - **Records can now be read out of bytes a caller already holds**, which is the
   one thing the receiver boundary asked the library for (`OPEN_QUESTIONS.md`
   §19, `WORKPLAN.md` L6). `spanweave.read_records(data)` returns a `Records`:

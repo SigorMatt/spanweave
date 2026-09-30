@@ -28,7 +28,12 @@ Two things this layer must get right:
   terminator**, because a lone CR is legal JSON whitespace *inside* a record
   (RFC 8259): splitting on it would take a record that parses and break it in
   two, which is the tolerance reaching content -- the one thing this bullet
-  forbids.
+  forbids. The **encoding** is UTF-8, and bytes it cannot decode are replaced
+  with U+FFFD rather than refused, because what did decode is still a record
+  and dropping it would lose that. The replacement is reported
+  (``undecodable_bytes``): a record carrying a character nothing in the input
+  wrote, with nothing saying so, is this layer quietly rewriting what it was
+  handed (``SPEC.md`` §3.7).
 * **A transport envelope is a container, not a dialect.** An OTLP JSON export
   is an object whose ``resourceSpans`` is a list, and the spans inside it are
   in whatever dialect their instrumentor speaks -- possibly two dialects in
@@ -240,7 +245,9 @@ class RecordStream:
         self._consumed = True
 
     def _read_array(self, data: bytes) -> Iterator[JsonValue]:
-        text = data.decode("utf-8", errors="replace")
+        text, undecodable = _decoded(data)
+        if undecodable:
+            self._report_undecodable("the input")
         try:
             document = jsoncodec.loads(text)
         # RecursionError is how `json` reports nesting it will not descend;
@@ -273,15 +280,21 @@ class RecordStream:
         per line begins with exactly these bytes. When the buffered input is
         not a single document it is read line by line, which is byte for byte
         what this input did before this branch existed -- including its
-        diagnostics, which is why none is emitted here.
+        diagnostics, which is why the fallback below emits none of its own.
         """
-        text = data.decode("utf-8", errors="replace")
+        text, undecodable = _decoded(data)
         try:
             document = jsoncodec.loads(text)
         # RecursionError: see `_read_array`. The line reader reports it.
         except (ValueError, RecursionError):
             yield from self._read_lines(data, iter(()))
             return
+        # Reported only on the branch that keeps this reading. The fallback
+        # above hands the same bytes to the line reader, which decodes them
+        # again and reports each line itself; reporting here as well would
+        # publish this layer's second attempt as a second fact about the input.
+        if undecodable:
+            self._report_undecodable("the input")
         yield document
 
     def _read_lines(self, head: bytes, chunks: Iterator[bytes]) -> Iterator[JsonValue]:
@@ -309,7 +322,10 @@ class RecordStream:
         yield from self._read_line(number, buffered)
 
     def _read_line(self, number: int, raw_line: bytes) -> Iterator[JsonValue]:
-        line = raw_line.decode("utf-8", errors="replace").strip()
+        text, undecodable = _decoded(raw_line)
+        if undecodable:
+            self._report_undecodable(f"line {number}")
+        line = text.strip()
         if not line:
             # A blank line is not a record, and losing it drops nothing.
             return
@@ -326,6 +342,44 @@ class RecordStream:
                 f"else for it to survive",
                 source=line,
             )
+
+    def _report_undecodable(self, what: str) -> None:
+        """Say that U+FFFD stands where the input did not hold UTF-8.
+
+        ``what`` names where: the line, or the whole buffered container, which
+        has no line of its own. No ``source``: the bytes are not a `JsonValue`
+        -- JSON has no way to write them -- and the text they were replaced by
+        survives where the record does, on the record itself or on the
+        ``malformed_record`` for a line that would not parse (`SPEC.md` §3.7).
+
+        It does **not** touch ``skipped_records``. That number answers one
+        question -- was any record of this input never read at all -- and this
+        record was read; counting it here would tell
+        `build_contributed_graph` a record is missing when the record is there.
+        """
+        self._collector.add(
+            codes.UNDECODABLE_BYTES,
+            f"{what} holds bytes that are not UTF-8; each such sequence was "
+            f"read as U+FFFD, the substitution Unicode defines for it, and "
+            f"the rest was read as written -- so no record was skipped, and "
+            f"this is the only report that what arrived is not, character for "
+            f"character, what the input holds",
+        )
+
+
+def _decoded(data: bytes) -> tuple[str, bool]:
+    """``(the text these bytes hold, whether any of them did not decode)``.
+
+    Strict first, and the replacing decode only where the strict one refused,
+    so the ordinary input pays one pass and nothing else. The replacement is
+    kept -- returning the text is the point -- and the flag is what makes it
+    reportable rather than silent: ``errors="replace"`` on its own hands back a
+    string that looks like the input and is not (`SPEC.md` §7).
+    """
+    try:
+        return data.decode("utf-8"), False
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="replace"), True
 
 
 def _canonical_text(record: JsonValue) -> str:
