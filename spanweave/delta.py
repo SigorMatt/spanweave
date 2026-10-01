@@ -261,12 +261,14 @@ class Tally:
 
         `set_edges` restates a key *in full*, which is right for a key whose
         contribution is small and recomputed whole -- a record's `parent`, a call
-        id's `data` edges. It is wrong for a sibling group's temporal chain: the
-        chain of a group of `m` is `m - 1` edges and an arrival moves at most
-        three of them, so replacing the key would make one arrival redo the whole
-        group's work (`SPEC.md` §4.3, §10.6).
+        id's two sides. It is wrong for a key that grows with the stream: a
+        sibling group's temporal chain is `m - 1` edges for a group of `m` and an
+        arrival moves at most three of them, and a call id's `data` edges are one
+        per declared receipt and an arrival moves at most two receipts' worth, so
+        replacing either key would make one arrival redo the whole key's work
+        (`SPEC.md` §4.2.1, §4.3, §10.6).
 
-        So the absorber keeps that chain in order itself and says here exactly
+        So the absorber keeps both in order itself and says here exactly
         which edges left and which arrived. Nothing is attributed in
         `_edges_for`, because there is nothing for a later `set_edges` of the
         same key to replace -- a key is accounted one way or the other and never

@@ -150,7 +150,12 @@ class SpanAbsorber:
         # Per call id.
         self._call_edges: dict[str, tuple[Edge, ...]] = {}
         self._call_diagnostics: dict[str, tuple[Diagnostic, ...]] = {}
-        self._data_edges: dict[str, tuple[Edge, ...]] = {}
+        # Per call id, and keyed inside by the span that declared receipt: the
+        # `data` edges that receipt contributes. Keyed that way because a receipt
+        # is what an arrival adds and what a basis rewrite moves, so the one
+        # receipt whose basis changed is reached without walking the rest
+        # (`SPEC.md` §4.2.1, §10.6).
+        self._data_edges: dict[str, dict[NodeId, tuple[Edge, ...]]] = {}
         # Per sibling group: the group's members in `SPEC.md` §4.3's order, and
         # the chain over them, held as lists because both are *amended* by an
         # arrival rather than rebuilt -- `_temporal_edges[group][j]` is the edge
@@ -160,6 +165,10 @@ class SpanAbsorber:
         self._requesters: dict[str, list[NodeId]] = {}
         self._fulfillers: dict[str, list[NodeId]] = {}
         self._call_names: dict[str, set[str]] = {}
+        # Held in `(started_at, node_id)` order -- §4.2.1's ranking -- because
+        # which receipt ranks first is the only thing a `data` edge's basis turns
+        # on, and a sorted list makes an arrival's effect on that a comparison
+        # rather than a re-ranking of the whole set.
         self._receipts: dict[str, list[tuple[int | float, NodeId]]] = {}
         # Records that named a span id and are waiting for it. A parent that
         # arrives after its child, and a link whose target arrives later, are
@@ -496,31 +505,112 @@ class SpanAbsorber:
         self._place(position)
 
     def _index_calls(self, span: NormalizedSpan, node_id: NodeId) -> set[str]:
-        """Index the call ids this record names, and return which they were.
+        """Index the call ids this record names; answer whose *sides* moved.
 
-        Both sides and the receipts, because all three feed the same two keys:
-        one call id's `call_result` edges and its `data` edges are decided by
-        that call id's requesters, fulfillers and receivers and by nothing else
-        (`SPEC.md` §4.2, §4.4).
+        Two keys per call id and they are no longer restated together. A call
+        id's `call_result` edges are decided by its requesters and fulfillers
+        (§4.4), so only a span on one of those sides moves them, and the answer
+        is which call ids those were. Its `data` edges are decided by its
+        fulfillers and the spans declaring receipt (§4.2), and those are
+        *amended* here, as the sibling chain is: a receipt that declares what
+        every earlier one already declared is one edge per fulfiller and not the
+        call id's whole set (`SPEC.md` §10.6).
+
+        Sorted, both loops. Nothing here may turn on how a set iterates
+        (`CLAUDE.md` 4) -- the edges an arrival makes do not depend on the order
+        it names its call ids in, and sorting says so rather than relying on it.
         """
-        touched: set[str] = set()
+        sides: set[str] = set()
         if span.call_ids and span.call_role is not None:
-            side = (
-                self._requesters
-                if span.call_role is CallRole.REQUESTER
-                else self._fulfillers
-            )
-            for call_id in span.call_ids:
+            fulfils = span.call_role is CallRole.FULFILLER
+            side = self._fulfillers if fulfils else self._requesters
+            for call_id in sorted(set(span.call_ids)):
                 side.setdefault(call_id, []).append(node_id)
                 named = span.call_names.get(call_id)
                 if named is not None:
                     self._call_names.setdefault(call_id, set()).add(named)
-                touched.add(call_id)
+                sides.add(call_id)
+                if fulfils:
+                    self._fulfilled(call_id, node_id)
         start = span.started_at if span.started_at is not None else float("inf")
-        for call_id in set(span.received_call_ids):
-            self._receipts.setdefault(call_id, []).append((start, node_id))
-            touched.add(call_id)
-        return touched
+        for call_id in sorted(set(span.received_call_ids)):
+            self._received(call_id, (start, node_id))
+        return sides
+
+    def _fulfilled(self, call_id: str, producer: NodeId) -> None:
+        """A span that answered this call: one `data` edge to every receipt.
+
+        A producer arriving after the spans that declared receipt of it completes
+        a relation each of them already stated, so each is a *new* edge and the
+        arrival is linear in the receipts -- which is the size of the answer and
+        not a restatement of it. No basis moves: ranking receipts is §4.2.1's and
+        a fulfiller is not in that ranking.
+        """
+        receipts = self._receipts.get(call_id)
+        if not receipts:
+            return
+        held = self._data_edges.setdefault(call_id, {})
+        added: list[Edge] = []
+        for receipt in receipts:
+            edges = build.data_edges_of(
+                receipt[1],
+                (producer,),
+                build.data_basis(receipt, receipts),
+                self._by_node,
+            )
+            if edges:
+                held[receipt[1]] = (*held.get(receipt[1], ()), *edges)
+                added.extend(edges)
+        self._tally.amend_edges((), added)
+
+    def _received(self, call_id: str, receipt: tuple[int | float, NodeId]) -> None:
+        """One declared receipt into a call id, and only the edges it moved.
+
+        The ranking §4.2.1 states is a fact about the whole set of receipts, so
+        restating the key was how the live builder kept it true -- and that made a
+        protocol resending its history pay for every declaration it had already
+        made, on every turn. What the ranking actually turns on is narrower: the
+        receipt that ranks **first**, and whether the second ties with it. So the
+        receipts are kept in that order and an arrival moves at most two of them:
+
+        * its own, which is new, at one edge per span that answered the call;
+        * the one that ranked first before, if this arrival outranks it (now "not
+          the earliest") or ties with it (now "earliest tied") -- one removal and
+          one addition per edge, which is what `SPEC.md` §10.6 says a basis
+          rewrite is and what `Delta.basis_rewritten` reports.
+
+        Every other receipt was already "not the earliest" and stays so, whatever
+        arrives: no arrival can make a receipt that is not first become first
+        except by being first itself. The edges are the ones a batch build of the
+        same prefix emits -- `data_basis` is the only spelling of the rule -- and
+        that is §10.1.
+        """
+        receipts = self._receipts.setdefault(call_id, [])
+        was_first = receipts[0] if receipts else None
+        bisect.insort(receipts, receipt)
+        held = self._data_edges.setdefault(call_id, {})
+        answered = sorted(self._fulfillers.get(call_id, ()))
+        removed: list[Edge] = []
+        added: list[Edge] = []
+        if was_first is not None:
+            # Every edge of one receipt carries that receipt's basis, so the
+            # first of them says what the ranking said when they were made.
+            stale = held.get(was_first[1], ())
+            fresh = build.data_basis(was_first, receipts)
+            if stale and stale[0].basis != fresh:
+                removed.extend(stale)
+                rewritten = build.data_edges_of(
+                    was_first[1], answered, fresh, self._by_node
+                )
+                held[was_first[1]] = tuple(rewritten)
+                added.extend(rewritten)
+        mine = build.data_edges_of(
+            receipt[1], answered, build.data_basis(receipt, receipts), self._by_node
+        )
+        if mine:
+            held[receipt[1]] = tuple(mine)
+            added.extend(mine)
+        self._tally.amend_edges(removed, added)
 
     def _restate_parent(self, position: int) -> None:
         """One record's `parent` edge and `orphan_parent`, as they stand now.
@@ -565,6 +655,15 @@ class SpanAbsorber:
         self._tally.set_edges(("link", str(position)), self._link_edges[position])
 
     def _restate_calls(self, call_ids: Iterable[str]) -> None:
+        """One call id's `call_result` edges and its pairing diagnostics (§4.4).
+
+        Restated in full, and small enough to be: the key is the requesters and
+        the fulfillers of one call, which is one span each in every shape anyone
+        has captured. A call id's `data` edges are *not* here -- they are amended
+        per receipt by `_received`, because the spans declaring receipt of one
+        call grow with the conversation while its two sides do not
+        (`SPEC.md` §10.6).
+        """
         for call_id in sorted(call_ids):
             collector = DiagnosticCollector()
             self._call_edges[call_id] = tuple(
@@ -578,19 +677,10 @@ class SpanAbsorber:
                 )
             )
             self._call_diagnostics[call_id] = collector.collected()
-            self._data_edges[call_id] = tuple(
-                build.data_edges(
-                    call_id,
-                    self._receipts.get(call_id, ()),
-                    self._fulfillers.get(call_id, ()),
-                    self._by_node,
-                )
-            )
             self._tally.set_edges(("call", call_id), self._call_edges[call_id])
             self._tally.set_diagnostics(
                 ("call", call_id), self._call_diagnostics[call_id]
             )
-            self._tally.set_edges(("data", call_id), self._data_edges[call_id])
 
     def _sole_name(self, call_id: str) -> str | None:
         """The name one call id was given, or `None` where two disagree.
@@ -794,7 +884,11 @@ class SpanAbsorber:
                 *(self._parent_edges[key] for key in sorted(self._parent_edges)),
                 *_flattened(self._call_edges),
                 *_flattened(self._link_edges),
-                *_flattened(self._data_edges),
+                *(
+                    edge
+                    for call_id in sorted(self._data_edges)
+                    for edge in _flattened(self._data_edges[call_id])
+                ),
             ]
         )
         if self.temporal:

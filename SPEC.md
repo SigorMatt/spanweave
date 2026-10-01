@@ -1600,9 +1600,9 @@ declares reaches `0.5`.
     `build` would have classified, and feeding them to a `Builder` one at a
     time is the live path §10 specifies.
   - **Cheap to read is not cheap to absorb.** A whole export read in one call
-    is still one `feed` per span, and a `feed` restates in full every key the
-    record touches (§10.6). Reading is where the container form stops
-    mattering; it is not where absorbing becomes free.
+    is still one `feed` per span, and a `feed` pays for every key the record
+    touches — most of them restated in full (§10.6). Reading is where the
+    container form stops mattering; it is not where absorbing becomes free.
   - A `Records` is **complete when it is returned**: the bytes were already in
     memory, so there is nothing to stream and no diagnostic that arrives later.
     That is the one thing it does not share with the reader behind it, and the
@@ -2163,9 +2163,10 @@ Everything a batch build would say differently about `k` records than about
 - its own node, and the `parent` or `link` edges it states;
 - an earlier `orphan_parent` becoming false, because the parent has now arrived;
 - a `call_result` edge and the end of an `unpaired_call` / `unpaired_result`;
-- the `basis` of a `data` edge, when this record turns out to be the earliest
-  span to declare receipt of a call (§4.2.1) — which rewrites the basis of every
-  later one;
+- the `basis` of a `data` edge, when this record declares receipt of a call no
+  later than the span that declared it earliest so far (§4.2.1) — which moves
+  **that one span's** basis and no other's, because every other span declaring
+  the same receipt was already not the earliest and still is;
 - the `temporal` chain of the sibling group it joins, and of the group it leaves
   when it is given a parent;
 - the canonical position of every node, and — where it changes one of the three
@@ -2316,14 +2317,14 @@ per record, as one asking for a graph after every record pays one.
 
 What §10.2 does not say, and a reader should not read into it: most keys are
 restated **in full**, so what an arrival costs is usually the *size* of the keys
-it touched and not their number. A record that declares receipt of a call
-restates that call id's whole `data` edge set (§4.2), so a loop resending its
-history is superlinear in `n` to feed even though every individual arrival is
-local. That shape occurs in real telemetry and is measured by `make bench`
-(`tests/live_cost.py`).
+it touched and not their number. **Two** keys are not, and they are exactly the
+two that grow with the stream rather than with the record — a sibling group's
+temporal chain and a call id's `data` edges — so each is stated below rather than
+left to be the worst of them. Both shapes occur in real telemetry and both are
+measured by `make bench` (`tests/live_cost.py`).
 
-A sibling group's temporal chain is the one key that is **not** restated, and the
-exception is stated because it would otherwise be the worst of them: one wide
+A sibling group's temporal chain is **not** restated, and the exception is stated
+because it would otherwise be the worst of them: one wide
 sibling group is the whole input. A group's members are kept in §4.3's order, so
 a joining record is placed by a search and only the chain edges adjacent to that
 place change — **at most one removed and two added**, whatever the group already
@@ -2338,6 +2339,24 @@ group is re-keyed and **no edge moves at all**. A move that empties only part of
 a group is the per-record price above, once per record moved. The rule is §4.3's
 unchanged, and the chain is the one a batch build of the same prefix emits, which
 is §10.1; what is bounded is only how much of it an arrival rebuilds.
+
+A call id's `data` edges are **not** restated either, for the mirror reason: a
+conversational protocol resends its history, so a call id's declared receipts grow
+with the turns while the two sides that decide its `call_result` edge do not
+(§4.2.1, §4.4). The receipts are kept in §4.2.1's ranking, and what that ranking
+decides is narrower than it looks — which receipt is **first**, and whether the
+second ties with it — so an arrival moves at most two receipts' worth of edges:
+its own, at one edge per span that answered the call, and the one that ranked
+first before it, if this receipt outranks it (now "not the earliest") or ties with
+it (now "earliest tied"), at **one removed and one added** per edge. No other
+receipt moves, which is §10.2's bullet: a receipt that is not the earliest stays
+so whatever arrives. What is **not** bounded is the answer. `n` turns of a loop
+resending its history declare `n(n-1)/2` receipts and every one of them is an edge
+the telemetry stated (§4.2.1), so feeding such a loop is quadratic in its turns
+because its *graph* is — and the promise is only that each declaration is built
+once, never that an arrival carrying `k` declarations costs what one carrying none
+does. A requester or fulfiller arriving restates that call id's two sides in full,
+because they are one span each in every shape anyone has captured.
 
 **Where the sort is and is not the cost, measured rather than argued** (the same
 two shapes; `make bench` prints the numbers and `tests/live_cost.py` records the

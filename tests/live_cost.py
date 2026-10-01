@@ -1,8 +1,9 @@
 """What a live build costs, measured rather than reasoned about.
 
 Run: ``make bench`` (``uv run python -m tests.live_cost``), optionally with
-``ARGS="--turns 400 --wide 20000"`` or
-``ARGS="--only wide --root-last --wide 2000"``.
+``ARGS="--turns 400 --wide 20000"``,
+``ARGS="--only wide --root-last --wide 2000"`` or
+``ARGS="--only echo --turns 400 --segments 4"``.
 
 `SPEC.md` §10.6 states the cost of the two live paths: a `feed` is O(the keys
 the arrival touched) and a `delta(since=v)` is O(n + e), because it sorts both
@@ -64,15 +65,30 @@ chain on every arrival and the echo shape restates a call id's whole `data` edge
 set for every receipt echoed at it. Each was a key restated in full, which is
 what `SPEC.md` §10.6 said an arrival costs.
 
-**One of those two sites is since fixed, so every wide-shape `feed` number above
-is history.** A sibling group's chain is now maintained in §4.3's order and an
+**Both of those two sites are since fixed, so every `feed` number above is
+history.** A sibling group's chain is now maintained in §4.3's order and an
 arrival replaces only the edges adjacent to where it lands, so the wide shape's
 `feed` is linear in its records: re-measured on one machine at 0.109 ms/record at
 1,000 and 0.112 ms/record at 8,000, against 1.875 and 20.918 at the commit this
-header's table was taken from. The echo shape's `data` edge set is untouched and
-still cubic in turns. The table and the shares above are left as the record of
-what was measured when; they are re-taken wholesale, with provenance, once the
-remaining sites are fixed.
+header's table was taken from. A call id's `data` edges are now amended per
+declared receipt rather than restated, so the echo shape's `feed` is linear in the
+receipts the input declares instead of cubic in its turns: 400 turns re-measured
+on one machine at **958 ms against 75,171 ms**, with `Edge.__init__` called 81,799
+times against 10,748,399 -- one `data` edge built per declared receipt, where
+before each was rebuilt once per later turn. The table and the shares above are
+left as the record of what was measured when; they are re-taken wholesale, with
+provenance, by `WORKPLAN.md` L18.
+
+What the echo shape's per-record cost does **not** become is flat, and `--segments`
+is how that is read rather than argued. Its edge set is quadratic in its turns
+because §4.2.1 says the input declares that many relations, so a turn carrying 350
+declarations cannot cost what a turn carrying 25 does: measured over the same 400
+turns in four stretches, 0.3746 ms/record over turns 1-100 against 2.0393 over
+turns 301-400, a ratio of **5.44x** where the same measurement on the cubic site
+gave 52.18x (4.3547 against 227.2158). The floor is the work itself -- those two
+stretches declare 24.6 and 174.8 receipts per record, a ratio of 7.1x -- so 5.44x
+is *below* the growth of the answer, the difference being the fixed per-record
+cost of classifying and absorbing a span at all.
 
 A third site the audit's table cannot show is the **arrival order** of one
 record, and `--root-last` is that measurement: the wide shape fed children-first
@@ -182,15 +198,53 @@ def _elapsed(label: str, start: float) -> float:
     return seconds
 
 
-def measure(label: str, records: Sequence[JsonValue], *, per_record: bool) -> None:
+def _per_segment(cuts: Sequence[int], marks: Sequence[float], opened: float) -> None:
+    """ms/record over each stretch of the stream, and the last against the first.
+
+    A total says what a workload cost; it does not say whether the cost per
+    record is **flat**, and that is the question a superlinear `feed` is asked
+    (`SPEC.md` §10.6). So the one feed loop is marked at the cut points the
+    caller names and each stretch reported on its own: a per-record cost that
+    rises across the stream is a `feed` whose price depends on how much has
+    already arrived, whatever the total looks like.
+
+    The cuts are the caller's rather than an equal split of the records, because
+    a segment boundary that falls mid-turn compares unlike work on a workload
+    whose turns are two records each.
+    """
+    was = opened
+    first = last = 0.0
+    for index, (cut, mark) in enumerate(zip(cuts, marks, strict=True), start=1):
+        started = 1 if index == 1 else cuts[index - 2] + 1
+        each = (mark - was) * 1000 / (cut - started + 1)
+        print(f"  {f'records {started}-{cut}':<34} {each:9.4f} ms/record")
+        first, last, was = (each if index == 1 else first), each, mark
+    if first:
+        print(f"  {'last segment / first segment':<34} {last / first:9.2f} x")
+
+
+def measure(
+    label: str,
+    records: Sequence[JsonValue],
+    *,
+    per_record: bool,
+    cuts: Sequence[int] = (),
+) -> None:
     """Feed the workload, then time each path at the version where n and e peak."""
     print(f"{label}: {len(records)} records")
     builder = Builder()
+    marks: list[float] = []
+    pending = list(cuts)
     start = time.perf_counter()
-    for record in records:
+    for index, record in enumerate(records, start=1):
         builder.feed(record)
+        if pending and index == pending[0]:
+            marks.append(time.perf_counter())
+            pending.pop(0)
     feed = _elapsed("feed, all records", start)
     print(f"  {'feed, per record':<34} {feed * 1000 / len(records):9.1f} ms")
+    if marks:
+        _per_segment(cuts, marks, start)
 
     start = time.perf_counter()
     graph = builder.graph()
@@ -278,6 +332,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         "right (see this module's docstring), so 20,000 takes tens of minutes.",
     )
     parser.add_argument(
+        "--segments",
+        type=int,
+        default=0,
+        help="split the feed into this many equal stretches of the stream and "
+        "print ms/record for each, plus the last against the first. Whether the "
+        "per-record cost is flat is what a superlinear `feed` is asked, and a "
+        "total cannot answer it (`SPEC.md` §10.6).",
+    )
+    parser.add_argument(
         "--root-last",
         action="store_true",
         help="for the wide workload, feed it twice -- root first and root last "
@@ -286,18 +349,34 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     if args.only != "wide":
+        # Turn-aligned, because one echo turn is two records after the root: a
+        # boundary anywhere else would put a turn's LLM span in one segment and
+        # its tool span in the next, and those two cost nothing like each other.
+        per = args.turns // args.segments if args.segments else 0
         measure(
             f"echo, {args.turns} turns",
             echo_records(args.turns),
             per_record=args.per_record,
+            cuts=[1 + 2 * per * index for index in range(1, args.segments + 1)]
+            if per
+            else (),
         )
     if args.only == "echo":
         return
     if args.root_last:
         arrival_order(args.wide)
     else:
+        width = args.wide
         measure(
-            f"wide, {args.wide}", wide_records(args.wide), per_record=args.per_record
+            f"wide, {width}",
+            wide_records(width),
+            per_record=args.per_record,
+            cuts=[
+                1 + width * index // args.segments
+                for index in range(1, args.segments + 1)
+            ]
+            if args.segments
+            else (),
         )
 
 

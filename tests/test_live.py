@@ -13,6 +13,7 @@ a corpus file has one order and these need two.
 """
 
 import inspect
+import itertools
 import json
 import sys
 
@@ -22,11 +23,12 @@ import spanweave
 from spanweave import diagnostics as codes
 from spanweave.adapters import REGISTRY, register
 from spanweave.api import graph_from_records
+from spanweave.build import DATA_BASIS, DATA_LATER_BASIS, DATA_TIED_BASIS
 from spanweave.errors import AdapterSelectionError, DuplicateNodeIdError
 from spanweave.ids import derive
 from spanweave.model import EdgeKind, NodeKind, RawRecord
 from spanweave.read import record_digest
-from spanweave.seam import NormalizedSpan
+from spanweave.seam import CallRole, NormalizedSpan
 from spanweave.serialize import DELTA_ROOT_KEYS, ROOT_KEYS, dumps
 from tests.delta_oracle import checkpoint_delta
 
@@ -485,6 +487,15 @@ TWO_SPAN_MARKER = "twospan.ids"
 #: which is what a test about a *regrouping* refusal needs (`SPEC.md` §10.5).
 TWO_SPAN_PARENT = "twospan.parent"
 
+#: The call id every span of one `twospan` record fulfils, the call id they
+#: declare receipt of, and the start time they share. All optional, and all
+#: three exist for one reason: a refusal reached *after* a `data` basis was
+#: rewritten needs a record of two spans whose first span declares a receipt
+#: that outranks one already held (`SPEC.md` §4.2.1, §10.5).
+TWO_SPAN_FULFILS = "twospan.fulfils"
+TWO_SPAN_RECEIVES = "twospan.receives"
+TWO_SPAN_START = "twospan.start"
+
 
 class TwoSpanAdapter:
     """A test-local dialect whose records become **more than one** span.
@@ -513,6 +524,9 @@ class TwoSpanAdapter:
     def parse(self, records):
         for index, record in enumerate(records, start=1):
             raw = RawRecord(source=record, line_number=index)
+            fulfils = record.get(TWO_SPAN_FULFILS)
+            receives = record.get(TWO_SPAN_RECEIVES)
+            start = record.get(TWO_SPAN_START, 1000.0)
             for span_id in record[TWO_SPAN_MARKER]:
                 yield NormalizedSpan(
                     source_key=span_id,
@@ -521,16 +535,25 @@ class TwoSpanAdapter:
                     raw=raw,
                     span_id=span_id,
                     parent_id=record.get(TWO_SPAN_PARENT),
-                    started_at=1000.0,
-                    ended_at=1000.5,
+                    started_at=start,
+                    ended_at=start + 0.5,
+                    call_ids=() if fulfils is None else (fulfils,),
+                    call_role=None if fulfils is None else CallRole.FULFILLER,
+                    received_call_ids=() if receives is None else (receives,),
                 )
 
 
-def ts(*span_ids, parent=None):
+def ts(*span_ids, parent=None, fulfils=None, receives=None, start=None):
     """One `twospan` record, which becomes one span per id named."""
     record = {TWO_SPAN_MARKER: list(span_ids)}
     if parent is not None:
         record[TWO_SPAN_PARENT] = parent
+    if fulfils is not None:
+        record[TWO_SPAN_FULFILS] = fulfils
+    if receives is not None:
+        record[TWO_SPAN_RECEIVES] = receives
+    if start is not None:
+        record[TWO_SPAN_START] = start
     return record
 
 
@@ -707,9 +730,59 @@ def test_a_half_refused_record_that_regrouped_a_whole_group_puts_its_key_back(
     assert codes.ORPHAN_PARENT not in codes_of(builder.graph())
 
 
+def test_a_half_refused_record_puts_back_the_data_basis_it_rewrote(two_span):
+    """The rollback reaches per-edge `data` traffic too (`SPEC.md` §10.5).
+
+    The sibling-chain test above, on the other key an arrival amends edge by
+    edge. `ts("r1", "r1")`'s first span declares receipt of `c` at a start that
+    **outranks** the receipt already held, so the arrival hands the ledger the
+    earlier receipt's edge to drop and two to add -- the same edge back with
+    "not the earliest" in its basis, and its own -- and then its second span is
+    refused.
+
+    So what has to come back is an edge the arrival removed *and* a basis it
+    rewrote, which is the case a per-site inverse would get subtly wrong: taking
+    back what was added leaves `r2` with no `data` edge at all.
+    """
+    kept = [ts("f", fulfils="c"), ts("r2", receives="c", start=1002.0)]
+    builder = spanweave.Builder()
+    for record in kept:
+        builder.feed(record)
+    before = dumps(builder.graph())
+    assert data_of(builder.graph()) == [("f", "r2", DATA_BASIS)]
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("r1", "r1", receives="c", start=1001.0))
+
+    assert builder.version == 2
+    assert dumps(builder.graph()) == before
+    assert data_of(builder.graph()) == [("f", "r2", DATA_BASIS)]
+    rewritten = builder.delta(since=0).basis_rewritten
+    assert rewritten == (), "a refused arrival rewrote a basis after all"
+    added = builder.delta(since=0).edges_added
+    assert [(e.src, e.dst, e.basis) for e in added if e.kind is EdgeKind.DATA] == [
+        ("f", "r2", DATA_BASIS)
+    ]
+
+    landed = [*kept, ts("r1", receives="c", start=1001.0)]
+    assert builder.feed(ts("r1", receives="c", start=1001.0)) == 3
+    assert dumps(builder.graph()) == dumps(graph_from_records(landed))
+    assert data_of(builder.graph()) == [
+        ("f", "r1", DATA_BASIS),
+        ("f", "r2", DATA_LATER_BASIS),
+    ]
+
+
 def chain_of(graph):
     """One sibling group's chain, as `(src, dst)` pairs in canonical edge order."""
     return [(edge.src, edge.dst) for edge in graph.edges(kind=EdgeKind.TEMPORAL)]
+
+
+def data_of(graph):
+    """Every `data` edge as `(src, dst, basis)`, in canonical edge order."""
+    return [
+        (edge.src, edge.dst, edge.basis) for edge in graph.edges(kind=EdgeKind.DATA)
+    ]
 
 
 # --------------------------------------------------------------------------
@@ -1343,6 +1416,161 @@ def test_a_late_parent_moves_every_waiting_child_without_building_a_chain_edge(
             f"the parent of {width} waiting children built {len(built)} chain "
             "edges; the chain they had is the chain they keep"
         )
+
+
+#: Two turn counts, because a cube and a square are the same number once.
+ECHO_TURNS = (20, 40)
+
+
+def echo_loop(turns):
+    """`tests/live_cost.py`'s `echo` workload, at a size a test can afford.
+
+    One agent, and per turn an LLM span that asks for a tool call and resends
+    every tool result it has already been given, then the tool span that answers
+    it. `turns` turns carry `turns * (turns - 1) / 2` declared receipts, which is
+    what §4.2.1 says a protocol resending its history states -- and so is the
+    number of `data` edges the graph holds.
+    """
+    records = [oi("s0", kind="AGENT", name="agent", t0=1000.0, t1=1000.0 + turns)]
+    for turn in range(turns):
+        resent = {"llm.input_messages.0.message.role": "user"}
+        for earlier in range(turn):
+            resent[f"llm.input_messages.{earlier + 1}.message.role"] = "tool"
+            resent[f"llm.input_messages.{earlier + 1}.message.tool_call_id"] = (
+                f"c{earlier:04d}"
+            )
+        start = 1000.0 + turn
+        records.append(
+            oi(
+                f"l{turn:04d}",
+                parent="s0",
+                kind="LLM",
+                name="llm",
+                t0=start + 0.1,
+                t1=start + 0.4,
+                **{
+                    "llm.output_messages.0.message.tool_calls.0.tool_call.id": (
+                        f"c{turn:04d}"
+                    ),
+                    **resent,
+                },
+            )
+        )
+        records.append(
+            oi(
+                f"t{turn:04d}",
+                parent="s0",
+                kind="TOOL",
+                name="tool",
+                t0=start + 0.5,
+                t1=start + 0.9,
+                **{"tool_call.id": f"c{turn:04d}"},
+            )
+        )
+    return records
+
+
+def test_feeding_an_echo_loop_builds_one_data_edge_per_declared_receipt(edges_built):
+    """A call id's `data` edges are the arrival's, not the call id's (§10.6).
+
+    The receipts of one call id grow with the conversation, and which of them
+    ranks first decides a `basis` (§4.2.1) -- so the whole set was restated per
+    receipt, and a loop resending its history paid for every declaration it had
+    already made on every turn. Three nested sizes, which is **cubic** in turns:
+    the receipts are quadratic and each was re-emitted once per later turn.
+
+    A receipt *amended* in is one edge per span that answered the call, and the
+    graph holds exactly one `data` edge per declared receipt, so the feed builds
+    as many `data` edges as the answer has and the work is linear in the receipts
+    rather than in their square. The edge set is still quadratic in the turns --
+    §4.2.1 says the input declares that many relations and none is suppressed --
+    so what this pins is that nothing is built *twice*, which is the whole of the
+    claim and all §10.6 promises.
+
+    Asserted twice, as the wide-group test is: a bound per size catches a cube at
+    one size, and the ratio between the two sizes catches a bound that is merely
+    generous at the small one.
+    """
+    built = {}
+    held = {}
+    for turns in ECHO_TURNS:
+        edges_built.clear()
+        builder = spanweave.Builder()
+        for record in echo_loop(turns):
+            builder.feed(record)
+        built[turns] = len([e for e in edges_built if e.kind is EdgeKind.DATA])
+        held[turns] = len(builder.graph().edges(kind=EdgeKind.DATA))
+        assert held[turns] == turns * (turns - 1) // 2, (
+            "the workload does not carry the receipts §4.2.1 describes"
+        )
+
+    for turns, made in built.items():
+        assert made <= 1.5 * held[turns], (
+            f"{turns} turns hold {held[turns]} `data` edges and building them "
+            f"took {made}; a receipt amended in is built once"
+        )
+    small, large = ECHO_TURNS
+    growth = built[large] / built[small]
+    declared = held[large] / held[small]
+    assert growth <= 1.5 * declared, (
+        f"{large / small:.0f}x the turns declared {declared:.1f}x the receipts "
+        f"and built {growth:.1f}x the edges; linear in the receipts is the promise"
+    )
+
+
+def test_a_receipt_that_outranks_the_first_rewrites_only_that_one(edges_built):
+    """The rewrite half, and the per-arrival bound on it (`SPEC.md` §4.2.1).
+
+    Every receiver arrives *earlier* than the one before it, so every arrival
+    outranks the receipt that ranked first and every arrival rewrites a basis --
+    the worst order there is for this key, and the one a restated key charges the
+    whole set for. What a rewrite costs is one removal and one addition per edge
+    of the **one** receipt that stopped being the earliest: every other receipt
+    was already "not the earliest" and no arrival can change that.
+
+    Three edges covers its own, the one rewritten, and the room a `temporal` edge
+    would need if this bound were ever read as a kind-blind one; the `data`
+    filter means it is not.
+    """
+    builder = spanweave.Builder()
+    builder.feed(fulfiller("f", "call_a", t0=1000.0))
+    for arrival in range(40):
+        before = len(edges_built)
+        builder.feed(receiver(f"r{arrival:04d}", "call_a", t0=2000.0 - arrival))
+        made = [e for e in edges_built[before:] if e.kind is EdgeKind.DATA]
+        assert len(made) <= 3, (
+            f"receipt {arrival + 1} of {arrival + 1} built {len(made)} `data` "
+            "edges; a rewrite moves the first receipt's edges and no other's"
+        )
+    bases = [basis for _, _, basis in data_of(builder.graph())]
+    assert bases.count(DATA_BASIS) == 1, "exactly one receipt is the earliest"
+
+
+def test_a_scrambled_set_of_receipts_is_the_batch_bases_at_every_prefix():
+    """Correctness under every arrival order, ties included (§4.2.1).
+
+    The ranking is a fact about a *set*, so the three bases must not depend on
+    which receipt arrived first -- and two receipts sharing a start time are the
+    case the maintained ranking has to get right in both directions: a receipt
+    that outranks the first demotes it, and one that merely *ties* with the first
+    turns "earliest" into "earliest tied" without displacing it.
+
+    `replay` compares against the batch build at every prefix, so each
+    permutation is four assertions and not one.
+    """
+    records = [
+        fulfiller("f", "call_a", t0=1000.0),
+        receiver("r1", "call_a", t0=1001.0),
+        receiver("r2", "call_a", t0=1001.0),
+        receiver("r3", "call_a", t0=1002.0),
+    ]
+    for order in itertools.permutations(range(4)):
+        builder = replay([records[index] for index in order])
+        assert data_of(builder.graph()) == [
+            ("f", "r1", DATA_TIED_BASIS),
+            ("f", "r2", DATA_LATER_BASIS),
+            ("f", "r3", DATA_LATER_BASIS),
+        ], f"arrival order {order} did not agree with the batch bases"
 
 
 # --------------------------------------------------------------------------

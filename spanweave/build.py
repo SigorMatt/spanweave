@@ -865,31 +865,64 @@ def data_edges(
     ranked = sorted(set(receivers))
     if not ranked:
         return []
-    earliest, tied = ranked[0][1], len(ranked) > 1 and ranked[0][0] == ranked[1][0]
     answered = sorted(fulfillers)
     found = []
-    for _, node_id in ranked:
-        if node_id != earliest:
-            basis = DATA_LATER_BASIS
-        elif tied:
-            basis = DATA_TIED_BASIS
-        else:
-            basis = DATA_BASIS
-        for producer in answered:
-            if producer == node_id:
-                # A span cannot feed itself. Malformed input rather than a
-                # relation, and a self-loop would be neither.
-                continue
-            found.append(
-                Edge(
-                    src=producer,
-                    dst=node_id,
-                    kind=EdgeKind.DATA,
-                    warrant=Warrant.EXPLICIT,
-                    basis=basis,
-                    adapter=edge_adapter(by_node, producer, node_id),
-                )
+    for receipt in ranked:
+        found.extend(
+            data_edges_of(receipt[1], answered, data_basis(receipt, ranked), by_node)
+        )
+    return found
+
+
+def data_basis(
+    receipt: tuple[int | float, NodeId],
+    ranked: Sequence[tuple[int | float, NodeId]],
+) -> str:
+    """Which of §4.2.1's three strings one receipt earns, given the ranking.
+
+    The rule in one place, because two callers need it at two sizes: a batch
+    build ranks a call id's receipts once and asks for all of them, and the live
+    builder (`spanweave/incremental.py`) keeps the ranking and asks about the one
+    receipt an arrival can have moved. `ranked` is the receipts of one call id in
+    `(started_at, node_id)` order -- §5.2's, so the answer is a function of a
+    *set* and input order cannot reach it.
+    """
+    if receipt != ranked[0]:
+        return DATA_LATER_BASIS
+    if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+        return DATA_TIED_BASIS
+    return DATA_BASIS
+
+
+def data_edges_of(
+    receiver: NodeId,
+    fulfillers: Iterable[NodeId],
+    basis: str,
+    by_node: Mapping[NodeId, str | None],
+) -> list[Edge]:
+    """One receipt's `data` edges: one per span that fulfilled the call (§4.2).
+
+    Separate from `data_edges` for the reason `temporal_edge` is separate from
+    `temporal_chain`: the batch path wants every receipt of a call id at once and
+    the live one wants exactly the edges an arrival moved, and both reach the
+    rule here so neither carries a second copy of it.
+    """
+    found = []
+    for producer in fulfillers:
+        if producer == receiver:
+            # A span cannot feed itself. Malformed input rather than a
+            # relation, and a self-loop would be neither.
+            continue
+        found.append(
+            Edge(
+                src=producer,
+                dst=receiver,
+                kind=EdgeKind.DATA,
+                warrant=Warrant.EXPLICIT,
+                basis=basis,
+                adapter=edge_adapter(by_node, producer, receiver),
             )
+        )
     return found
 
 

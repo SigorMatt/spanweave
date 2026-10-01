@@ -448,6 +448,43 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A call id's `data` edges are amended per declared receipt rather than
+  restated, so a loop resending its history is no longer cubic in its turns.**
+  `SPEC.md` §10.6 gains the case and §10.2's `basis` bullet is narrowed to what
+  actually moves; §4.2's prohibition, §4.2.1's three bases and §10.1's promise do
+  not move (`WORKPLAN.md` L17, from the 2026-09-30 decision on the run-2 cold
+  review's three superlinear `feed` sites — site (ii), the cubic one). A span that
+  declares receipt of a call used to restate that call id's **whole** `data` edge
+  set, because which receipt ranks first decides a `basis` and that is a fact about
+  the whole set; a conversational protocol resends every result it has been given
+  on every turn, so each declaration was rebuilt once per later turn. What the
+  ranking actually turns on is narrower: the receipt that ranks **first**, and
+  whether the second ties with it. The receipts of a call id are now held in
+  §4.2.1's order, and an arrival moves at most two of them — its own, at one edge
+  per span that answered the call, and the one that ranked first before it, if this
+  receipt outranks it (now "not the earliest") or ties with it (now "earliest
+  tied"), at one edge removed and one added. Every other receipt was already not
+  the earliest and stays so, whatever arrives. The rule is not copied: one function
+  answers which of §4.2.1's three strings a receipt earns and the batch path's
+  `data_edges` is now that function over a ranked set, so the live bases are the
+  batch bases by construction. The per-edge traffic goes through the same rollback
+  the chain's does, so a record refused part-way through still leaves the builder
+  exactly as it was — the basis it rewrote put back, not merely its additions
+  withdrawn. `Delta.basis_rewritten` reports the same pairs it always did.
+  Measured with `make bench ARGS="--only echo --turns 400 --segments 4"` on one
+  machine (CPython 3.14.6), echo shape, `feed` only: **958 ms against 75,171 ms**
+  at the parent commit, with `Edge.__init__` at **81,799 against 10,748,399** —
+  one `data` edge built per declared receipt (1.000 at 50, 100, 200 and 400 turns,
+  against 17.0, 33.7, 67.0 and 133.7), so the feed is linear in the receipts the
+  input declares. Per-record cost is **not** flat and cannot be: §4.2.1 says `n`
+  turns declare `n(n-1)/2` receipts and none is suppressed, so the edge set is
+  quadratic in the turns and an arrival carrying 175 declarations cannot cost what
+  one carrying 25 does. Over the same 400 turns in four stretches, turns 301-400
+  cost **5.44x** turns 1-100 (2.0393 against 0.3746 ms/record) where the cubic site
+  gave 52.18x (227.2158 against 4.3547) — below the 7.1x growth of the answer
+  itself, and above the 1.5x the batch was accepted against, which the quadratic
+  edge set makes unreachable. The harness gained `--segments` to measure it.
+
 - **A parent that arrives after its children regroups all of them in one move, so
   the arrival order of one record no longer decides what a trace costs to feed.**
   `SPEC.md` §10.6 gains the case; §4.3's rule and §10.1's promise do not move
@@ -500,8 +537,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   0.112 ms/record at k=8,000, a ratio of 1.02x** against 1.875 and 20.918
   ms/record (11.15x) at the parent commit — and `Edge.__init__` under `cProfile`
   falls from 1,999,000 constructions at k=2,000 to 3,999, exactly linear across
-  k = 1,000 / 2,000 / 4,000 / 8,000. The echo shape's `data` edge set is a
-  separate site and is unchanged.
+  k = 1,000 / 2,000 / 4,000 / 8,000. The echo shape's `data` edge set was a
+  separate site, and is the entry above.
 
 - **`read_records` is now pinned on every container and every refused shape.**
   Tests only: nothing under `spanweave/` moves and `SPEC.md` does not move
