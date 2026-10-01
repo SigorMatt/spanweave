@@ -5,9 +5,9 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 4 in progress: L20 and L21 done, each with CI
-green on its own pushed tip. Next: L22 → L15 → L16 → L17 → L18 → L19,
-spanweave repo. L7 and L8 in run 5).
+Last updated: 2026-10-01 (run 4 in progress: L20, L21 and L22 done, each with
+CI green on its own pushed tip. Next: the three cost batches L15 → L16 → L17,
+then L18 → L19, spanweave repo. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -182,7 +182,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
 | L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | done | 6 |
-| L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | todo | 4 |
+| L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | done | 4 |
 
 ---
 
@@ -524,6 +524,17 @@ with both of them available.
   (`itemsize`/`c_contiguous`), so the two refusals were distinguishable
   without a code change. `tests/test_read.py` is order-independent forward,
   reversed, and under three seeds.
+- 2026-10-01: L22 done (`369e826`), docs plus a gate, no behaviour change.
+  The census was stale in **two** places, not the one finding 4 named: the
+  `null` count aged at L12, and the object count was already off by one at the
+  parent (`timestamp_unit_suspect`). Measured: three carry an object, four
+  carry nothing, one carries something the library computed. §10.9 now names
+  what `tests/serialized_shape.json` carries and the only two commits that
+  moved it (`be16fa8` at L12, `b10c60a` at L14 — L20 and L21 left it alone,
+  confirmed by `git log` on the file). The gate lives in `tests/test_codes.py`
+  beside the existing `CONTRACTS.md` count guard and was proven red three
+  ways, including the next-addition case: plant a fifth `null` row with the
+  prose untouched and `make check` fails.
 
 ---
 
