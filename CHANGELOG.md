@@ -448,6 +448,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **`read_records` is now pinned on every container and every refused shape.**
+  Tests only: nothing under `spanweave/` moves and `SPEC.md` does not move
+  (`WORKPLAN.md` L21, from the run-3 cold review's findings 2 and 7). Two gaps,
+  both in what was *checked* rather than in what the library does.
+  **The no-carry property was pinned only where lines are the unit.** §7 says
+  the reader neither buffers nor rejoins across calls, and that sentence is not
+  qualified by container — but the only test of it handed over half a *line*.
+  The other two containers, the JSON array and the OTLP export document, are
+  precisely the ones the reader buffers whole, so they are where a carry buffer
+  is easiest to write and hardest to see: the review demonstrated that the whole
+  suite stayed green (`2964 passed, 2 skipped`) with either of them silently
+  rejoining a truncated container across two calls and inventing records out of
+  the pair. Each now has a test of its own, in the shape the lines test already
+  had: a container cut short is one `malformed_record` with `skipped_records=1`
+  in the call that received it, the bytes that would complete it yield no record
+  in the next call, and the two joined are stated to be readable so the two
+  empty reads cannot be mistaken for a claim about unreadable bytes.
+  **The two `memoryview` refusals could not tell their branches apart.** They
+  share one message naming both conditions, so `'one byte per item'` and
+  `'contiguous'` are each in it whichever shape was passed, and both tests
+  passed on either — a swap of the branch attribution went unnoticed. Each now
+  asserts the shape the message interpolates (`itemsize 2 with
+  c_contiguous=True` for the wide view, `itemsize 1 with c_contiguous=False` for
+  the strided one) and denies the other's, which is the only discriminator there
+  is. The message itself is unchanged, so this is an assertion added, not a
+  contract moved.
+
 - **Both halves of the delta surface are now pinned where a review found they
   were not.** Tests only: nothing under `spanweave/` moves and `SPEC.md` does
   not move (`WORKPLAN.md` L14, from the run-2 cold review's N4 and T9).

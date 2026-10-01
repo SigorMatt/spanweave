@@ -1485,21 +1485,44 @@ def test_a_write_after_the_call_cannot_change_what_the_call_returned():
     assert from_view.records == tuple(RECORDS)
 
 
+# The two refusals below share one message, which names both conditions, so
+# neither "one byte per item" nor "contiguous" tells the two refused shapes
+# apart: each is in the message whichever shape was passed. What does tell them
+# apart is the shape the message interpolates, and each test asserts its own and
+# denies the other's, so swapping which condition reports which fails a test
+# rather than nothing (`patches/REVIEW-2026-10-01.md` finding 7).
+
+
 def test_read_records_refuses_a_memoryview_whose_items_are_wider_than_a_byte():
     # Rendering one to bytes takes the machine's own endianness, so the same
     # input would read differently on another machine (`CLAUDE.md` 4).
     wide = memoryview(bytearray(JSONL)).cast("H")
     with pytest.raises(TypeError) as failure:
         spanweave.read_records(wide)
-    assert "memoryview" in str(failure.value)
-    assert "one byte per item" in str(failure.value)
+    message = str(failure.value)
+    assert "memoryview" in message
+    assert "one byte per item" in message
+    # Wide items, laid out contiguously: that pair, and not the strided one.
+    assert wide.itemsize == 2 and wide.c_contiguous
+    assert "itemsize 2 with c_contiguous=True" in message, (
+        "the refusal did not report the shape it refused"
+    )
+    assert "c_contiguous=False" not in message
 
 
 def test_read_records_refuses_a_memoryview_that_is_not_a_contiguous_run():
     every_other = memoryview(bytearray(JSONL))[::2]
     with pytest.raises(TypeError) as failure:
         spanweave.read_records(every_other)
-    assert "contiguous" in str(failure.value)
+    message = str(failure.value)
+    assert "contiguous" in message
+    # Single bytes, strided: the other half of the same condition, and the one
+    # discriminator between the two refusals.
+    assert every_other.itemsize == 1 and not every_other.c_contiguous
+    assert "itemsize 1 with c_contiguous=False" in message, (
+        "the refusal did not report the shape it refused"
+    )
+    assert "itemsize 2" not in message
 
 
 def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes():
@@ -1580,6 +1603,96 @@ def test_the_same_record_in_two_calls_is_read_twice_and_diagnosed_in_neither():
     assert together.records == first.records
     assert [d.code for d in together.diagnostics] == [codes.DUPLICATE_RECORD]
     assert together.skipped_records == 0
+
+
+# The two above pin "neither buffers nor rejoins across calls" (§7) where lines
+# are the unit. The sentence is not qualified by container, and the other two --
+# the JSON array and the OTLP export document -- are the ones a reader has to
+# buffer whole, so they are where a carry buffer would be easiest to introduce
+# and hardest to see. The two below carry the same structure one container over
+# (`patches/REVIEW-2026-10-01.md` finding 2): a trailing fragment is one
+# `malformed_record` with `skipped_records=1` in the call that received it, and
+# the bytes that would complete it produce no record in the next call. Each one
+# brings its own bytes and bites alone.
+
+
+def test_an_unterminated_array_is_diagnosed_in_its_own_call_and_never_the_next():
+    """An array cut short is a loss in its own call, not a record held open.
+
+    The array form is the one place laziness is impossible -- it is not a record
+    until its closing bracket arrives -- so a reader tempted to wait for that
+    bracket would wait across the call boundary. It does not: the whole
+    container is one `malformed_record`, counted once because how many records
+    it held is exactly what could not be read (§3.7), and the remainder of the
+    array is read on its own terms in the next call, where it is not JSON
+    either.
+    """
+    whole = b'[{"span_id":"array-carry-s0"},{"span_id":"array-carry-s1"}]'
+    cut = whole.index(b",") + 1
+    opening, remainder = whole[:cut], whole[cut:]
+
+    first = spanweave.read_records(opening)
+    assert first.records == (), "a half-read array yielded a record"
+    assert [d.code for d in first.diagnostics] == [codes.MALFORMED_RECORD], (
+        "the unterminated array was not reported in the call that received it"
+    )
+    assert "could not be read as a JSON array" in first.diagnostics[0].message, (
+        "the array container did not report this; the branch under test is not "
+        "the one that ran"
+    )
+    assert first.diagnostics[0].source == opening.decode("utf-8")
+    assert first.skipped_records == 1, "the array is records that were never read"
+
+    # The bytes that would close it. A reader holding the opening would show it
+    # by producing the two records here; one holding nothing produces none,
+    # because these bytes are not a record on their own.
+    second = spanweave.read_records(remainder)
+    assert second.records == (), (
+        "an array fragment from an earlier call was rejoined here"
+    )
+    assert [d.code for d in second.diagnostics] == [codes.MALFORMED_RECORD]
+    assert second.skipped_records == 1
+    # Stated so the two-call claim cannot be mistaken for a claim that the
+    # bytes are unreadable: joined, they are two records.
+    assert len(spanweave.read_records(whole).records) == 2
+
+
+def test_an_unterminated_export_document_is_diagnosed_in_its_own_call_too():
+    """An OTLP document cut short is a loss in its own call as well.
+
+    This container is buffered for the array's reason and reached by a head
+    scan of one member key, so a truncated export is read as far as the scan
+    went and then refused. The refusal is the line reader's, because an input
+    that is not a single document is read line by line -- what matters here is
+    that the refusal happens *now*, and that the bytes completing the document
+    cannot combine with it in the next call.
+    """
+    whole = (
+        b'{"resourceSpans":[{"scopeSpans":[{"spans":'
+        b'[{"spanId":"doc-carry-s0","name":"doc-carry"}]}]}]}'
+    )
+    cut = whole.index(b'"spans"')
+    opening, remainder = whole[:cut], whole[cut:]
+
+    first = spanweave.read_records(opening)
+    assert first.records == (), "a half-read export document yielded a record"
+    assert [d.code for d in first.diagnostics] == [codes.MALFORMED_RECORD], (
+        "the unterminated document was not reported in the call that received it"
+    )
+    assert first.diagnostics[0].source == opening.decode("utf-8")
+    assert first.skipped_records == 1
+
+    second = spanweave.read_records(remainder)
+    assert second.records == (), (
+        "a document fragment from an earlier call was rejoined here"
+    )
+    assert [d.code for d in second.diagnostics] == [codes.MALFORMED_RECORD]
+    assert second.skipped_records == 1
+    # Joined, they are the one span the export carries -- so the two empty
+    # reads above are about the call boundary, not about unreadable bytes.
+    assert spanweave.read_records(whole).records == (
+        {"span_id": "doc-carry-s0", "name": "doc-carry"},
+    )
 
 
 # --- Bytes UTF-8 cannot decode (`SPEC.md` §3.7, §7) --------------------------
