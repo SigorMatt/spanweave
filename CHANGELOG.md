@@ -448,6 +448,34 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The live-graphs series' two cold reviews are in the repository, and every
+  finding either names the batch that closed it or is registered as an open
+  thread.** `reviews/2026-09-30-live-run2.md` and
+  `reviews/2026-10-01-live-run3.md`, each archived byte-for-byte from the
+  untracked scratch drop — `sha256`
+  `3800a79dc3e3c7cfea110e35a53919e307b16bb23f2376b03e9672423b23ce38` and
+  `0aa047c4fc7054d4c96af948522b7040e53db33e410b25bbd4bf5ddd837dd8f2`, `cmp`
+  clean on both — with the scratch name and the whole digest written into
+  `TASKS.md` beside each, as runs 5 and 6 of the September 2026 audit did
+  (`WORKPLAN.md` L19). The dispositions are the `WORKPLAN.md` §3 decisions-log
+  rows of 2026-09-30 and 2026-10-01; `TASKS.md` gains a section for the series
+  carrying both, because the plan file those rows live in is written to be
+  deleted at the close and a disposition recorded only there leaves with it.
+  Run 2: seventeen of its twenty-one lettered findings closed by batches L9–L18
+  or corrected in the plan, the three superlinear `feed` sites it confirmed and
+  extended closed one per batch by L15–L17, and **four open threads** —
+  `restated` uncovered by the corpus, the asymmetric edge dedup, the unlabelled
+  `build.py` refactor, and `_numbered`'s one-span-per-record reading — each
+  quoted as the review wrote it. Run 3: findings 1, 2, 3, 4 and 7
+  closed by L20–L22, finding 6 corrected in the plan, finding 5 recorded here as
+  a correction to `b10c60a`'s body (gate 3 was not changed by L14, and is not
+  owed a mid-stream window, because such a window *is* a full-prefix delta of a
+  shorter builder), and **ten threads** registered verbatim, of which eight are
+  open: threads 8 and 17 were closed by `f04cbc8` and `71d282f`. **No behaviour
+  changed**: documents only, nothing under `spanweave/` or `tests/`, and
+  `tests/serialized_shape.json` does not move. (run-2 and run-3 reviews, all
+  findings)
+
 - **`SPEC.md` §10.2 and §10.6 state what a live build costs as *promises* with
   the numbers cited to the harness, and the harness now measures what the prose
   attributes.** Nothing under `spanweave/` moves (`WORKPLAN.md` L18, from the
