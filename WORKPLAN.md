@@ -5,9 +5,9 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 4 in progress: L20, L21 and L22 done, each with
-CI green on its own pushed tip. Next: the three cost batches L15 → L16 → L17,
-then L18 → L19, spanweave repo. L7 and L8 in run 5).
+Last updated: 2026-10-01 (run 4 in progress: L20, L21, L22 and L15 done, each
+with CI green on its own pushed tip. Next: L16 → L17, then L18 → L19,
+spanweave repo. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -175,7 +175,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L12 | **Undecodable bytes are a diagnostic, not a silent replacement.** T12. A byte sequence UTF-8 cannot decode is still replaced with U+FFFD and the record still read, but the read emits `undecodable_bytes` (record-scoped where a record results, naming the line; `skipped_records` unchanged), for `read_records`, file reads and every `errors="replace"` site (`read.py:243,278,312`). SPEC §3.7 enumerates the code; §7 gains one sentence: the reader neither buffers nor rejoins across calls, so a receiver splits its bytes on `\n` before calling. Tests red on the parent: `read_records(b'{"span_id":"\xff\xfe"}\n')` yields the record with the diagnostic; a valid multi-byte sequence split across two calls gives two diagnostics and two `malformed_record`s, not one record; a file with the same bytes matches. Corpus unmoved (verify — no fixture carries invalid bytes). | done (`be16fa8`) | 10 |
 | L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | done (`6b2e866`) | 4 |
 | L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | done (`b10c60a`) | 6 |
-| L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | todo | 20 |
+| L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | done | 20 |
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | todo | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
@@ -535,6 +535,23 @@ with both of them available.
   beside the existing `CONTRACTS.md` count guard and was proven red three
   ways, including the next-addition case: plant a fifth `null` row with the
   prose untouched and `make check` fails.
+- 2026-10-01: L15 done (`cda7f74`), the first of the three cost sites.
+  `_restate_chain` is gone, replaced by `_rank`/`_join`/`_leave` over members
+  held in sorted order, with `Tally.amend_edges` carrying per-edge traffic
+  instead of `set_edges` of the whole key. Acceptance met by `make bench`
+  (`--only wide`, feed only, CPython 3.14.6, one machine): **0.1093 ms/rec at
+  k=1000 → 0.1119 at k=8000 = 1.02×**, against the ≤1.5× the row asked for;
+  the same machine on the parent gives 1.875 → 20.918 = 11.15×, which
+  reproduces the review's 11.27×. `Edge.__init__` under `cProfile` is
+  1999/3999/7999/15999 at k=1000/2000/4000/8000 — linear, against 1,999,000 at
+  k=2000 before. Red on the derived parent `1250d35`: 2 failed, 64 passed, the
+  three correctness controls green. The sequencing decision paid: the per-edge
+  ledger traffic is reversed by L20's `Ledger.rollback`, pinned by a
+  half-refused-record test. Two things for later batches: `cProfile`'s
+  `pstats` merges every frozen-dataclass `__init__` under `<string>:2`, so an
+  `Edge` count must be read from `Profile.getstats()` raw entries (L18's
+  harness); and §10.6 moved here **only** for the one sentence L15 falsified —
+  L18 still owns the wholesale rewrite.
 
 ---
 
