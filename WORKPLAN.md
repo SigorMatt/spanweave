@@ -5,9 +5,9 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 4 in progress: L20, L21, L22 and L15 done, each
-with CI green on its own pushed tip. Next: L16 → L17, then L18 → L19,
-spanweave repo. L7 and L8 in run 5).
+Last updated: 2026-10-01 (run 4 in progress: L20, L21, L22, L15 and L16 done,
+each with CI green on its own pushed tip. Next: L17, then L18 → L19, spanweave
+repo. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -176,7 +176,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L13 | **`read_records` accepts `bytearray` and `memoryview`.** T13: `isinstance(data, (bytes, bytearray, memoryview))`; the copy, if any, is the library's; `str` still refused with the path rationale. SPEC §7 one clause. Test red on the parent: a `bytearray` accumulator read in place yields what `bytes(buf)` yields; `memoryview` likewise. | done (`6b2e866`) | 4 |
 | L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | done (`b10c60a`) | 6 |
 | L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | done | 20 |
-| L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | todo | 12 |
+| L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | done | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
 | L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
@@ -552,6 +552,22 @@ with both of them available.
   `Edge` count must be read from `Profile.getstats()` raw entries (L18's
   harness); and §10.6 moved here **only** for the one sentence L15 falsified —
   L18 still owns the wholesale rewrite.
+- 2026-10-01: L16 done (`e708ed5`), and it corrected the row's own premise.
+  Measured on one machine across three commits, wide n=2000, root-first /
+  root-last / ratio: pre-L15 `1250d35` 7572.0 / 18810.7 ms = **2.48×**; parent
+  `9f5b8c3` 218.8 / 264.5 = **1.21×**; here 217.9 / 230.6 = **1.05×**. So the
+  row's ≤2× acceptance *failed* at the commit it was written against, L15
+  brought it inside the bound, and L16 took it to 1.05× — met, not loosened.
+  What L16 adds is the half L15 did not: the move made **once**.
+  `_regroup_many` re-keys a group whose whole membership moves to an empty
+  destination, and because a `temporal` edge names its endpoints rather than
+  its group, **no edge moves at all** — the arrival is linear in the children
+  (7.4 µs/child at n=1000, 8.7 at n=16000, against 18.3/28.4 at the parent).
+  Partial moves fall back to L15's per-record `_leave`/`_join`. Red on the
+  derived parent `9f5b8c3`: 1 failed, 68 passed. §10.6 gained an *addition*
+  here, nothing was falsified, so L18's wholesale rewrite is still untouched;
+  `make bench ARGS="--only wide --root-last --wide N"` is new and is how L18
+  re-takes this number.
 
 ---
 
