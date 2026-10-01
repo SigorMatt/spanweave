@@ -5,11 +5,11 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-02 (run 4 in progress: L20, L21, L22, L15, L16 and L17
-done, each with CI green on its own pushed tip. All three superlinear `feed`
-sites are now fixed. Next: L18 → L19, spanweave repo — and L18 must correct
-L17's first acceptance number, which §4 records as unmeetable. L7 and L8 in
-run 5).
+Last updated: 2026-10-02 (run 4 in progress: L20, L21, L22, L15, L16, L17 and
+L18 done, each with CI green on its own pushed tip. All three superlinear
+`feed` sites are fixed and §10.6 is rewritten on numbers measured at the new
+tip. Next: L19, the last batch of the run, then stop for a cold review. L7 and
+L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -180,7 +180,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | done | 20 |
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | done | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | done; the second criterion met exactly, the first unmeetable as written and corrected in L18 (§4) | 20 |
-| L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
+| L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | done | 10 |
 | L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
 | L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | done | 6 |
@@ -592,6 +592,33 @@ with both of them available.
   take bare ratios out of SPEC. `--segments N` is new (turn-aligned on echo),
   and with all three sites fixed the whole `tests/live_cost.py` header table is
   now history and ready to be re-taken.
+- 2026-10-02: L18 done (`60a831b`), docs plus harness, nothing under
+  `spanweave/`. All seven row items satisfied: the materialize sort, the
+  rewind and **each** `ordering()` of one `delta()` are timed in place; `--smoke`
+  is a new `bench-smoke` prerequisite of `check` (~0.15 s, `make check` 27.5 s
+  against 27.1 s before); §10.2/§10.6 are promises plus a dated,
+  harness-cited numbers block with no bare ratios; heap-Kahn is gone from SPEC
+  including its surviving "not a faster sort" form, with the rejected subtree
+  recompute named beside the open "no sort" question; CHANGELOG's heap line is
+  reworded; this file was not touched; both shapes re-taken. `--smoke` asserts
+  **shape, never the clock** — receipt count, one `Edge` per edge held, sort
+  counts 0/1/2, identical bytes across arrival order — the rule `bench` and
+  `stranger` both already state. It bites per site when replayed on the three
+  earlier tips (`1250d35` echo 90/34, `9f5b8c3` echo 54/34, `f385d36` echo
+  54/34, each exit 1 at eleven records). Fresh numbers at `0718ba8`, CPython
+  3.14.6, one machine — echo 400 turns: feed 1.2009 ms/rec, 0 sorts, 81,799
+  `Edge` = 1.000 per edge held, `delta` 245.8 ms of which the sort is 15.1%;
+  wide 20,000: feed 0.1198 ms/rec, 39,999 `Edge` = 1.000, `delta` 293.2 ms of
+  which the sort is 59.3%; root-last at 2,000 is 1.07×. **L17's unmeetable
+  ratio is now the declaration floor in §10.6**: 24.6 receipts/record for
+  turns 1–100 against 174.8 for 301–400 makes 7.1× the floor for any
+  implementation that builds each declaration once, the measured 5.43× is
+  below it, and a target beneath the floor could only be met by suppressing
+  declared relations, which §4.2.1 forbids. Red on the derived parent
+  `0718ba8`: 4 failed, 4 passed. The harness also gained `--count-edges`,
+  reading `Edge.__init__` from `Profile.getstats()` raw entries per L15's note,
+  so an acceptance count can be re-taken from `make bench` without a one-off
+  script.
 
 ---
 
