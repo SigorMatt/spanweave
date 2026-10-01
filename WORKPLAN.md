@@ -5,8 +5,9 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 3 done: L9-L14, each with CI green on its own
-pushed tip. Next: cold review of L9-L14, then run 4. L7 and L8 in run 5).
+Last updated: 2026-10-01 (run-3 cold review read and decided (§3). Next: run 4
+= L20 → L21 → L22 → L15 → L16 → L17 → L18 → L19, spanweave repo. L7 and L8 in
+run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -67,7 +68,9 @@ in a sub-agent per commit, check against the `CONTRIBUTING.md` bar and
 `AGENT.md` "Self-verification": spec changed in the same commit where
 behaviour changed; the new test fails on the parent commit (`git stash` /
 `git checkout <parent> -- spanweave` is not allowed — use `git worktree`
-on the parent, run the test there); no `hash()`, clock, or network in
+on the parent, run the test there), and the parent is `<sha>^`, derived —
+never a sha a brief names, because `plan:` commits interleave with code
+commits; no `hash()`, clock, or network in
 `spanweave/`; `tests/serialized_shape.json` unchanged or regenerated with
 an explanation; commit is one concern. Write findings to
 `patches/REVIEW-<date>.md` (untracked) and print them. Aux never edits
@@ -176,7 +179,10 @@ never restarts, fixes, or touches anything. Conventions live in
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | todo | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
-| L19 | **The run-2 review archived and every finding dispositioned.** `reviews/2026-09-30-live-run2.md` byte-for-byte, sha256 in the body; TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction. CHANGELOG entry. `make check`. | todo | 6 |
+| L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
+| L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | todo | 12 |
+| L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | todo | 6 |
+| L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | todo | 4 |
 
 ---
 
@@ -188,11 +194,12 @@ close. Run 1 = L0 then stop at the decision point; it ran and stopped there.
 Run 2 = L3 → L4 → L5 → L6, in the spanweave repo, then stop.
 
 Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop: cold
-review of L9–L14 (aux), decisions, then run 4. Run 4 = L15 → L16 → L17 →
-L18 → L19, then stop: cold review, decisions. Run 5 = L7 → L8 in
-`SigorMatt/spanweave-live` once it exists. Every batch: CI green on the
-pushed tip before `done`. The cost batches precede L7 because a receiver is
-not designed against a `feed` that costs 72 ms/record.
+review of L9–L14 (aux), decisions, then run 4. Run 4 = L20 → L21 → L22 → L15
+→ L16 → L17 → L18 → L19, spanweave repo, then stop: cold review of the range
+(aux), decisions. L20 precedes the cost batches because the rollback it
+introduces is the path their per-edge ledger traffic must take. Run 5 = L7 →
+L8 in `SigorMatt/spanweave-live` once it exists. Every batch: CI green on the
+pushed tip before `done`.
 
 L1 and L2 carried no call estimate because they were already written: the two
 memos went in with the series-opening commit, so the series opened at the
@@ -212,6 +219,11 @@ with both of them available.
 | 2026-09-30 | L5 / §10.6 | The review's independent re-measurement (90.2× vs the note's 116×; three superlinear sites, one cubic, one inside a single `feed`) stands as the record. The drop of the *resort* batch holds — ordering is not the cost. The three sites in `feed` are implementation, not spec: §10.1 is the promise, §10.2/§10.6's cost paragraphs describe the implementation and are rewritten on fresh numbers once the sites are fixed (L15–L18). The "no sort" conversation about carrying canonical order between versions stays deferred and gets no batch; it is revisited only after L18's numbers, since `delta()` at a few hundred ms on 20k spans is not what makes the builder unusable — `feed` is. | maintainer |
 | 2026-09-30 | N2, T1–T5 | SPEC states complexity classes as promises and cites `tests/live_cost.py` for numbers with their provenance; bare machine ratios leave SPEC. The heap-Kahn claim is removed from SPEC and reworded in CHANGELOG as "measured in the batch session; harness not retained", because nothing can reproduce it. §10.6 names the rejected subtree-recompute alternative (T2). `make bench` gains a smoke form that `make check` runs (T5); the harness times what the prose attributes (N3, T3, T4). All in L18, after the numbers have changed. | maintainer |
 | 2026-09-30 | runs | Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop for a cold review. Run 4 = L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo, which still does not exist. A receiver is not designed against a `feed` that costs 72 ms/record, so the cost batches precede L7. | maintainer |
+| 2026-10-01 | review run 3 | Finding 1 (§10.5's atomicity promise is false two ways: `_translate` commits `_claimed`/`_sample`/`_unread` before the absorb loop, and the span loop is not atomic, leaving a *silently* corrupt builder) is one batch, L20, and it runs **before** L15/L17 so the rollback is derived once, before `Tally.set_edges` becomes per-edge ledger traffic. Finding 2 (a carry buffer in the array or document container is uncaught) and finding 7 (L13's two refusals indistinguishable) are one tests-only batch, L21. Findings 3 and 4 (`SPEC.md:2390` false; `SPEC.md:709` census stale) are one docs batch, L22, with a doc-truth check so the census cannot go stale again. Finding 5 is a correction recorded in L19, not a batch: the review showed mid-stream windows are full-prefix deltas of a shorter builder by construction, so gate 3 gains nothing from them. Finding 6 is corrected in this commit. The ten threads go to L19. | maintainer |
+| 2026-10-01 | L14 | The 62 windows stay. They are redundant against every mutation tried because `until` is hard-wired to the current version (`api.py:226`); their value is the 19/62 windows that report a still-open fact, and the lever for selectivity is a longer fixture, not more windows. No further window batches. | maintainer |
+| 2026-10-01 | L12 | The array branch's whole-input scope for `undecodable_bytes` is accepted as a thread, not a fix: a receiver that tails exporters feeds lines or documents, and a legitimately written U+FFFD is indistinguishable from a replaced one only on that branch. Revisit if L7 reads arrays. | maintainer |
+| 2026-10-01 | §0.2 | The parent of a code commit is `<sha>^`, derived, never a sha named in a brief: `plan:` commits interleave, and the run-3 brief named a child as a parent. Written into §0.2 in this commit. | maintainer |
+| 2026-10-01 | run 4 | L20 → L21 → L22 → L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo once it exists. | maintainer |
 
 ---
 
@@ -461,7 +473,10 @@ with both of them available.
   to running gate 2 on every prefix rather than claiming a new mechanism.
   **The corpus is the binding limit**: the longest rendering is 5 records, so
   23 of 53 renderings (n ≤ 2) get no mid-stream window at all, 17 get one, and
-  `(1, n//2)` / `(n-3, n-1)` exist on only 13. Windows were dropped where they
+  `(1, n//2)` exists on **0** renderings while `(n−3, n−1)` exists on **30**
+  (corrected 2026-10-01 by the run-3 review; the record said 13 for both, and
+  the commit body's "always" for `(1, n//2)` was wrong — it needs n ≥ 6 and the
+  corpus tops out at 5). Windows were dropped where they
   collapse, never clamped. `MID_STREAM_CEILING = 64` bounds the exhaustive set
   if a long captured trace is ever added; nothing in the corpus reaches it
   today, which makes a real-length captured fixture the first input that would.
@@ -481,6 +496,12 @@ with both of them available.
   per span so the loop is not atomic even though each absorb now is; and
   whether L12's choice of *where* the buffered-document branch reports
   `undecodable_bytes` is the one a receiver would want.
+- 2026-10-01: run-3 cold review read and decided (§3). Nothing blocks, but
+  §10.5's atomicity promise was shown false two ways with the shipped
+  adapters, and the fix (L20) is sequenced ahead of the cost batches so the
+  rollback is written once. The review's own brief named a child as a parent;
+  §0.2 now derives the parent. Run 4 is eight batches in this repo; the
+  receiver repo is still not created.
 
 ---
 
