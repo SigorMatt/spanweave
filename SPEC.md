@@ -706,8 +706,11 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; two carry an object, three carry nothing, and one carries something
-the library computed rather than something it was given.
+arrived as; three carry an object, four carry nothing, and one carries something
+the library computed rather than something it was given. Those three counts are
+measured from the table below by `tests/test_codes.py`, beside the count
+`CONTRACTS.md` states, so the next row added fails the build instead of ageing
+this sentence.
 
 | Code | `source` |
 |---|---|
@@ -2396,9 +2399,20 @@ does (§8).
 ### 10.9 The delta document form is additive
 
 A delta serializes to its **own** top-level document. The graph document does
-not move for this: no key is added to it, and
-`tests/serialized_shape.json` is unchanged — which is the same promise §10.1
+not move for this: no key is added to it, and the graph half of
+`tests/serialized_shape.json` — its `document`, `model`, `passthrough` and
+`declared_elsewhere` sections — is unchanged, which is the same promise §10.1
 makes and the reason lifecycle option (a) was taken.
+
+The **file** is a different claim, and an earlier wording of this sentence made
+it wrongly by saying the file itself was unchanged. The artifact specimens both
+documents, so it moved when the delta landed and has moved since.
+`WORKPLAN.md` L14 added its four `delta_*` sections, which specimen this
+document beside the graph one, and rewrote the `_` head note the gate excludes
+as prose; L12 added `undecodable_bytes` to `diagnostic_source` and to
+`vocabularies.diagnostic_codes`, which grows the vocabulary of a value a graph
+document already carried rather than its shape. Neither move touched the four
+graph sections, and neither L20 nor L21 touched the file at all.
 
 ```
 {"schema_version": "...", "kind": "delta", "since": 11, "until": 15,

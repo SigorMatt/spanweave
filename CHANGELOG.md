@@ -1276,6 +1276,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **Two `SPEC.md` sentences the repo contradicted, and a census that can no
+  longer go stale.** Both from the run-3 cold review (findings 3 and 4;
+  `WORKPLAN.md` L22). §10.9 said `tests/serialized_shape.json` "is unchanged",
+  which is true of the **graph half** and false of the file: L14 added its four
+  `delta_*` sections and L12 added `undecodable_bytes` to `diagnostic_source`
+  and `vocabularies.diagnostic_codes`. §10.9 now names the four graph sections
+  the promise is about, says when and why the file moved, and records that L20
+  and L21 left it alone. §3.7's census paragraph above the `source` table read
+  "two carry an object, three carry nothing"; the table says **three**, **four**
+  and one, the `null` count having aged the moment L12 added a row. Correcting
+  the numbers alone would only move the expiry date, so all three are now
+  measured from the table itself by `tests/test_codes.py`
+  (`test_the_source_census_in_the_spec_is_the_census_of_its_own_table`), beside
+  the `CONTRACTS.md` count that was the only one anything asserted — the next
+  row added to that table fails `make check` in the same change. A second test
+  pins the measurement, so a marker the table stops using fails loudly instead
+  of agreeing with a wrong prose number. Documents and tests only: nothing
+  under `spanweave/` changes behaviour, and no serialized form moves.
+
 - **A record a live `Builder` refuses is now absorbed whole or not at all — the
   atomic region reaches `_translate` and spans a record of more than one span.**
   `SPEC.md` §10.5's promise was false two ways with the code that shipped, and
