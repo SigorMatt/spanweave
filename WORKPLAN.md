@@ -5,9 +5,11 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 4 in progress: L20, L21, L22, L15 and L16 done,
-each with CI green on its own pushed tip. Next: L17, then L18 → L19, spanweave
-repo. L7 and L8 in run 5).
+Last updated: 2026-10-02 (run 4 in progress: L20, L21, L22, L15, L16 and L17
+done, each with CI green on its own pushed tip. All three superlinear `feed`
+sites are now fixed. Next: L18 → L19, spanweave repo — and L18 must correct
+L17's first acceptance number, which §4 records as unmeetable. L7 and L8 in
+run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -177,7 +179,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L14 | **The delta surface is pinned where the review found it wasn't.** N4, T9, tests only. `tests/schema_shape.py` specimens a `Delta` document beside the `Graph` one, so `tests/serialized_shape.json` sees `delta_to_document` (regenerated, with the explanation in the body; the `Graph` half byte-identical — verify). Gate 2 adds windows with `until < n` and width > 1 (at least `(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)` per rendering) against the oracle. Print the new assertion count. | done (`b10c60a`) | 6 |
 | L15 | **A sibling group's temporal chain is maintained, not rebuilt.** Site (i): `_restate_chain` rebuilds the group's whole chain per arrival, O(m log m) and m−1 new `Edge`s. Keep each group's members in sorted order (`bisect` on the §4.3 tie-break key), and on an arrival replace only the chain edges adjacent to the insertion point — at most one removed, two added — through per-edge ledger add/drop instead of `Tally.set_edges` of the whole key. Prefix-consistency is untouched: gates 1–3 green on every rendering. Acceptance in `make bench`: wide shape `feed` ms/record at k=8000 within 1.5× of k=1000 (review: 11.3×), and `Edge.__init__` count linear in n under `cProfile`. | done | 20 |
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | done | 12 |
-| L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | todo | 20 |
+| L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | done; the second criterion met exactly, the first unmeetable as written and corrected in L18 (§4) | 20 |
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
 | L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
@@ -568,6 +570,28 @@ with both of them available.
   here, nothing was falsified, so L18's wholesale rewrite is still untouched;
   `make bench ARGS="--only wide --root-last --wide N"` is new and is how L18
   re-takes this number.
+- 2026-10-02: L17 done (`7ddd630`), the cubic site, and the last of the three.
+  Receipts are held in §4.2.1's ranking; `_received`/`_fulfilled` amend per
+  edge through L15's `Tally.amend_edges`; `_restate_calls` no longer touches
+  `data`. Red on the derived parent `f385d36`: 2 failed, 71 passed — 1330 data
+  edges built for 190 held at 20 turns, which is C(21,3), the cube itself.
+  Measured (`--only echo --turns 400 --segments 4`, CPython 3.14.6, one
+  machine, here vs parent): feed 958 ms vs 75,171; `Edge.__init__` **81,799 vs
+  10,748,399**, exactly 1.000 data edge per declared receipt at 50/100/200/400
+  turns against 17.0/33.7/67.0/133.7. **The row's second criterion is met
+  exactly; its first cannot be met by any correct implementation.** §4.2.1
+  promises that n turns declare n(n−1)/2 receipts and that none is suppressed,
+  so turns 301–400 carry 174.8 declarations/record against 24.6 — a **7.1×
+  floor** on ms/record for anything that builds each declaration once. The
+  measured 5.44× is *below* that floor, i.e. the per-record work is already
+  sublinear in declarations; reaching the row's 1.5× would require not
+  emitting declared relations, which §4.2.1 forbids. The batch did not loosen
+  the acceptance or edit this file — correctly. **L18 owns the correction**:
+  the 1.5× figure is replaced by the declaration-floor statement when §10.6's
+  cost prose is rewritten, which is the same batch that was already told to
+  take bare ratios out of SPEC. `--segments N` is new (turn-aligned on echo),
+  and with all three sites fixed the whole `tests/live_cost.py` header table is
+  now history and ready to be re-taken.
 
 ---
 
