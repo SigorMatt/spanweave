@@ -937,6 +937,31 @@ def deduplicated(edges: Sequence[Edge]) -> tuple[Edge, ...]:
     return tuple(sorted(unique.values(), key=lambda edge: edge.sort_key))
 
 
+def temporal_edge(earlier: Node, later: Node) -> Edge:
+    """One link of a sibling chain: `earlier` immediately before `later` (§4.3).
+
+    Two siblings reporting the same start time still get an edge -- the order
+    has to be total or the graph is not deterministic -- but it carries a
+    different ``basis``, because "we put these in an order" and "this one
+    started first" are different claims and only one of them is an
+    observation.
+
+    One pair at a time, and separately from `temporal_chain`, because a chain
+    has two callers that need different amounts of it: a batch build makes every
+    link of a group at once, and the live builder (`spanweave/incremental.py`)
+    makes only the links an arrival moved. Both reach the rule here, so neither
+    carries a second copy of it.
+    """
+    tied = earlier.started_at == later.started_at
+    return Edge(
+        src=earlier.id,
+        dst=later.id,
+        kind=EdgeKind.TEMPORAL,
+        warrant=Warrant.DERIVED,
+        basis=TEMPORAL_TIED_BASIS if tied else TEMPORAL_BASIS,
+    )
+
+
 def temporal_chain(siblings: Iterable[Node]) -> list[Edge]:
     """Consecutive siblings only, in one sibling group (`SPEC.md` §4.3).
 
@@ -945,29 +970,14 @@ def temporal_chain(siblings: Iterable[Node]) -> list[Edge]:
     ``graph.reachable(...)``, so materializing it here would trade memory for
     no information.
 
-    Two siblings reporting the same start time still get an edge -- the order
-    has to be total or the graph is not deterministic -- but it carries a
-    different ``basis``, because "we put these in an order" and "this one
-    started first" are different claims and only one of them is an
-    observation.
-
     One group at a time, because that is the scope of the rule: an arriving
     record changes the chain of the group it joins and of no other
     (`SPEC.md` §10).
     """
-    found = []
-    for earlier, later in itertools.pairwise(sorted(siblings, key=tie_break)):
-        tied = earlier.started_at == later.started_at
-        found.append(
-            Edge(
-                src=earlier.id,
-                dst=later.id,
-                kind=EdgeKind.TEMPORAL,
-                warrant=Warrant.DERIVED,
-                basis=TEMPORAL_TIED_BASIS if tied else TEMPORAL_BASIS,
-            )
-        )
-    return found
+    return [
+        temporal_edge(earlier, later)
+        for earlier, later in itertools.pairwise(sorted(siblings, key=tie_break))
+    ]
 
 
 def sibling_group(node: Node, parent_of: Mapping[NodeId, NodeId]) -> str:

@@ -256,6 +256,34 @@ class Tally:
         for edge in edges:
             self.edges.add(edge)
 
+    def amend_edges(self, removed: Sequence[Edge], added: Sequence[Edge]) -> None:
+        """A few edges out and a few in, for a key the caller accounts itself.
+
+        `set_edges` restates a key *in full*, which is right for a key whose
+        contribution is small and recomputed whole -- a record's `parent`, a call
+        id's `data` edges. It is wrong for a sibling group's temporal chain: the
+        chain of a group of `m` is `m - 1` edges and an arrival moves at most
+        three of them, so replacing the key would make one arrival redo the whole
+        group's work (`SPEC.md` §4.3, §10.6).
+
+        So the absorber keeps that chain in order itself and says here exactly
+        which edges left and which arrived. Nothing is attributed in
+        `_edges_for`, because there is nothing for a later `set_edges` of the
+        same key to replace -- a key is accounted one way or the other and never
+        both. Mixing them would leave the edge a key no longer contributes in
+        this collection, and conformance gate 2 diffs this accounting against two
+        materialized graphs at every version, so it would not be a quiet bug.
+
+        Removals first, so a key whose edges move around keeps its multiset
+        count in range throughout. Rollback needs nothing extra: both halves go
+        through `Ledger.add`/`drop`, which snapshot the group they touch, so the
+        one `rollback` undoes this as it undoes everything else (`SPEC.md` §10.5).
+        """
+        for edge in removed:
+            self.edges.drop(edge)
+        for edge in added:
+            self.edges.add(edge)
+
     def set_diagnostics(self, key: Key, items: Sequence[Diagnostic]) -> None:
         for item in self._diagnostics_for.replace(key, items):
             self.diagnostics.drop(item)

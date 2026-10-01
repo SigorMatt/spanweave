@@ -60,8 +60,18 @@ shape. And **what is superlinear in `feed` is not ordering**: eight times the
 records of a wide trace cost a hundred and sixteen times the feed (12.5 s at
 2,500), because the wide shape restates its one sibling group's whole temporal
 chain on every arrival and the echo shape restates a call id's whole `data` edge
-set for every receipt echoed at it. Each is a key restated in full, which is
-what `SPEC.md` §10.6 now says an arrival costs.
+set for every receipt echoed at it. Each was a key restated in full, which is
+what `SPEC.md` §10.6 said an arrival costs.
+
+**One of those two sites is since fixed, so every wide-shape `feed` number above
+is history.** A sibling group's chain is now maintained in §4.3's order and an
+arrival replaces only the edges adjacent to where it lands, so the wide shape's
+`feed` is linear in its records: re-measured on one machine at 0.109 ms/record at
+1,000 and 0.112 ms/record at 8,000, against 1.875 and 20.918 at the commit this
+header's table was taken from. The echo shape's `data` edge set is untouched and
+still cubic in turns. The table and the shares above are left as the record of
+what was measured when; they are re-taken wholesale, with provenance, once the
+remaining sites are fixed.
 """
 
 from __future__ import annotations

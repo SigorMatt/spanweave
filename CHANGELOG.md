@@ -448,6 +448,32 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A sibling group's temporal chain is maintained rather than rebuilt, so a wide
+  trace's `feed` is linear in its records.** `SPEC.md` §10.6 moves; §4.3's rule
+  and §10.1's promise do not (`WORKPLAN.md` L15, from the 2026-09-30 decision on
+  the run-2 cold review's three superlinear `feed` sites). Every arrival used to
+  restate the whole chain of the group it joined — `m - 1` fresh `Edge` objects
+  for a group of `m`, reusing none of the `m - 2` that had not changed — so one
+  wide sibling group, which is the ordinary shape of a trace whose root has many
+  children, made the feed quadratic in `n`. A group's members are now held in
+  §4.3's tie-break order, an arrival is placed in it with a binary search, and
+  only the chain edges adjacent to that place move: **at most one removed and two
+  added**, whatever the group holds. A record given a parent leaves one group and
+  joins another at the same price. The `Edge` objects go to the journal one at a
+  time instead of as a whole key, and are undone by the one rollback the previous
+  batch wrote — a refusal part-way through a record still leaves the builder
+  exactly as it was, the edge the arrival *removed* included.
+  The rule itself is not touched and is not copied: one function makes one link
+  of a chain and the batch path's `temporal_chain` is now that function over
+  consecutive siblings, so the live chain is the batch chain by construction
+  rather than by agreement. Measured with `make bench` on one machine
+  (CPython 3.14.6), wide shape, `feed` only: **0.109 ms/record at k=1,000 and
+  0.112 ms/record at k=8,000, a ratio of 1.02x** against 1.875 and 20.918
+  ms/record (11.15x) at the parent commit — and `Edge.__init__` under `cProfile`
+  falls from 1,999,000 constructions at k=2,000 to 3,999, exactly linear across
+  k = 1,000 / 2,000 / 4,000 / 8,000. The echo shape's `data` edge set is a
+  separate site and is unchanged.
+
 - **`read_records` is now pinned on every container and every refused shape.**
   Tests only: nothing under `spanweave/` moves and `SPEC.md` does not move
   (`WORKPLAN.md` L21, from the run-3 cold review's findings 2 and 7). Two gaps,

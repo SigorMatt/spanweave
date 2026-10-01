@@ -203,6 +203,49 @@ def test_a_sibling_inserted_between_two_others():
     assert chain == [("s1", "s2"), ("s2", "s3")]
 
 
+def test_a_scrambled_sibling_group_is_the_batch_chain_at_every_prefix():
+    """The chain is maintained rather than rebuilt, so every arrival position
+    inside it is a case: front, back, and between two members already there.
+
+    `replay` is the whole assertion -- the graph at each version is the batch
+    build of that prefix, byte for byte -- and the shape is chosen so that the
+    arrivals land all over the group instead of appending to it. The evens
+    arrive in order and then every odd lands strictly inside, which is the
+    insertion that has an edge to *remove* as well as two to add.
+    """
+    children = [index for index in range(0, 12, 2)] + [
+        index for index in range(1, 12, 2)
+    ]
+    records = [oi("s0", kind="AGENT", name="agent", t0=1000.0)] + [
+        oi(f"t{index:02d}", parent="s0", t0=1001.0 + index) for index in children
+    ]
+    builder = replay(records)
+    chain = [
+        (edge.src, edge.dst) for edge in builder.graph().edges(kind=EdgeKind.TEMPORAL)
+    ]
+    assert chain == [(f"t{i:02d}", f"t{i + 1:02d}") for i in range(11)]
+
+
+def test_several_children_regroup_when_their_parent_arrives_last():
+    """A record given a parent leaves the root group for its parent's, and both
+    chains have to be right afterwards -- the one it left as much as the one it
+    joined (`SPEC.md` §4.3, §10.2)."""
+    children = [oi(f"c{index}", parent="s0", t0=1001.0 + index) for index in range(5)]
+    other = oi("r1", t0=999.0)
+    records = [*children, other, oi("s0", kind="AGENT", name="agent", t0=1000.0)]
+    builder = replay(records)
+    chain = [
+        (edge.src, edge.dst) for edge in builder.graph().edges(kind=EdgeKind.TEMPORAL)
+    ]
+    assert chain == [
+        ("c0", "c1"),
+        ("c1", "c2"),
+        ("c2", "c3"),
+        ("c3", "c4"),
+        ("r1", "s0"),
+    ]
+
+
 def test_the_majority_trace_id_can_change_with_an_arrival():
     """Every derived id holds the trace id, so this one moves ids."""
     records = [
@@ -552,6 +595,48 @@ def test_a_half_refused_restating_record_leaves_the_builder_as_it_was(two_span):
     landed = [*kept, ts("d")]
     assert builder.feed(ts("d")) == 3
     assert dumps(builder.graph()) == dumps(graph_from_records(landed))
+
+
+def test_a_half_refused_record_puts_back_the_chain_edge_it_removed(two_span):
+    """The rollback reaches per-edge chain traffic too.
+
+    `ts("b", "b")`'s first span lands strictly between `a` and `c`, so the
+    arrival hands the ledger one temporal edge to drop and two to add, one edge
+    at a time rather than a whole key at once -- and then its second span is
+    refused. The undo is therefore not "take back what the arrival added": the
+    edge it *removed* has to come back, which is what makes `Ledger.rollback`'s
+    snapshot the one mechanism rather than a per-site inverse (`SPEC.md` §10.5).
+
+    The journal is checked and not only the graph: `graph()` is assembled from
+    the absorber's own dicts, which a refusal re-derives from the survivors, so
+    a ledger left holding `(a, b)` and `(b, c)` would show up in a `delta` and
+    nowhere else.
+    """
+    kept = [ts("a"), ts("c")]
+    builder = spanweave.Builder()
+    for record in kept:
+        builder.feed(record)
+    before = dumps(builder.graph())
+    assert chain_of(builder.graph()) == [("a", "c")]
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("b", "b"))
+
+    assert builder.version == 2
+    assert dumps(builder.graph()) == before
+    assert chain_of(builder.graph()) == [("a", "c")]
+    added = builder.delta(since=0).edges_added
+    assert [(edge.src, edge.dst) for edge in added] == [("a", "c")]
+
+    landed = [*kept, ts("b")]
+    assert builder.feed(ts("b")) == 3
+    assert dumps(builder.graph()) == dumps(graph_from_records(landed))
+    assert chain_of(builder.graph()) == [("a", "b"), ("b", "c")]
+
+
+def chain_of(graph):
+    """One sibling group's chain, as `(src, dst)` pairs in canonical edge order."""
+    return [(edge.src, edge.dst) for edge in graph.edges(kind=EdgeKind.TEMPORAL)]
 
 
 # --------------------------------------------------------------------------
@@ -1036,6 +1121,110 @@ def test_feeding_sorts_nothing_and_the_other_paths_sort_a_stated_number_of_times
     assert sorts == [3], "folding sorts once, over the nodes it has just applied"
     sorts.clear()
     assert dumps(folded) == dumps(builder.graph())
+
+
+# -- what each arrival builds ----------------------------------------------
+
+
+@pytest.fixture
+def edges_built(monkeypatch):
+    """Every `Edge` allocated while the fixture is in place.
+
+    The companion of `sorts`, and the same argument: what an arrival costs is
+    not readable from a wall clock on a shared machine, but it *is* readable
+    from how many edge objects the arrival had to make. An edge the arrival
+    reused is an edge it did not allocate, so this counts exactly the work a
+    maintained chain removes (`SPEC.md` §10.6).
+
+    The class is patched rather than `spanweave.build`'s callers, because
+    `build` names `Edge` directly and so does every other module that makes
+    one; there is one class object and this is it.
+    """
+    model = sys.modules["spanweave.model"]
+    original = model.Edge.__init__
+    counted = []
+
+    def counting(self, *args, **kwargs):
+        counted.append(None)
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(model.Edge, "__init__", counting)
+    return counted
+
+
+#: Two widths an order of magnitude apart in the product of the group size, so
+#: that "linear in `n`" and "quadratic in `n`" are not the same number twice.
+WIDE_SIBLINGS = (200, 800)
+
+
+def wide_group(width):
+    """One root and `width` children of it: one sibling group holding them all.
+
+    `tests/live_cost.py`'s `wide` workload, at a size a test can afford.
+    """
+    return [oi("s0", kind="AGENT", name="agent", t0=1000.0)] + [
+        oi(f"t{index:04d}", parent="s0", t0=1001.0 + index) for index in range(width)
+    ]
+
+
+def test_feeding_a_wide_sibling_group_builds_edges_linearly_in_the_records(
+    edges_built,
+):
+    """The cost of a sibling group's chain is the arrival, not the group.
+
+    A chain rebuilt per arrival allocates the group's whole chain again --
+    `m - 1` edges for a group of `m`, so `n**2 / 2` over the feed, and
+    `SPEC.md` §10.6 said that is what a key restated in full costs. A chain
+    *maintained* replaces only the edges adjacent to where the arrival lands,
+    so the feed allocates a bounded number per record and the total is linear.
+
+    Asserted twice over, because either alone is weaker than it looks: a bound
+    per width catches a quadratic at one size, and the ratio between the two
+    widths catches a constant factor that happens to be generous at the small
+    one.
+    """
+    counts = {}
+    for width in WIDE_SIBLINGS:
+        edges_built.clear()
+        builder = spanweave.Builder()
+        for record in wide_group(width):
+            builder.feed(record)
+        counts[width] = len(edges_built)
+
+    for width, built in counts.items():
+        assert built <= 4 * (width + 1), (
+            f"feeding {width + 1} records built {built} edges; a maintained "
+            "chain builds a bounded number per arrival"
+        )
+    small, large = WIDE_SIBLINGS
+    growth = counts[large] / counts[small]
+    assert growth <= 1.5 * large / small, (
+        f"{large / small:.0f}x the records built {growth:.1f}x the edges; "
+        "linear in the records is the promise"
+    )
+
+
+def test_no_arrival_rebuilds_the_sibling_chain_it_lands_inside(edges_built):
+    """One edge out and two in, whatever the group already holds (§4.3).
+
+    The per-arrival half of the test above, and on the harder shape: the evens
+    append, then every odd lands *between* two members already chained, which
+    is the only insertion with an edge to remove. Three edges covers the two
+    the chain gains plus the record's own `parent`.
+    """
+    width = 120
+    children = [index for index in range(0, width, 2)] + [
+        index for index in range(1, width, 2)
+    ]
+    builder = spanweave.Builder()
+    builder.feed(oi("s0", kind="AGENT", name="agent", t0=1000.0))
+    for arrival, index in enumerate(children, start=1):
+        before = len(edges_built)
+        builder.feed(oi(f"t{index:04d}", parent="s0", t0=1001.0 + index))
+        built = len(edges_built) - before
+        assert built <= 3, (
+            f"arrival {arrival} into a group of {arrival - 1} built {built} edges"
+        )
 
 
 # --------------------------------------------------------------------------

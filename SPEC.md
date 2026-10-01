@@ -2314,16 +2314,23 @@ sorts once to materialize. The gain over materializing is therefore what the
 yet the sort. A consumer asking for a delta after every record pays two sorts
 per record, as one asking for a graph after every record pays one.
 
-What §10.2 does not say, and a reader should not read into it: a key is
-restated **in full**, so what an arrival costs is the *size* of the keys it
-touched and not their number. An arrival that joins a sibling group of `m`
-restates that group's whole temporal chain (§4.3), and a record that declares
-receipt of a call restates that call id's whole `data` edge set (§4.2) — so a
-trace that is one wide sibling group, or one loop resending its history, is
-superlinear in `n` to feed even though every individual arrival is local:
-measured, eight times the records of a wide trace cost a hundred and sixteen
-times the feed. Both shapes occur in real telemetry and both are measured by
-`make bench` (`tests/live_cost.py`).
+What §10.2 does not say, and a reader should not read into it: most keys are
+restated **in full**, so what an arrival costs is usually the *size* of the keys
+it touched and not their number. A record that declares receipt of a call
+restates that call id's whole `data` edge set (§4.2), so a loop resending its
+history is superlinear in `n` to feed even though every individual arrival is
+local. That shape occurs in real telemetry and is measured by `make bench`
+(`tests/live_cost.py`).
+
+A sibling group's temporal chain is the one key that is **not** restated, and the
+exception is stated because it would otherwise be the worst of them: one wide
+sibling group is the whole input. A group's members are kept in §4.3's order, so
+a joining record is placed by a search and only the chain edges adjacent to that
+place change — **at most one removed and two added**, whatever the group already
+holds — and a record given a parent (§10.2) leaves one group and joins another at
+the same price. The rule is §4.3's unchanged, and the chain is the one a batch
+build of the same prefix emits, which is §10.1; what is bounded is only how much
+of it an arrival rebuilds.
 
 **Where the sort is and is not the cost, measured rather than argued** (the same
 two shapes; `make bench` prints the numbers and `tests/live_cost.py` records the

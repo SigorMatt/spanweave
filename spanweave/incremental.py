@@ -36,7 +36,8 @@ values and never learns that a dialect exists (``DESIGN.md`` §3). Feeding it
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import bisect
+from collections.abc import Iterable, Mapping, Sequence
 from typing import TypeVar
 
 from spanweave import build, ids
@@ -61,7 +62,7 @@ WHOLE_INPUT = ("whole_input",)
 _Key = TypeVar("_Key", int, str)
 
 
-def _flattened(edges: Mapping[_Key, tuple[Edge, ...]]) -> list[Edge]:
+def _flattened(edges: Mapping[_Key, Sequence[Edge]]) -> list[Edge]:
     """Every edge under every key, the keys in order.
 
     The order does not reach the graph -- `deduplicated` sorts, and two edges
@@ -150,8 +151,11 @@ class SpanAbsorber:
         self._call_edges: dict[str, tuple[Edge, ...]] = {}
         self._call_diagnostics: dict[str, tuple[Diagnostic, ...]] = {}
         self._data_edges: dict[str, tuple[Edge, ...]] = {}
-        # Per sibling group.
-        self._temporal_edges: dict[str, tuple[Edge, ...]] = {}
+        # Per sibling group: the group's members in `SPEC.md` §4.3's order, and
+        # the chain over them, held as lists because both are *amended* by an
+        # arrival rather than rebuilt -- `_temporal_edges[group][j]` is the edge
+        # from `_groups[group][j]` to the member after it.
+        self._temporal_edges: dict[str, list[Edge]] = {}
         # The indexes the keys above are restated from.
         self._requesters: dict[str, list[NodeId]] = {}
         self._fulfillers: dict[str, list[NodeId]] = {}
@@ -163,7 +167,7 @@ class SpanAbsorber:
         self._awaiting_parent: dict[str, set[int]] = {}
         self._awaiting_link: dict[str, set[int]] = {}
         self._group_of: dict[int, str] = {}
-        self._groups: dict[str, set[int]] = {}
+        self._groups: dict[str, list[int]] = {}
 
     # ----------------------------------------------------------------------
     # Absorbing
@@ -588,7 +592,7 @@ class SpanAbsorber:
     # -- sibling groups, and the chains over them --------------------------
 
     def _place(self, position: int) -> None:
-        """Put a record in its sibling group and restate that chain."""
+        """Put a record in its sibling group, between the two it belongs between."""
         if not self.temporal:
             return
         node = self._nodes[position]
@@ -602,35 +606,102 @@ class SpanAbsorber:
             return
         group = self._group_key(position)
         self._group_of[position] = group
-        self._groups.setdefault(group, set()).add(position)
-        self._restate_chain(group)
+        self._join(group, position)
 
     def _regroup(self, position: int) -> None:
         was = self._group_of[position]
         now = self._group_key(position)
         if now == was:
             return
-        self._groups[was].discard(position)
-        self._restate_chain(was)
+        self._leave(was, position)
         self._group_of[position] = now
-        self._groups.setdefault(now, set()).add(position)
-        self._restate_chain(now)
+        self._join(now, position)
 
     def _group_key(self, position: int) -> str:
         edge = self._parent_edges.get(position)
         return edge.src if edge is not None else ROOT_GROUP
 
-    def _restate_chain(self, group: str) -> None:
-        members = self._groups.get(group, set())
+    def _rank(self, position: int) -> tuple[int | float, str]:
+        """Where this record sits in its group's order -- §4.3's tie-break key.
+
+        The *same* key the batch path sorts a group by (`build.tie_break`), and
+        it has to be: this is what `bisect` below searches on, so a second
+        spelling of it would put an arrival in a place the batch build does not,
+        which is a determinism bug and not a slow path (`CLAUDE.md` 4).
+
+        It is **unique** within a group and **stable** while a record is in one,
+        which together are what let `_leave` find a member by searching for it
+        rather than by scanning: unique because the key ends in a node id and two
+        records resolving to one id is refused (§3.6), and stable because the key
+        is read off a node built once in `_absorb_at` and the one thing that can
+        move a node id -- a whole-input fact changing (§10.2) -- throws every
+        group away and rebuilds it.
+        """
+        return build.tie_break(self._nodes[position])
+
+    def _join(self, group: str, position: int) -> None:
+        """One record into a group, and only the chain edges next to it (§4.3).
+
+        The group's members are held in §4.3's order, so the record's place is a
+        `bisect` and the chain around it is three edges at most: the one that
+        joined its new neighbours to each other goes, and the two that join it to
+        each of them arrive. A group of `m` is `m - 1` edges and `m - 2` of them
+        are untouched, so they are *reused* rather than rebuilt -- which is the
+        difference between this and restating the key (`SPEC.md` §10.6).
+
+        The three cases are the three ends: at the front and at the back there is
+        no edge to remove and one to add, and in the middle there is one of each
+        way. The slice assignment is all three, because the chain's index `j` is
+        the edge from member `j` to member `j + 1` and that stays true on both
+        sides of the splice.
+        """
+        members = self._groups.setdefault(group, [])
+        chain = self._temporal_edges.setdefault(group, [])
+        index = bisect.bisect_left(members, self._rank(position), key=self._rank)
+        members.insert(index, position)
+        before = (
+            build.temporal_edge(self._nodes[members[index - 1]], self._nodes[position])
+            if index > 0
+            else None
+        )
+        after = (
+            build.temporal_edge(self._nodes[position], self._nodes[members[index + 1]])
+            if index + 1 < len(members)
+            else None
+        )
+        added = [edge for edge in (before, after) if edge is not None]
+        cut = max(index - 1, 0)
+        stop = cut + (1 if before is not None and after is not None else 0)
+        removed = chain[cut:stop]
+        chain[cut:stop] = added
+        self._tally.amend_edges(removed, added)
+
+    def _leave(self, group: str, position: int) -> None:
+        """One record out of a group: its two chain edges for the one that
+        bridges the neighbours it was between. The inverse of `_join`, down to
+        the same slice."""
+        members = self._groups[group]
+        chain = self._temporal_edges[group]
+        index = bisect.bisect_left(members, self._rank(position), key=self._rank)
+        before = chain[index - 1] if index > 0 else None
+        after = chain[index] if index + 1 < len(members) else None
+        removed = [edge for edge in (before, after) if edge is not None]
+        added = (
+            [
+                build.temporal_edge(
+                    self._nodes[members[index - 1]], self._nodes[members[index + 1]]
+                )
+            ]
+            if before is not None and after is not None
+            else []
+        )
+        cut = max(index - 1, 0)
+        chain[cut : cut + len(removed)] = added
+        members.pop(index)
         if not members:
             self._groups.pop(group, None)
             self._temporal_edges.pop(group, None)
-            self._tally.set_edges(("temporal", group), ())
-            return
-        self._temporal_edges[group] = tuple(
-            build.temporal_chain(self._nodes[position] for position in members)
-        )
-        self._tally.set_edges(("temporal", group), self._temporal_edges[group])
+        self._tally.amend_edges(removed, added)
 
     # ----------------------------------------------------------------------
     # Materializing
