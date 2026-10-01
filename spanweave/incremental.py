@@ -179,6 +179,81 @@ class SpanAbsorber:
         """Close the entry the last `begin` opened (`SPEC.md` §10.7)."""
         return self._tally.end(self._before, self.facts(), self._restated)
 
+    def span_count(self) -> int:
+        """How many spans have been absorbed -- a point to roll back to."""
+        return len(self._spans)
+
+    def rollback_to(self, spans: int) -> None:
+        """Undo every span absorbed since there were `spans`, tally included.
+
+        The other half of `feed`'s atomicity. `absorb` decides its refusal
+        before it writes, so a record that became **one** span needs nothing
+        here -- but a record can become several (`SPEC.md` §10.5), and then the
+        second of them can be refused with the first already absorbed. "The
+        builder is left as it was" is this.
+
+        Two halves, and only one is a recomputation:
+
+        * The **tally** is put back exactly, from the snapshot `begin` opened.
+          Every `add`, `drop` and `clear` it saw is reversed, whatever order
+          they came in -- which is what makes this the one rollback, and why
+          finer-grained ledger traffic later needs no second one.
+        * The absorber's own derived state is **re-derived from the
+          survivors**, because an arrival can restate every record (§10.2) and
+          undoing that span by span would be a second implementation of rules
+          this module is careful to hold only one copy of.
+
+        O(n) and paid on refusals only; nothing is added to the accepted path.
+        """
+        if len(self._spans) != spans:
+            del self._spans[spans:]
+            del self._producers[spans:]
+            self._recount()
+            self._restate_every_record(
+                list(ids.assign(self._spans, self._adapters(), self._trace_id).ids)
+            )
+            self._restate_whole_input()
+        self._tally.rollback()
+        # `begin` sets this on every arrival, so its value between arrivals is
+        # nobody's; it is written here anyway rather than left describing an
+        # arrival that did not happen.
+        self._restated = False
+
+    def _recount(self) -> None:
+        """The three whole-input counts, and the producers, from the spans held.
+
+        Re-counted rather than decremented: a count walked backwards has to
+        reverse `_duplicated`'s "the *second* claim is what counts" and the
+        majority trace id's tie-break, and the arithmetic that undoes a rule is
+        a second statement of it. Over the survivors in arrival order, so
+        `_adapter_ids` and `_producer_latest` hold what an absorb of exactly
+        those spans would have left (`SPEC.md` §3.7, §6.1).
+        """
+        self._adapter_ids = {}
+        self._producer_latest = {}
+        self._trace_counts = {}
+        self._span_id_counts = {}
+        self._source_key_counts = {}
+        self._duplicated = 0
+        for span, producer in zip(self._spans, self._producers, strict=True):
+            adapter = producer.id if producer is not None else None
+            self._adapter_ids.setdefault(adapter)
+            if producer is not None:
+                self._producer_latest[producer.sort_key] = producer
+            if span.trace_id is not None:
+                self._trace_counts[span.trace_id] = (
+                    self._trace_counts.get(span.trace_id, 0) + 1
+                )
+            if span.span_id is not None:
+                claims = self._span_id_counts.get(span.span_id, 0) + 1
+                self._span_id_counts[span.span_id] = claims
+                if claims == 2:
+                    self._duplicated += 1
+            self._source_key_counts[span.source_key] = (
+                self._source_key_counts.get(span.source_key, 0) + 1
+            )
+        self._trace_id = build.majority_trace_id(self._trace_counts)
+
     def facts(self) -> Facts:
         """What the graph says that none of its collections hold (§10.6)."""
         return Facts(
@@ -217,6 +292,11 @@ class SpanAbsorber:
         the counts below are read here and written only in the second half: a
         span appended before its id was checked is a span the rest of the state
         has no entry for, and every later arrival trips over it.
+
+        One span, though: a *record* can become several, and then the refusal
+        of a later one has earlier ones to undo. `rollback_to` is that, and it
+        is the caller's to ask for, because only the caller knows where the
+        record began.
         """
         adapter = producer.id if producer is not None else None
         # What the three whole-input facts would say with this span in them,

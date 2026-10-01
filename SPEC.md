@@ -2199,14 +2199,22 @@ diagnostics the builder cannot.
 
 ### 10.5 Refusals
 
-A record is classified on its own, as every record in a batch build is (§6.1).
-Every refusal below is a refusal of the **record**: it is **not** absorbed,
-`version` does not move, and the builder is left as it was — the next `feed`
-and every later `graph()` and `delta()` answer exactly as they would have had
-the record never arrived. There is no half-arrival. This holds for *all* of
-them, including the node-id collision, which is reached on the path that
-restates every record (§10.2): an exporter resending one span is refused and
-costs nothing else.
+A record is classified on its own, as every record in a batch build is (§6.1),
+and a record becomes however many spans its adapter yields — all of which
+arrive together, so a refusal reached on the second of them absorbs neither.
+Two of the four outcomes below are refusals of the **record** — *two adapters
+claim it* and *two records resolving to one node id* — and a refusal of the
+record means it is **not** absorbed, `version` does not move, and the builder
+is left as it was: the next `feed` and every later `graph()` and `delta()`
+answer exactly as they would have had the record never arrived, whatever it
+became and however far through it the refusal came. There is no half-arrival.
+This holds for *both* of them, including the node-id collision, which is
+reached on the path that restates every record (§10.2): an exporter resending
+one span is refused and costs nothing else. The other two outcomes are not
+refusals of an arrival at all — an unclaimed record **is** absorbed and does
+move `version`, and a refusing `graph()` is a statement about everything read
+so far rather than about any one record — and the umbrella covers them in the
+same sense: neither is a reason for anything else to be half-written.
 
 - **Two adapters claim it** — refused, naming the record's arrival index.
 - **Nobody claims it** — kept as an `unknown` node carrying the record verbatim,
@@ -2214,7 +2222,9 @@ costs nothing else.
 - **No record any adapter claimed** — `graph()` refuses, with the same code and
   the same declared confidences a whole input nothing claims earns (§6.1).
   An empty builder is that case, so `Builder().graph()` refuses rather than
-  returning an empty graph, because `build` of an empty input does.
+  returning an empty graph, because `build` of an empty input does. A record
+  that was claimed and *then* refused has not claimed anything: it does not
+  turn this refusal into a graph.
 - **Two records resolving to one node id** — refused as §3.6 refuses it.
 
 ### 10.6 A delta is the difference between two versions

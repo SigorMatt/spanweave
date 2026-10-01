@@ -1249,6 +1249,44 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A record a live `Builder` refuses is now absorbed whole or not at all — the
+  atomic region reaches `_translate` and spans a record of more than one span.**
+  `SPEC.md` §10.5's promise was false two ways with the code that shipped, and
+  the run-3 cold review falsified both. First, `Builder._translate` wrote
+  `_claimed`, the detection `_sample` and `_unread` *before* the spans were
+  absorbed, so a refusal raised after it left all three moved — and `_claimed`
+  is what `graph()`'s own refusal is gated on, so a record that was claimed and
+  then refused flipped a builder from "nothing here can read this" to a one-node
+  graph. **Reachable with the shipped adapters alone**, no third-party adapter
+  needed: a record nobody claims takes an id derived from its own digest (§3.6
+  rule 2), and a second record stating that id as its `span_id` resolves to the
+  same node. Second, `feed` looped `absorb` once per span and each `absorb` was
+  atomic while the loop was not, so a record that became two spans whose second
+  collided left the first absorbed at an unmoved `version` — `graph()` showing a
+  node the journal had no entry for, and `delta(since=0)` then presenting that
+  node as having always been in an empty builder. That one needs an adapter that
+  yields two spans per record, which neither shipped adapter does; cardinality is
+  no part of the `Adapter` protocol and `register` is public, and the failure
+  when reached was silent rather than loud, which is worse than the crash the
+  previous fix removed. Now: `_translate` computes what the arrival would commit
+  and writes nothing, the spans are absorbed, and `_commit` writes `_claimed`,
+  `_sample` and `_unread` only once all of them landed. A refusal inside the
+  loop calls one `rollback_to`, which puts the tally back from the snapshot
+  `begin` already opens on every arrival — the undo of the mechanism `add`,
+  `drop` and `clear` all go through, so finer-grained ledger traffic later needs
+  no second rollback — and re-derives the absorber's own state from the
+  surviving spans, because an arrival can restate every record (§10.2) and
+  undoing that span by span would be a second copy of rules this library keeps
+  one copy of. Including the ledger's snapshot: `delta(since=0)` after a refusal
+  is the delta of the builder the refusal did not change. O(n), paid on refusals
+  only; nothing is added to the accepted path, and no accepted record's answer
+  moves. Five tests in `tests/test_live.py`, four of them red on `71d282f` — the
+  claimed-then-refused record not flipping `graph()`, with `_claimed`, `_sample`
+  and `_unread` named because two of them are unobservable through either
+  shipped adapter; and a test-local two-span adapter whose second span collides,
+  as the first arrival, after one good arrival, and on the restating path.
+  (`WORKPLAN.md` L20, run-3 cold review finding 1)
+
 - **The two properties a receiver reads bytes against are now pinned, each by a
   test that bites on its own.** `read_records` is specified to hold nothing
   between calls (`SPEC.md` §7: a `Records` is complete when it is returned, and

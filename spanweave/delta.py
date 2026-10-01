@@ -103,6 +103,11 @@ class Ledger(Generic[_Item]):
     arrival honest rather than small: restating clears every group, so every
     group is snapshotted, and the entry describes the whole state
     (`SPEC.md` §10.7).
+
+    The same snapshot is what `rollback` undoes an arrival from, which is why
+    it is one mechanism and not two: every way of changing this collection goes
+    through `_touch` first, so traffic added here later is reversible without
+    anything else having to be kept in step (`SPEC.md` §10.5).
     """
 
     def __init__(self, key: Callable[[_Item], Key]) -> None:
@@ -150,9 +155,73 @@ class Ledger(Generic[_Item]):
         self._before.clear()
         return tuple(added), tuple(removed)
 
+    def rollback(self) -> None:
+        """Every group back where `begin` found it; the snapshot cleared.
+
+        The undo of `end`, over exactly the same snapshot: a group `add`,
+        `drop` or `clear` touched is restored to the value it held when the
+        arrival opened, and a group none of them touched cannot have moved. So
+        this is total over whatever an arrival did, in whatever order and
+        however many times (`SPEC.md` §10.5).
+        """
+        for key, was in self._before.items():
+            if was:
+                self._groups[key] = list(was)
+            else:
+                self._groups.pop(key, None)
+        self._before.clear()
+
     def _touch(self, key: Key) -> None:
         if key not in self._before:
             self._before[key] = tuple(self._groups.get(key, ()))
+
+
+class Contributions(Generic[_Item]):
+    """What each key contributes to a `Ledger`, with the same snapshot rule.
+
+    `Ledger` holds the items; this holds the attribution that lets one key's
+    contribution be *replaced* -- which is what the absorber restates a key
+    with. It is separate because the two are keyed differently: a ledger groups
+    by an item's own identity, and this groups by the absorber's key (a
+    record's position, a call id, a sibling group).
+
+    Snapshotted on first touch, exactly as a ledger group is, so that
+    `rollback` puts both halves of a collection back together and a refused
+    arrival cannot leave one of them describing the other (`SPEC.md` §10.5).
+    """
+
+    def __init__(self) -> None:
+        self._now: dict[Key, tuple[_Item, ...]] = {}
+        self._before: dict[Key, tuple[_Item, ...]] = {}
+
+    def replace(self, key: Key, items: Sequence[_Item]) -> tuple[_Item, ...]:
+        """Record what `key` contributes now; answer what it contributed."""
+        was = self._now.get(key, ())
+        self._before.setdefault(key, was)
+        if items:
+            self._now[key] = tuple(items)
+        else:
+            self._now.pop(key, None)
+        return was
+
+    def clear(self) -> None:
+        for key, items in self._now.items():
+            self._before.setdefault(key, items)
+        self._now.clear()
+
+    def begin(self) -> None:
+        self._before.clear()
+
+    def end(self) -> None:
+        self._before.clear()
+
+    def rollback(self) -> None:
+        for key, was in self._before.items():
+            if was:
+                self._now[key] = was
+            else:
+                self._now.pop(key, None)
+        self._before.clear()
 
 
 class Tally:
@@ -174,28 +243,24 @@ class Tally:
         self.nodes: Ledger[Node] = Ledger(node_key)
         self.edges: Ledger[Edge] = Ledger(edge_key)
         self.diagnostics: Ledger[Diagnostic] = Ledger(diagnostic_key)
-        self._edges_for: dict[Key, tuple[Edge, ...]] = {}
-        self._diagnostics_for: dict[Key, tuple[Diagnostic, ...]] = {}
+        self._edges_for: Contributions[Edge] = Contributions()
+        self._diagnostics_for: Contributions[Diagnostic] = Contributions()
 
     def add_node(self, node: Node) -> None:
         self.nodes.add(node)
 
     def set_edges(self, key: Key, edges: Sequence[Edge]) -> None:
         """What this key contributes now, replacing what it contributed before."""
-        for edge in self._edges_for.pop(key, ()):
+        for edge in self._edges_for.replace(key, edges):
             self.edges.drop(edge)
         for edge in edges:
             self.edges.add(edge)
-        if edges:
-            self._edges_for[key] = tuple(edges)
 
     def set_diagnostics(self, key: Key, items: Sequence[Diagnostic]) -> None:
-        for item in self._diagnostics_for.pop(key, ()):
+        for item in self._diagnostics_for.replace(key, items):
             self.diagnostics.drop(item)
         for item in items:
             self.diagnostics.add(item)
-        if items:
-            self._diagnostics_for[key] = tuple(items)
 
     def clear(self) -> None:
         """Everything derived, gone -- what a restating arrival does (§10.2)."""
@@ -206,11 +271,25 @@ class Tally:
         self.diagnostics.clear()
 
     def begin(self) -> None:
+        self._edges_for.begin()
+        self._diagnostics_for.begin()
         self.nodes.begin()
         self.edges.begin()
         self.diagnostics.begin()
 
+    def rollback(self) -> None:
+        """Undo everything since `begin`, in all five halves of all three
+        collections. The one rollback every change to this state goes through
+        (`SPEC.md` §10.5)."""
+        self._edges_for.rollback()
+        self._diagnostics_for.rollback()
+        self.nodes.rollback()
+        self.edges.rollback()
+        self.diagnostics.rollback()
+
     def end(self, before: Facts, after: Facts, restated: bool) -> Change:
+        self._edges_for.end()
+        self._diagnostics_for.end()
         nodes_added, nodes_removed = self.nodes.end()
         edges_added, edges_removed = self.edges.end()
         opened, resolved = self.diagnostics.end()

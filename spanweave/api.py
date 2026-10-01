@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Iterator, Sequence
+from typing import Literal
 
 from spanweave.adapters import (
     DETECTION_SAMPLE_SIZE,
@@ -177,14 +178,32 @@ class Builder:
         builder is left as it was, so the next `feed` and every later `graph()`
         and `delta()` answer as they would have had the record never arrived
         (`SPEC.md` §10.5).
+
+        A record becomes **however many spans** its adapter yields, and they
+        arrive together: translating writes nothing, the spans are absorbed,
+        and only then is anything committed. Both ends of that are necessary --
+        a refusal raised after `_translate` had written would leave `_claimed`
+        moved, and `_claimed` is what `graph()`'s own refusal is gated on; a
+        refusal raised on the second span of a record would leave the first
+        absorbed, which is the same promise broken quietly instead of loudly.
         """
         position = self._version + 1
-        producer, spans = self._translate(record, position)
+        staged = self._translate(record, position)
+        absorbed = self._absorber.span_count()
         self._absorber.begin()
-        for span in spans:
-            self._absorber.absorb(span, producer)
+        try:
+            for span in staged.spans:
+                self._absorber.absorb(span, staged.producer)
+        except BaseException:
+            # Re-raised unchanged; the rollback is what the caller is promised
+            # on the way out, not a different outcome. `BaseException` because
+            # an interrupt between two spans of one record leaves the same
+            # half-arrival a refusal would.
+            self._absorber.rollback_to(absorbed)
+            raise
         self._journal.record(position, self._absorber.finish())
         self._version = position
+        self._commit(record, staged)
         self._graph = None
         return self._version
 
@@ -264,38 +283,79 @@ class Builder:
             self._graph = self._absorber.materialize()
         return self._graph
 
-    def _translate(
-        self, record: JsonValue, position: int
-    ) -> tuple[AdapterInfo | None, tuple[NormalizedSpan, ...]]:
-        """One record, over the seam: who read it and what it became."""
+    def _translate(self, record: JsonValue, position: int) -> _Staged:
+        """One record, over the seam: who read it, what it became, and what
+        absorbing it would commit. It writes **nothing** (`SPEC.md` §10.5)."""
         if self._named is not None:
             chosen = get(self._named)
-            self._claimed += 1
-            return (
-                AdapterInfo(id=chosen.id, version=chosen.version),
-                _numbered(chosen.parse([record]), position),
+            return _Staged(
+                producer=AdapterInfo(id=chosen.id, version=chosen.version),
+                spans=_numbered(chosen.parse([record]), position),
+                claimed=self._claimed + 1,
+                unread="keep",
             )
         claimants = classify(record)
         if len(claimants) > 1:
             raise AdapterSelectionError(ambiguous_claim(position, record, claimants))
         if not claimants:
-            if self._claimed == 0:
-                self._unread.append(record)
-            return None, (unclaimed_span(record, position),)
+            return _Staged(
+                producer=None,
+                spans=(unclaimed_span(record, position),),
+                claimed=self._claimed,
+                unread="append" if self._claimed == 0 else "keep",
+            )
         chosen = get(claimants[0])
-        sample = self._sample.setdefault(chosen.id, [])
-        if len(sample) < DETECTION_SAMPLE_SIZE:
-            sample.append(record)
-        self._claimed += 1
-        self._unread.clear()
-        return (
-            AdapterInfo(
+        held: Sequence[JsonValue] = self._sample.get(chosen.id, ())
+        joins = len(held) < DETECTION_SAMPLE_SIZE
+        return _Staged(
+            producer=AdapterInfo(
                 id=chosen.id,
                 version=chosen.version,
-                declared_confidence=declared(chosen, sample),
+                # Declared over the sample **with** this record in it, which is
+                # what it was declared over when the append came first. Bounded
+                # by `DETECTION_SAMPLE_SIZE`, so the copy costs nothing that
+                # grows with the stream.
+                declared_confidence=declared(
+                    chosen, [*held, record] if joins else held
+                ),
             ),
-            _numbered(chosen.parse([record]), position),
+            spans=_numbered(chosen.parse([record]), position),
+            claimed=self._claimed + 1,
+            unread="clear",
+            sampled=chosen.id if joins else None,
         )
+
+    def _commit(self, record: JsonValue, staged: _Staged) -> None:
+        """Write what the arrival earned, now that every span of it landed."""
+        self._claimed = staged.claimed
+        if staged.unread == "append":
+            self._unread.append(record)
+        elif staged.unread == "clear":
+            self._unread.clear()
+        if staged.sampled is not None:
+            self._sample.setdefault(staged.sampled, []).append(record)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Staged:
+    """One record translated, and what absorbing it would commit above the seam.
+
+    `_translate` used to write these three as it went, and a refusal raised
+    afterwards left them moved -- `_claimed` among them, which is what
+    `graph()`'s own refusal is gated on, so a record that was claimed and then
+    refused could turn "nothing here can read this" into a one-node graph
+    (`SPEC.md` §10.5). Staged here and written by `_commit` once every span of
+    the record has been absorbed.
+    """
+
+    producer: AdapterInfo | None
+    spans: tuple[NormalizedSpan, ...]
+    #: `_claimed` as it stands once this record has arrived.
+    claimed: int
+    #: What the arrival does to the records kept while nothing has claimed one.
+    unread: Literal["keep", "append", "clear"]
+    #: The adapter whose detection sample this record joins, where it joins one.
+    sampled: str | None = None
 
 
 def _rewound_nodes(

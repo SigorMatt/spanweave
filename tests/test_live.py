@@ -20,9 +20,13 @@ import pytest
 
 import spanweave
 from spanweave import diagnostics as codes
+from spanweave.adapters import REGISTRY, register
 from spanweave.api import graph_from_records
 from spanweave.errors import AdapterSelectionError, DuplicateNodeIdError
-from spanweave.model import EdgeKind
+from spanweave.ids import derive
+from spanweave.model import EdgeKind, NodeKind, RawRecord
+from spanweave.read import record_digest
+from spanweave.seam import NormalizedSpan
 from spanweave.serialize import DELTA_ROOT_KEYS, ROOT_KEYS, dumps
 from tests.delta_oracle import checkpoint_delta
 
@@ -363,6 +367,191 @@ def test_a_refused_duplicate_leaves_the_journal_where_it_was():
     assert delta.until == 2
     assert [node.id for node in delta.nodes_added] == ["s1"]
     assert delta.nodes_removed == ()
+
+
+def test_a_refused_record_leaves_a_refusing_builder_still_refusing():
+    """`SPEC.md` §10.5: "left as it was" includes `graph()`'s own refusal.
+
+    Classification is what the refused record moves here, not the absorber:
+    an adapter claimed it, and `graph()` refuses exactly while **nothing** has
+    been claimed (§6.1). So a record that is claimed and *then* refused must
+    not turn "nothing here can read this" into a one-node graph.
+
+    Reachable with the shipped adapters alone: the first record is one nobody
+    claims, so its node id is derived from its own digest (§3.6 rule 2), and a
+    second record stating that id as its `span_id` resolves to the same node.
+    Contrived on purpose -- trace payloads are untrusted input
+    (`SECURITY.md`) and the crafted value is the cheapest way to reach the
+    path.
+    """
+    unclaimed = {"not": "any dialect"}
+    colliding = {
+        "span_id": derive(None, None, record_digest(unclaimed)),
+        "attributes": {"openinference.span.kind": "LLM"},
+    }
+    builder = spanweave.Builder()
+    builder.feed(unclaimed)
+    with pytest.raises(AdapterSelectionError) as before:
+        builder.graph()
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(colliding)
+
+    assert builder.version == 1
+    with pytest.raises(AdapterSelectionError) as after:
+        builder.graph()
+    assert after.value.code == before.value.code
+    assert str(after.value) == str(before.value)
+    # The three the refusal used to leave moved, named because two of them are
+    # not observable through any shipped adapter (both `detect()`s answer the
+    # same 0.9 on one marker, so sample composition cannot change the answer).
+    assert builder._claimed == 0
+    assert builder._sample == {}
+    assert builder._unread == [unclaimed]
+
+
+# --------------------------------------------------------------------------
+# A record is absorbed whole or not at all (`SPEC.md` §10.5)
+# --------------------------------------------------------------------------
+
+TWO_SPAN_MARKER = "twospan.ids"
+
+
+class TwoSpanAdapter:
+    """A test-local dialect whose records become **more than one** span.
+
+    Both shipped adapters yield exactly one span per record, so the span loop
+    inside `feed` never runs twice in the corpus. Cardinality is no part of the
+    `Adapter` protocol (`spanweave/adapters/base.py`) and `register` is public,
+    so a contributor's adapter reaches it -- which is why the atomicity
+    `SPEC.md` §10.5 promises has to hold for a record of two spans as well.
+
+    Each span's `source_key` is its own span id, so a record naming one id
+    twice yields two spans that are equal in every field, and the second
+    resolves to the node id the first already took (`SPEC.md` §3.6 rule 3,
+    `spanweave/ids.py:collision`).
+    """
+
+    id = "twospan"
+    version = "0"
+
+    def detect(self, sample):
+        for record in sample:
+            if isinstance(record, dict) and TWO_SPAN_MARKER in record:
+                return 0.9
+        return 0.0
+
+    def parse(self, records):
+        for index, record in enumerate(records, start=1):
+            raw = RawRecord(source=record, line_number=index)
+            for span_id in record[TWO_SPAN_MARKER]:
+                yield NormalizedSpan(
+                    source_key=span_id,
+                    kind=NodeKind.TOOL,
+                    name=span_id,
+                    raw=raw,
+                    span_id=span_id,
+                    started_at=1000.0,
+                    ended_at=1000.5,
+                )
+
+
+def ts(*span_ids):
+    """One `twospan` record, which becomes one span per id named."""
+    return {TWO_SPAN_MARKER: list(span_ids)}
+
+
+@pytest.fixture
+def two_span():
+    """`TwoSpanAdapter`, registered for one test and then gone.
+
+    Registered on the module-level registry because that is the one `Builder`
+    asks (`spanweave/api.py`); the saved mapping is restored afterwards so no
+    other test sees a third dialect.
+    """
+    kept = dict(REGISTRY._adapters)
+    register(TwoSpanAdapter())
+    try:
+        yield
+    finally:
+        REGISTRY._adapters.clear()
+        REGISTRY._adapters.update(kept)
+
+
+def test_two_spans_of_one_record_both_arrive(two_span):
+    """The adapter itself, before anything is refused: the record becomes two
+    nodes at one version, and the live graph is the batch graph of it."""
+    builder = spanweave.Builder()
+    assert builder.feed(ts("a", "b")) == 1
+    assert [node.id for node in builder.graph().nodes()] == ["a", "b"]
+    assert dumps(builder.graph()) == dumps(graph_from_records([ts("a", "b")]))
+
+
+def test_a_records_second_span_colliding_absorbs_neither(two_span):
+    """The first arrival, half of it refused: `version` stays 0, so `graph()`
+    refuses as an empty builder's does and `delta(since=0)` is the delta of an
+    empty builder -- not a delta that presents a half-arrived node as having
+    always been there (`SPEC.md` §10.5)."""
+    builder = spanweave.Builder()
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("c", "c"))
+
+    assert builder.version == 0
+    with pytest.raises(AdapterSelectionError) as live:
+        builder.graph()
+    with pytest.raises(AdapterSelectionError) as empty:
+        spanweave.Builder().graph()
+    assert live.value.code == empty.value.code
+    assert not builder.delta(since=0).changed
+
+    assert builder.feed(ts("d")) == 1
+    assert dumps(builder.graph()) == dumps(graph_from_records([ts("d")]))
+    assert [node.id for node in builder.delta(since=0).nodes_added] == ["d"]
+
+
+def test_a_half_refused_record_leaves_the_builder_as_it_was(two_span):
+    """The same refusal onto a builder that already holds a version: nothing
+    the refused record's first span did survives it, in the graph, in the
+    journal, or in the version counter (`SPEC.md` §10.5)."""
+    kept = ts("a", "b")
+    builder = spanweave.Builder()
+    builder.feed(kept)
+    before = dumps(unrefused([kept]))
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("c", "c"))
+
+    assert builder.version == 1
+    assert dumps(builder.graph()) == before
+    assert [node.id for node in builder.delta(since=0).nodes_added] == ["a", "b"]
+
+    landed = [kept, ts("d")]
+    assert builder.feed(ts("d")) == 2
+    assert dumps(builder.graph()) == dumps(graph_from_records(landed))
+    assert [node.id for node in builder.delta(since=1).nodes_added] == ["d"]
+
+
+def test_a_half_refused_restating_record_leaves_the_builder_as_it_was(two_span):
+    """The same, where the refused record's first span *restates* everything:
+    a second claim on a span id moves every id derived from it (§10.2), so the
+    rollback has to put back a state the arrival rewrote rather than extended.
+    """
+    kept = [ts("a"), ts("b")]
+    builder = spanweave.Builder()
+    for record in kept:
+        builder.feed(record)
+    before = dumps(unrefused(kept))
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("a", "a"))
+
+    assert builder.version == 2
+    assert dumps(builder.graph()) == before
+    assert [node.id for node in builder.delta(since=0).nodes_added] == ["a", "b"]
+
+    landed = [*kept, ts("d")]
+    assert builder.feed(ts("d")) == 3
+    assert dumps(builder.graph()) == dumps(graph_from_records(landed))
 
 
 # --------------------------------------------------------------------------
