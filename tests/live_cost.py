@@ -1,7 +1,8 @@
 """What a live build costs, measured rather than reasoned about.
 
 Run: ``make bench`` (``uv run python -m tests.live_cost``), optionally with
-``ARGS="--turns 400 --wide 20000"``.
+``ARGS="--turns 400 --wide 20000"`` or
+``ARGS="--only wide --root-last --wide 2000"``.
 
 `SPEC.md` §10.6 states the cost of the two live paths: a `feed` is O(the keys
 the arrival touched) and a `delta(since=v)` is O(n + e), because it sorts both
@@ -72,6 +73,15 @@ header's table was taken from. The echo shape's `data` edge set is untouched and
 still cubic in turns. The table and the shares above are left as the record of
 what was measured when; they are re-taken wholesale, with provenance, once the
 remaining sites are fixed.
+
+A third site the audit's table cannot show is the **arrival order** of one
+record, and `--root-last` is that measurement: the wide shape fed children-first
+makes the root's arrival regroup the whole input in a single `feed`. Maintaining
+the chain fixed most of it — 15.4 s for that one arrival at 2,000 before,
+38 ms after — and moving the whole group *at once* rather than child by child
+took the rest, to 16 ms, which makes the arrival linear in the children rather
+than `n log n`. Measured on one machine at 2,000: root-last total within 1.07x
+of root-first, where before the chain was maintained it was far outside it.
 """
 
 from __future__ import annotations
@@ -213,6 +223,44 @@ def measure(label: str, records: Sequence[JsonValue], *, per_record: bool) -> No
         _elapsed("feed + delta per record, all", start)
 
 
+def arrival_order(width: int) -> None:
+    """The wide shape fed root-first and root-last, and the ratio of the two.
+
+    Where one record arrives is a cost case of its own, and the only one the two
+    `measure` workloads cannot show: a parent that arrives after its children
+    gives **all** of them a parent inside a single `feed` (`SPEC.md` §10.2,
+    §10.6), so the whole of the shape's regrouping happens in one call instead of
+    being spread one record at a time over the stream. Both orders build the same
+    graph -- that is §10.1, and `tests/test_live.py` asserts it rather than this
+    module, which times things and asserts nothing.
+
+    Printed as a ratio against the same records fed root-first, because that is
+    the comparison that says whether the arrival order matters, and the absolute
+    numbers are one machine's.
+    """
+    records = wide_records(width)
+    print(f"wide, {width}: the root fed first against the root fed last")
+    builder = Builder()
+    start = time.perf_counter()
+    for record in records:
+        builder.feed(record)
+    first = _elapsed("feed, root first", start)
+
+    builder = Builder()
+    start = time.perf_counter()
+    for record in records[1:]:
+        builder.feed(record)
+    children = time.perf_counter() - start
+    start = time.perf_counter()
+    builder.feed(records[0])
+    single = time.perf_counter() - start
+    last = children + single
+    print(f"  {'feed, root last':<34} {last * 1000:9.1f} ms")
+    print(f"  {'  of which the root arrival':<34} {single * 1000:9.1f} ms")
+    ratio = last / first if first else 0.0
+    print(f"  {'root last / root first':<34} {ratio:9.2f} x")
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--turns", type=int, default=400, help="echo workload turns")
@@ -229,6 +277,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="run one workload. The wide one's `feed` is quadratic in its own "
         "right (see this module's docstring), so 20,000 takes tens of minutes.",
     )
+    parser.add_argument(
+        "--root-last",
+        action="store_true",
+        help="for the wide workload, feed it twice -- root first and root last "
+        "-- and print the ratio, instead of timing `graph()` and `delta()`. "
+        "What the arrival order of one record costs (`SPEC.md` §10.6).",
+    )
     args = parser.parse_args(argv)
     if args.only != "wide":
         measure(
@@ -236,7 +291,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             echo_records(args.turns),
             per_record=args.per_record,
         )
-    if args.only != "echo":
+    if args.only == "echo":
+        return
+    if args.root_last:
+        arrival_order(args.wide)
+    else:
         measure(
             f"wide, {args.wide}", wide_records(args.wide), per_record=args.per_record
         )

@@ -2328,9 +2328,16 @@ sibling group is the whole input. A group's members are kept in §4.3's order, s
 a joining record is placed by a search and only the chain edges adjacent to that
 place change — **at most one removed and two added**, whatever the group already
 holds — and a record given a parent (§10.2) leaves one group and joins another at
-the same price. The rule is §4.3's unchanged, and the chain is the one a batch
-build of the same prefix emits, which is §10.1; what is bounded is only how much
-of it an arrival rebuilds.
+the same price. One arrival can give a parent to *every* record waiting on it, a
+trace's root arriving after its children being the ordinary case, and then the
+move is made **once** rather than once per child: where the records moving are
+the whole of the group they leave and the group they join holds nothing yet, the
+chain they had is the chain they keep — a `temporal` edge names its two endpoints
+and not the group they sit in, and §4.3's key moved for none of them — so the
+group is re-keyed and **no edge moves at all**. A move that empties only part of
+a group is the per-record price above, once per record moved. The rule is §4.3's
+unchanged, and the chain is the one a batch build of the same prefix emits, which
+is §10.1; what is bounded is only how much of it an arrival rebuilds.
 
 **Where the sort is and is not the cost, measured rather than argued** (the same
 two shapes; `make bench` prints the numbers and `tests/live_cost.py` records the

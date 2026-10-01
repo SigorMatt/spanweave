@@ -477,9 +477,17 @@ class SpanAbsorber:
         # What this record completes for records already absorbed: a reference
         # to its span id that could not be resolved before it arrived.
         if span.span_id is not None and self._by_span_id.get(span.span_id) == node_id:
-            for other in sorted(self._awaiting_parent.get(span.span_id, ())):
-                if other != position:
-                    self._restate_parent(other)
+            given = [
+                other
+                for other in sorted(self._awaiting_parent.get(span.span_id, ()))
+                if other != position
+            ]
+            for other in given:
+                self._restate_parent(other)
+            # Every one of them in one move, not one move each: in the shape
+            # where a trace's root arrives after its children, `given` is the
+            # whole input (`SPEC.md` §10.6).
+            self._regroup_many(given)
             for other in sorted(self._awaiting_link.get(span.span_id, ())):
                 if other != position:
                     self._restate_links(other)
@@ -515,7 +523,16 @@ class SpanAbsorber:
         return touched
 
     def _restate_parent(self, position: int) -> None:
-        """One record's `parent` edge and `orphan_parent`, as they stand now."""
+        """One record's `parent` edge and `orphan_parent`, as they stand now.
+
+        The sibling group a record belongs to follows from this edge, but the
+        move is **not** made here. One arrival can give a parent to every record
+        waiting on it, and `_regroup_many` moves all of them in one operation
+        rather than one each, which is what makes a late parent O(n) in the
+        records it un-orphans instead of O(n log n) (`SPEC.md` §10.6). The
+        arriving record is not moved at all: it has not been placed yet, and
+        `_place` reads the same edge.
+        """
         collector = DiagnosticCollector()
         edge = build.parent_edge(
             self._spans[position],
@@ -535,10 +552,6 @@ class SpanAbsorber:
         self._tally.set_edges(
             ("parent", str(position)), () if edge is None else (edge,)
         )
-        # A record just given a parent leaves the root group for its parent's.
-        # Only a record already placed moves: the arriving one is placed after.
-        if position in self._group_of:
-            self._regroup(position)
 
     def _restate_links(self, position: int) -> None:
         self._link_edges[position] = tuple(
@@ -608,14 +621,61 @@ class SpanAbsorber:
         self._group_of[position] = group
         self._join(group, position)
 
-    def _regroup(self, position: int) -> None:
-        was = self._group_of[position]
-        now = self._group_key(position)
-        if now == was:
-            return
-        self._leave(was, position)
-        self._group_of[position] = now
-        self._join(now, position)
+    def _regroup_many(self, positions: Sequence[int]) -> None:
+        """Every record one arrival gave a parent, moved to its group **once**.
+
+        A record's group follows from its `parent` edge, so an arrival that
+        resolves a reference moves every record that was waiting on it -- and
+        where that reference is a trace's root arriving after its children, the
+        records waiting on it are the whole input, moved inside a single `feed`
+        (`SPEC.md` §10.2, §10.6). Moving them one at a time is correct, and is
+        what the second half below does; moving them together is what the first
+        half does instead, and the difference is the whole of this method.
+
+        The case it is worth separating is that the records moving are **all** of
+        the group they leave and the group they join holds nothing yet -- the
+        orphaned children of one parent, with nothing else at trace root. Then
+        the chain they had *is* the chain they keep. A `temporal` edge names its
+        two endpoints and the group they sit in is not one of its fields, and
+        their order inside the group cannot have moved either, because §4.3's key
+        is `(started_at, node_id)` and a regroup changes neither. So the group is
+        **re-keyed** and no edge moves at all: no ledger traffic, nothing to roll
+        back, and -- the reason this is the bulk move rather than a chain rebuilt
+        once per arrival -- no second spelling of §4.3's rule.
+
+        Otherwise the records leave and join one at a time, one `_leave` and one
+        `_join` each, because a group that keeps some of its members ends up with
+        a chain that has holes in it and the edges bridging those holes are
+        exactly the ones `_leave` already makes.
+
+        A record that was never placed is never moved: one with no `started_at`
+        is in no group (§4.3), and the arriving record is put in its group by
+        `_place`, after this, from the same edge.
+        """
+        moves: dict[tuple[str, str], list[int]] = {}
+        for position in positions:
+            was = self._group_of.get(position)
+            if was is None:
+                continue
+            now = self._group_key(position)
+            if now != was:
+                moves.setdefault((was, now), []).append(position)
+        # Sorted rather than in insertion order: nothing here may turn on how a
+        # dict iterates (`CLAUDE.md` 4). Where two moves name one group, which of
+        # them goes first decides which takes the re-key and never the chains
+        # either leaves behind, so the order is a tie-break and not a rule.
+        for was, now in sorted(moves):
+            movers = moves[(was, now)]
+            if len(movers) == len(self._groups[was]) and now not in self._groups:
+                self._groups[now] = self._groups.pop(was)
+                self._temporal_edges[now] = self._temporal_edges.pop(was)
+                for position in movers:
+                    self._group_of[position] = now
+                continue
+            for position in movers:
+                self._leave(was, position)
+                self._group_of[position] = now
+                self._join(now, position)
 
     def _group_key(self, position: int) -> str:
         edge = self._parent_edges.get(position)

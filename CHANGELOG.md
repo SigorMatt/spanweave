@@ -448,6 +448,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A parent that arrives after its children regroups all of them in one move, so
+  the arrival order of one record no longer decides what a trace costs to feed.**
+  `SPEC.md` §10.6 gains the case; §4.3's rule and §10.1's promise do not move
+  (`WORKPLAN.md` L16, from the 2026-09-30 decision on the run-2 cold review's
+  three superlinear `feed` sites — site (iii), the one inside a *single* `feed`).
+  A record's sibling group follows from its `parent` edge, so the arrival that
+  resolves a dangling reference moves every record that was waiting on it; where
+  that reference is a trace's root, which an exporter tailed in completion order
+  delivers last, that is the whole input moving inside one call. They now move
+  **together**: where the records moving are the whole of the group they leave and
+  the group they join holds nothing yet, the chain they had is the chain they keep
+  — a `temporal` edge names its two endpoints and not the group they sit in, and
+  §4.3's key moved for none of them — so the group is **re-keyed and no edge moves
+  at all**. A group only partly emptied is the per-record move the previous entry
+  describes, once per record moved. Nothing is restated and §4.3's rule is not
+  copied a second time, which is the reason this is the bulk move rather than a
+  chain rebuilt once per arrival; the re-key hands the journal nothing, so there
+  is nothing new for a refusal to undo and a record refused part-way through one
+  still leaves the builder exactly as it was.
+  Measured with `make bench ARGS="--only wide --root-last"` on one machine
+  (CPython 3.14.6), wide shape at 2,000, `feed` only: root-last total **1.05x**
+  root-first, with the root's own arrival at **16.3 ms** — against 1.21x and
+  43.1 ms at the parent commit, and 2.48x and 11,316 ms before the chain was
+  maintained at all. The arrival is now linear in the children it un-orphans
+  rather than `n log n`: 8.7 µs per child at 16,000 against 7.4 µs at 1,000.
+  The harness gained the root-last mode to measure it; the previous entry's
+  change is what brought the ratio inside the 2x this one was accepted against,
+  and this one takes it to 1.05x.
+
 - **A sibling group's temporal chain is maintained rather than rebuilt, so a wide
   trace's `feed` is linear in its records.** `SPEC.md` §10.6 moves; §4.3's rule
   and §10.1's promise do not (`WORKPLAN.md` L15, from the 2026-09-30 decision on

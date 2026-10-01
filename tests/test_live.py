@@ -226,6 +226,27 @@ def test_a_scrambled_sibling_group_is_the_batch_chain_at_every_prefix():
     assert chain == [(f"t{i:02d}", f"t{i + 1:02d}") for i in range(11)]
 
 
+def test_a_whole_root_group_moves_when_its_parent_arrives_last():
+    """The arrival that moves every record at trace root at once (§10.1, §10.6).
+
+    The companion of the test below, which keeps one record at trace root so the
+    group is only *partly* emptied: here nothing else is there, so the arrival
+    re-keys the group instead of moving child by child, and the two tests are the
+    two halves of `_regroup_many`. `replay` is the whole assertion -- the graph
+    at every version is the batch build of that prefix, which includes the
+    version before the parent arrives, where all six are still at root.
+
+    The children arrive scrambled, so the order the group is re-keyed *in* is
+    not the order it was built in: the evens append and then every odd lands
+    strictly inside, which is the insertion `_join` has an edge to remove for.
+    """
+    order = [index for index in range(0, 6, 2)] + [index for index in range(1, 6, 2)]
+    records = [oi(f"c{index}", parent="s0", t0=1001.0 + index) for index in order]
+    records.append(oi("s0", kind="AGENT", name="agent", t0=1000.0))
+    builder = replay(records)
+    assert chain_of(builder.graph()) == [(f"c{i}", f"c{i + 1}") for i in range(5)]
+
+
 def test_several_children_regroup_when_their_parent_arrives_last():
     """A record given a parent leaves the root group for its parent's, and both
     chains have to be right afterwards -- the one it left as much as the one it
@@ -459,6 +480,11 @@ def test_a_refused_record_leaves_a_refusing_builder_still_refusing():
 
 TWO_SPAN_MARKER = "twospan.ids"
 
+#: The parent every span of one `twospan` record states, where it states one.
+#: Enough to put a `twospan` record in a sibling group other than trace root,
+#: which is what a test about a *regrouping* refusal needs (`SPEC.md` §10.5).
+TWO_SPAN_PARENT = "twospan.parent"
+
 
 class TwoSpanAdapter:
     """A test-local dialect whose records become **more than one** span.
@@ -494,14 +520,18 @@ class TwoSpanAdapter:
                     name=span_id,
                     raw=raw,
                     span_id=span_id,
+                    parent_id=record.get(TWO_SPAN_PARENT),
                     started_at=1000.0,
                     ended_at=1000.5,
                 )
 
 
-def ts(*span_ids):
+def ts(*span_ids, parent=None):
     """One `twospan` record, which becomes one span per id named."""
-    return {TWO_SPAN_MARKER: list(span_ids)}
+    record = {TWO_SPAN_MARKER: list(span_ids)}
+    if parent is not None:
+        record[TWO_SPAN_PARENT] = parent
+    return record
 
 
 @pytest.fixture
@@ -632,6 +662,49 @@ def test_a_half_refused_record_puts_back_the_chain_edge_it_removed(two_span):
     assert builder.feed(ts("b")) == 3
     assert dumps(builder.graph()) == dumps(graph_from_records(landed))
     assert chain_of(builder.graph()) == [("a", "b"), ("b", "c")]
+
+
+def test_a_half_refused_record_that_regrouped_a_whole_group_puts_its_key_back(
+    two_span,
+):
+    """The one regroup that hands the ledger nothing, undone (`SPEC.md` §10.5).
+
+    Where the records a parent un-orphans are the whole of the group they leave,
+    the absorber moves them by **re-keying** the group rather than by moving
+    edges, so that arrival changes a chain's owner without a single
+    `Ledger.add` or `drop` (§10.6). There is therefore nothing for a per-site
+    inverse to take back, and the only thing that can put it right is
+    `rollback_to` re-deriving from the survivors (`f04cbc8`) -- which is why this
+    is the path worth a test of its own rather than a case of the one above.
+
+    The record that trips it is the parent: its first span `p` un-orphans `a`
+    and `b` and re-keys their group, and its second span is refused. The journal
+    is checked as well as the graph, because the two are assembled from
+    different state -- a `_group_of` left naming a group nobody holds would show
+    up in a `delta` and nowhere else.
+    """
+    kept = [ts("a", parent="p"), ts("b", parent="p")]
+    builder = spanweave.Builder()
+    for record in kept:
+        builder.feed(record)
+    before = dumps(builder.graph())
+    assert chain_of(builder.graph()) == [("a", "b")]
+    assert codes.ORPHAN_PARENT in codes_of(builder.graph())
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("p", "p"))
+
+    assert builder.version == 2
+    assert dumps(builder.graph()) == before
+    assert chain_of(builder.graph()) == [("a", "b")]
+    added = builder.delta(since=0).edges_added
+    assert [(edge.src, edge.dst) for edge in added] == [("a", "b")]
+
+    landed = [*kept, ts("p")]
+    assert builder.feed(ts("p")) == 3
+    assert dumps(builder.graph()) == dumps(graph_from_records(landed))
+    assert chain_of(builder.graph()) == [("a", "b")]
+    assert codes.ORPHAN_PARENT not in codes_of(builder.graph())
 
 
 def chain_of(graph):
@@ -1139,14 +1212,19 @@ def edges_built(monkeypatch):
     The class is patched rather than `spanweave.build`'s callers, because
     `build` names `Edge` directly and so does every other module that makes
     one; there is one class object and this is it.
+
+    The edges themselves are collected rather than counted, so that a test
+    about the sibling *chain* can say `kind` and not be answered by the
+    `parent` edges an arrival makes at the same time. `len()` is still the
+    count.
     """
     model = sys.modules["spanweave.model"]
     original = model.Edge.__init__
     counted = []
 
     def counting(self, *args, **kwargs):
-        counted.append(None)
         original(self, *args, **kwargs)
+        counted.append(self)
 
     monkeypatch.setattr(model.Edge, "__init__", counting)
     return counted
@@ -1224,6 +1302,46 @@ def test_no_arrival_rebuilds_the_sibling_chain_it_lands_inside(edges_built):
         built = len(edges_built) - before
         assert built <= 3, (
             f"arrival {arrival} into a group of {arrival - 1} built {built} edges"
+        )
+
+
+def test_a_late_parent_moves_every_waiting_child_without_building_a_chain_edge(
+    edges_built,
+):
+    """One arrival, one move, however many records it un-orphaned (§10.6).
+
+    Fed children-first, every child sits at trace root waiting for a parent that
+    has not arrived, so the root group holds the whole input -- and then the
+    parent arrives and all of them change group inside a **single** `feed`. Moved
+    one at a time, that arrival pays a search and up to three chain edges per
+    child; moved together, the chain they had is the chain they keep, so the
+    group is re-keyed and no `temporal` edge is built at all.
+
+    `parent` edges are excluded by `kind` rather than absorbed into a bound,
+    because every child genuinely gains one: a bound loose enough to admit
+    `width` parent edges would be loose enough to admit a chain moved per child
+    as well, and then the test would pass on either implementation.
+
+    Both widths, because the arrival is still asserted to be *correct* at each --
+    the chain afterwards is the whole group in §4.3's order -- and the two
+    together say the count does not follow the width.
+    """
+    moved = {}
+    for width in WIDE_SIBLINGS:
+        builder = spanweave.Builder()
+        for index in range(width):
+            builder.feed(oi(f"t{index:04d}", parent="s0", t0=1001.0 + index))
+        edges_built.clear()
+        builder.feed(oi("s0", kind="AGENT", name="agent", t0=1000.0))
+        moved[width] = [edge for edge in edges_built if edge.kind is EdgeKind.TEMPORAL]
+        assert chain_of(builder.graph()) == [
+            (f"t{index:04d}", f"t{index + 1:04d}") for index in range(width - 1)
+        ]
+
+    for width, built in moved.items():
+        assert built == [], (
+            f"the parent of {width} waiting children built {len(built)} chain "
+            "edges; the chain they had is the chain they keep"
         )
 
 
