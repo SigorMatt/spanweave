@@ -5,11 +5,11 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-02 (run 4 in progress: L20, L21, L22, L15, L16, L17 and
-L18 done, each with CI green on its own pushed tip. All three superlinear
-`feed` sites are fixed and §10.6 is rewritten on numbers measured at the new
-tip. Next: L19, the last batch of the run, then stop for a cold review. L7 and
-L8 in run 5).
+Last updated: 2026-10-02 (run 4 done: L20, L21, L22, L15, L16, L17, L18, L19,
+each with CI green on its own pushed tip. All three superlinear `feed` sites
+are fixed, §10.6 is rewritten on numbers measured at the new tip, and both
+cold reviews are archived with every finding dispositioned. Next: cold review
+of run 4 (aux), then decisions. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -181,7 +181,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L16 | **A late parent regroups its waiting children once.** Site (iii): `_regroup` per waiting child, each a full chain restate. On a parent arriving after its children, move every waiting child into the group and restate the chain **once**, O(n log n) for that one `feed`. Gates 1–3 green. Acceptance: wide shape with the root fed last, total `feed` within 2× of root-first (review: 15.4 s for the single arrival at n=2000). | done | 12 |
 | L17 | **A call id's `data` edges are maintained per receipt.** Site (ii): `build.data_edges` re-emits every (receiver, fulfiller) pair of a call id per new receipt because `basis` depends on which receipt ranks first — cubic in turns on the echo shape. Keep per call id the ranked-first receipt; a new receipt that does not outrank it adds its own edges and nothing else; one that does outrank it rewrites the previous first's basis (one removal, one addition per affected edge) and no other. Gates 1–3 green; `basis_rewritten` still reports every pair (gate 3 and `tests/test_live.py:550-592` are the pin). Acceptance: echo 400-turn `feed` ms/record for turns 301–400 within 1.5× of turns 1–100, and `Edge.__init__` count linear in receipts. | done; the second criterion met exactly, the first unmeetable as written and corrected in L18 (§4) | 20 |
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | done | 10 |
-| L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
+| L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | done | 8 |
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
 | L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | done | 6 |
 | L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | done | 4 |
@@ -619,6 +619,33 @@ with both of them available.
   reading `Edge.__init__` from `Profile.getstats()` raw entries per L15's note,
   so an acceptance count can be re-taken from `make bench` without a one-off
   script.
+- 2026-10-02: L19 done (`a97a525`), and run 4 is closed. Both reviews are in
+  the tree byte-for-byte — `reviews/2026-09-30-live-run2.md`
+  (`3800a79d…23ce38`) and `reviews/2026-10-01-live-run3.md` (`0aa047c4…7dd8f2`),
+  `cmp` clean against the untracked scratch copies in `patches/`. Run 2: 17 of
+  21 lettered findings closed or corrected, 4 threads registered verbatim. Run
+  3: findings 1/2/3/4/7 closed by L20–L22, 6 corrected in `71d282f`, 5 recorded
+  as a correction to `b10c60a`'s body, 10 threads registered verbatim, 8 open.
+  Three places where the row's disposition did not match what happened, all
+  recorded in the commit body rather than smoothed over: N5 was a plan
+  correction and not a batch, and T1–T5/T9/T14 are closed though the row's list
+  omits them; L21 closed findings 2 and 7 without touching `spanweave/`,
+  because only the distinct-assertions route existed; and finding 4's census
+  was stale in two places, not one. The cost number is recorded as
+  **corrected, not met**. No census moved (`tests/corpus_census.py` still 56
+  files / 159 records; `install-check` still 33 checks / 4 plants); the only
+  counted surface the two new files reach is the sdist, which already ships
+  `reviews/`. One thing for the cold review: this file's "329 tracked files" is
+  now 331, left as the dated historical measurement it is.
+- 2026-10-02: **run 4 closed.** Eight batches, eight code/doc commits and eight
+  `plan:` commits, every one with CI green on its own pushed tip — no batch
+  needed a second dispatch and none ended `blocked` or `awaiting decision`.
+  The one judgement the run had to make is the one worth the review's
+  attention: L17's first acceptance criterion was not merely unmet but
+  arithmetically unmeetable against §4.2.1, so it was corrected in L18 rather
+  than loosened, and the status cell says so. Next per §2: a cold review of the
+  range `71d282f..` by aux, then decisions, then run 5 (L7 → L8) in the
+  receiver repo, which still does not exist.
 
 ---
 
