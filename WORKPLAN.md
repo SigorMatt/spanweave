@@ -5,9 +5,9 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-01 (run 4 in progress: L20 done, CI green on its own
-pushed tip. Next: L21 → L22 → L15 → L16 → L17 → L18 → L19, spanweave repo.
-L7 and L8 in run 5).
+Last updated: 2026-10-01 (run 4 in progress: L20 and L21 done, each with CI
+green on its own pushed tip. Next: L22 → L15 → L16 → L17 → L18 → L19,
+spanweave repo. L7 and L8 in run 5).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -181,7 +181,7 @@ never restarts, fixes, or touches anything. Conventions live in
 | L18 | **§10.6 on fresh numbers, and a harness that measures what the prose says.** N2, N3, T1–T5, after L15–L17. `tests/live_cost.py` times the materialize sort, the rewind, and both `ordering()` calls of one `delta()` separately; gains `--smoke` (`--turns 5 --wide 5`) that `make check` runs. SPEC §10.2/§10.6 cost paragraphs rewritten: complexity classes as promises (`feed` O(size of the keys touched) with the three former sites named as fixed), numbers cited to the harness with date, interpreter and commit, no bare ratios; the heap-Kahn sentence removed and the rejected subtree-recompute alternative named beside the deferred "no sort" question. CHANGELOG's heap-Kahn line reworded to "measured in the batch session; harness not retained". WORKPLAN §4 numbers are left as history. Re-measure both shapes at the new tip and put the numbers in the harness header. | todo | 10 |
 | L19 | **The run-2 and run-3 reviews archived and every finding dispositioned.** Archives **both** reviews — `reviews/2026-09-30-live-run2.md` and `reviews/2026-10-01-live-run3.md`, byte-for-byte, sha256 in the body — and dispositions both: run 2's as already written (TASKS.md subsection "Cold review of live-graphs run 2 — 2026-09-30": B1, B2, N1–N5, T12, T13 closed by their batches; T6, T8, T10, T11 registered as open threads with the review's sentences verbatim; T7 recorded as a correction); run 3's findings 1, 2, 3, 4, 7 closed by L20, L21, L22; finding 5 recorded as a correction to `b10c60a`'s body (gate 3 was not changed; mid-stream windows are redundant by construction); finding 6 recorded as corrected in the plan; the ten threads registered with the review's sentences verbatim. CHANGELOG entry. `make check`. | todo | 8 |
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
-| L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | todo | 6 |
+| L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | done | 6 |
 | L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | todo | 4 |
 
 ---
@@ -513,6 +513,17 @@ with both of them available.
   passed, the control test green. `tests/serialized_shape.json` did not move.
   Note for the review: §5's findings table stops at L2, so batches from L9 on
   cite the §3 decisions log for their origin instead.
+- 2026-10-01: L21 done (`6d39fe0`), tests only — nothing under `spanweave/`
+  moved and `SPEC.md` did not need to: §7's "neither buffers nor rejoins
+  across calls" is already unqualified by container, so the gap was in the
+  tests, not the promise. The carry mutation fails each new test **alone**
+  (array and export-document, both on the diagnostic-code list, not on a
+  message), while the parent's whole suite stays green under *each* container
+  mutation — which is the negative control that reproduces finding 2. Finding
+  7 closed tests-only: the refusal message already interpolates the shape
+  (`itemsize`/`c_contiguous`), so the two refusals were distinguishable
+  without a code change. `tests/test_read.py` is order-independent forward,
+  reversed, and under three seeds.
 
 ---
 
