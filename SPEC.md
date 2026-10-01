@@ -2176,10 +2176,12 @@ Three facts are properties of the whole input rather than of any record: the
 most common trace id (§7), whether a dialect span id is unique, and whether a
 source key is. The first is in the material of every derived id and the other
 two decide which rule of §3.6 an id comes from, so a record that changes one of
-them moves ids already given out. Those arrivals cost O(n); the rest touch only
-the keys the record names. `graph()` is O(n) either way — it sorts the nodes and
-indexes them afresh — so a loop that feeds without materializing pays for
-bookkeeping only.
+them moves ids already given out. Those arrivals restate everything held, and
+they are the only ones that do; every other arrival touches only the keys the
+record names, at the price §10.6 states for each of them. Materializing is a
+third cost and not either of those: `graph()` sorts the nodes and indexes them
+afresh every time it is asked, so a loop that feeds without materializing pays
+for bookkeeping only.
 
 ### 10.3 A live diagnostic is true when it is made
 
@@ -2305,23 +2307,44 @@ A graph carries no version, so the fold **cannot** check that it was handed the
 or diagnostic it must remove and cannot find, or one it adds that is already
 there, raises `ValueError` rather than producing a quietly wrong graph.
 
-**What each of the two costs, stated rather than implied.** A `feed` appends an
-entry whose size is the keys the arrival touched, so feeding is what §10.2 says
-it is and no more. Asking for a delta is **O(n + e)**, not O(the changes): the
-two things a delta does not carry are functions of the whole node and edge set,
-so `delta(since=v)` sorts both endpoints to find them, exactly as `graph()`
-sorts once to materialize. The gain over materializing is therefore what the
-*answer* is — a handful of nodes and edges instead of the world resent — and not
-yet the sort. A consumer asking for a delta after every record pays two sorts
-per record, as one asking for a graph after every record pays one.
+**What each costs, as a promise rather than an observation.** The three classes
+below are what the implementation must keep; they are not a report on the
+implementation, and a measurement that disagreed with one of them would be a
+defect rather than a correction. The numbers behind them are measured by
+`tests/live_cost.py` (`make bench`) and cited, with their provenance, further
+down.
+
+- A **`feed`** costs the keys the arrival touched (§10.2) — their *size* and not
+  their number — and appends a journal entry of that size. Three sites once made
+  that promise false in practice and each is now bounded, with its own paragraph
+  below: a sibling group's temporal chain, a call id's `data` edges, and a
+  parent arriving after its children. The arrival that changes one of §10.2's
+  three whole-input facts is the exception, and the only one: it restates
+  everything held.
+- A **`delta(since=v)`** costs **O(n + e)**, not O(the changes): the two things a
+  delta does not carry are functions of the whole node and edge set, so it sorts
+  both endpoints to find them, exactly as `graph()` sorts once to materialize.
+  The gain over materializing is therefore what the *answer* is — a handful of
+  nodes and edges instead of the world resent — and not yet the sort.
+- A **`graph()`** materializes from nothing kept: a fresh sort over every node
+  and a fresh index. So a consumer asking for a graph after every record pays
+  one sort per record, and one asking for a delta after every record pays two.
+
+And one thing that is deliberately **not** promised: that an arrival carrying `k`
+declared relations costs what one carrying none does. §4.2.1 says the input
+declares what it declares and that none of it is suppressed, so `k` edges is the
+*answer*, and no bookkeeping makes building `k` edges cost what building none
+costs. What is promised is that each is built **once**.
 
 What §10.2 does not say, and a reader should not read into it: most keys are
 restated **in full**, so what an arrival costs is usually the *size* of the keys
 it touched and not their number. **Two** keys are not, and they are exactly the
 two that grow with the stream rather than with the record — a sibling group's
 temporal chain and a call id's `data` edges — so each is stated below rather than
-left to be the worst of them. Both shapes occur in real telemetry and both are
-measured by `make bench` (`tests/live_cost.py`).
+left to be the worst of them, as is the arrival that moves a whole group at once.
+All three shapes occur in real telemetry, all three are measured by `make bench`
+(`tests/live_cost.py`), and its `--smoke` form — which `make check` runs — asserts
+that each of the three still builds one edge where it once built many.
 
 A sibling group's temporal chain is **not** restated, and the exception is stated
 because it would otherwise be the worst of them: one wide
@@ -2358,27 +2381,76 @@ once, never that an arrival carrying `k` declarations costs what one carrying no
 does. A requester or fulfiller arriving restates that call id's two sides in full,
 because they are one span each in every shape anyone has captured.
 
-**Where the sort is and is not the cost, measured rather than argued** (the same
-two shapes; `make bench` prints the numbers and `tests/live_cost.py` records the
-ones this paragraph rests on). `feed` does not sort **at all** — canonical order
-is computed when a graph is materialized and when a delta is folded, and nowhere
-else — so an incrementally maintained order has nothing in `feed` to replace and
-could only add to it. Inside `delta(since=v)` the share depends on the shape: on
-a loop resending its history, whose edge set is quadratic in its nodes, the two
-sorts are a seventh of the call and assembling and rewinding the endpoints is
-most of the rest; on a wide trace, whose edge set is linear, they are three
-fifths of it, and one `delta(since=version - 1)` at the far end of a 20,000-span
-one costs four times the `feed` that produced it.
+**Where the sort is, and is not, the cost.** `feed` does not sort **at all** —
+canonical order is computed when a graph is materialized and when a delta is
+folded, and nowhere else — so an incrementally maintained order has nothing in
+`feed` to replace and could only add to it. That is a property of the code and
+`tests/test_live.py` pins it by counting the sorts of all four paths. Inside
+`delta(since=v)` the sort's share is a property of the *shape* instead, and so is
+measured and not reasoned about: it is small where the edge set is quadratic in
+the nodes, because assembling and rewinding that edge set is the call, and it is
+most of the call where the edge set is linear and the node set is large.
 
-So the way past that is not a faster sort but **no sort**, and that means
-carrying the two facts the sorts recover — canonical order, and the
-`ordering_cycle` that the same sort reports — between versions instead of
-computing them from the sets. This section and §10.7 take that the other way
-round on purpose: carrying them would make them journalled state, and would put
-a second ordering rule in the library beside the one §5.2 states, which every
-materialized graph and every folded one would then have to agree with. It is a
-spec conversation, not an optimization; until it is had, O(n + e) is what a
+**The numbers, and where they were taken.** Measured at `0718ba8` on 2026-10-02,
+CPython 3.14.6, by `tests/live_cost.py` (`make bench`) on one machine, whose
+header holds the full table; the absolute values are that machine's and do not
+reproduce elsewhere, which is why the classes above are stated without them and
+these are dated. The two shapes are the September 2026 audit's: an agent loop
+resending its history (400 turns — 801 records, 801 nodes, 81,799 edges) and one
+root with 20,000 tool children (20,001 records, 20,001 nodes, 39,999 edges).
+
+- **A `feed` is flat in what has already arrived, where the answer is.** The wide
+  shape feeds at 0.1139 ms/record at 1,000 children and 0.1136 ms/record at
+  8,000, and builds exactly **one `Edge` object per edge the prefix holds**
+  (39,999 for 39,999; 81,799 for 81,799 on the loop shape). Feeding makes **zero**
+  canonical sorts, counted rather than assumed.
+- **Where the answer is not flat, the cost follows the answer and not the
+  stream.** The loop shape feeds at 1.2009 ms/record overall and, over four
+  stretches of the same stream, at 0.3784, 0.8133, 1.5593 and 2.0567 ms/record.
+  The comparison that means something is not the last stretch against the first
+  but each against what it declares: turns 1–100 declare 24.6 receipts per record
+  and turns 301–400 declare 174.8, so **7.1× is the floor** of that rise for any
+  implementation that builds each declared relation once — and §4.2.1 forbids
+  dropping one. The measured rise is 5.43×, *below* the floor, so the per-record
+  cost is **sublinear in the declarations the record carries**; the difference is
+  the fixed cost of classifying and absorbing a span at all. A number under 7.1×
+  is the good outcome, and a target under it could only be met by suppressing
+  relations the telemetry stated.
+- **The arrival that regroups the whole input** — the wide shape's root fed last
+  — makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
+  root-first, 19.9 ms of it inside that single `feed`.
+- **A materialization's sort** is 18.0 ms of a 249.9 ms `graph()` on the loop
+  shape and 86.9 ms of 298.7 ms on the wide one: a fourteenth of the call where
+  the nodes are few and the edges many, and three tenths of it where they are
+  not.
+- **Inside `delta(since=version - 1)`** the four parts are timed one at a time.
+  Loop shape, 245.8 ms: assembling the held sets 161.5 ms, rewinding them to
+  `since` 44.3 ms, and the two `ordering()` calls 18.5 ms and 18.7 ms — a seventh
+  of the call. Wide shape, 293.2 ms: the held sets 77.8 ms, the rewind 26.1 ms,
+  the two sorts 91.2 ms and 82.5 ms — **three fifths** of it. That same 293.2 ms
+  answers for an arrival whose `feed` cost 0.1198 ms, which is what "O(n + e),
+  not O(the changes)" is in milliseconds.
+
+The wide shape's three fifths is therefore the only place where touching ordering
+could pay at all, and what it points at is **no sort**: carrying the two facts
+the sorts recover — canonical order, and the `ordering_cycle` that the same sort
+reports — between versions instead of computing them from the sets. This section
+and §10.7 take that the other way round on purpose: carrying them would make
+them journalled state, and
+would put a second ordering rule in the library beside the one §5.2 states, which
+every materialized graph and every folded one would then have to agree with. It
+is a spec conversation, not an optimization; until it is had, O(n + e) is what a
 delta costs and this paragraph is why.
+
+One narrower alternative was weighed against those numbers and **rejected**:
+recomputing canonical order for the subtree an arrival affects, rather than the
+whole node set (`WORKPLAN.md` L5). It can do nothing for `feed`, which does not
+sort at all, so it could only improve `delta()` — where it would have to reach
+*both* `ordering()` calls, because the two endpoints are two different node sets
+— and the shares above say that is worth having on one of the two shapes and
+nothing on the other. It is recorded as rejected and not as deferred: the open
+question is the one in the paragraph above, and the two are not the same
+question.
 
 ### 10.7 The journal, and the entries that are not local
 

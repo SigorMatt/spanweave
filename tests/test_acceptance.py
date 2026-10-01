@@ -44,13 +44,34 @@ def _recipe(target: str) -> str:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("prerequisite", ["lint", "types", "test", "gates"])
+@pytest.mark.parametrize(
+    "prerequisite", ["lint", "types", "test", "gates", "bench-smoke"]
+)
 def test_check_depends_on_every_stage(prerequisite):
     assert prerequisite in _recipe("check").splitlines()[0]
 
 
 def test_check_smoke_tests_the_installed_entrypoint():
     assert "spanweave --version" in _recipe("check")
+
+
+def test_the_cost_harness_smoke_form_is_what_check_runs():
+    """`check` runs the harness, and runs the form that asserts rather than times.
+
+    The live-cost harness (`tests/live_cost.py`, `make bench`) is a benchmark and
+    deliberately asserts nothing about the clock, so for most of its life nothing
+    ran it and a change could leave it measuring something `SPEC.md` §10.6 no
+    longer says. Its `--smoke` form asserts the *shape* those numbers are about
+    -- declared-receipt counts, one `Edge` per edge held, where the sorts are --
+    which is exactly the part a gate can hold. This test is here because a stage
+    silently dropped from `check` is indistinguishable from a stage that passes.
+    """
+    recipe = _recipe("bench-smoke")
+    assert "tests.live_cost" in recipe, "bench-smoke no longer runs the harness"
+    assert "--smoke" in recipe, (
+        "bench-smoke runs the harness in a form that TIMES rather than asserts; "
+        "a duration in the fast gate is the flake `make stranger` warns about"
+    )
 
 
 def test_lint_checks_formatting_as_well_as_rules():

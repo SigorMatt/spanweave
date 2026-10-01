@@ -2,9 +2,9 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance shape stranger bench capture clean
+.PHONY: check install-check lint types test gates conformance shape stranger bench bench-smoke capture clean
 
-check: lint types test gates
+check: lint types test gates bench-smoke
 	uv run spanweave --version
 
 lint:
@@ -96,6 +96,17 @@ stranger:
 # docstring), so the default width takes tens of minutes.
 bench:
 	uv run python -m tests.live_cost $(ARGS)
+
+# The smoke form of that harness, and the one thing in it `check` DOES run
+# (WORKPLAN.md L18). It feeds eleven records and six, and asserts the SHAPE the
+# numbers above are about -- the receipt count SPEC.md section 4.2.1 promises,
+# one Edge built per edge the prefix holds, zero canonical sorts while feeding
+# against one per materialization and two per delta, and the same bytes from the
+# same records fed in a different order. Still nothing about the clock, for the
+# reason `bench` and `stranger` both give: what belongs in a gate is the part
+# that can be true or false. Milliseconds, so the fast gate stays fast.
+bench-smoke:
+	uv run python -m tests.live_cost --smoke
 
 # Prove that what SHIPS works (TASKS.md 3.6). Everything `check` runs happens
 # under `uv run`, with the source tree on the path, so every gate it runs

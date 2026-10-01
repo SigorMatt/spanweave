@@ -3049,3 +3049,82 @@ def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, cap
     assert printed == shown, (
         f"the README shows\n  {shown}\nand the CLI prints\n  {printed}"
     )
+
+
+# -- §10.6's numbers against the harness that took them ---------------------
+
+# `SPEC.md` §10.6 states what a live build costs. For most of its life that
+# section carried a machine's ratios in its prose -- a seventh, three fifths,
+# "8x the records is 116x the feed" -- taken at commits where three `feed` sites
+# were superlinear. All three were fixed (`WORKPLAN.md` L15-L17) and the prose
+# went on saying what it had said, which is the exact failure this file exists
+# for: nothing recomputes a sentence. So §10.6 now states classes as promises and
+# cites `tests/live_cost.py` for the numbers, with the date, interpreter and
+# commit they were taken at -- and this check holds the two files to the *same*
+# provenance, because a number in SPEC attributed to a measurement the harness
+# header does not share is a citation with no referent.
+#
+# What it cannot check, said plainly: whether the numbers are the ones the
+# harness would print today. That needs minutes of CPU on a loaded machine and
+# would be a duration assertion in the fast gate, which is the flake `make
+# stranger` and `make bench` both refuse. What it checks is that prose and
+# harness agree on *what was measured, when, and where* -- and `make bench
+# ARGS="--smoke"`, which `make check` runs, checks the shape those numbers are
+# about.
+
+#: `Measured at `<sha>` on <date>, CPython <version>` -- the one spelling, so
+#: that history recorded in either file (which names its own commit and date)
+#: cannot be mistaken for the measurement the two must agree on.
+PROVENANCE = re.compile(
+    r"[Mm]easured at `([0-9a-f]{7,40})` on (\d{4}-\d{2}-\d{2}), (CPython [\d.]+)"
+)
+
+
+def test_spec_cost_numbers_cite_the_harness_that_took_them():
+    spec = flat(section(read("SPEC.md"), "### 10.6"))
+    harness = flat(read("tests/live_cost.py"))
+    assert "tests/live_cost.py" in spec, (
+        "`SPEC.md` §10.6 states cost numbers without naming the harness that "
+        "took them; a number in SPEC is either a promise or a citation"
+    )
+    in_spec = PROVENANCE.findall(spec)
+    in_harness = PROVENANCE.findall(harness)
+    assert len(in_spec) == 1, (
+        f"`SPEC.md` §10.6 states its measurement provenance {len(in_spec)} "
+        f"time(s) in the one spelling this check reads ('Measured at `<sha>` on "
+        f"<date>, CPython <version>'); exactly one is what keeps the citation "
+        f"unambiguous"
+    )
+    assert len(in_harness) == 1, (
+        f"`tests/live_cost.py` states its measurement provenance "
+        f"{len(in_harness)} time(s) in that spelling, and §10.6 cites it"
+    )
+    assert in_spec == in_harness, (
+        f"`SPEC.md` §10.6 attributes its numbers to {in_spec[0]} and "
+        f"`tests/live_cost.py` says its table was taken at {in_harness[0]}. One "
+        f"of the two was re-measured and the other was not"
+    )
+
+
+def test_spec_no_longer_claims_a_faster_sort_was_measured():
+    """The heap-Kahn claim is gone from SPEC, and gone for a stated reason.
+
+    A Kahn sort with a heap was measured once, in the session that wrote
+    `WORKPLAN.md` L5, and the harness for it was not retained -- so nothing in
+    this tree reproduces it and SPEC cannot state it as a property of the
+    library (`WORKPLAN.md` §3, 2026-09-30, N2/T1-T5). It survives as session
+    history in `CHANGELOG.md` and in the harness header, each saying so.
+    """
+    spec = read("SPEC.md")
+    assert not re.search(r"\bheaps?\b", spec, re.I), (
+        "`SPEC.md` names a heap again. The one measurement behind that claim "
+        "was taken in a batch session whose harness was not retained, so SPEC "
+        "would be stating a number nothing in this tree can reproduce"
+    )
+    retained = "harness not retained"
+    for where in ("CHANGELOG.md", "tests/live_cost.py"):
+        assert retained in read(where), (
+            f"{where} records the heap-Kahn measurement without saying the "
+            f"harness was not retained, which is the whole of why `SPEC.md` "
+            f"does not state it"
+        )

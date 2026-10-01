@@ -448,6 +448,66 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **`SPEC.md` §10.2 and §10.6 state what a live build costs as *promises* with
+  the numbers cited to the harness, and the harness now measures what the prose
+  attributes.** Nothing under `spanweave/` moves (`WORKPLAN.md` L18, from the
+  2026-09-30 decision on the run-2 cold review's N2 and T1–T5). Those two
+  sections carried a machine's ratios in their prose — a seventh, three fifths,
+  "four times the `feed` that produced it" — all taken at commits where three
+  `feed` sites were superlinear. All three are since fixed (L15–L17) and the
+  prose went on saying what it had said, which is a sentence nobody recomputed.
+  So the classes are now stated as promises the implementation must keep: a
+  `feed` costs the *size* of the keys the arrival touched, with the three former
+  sites named as bounded and the whole-input-fact arrival named as the one
+  exception that restates everything; a `delta(since=v)` is O(n + e); a
+  `graph()` materializes from nothing kept. And one thing is stated as
+  deliberately **not** promised — that an arrival carrying `k` declared
+  relations costs what one carrying none does, because §4.2.1 makes `k` edges
+  the *answer*.
+  The numbers follow, dated and attributed rather than floating: measured at
+  `0718ba8` on 2026-10-02, CPython 3.14.6, one machine, by `tests/live_cost.py`.
+  The agent loop resending its history (400 turns) feeds in **961.9 ms**
+  (1.2009 ms/record) against 75.5 s at `1d7ba8f`, and 20,000 tool children in
+  **2,395.9 ms** (0.1198 ms/record) against 1,449 s; both build exactly **one
+  `Edge` object per edge the prefix holds** (81,799 and 39,999) and make **zero**
+  canonical sorts while feeding, counted rather than read off the code. `graph()`
+  is 249.9 ms and 298.7 ms, of which the materialize sort is 18.0 ms and 86.9 ms.
+  `delta(since=version - 1)` is 245.8 ms and 293.2 ms, and is now split into the
+  four parts §10.6 attributes separately: assembling the held sets (161.5 /
+  77.8 ms), rewinding them to `since` (44.3 / 26.1 ms), and the **two**
+  `ordering()` calls timed one at a time (18.5 + 18.7 ms, a seventh of the call;
+  91.2 + 82.5 ms, three fifths of it). The wide shape's `feed` is flat in what
+  has arrived — 0.1139 ms/record at 1,000 children, 0.1136 at 8,000.
+  **The acceptance ratio the previous entry was written against is corrected, not
+  restated.** "Turns 301–400 within 1.5× of turns 1–100" cannot hold for any
+  correct implementation: §4.2.1 promises `n` turns declare `n(n-1)/2` receipts
+  and that none is suppressed, so those two stretches carry 24.6 and 174.8
+  declarations per record and **7.1× is the floor** of the rise for anything that
+  builds each declaration once. The measured rise is 5.43× — *below* the floor,
+  i.e. the per-record cost is sublinear in the declarations the record carries,
+  the difference being the fixed cost of classifying and absorbing a span at all.
+  §10.6 now states the floor instead of the ratio; a target under it would be a
+  demand to drop relations the telemetry stated.
+  Two claims leave the documents. The **heap-Kahn** figure is no longer in SPEC
+  at all and is reworded in this file as session history with the harness not
+  retained, because nothing in this tree reproduces it. And the **subtree
+  recompute** that `WORKPLAN.md` L5 dropped is now named in §10.6 as *rejected on
+  measurement*, beside the still-open "no sort" question, so the two are not read
+  as one.
+  The harness gains `--count-edges` (`Edge` objects built per edge held, read
+  from `cProfile.Profile.getstats()` raw entries, because `pstats` merges every
+  frozen dataclass's `__init__` under one `<string>:2` row) and `--smoke`, which
+  `make check` now runs through a new `bench-smoke` target. The smoke form
+  asserts the **shape** the numbers are about and nothing about the clock: the
+  receipt count §4.2.1 promises, one `Edge` per edge held on both shapes, zero
+  sorts while feeding against one per materialization and two per delta, and the
+  same bytes from the same records fed root-last. It takes about a tenth of a
+  second, so the fast gate stays fast. A duration threshold still appears
+  nowhere, for the reason `make stranger` gives. Two new doc checks hold the
+  prose to the harness: §10.6 and the harness header must name the same measured
+  commit, date and interpreter, and SPEC must not state the heap figure while
+  the files that do record it say the harness was not retained.
+
 - **A call id's `data` edges are amended per declared receipt rather than
   restated, so a loop resending its history is no longer cubic in its turns.**
   `SPEC.md` §10.6 gains the case and §10.2's `basis` bullet is narrowed to what
@@ -638,8 +698,11 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `feed` to replace and could only add to it; `tests/test_live.py` pins that, and
   the sort counts of the other three paths, rather than leaving the cost
   statement resting on a reading of the code. A faster sort is not the lever
-  either: Kahn with a heap emits the same sequence and was measured identical at
-  2.1x the speed, which moves `delta()` by 3% on the loop shape. What the wide
+  either: a Kahn sort with a heap emitted the same sequence at about 2.1x the
+  speed, which would move `delta()` by some 3% on the loop shape — **measured in
+  the batch session; harness not retained**, so that figure is session history
+  and nothing in this tree reproduces it. `SPEC.md` states it nowhere, which is
+  the one place it would be read as a property of the library. What the wide
   shape's 60% points at is therefore **not sorting** at all, which would mean
   carrying canonical order and `ordering_cycle` between versions instead of
   computing them from the node and edge sets — a reversal of what §10.6 and
