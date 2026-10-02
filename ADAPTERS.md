@@ -251,7 +251,10 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   them belong in it. Deduplicate, and do not worry about order — the builder
   joins on the ids and sorts what it emits.
 - `call_role` — `requester` on the span that asked, `fulfiller` on the span that
-  answered. One role per span, shared by all of its ids.
+  answered. One role per span, shared by all of its ids. `CallRole` is a
+  `StrEnum` and the builder compares it **by value**, so the plain string
+  `"fulfiller"` is read exactly as `CallRole.FULFILLER` is, on the batch path
+  and the live one alike.
 - **Take a requester id only from what the span itself produced.** Nearly
   every chat protocol resends the conversation on each turn, so a later span
   carries the earlier turn's call id as *input context*. If you match the id

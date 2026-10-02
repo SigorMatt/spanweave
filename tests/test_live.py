@@ -909,6 +909,150 @@ def data_of(graph):
 
 
 # --------------------------------------------------------------------------
+# A call role is read the same way live and in batch (`SPEC.md` §10.1)
+# --------------------------------------------------------------------------
+
+#: One `strrole` record: the span id, the role **as the dialect hands it over**,
+#: the call ids that role is about, the call ids whose result the span declares
+#: receipt of, and its start time.
+STR_ROLE_MARKER = "strrole.id"
+STR_ROLE_ROLE = "strrole.role"
+STR_ROLE_CALLS = "strrole.calls"
+STR_ROLE_RECEIVES = "strrole.receives"
+STR_ROLE_START = "strrole.start"
+
+
+class StrRoleAdapter:
+    """A test-local dialect that fills `call_role` with whatever it is handed.
+
+    `CallRole` is a `StrEnum`, so the plain string `"fulfiller"` **equals**
+    `CallRole.FULFILLER` without **being** it; `register` is public and nothing
+    checks the seam's types at runtime (`spanweave/adapters/base.py`). Both
+    shipped adapters use the enum members, so no corpus fixture reaches the
+    plain-string case -- a contributor's adapter does, and §10.1 is a promise
+    about every input the library accepts, not only the two dialects it ships.
+
+    Also the one dialect here that can name a call id **twice** in one span's
+    `call_ids`, which the shipped adapters deduplicate before the seam
+    (`ADAPTERS.md`, *Call pairing*) and which nothing stops an adapter handing
+    over as it read it.
+    """
+
+    id = "strrole"
+    version = "0"
+
+    def detect(self, sample):
+        for record in sample:
+            if isinstance(record, dict) and STR_ROLE_MARKER in record:
+                return 0.9
+        return 0.0
+
+    def parse(self, records):
+        for index, record in enumerate(records, start=1):
+            start = record[STR_ROLE_START]
+            yield NormalizedSpan(
+                source_key=record[STR_ROLE_MARKER],
+                kind=NodeKind.TOOL,
+                name=record[STR_ROLE_MARKER],
+                raw=RawRecord(source=record, line_number=index),
+                span_id=record[STR_ROLE_MARKER],
+                started_at=start,
+                ended_at=start + 0.5,
+                call_ids=tuple(record.get(STR_ROLE_CALLS, ())),
+                call_role=record.get(STR_ROLE_ROLE),
+                received_call_ids=tuple(record.get(STR_ROLE_RECEIVES, ())),
+            )
+
+
+def sr(span_id, role=None, calls=(), receives=(), start=1000.0):
+    """One `strrole` record. `role` reaches `call_role` verbatim."""
+    record = {STR_ROLE_MARKER: span_id, STR_ROLE_START: start}
+    if role is not None:
+        record[STR_ROLE_ROLE] = role
+    if calls:
+        record[STR_ROLE_CALLS] = list(calls)
+    if receives:
+        record[STR_ROLE_RECEIVES] = list(receives)
+    return record
+
+
+@pytest.fixture
+def str_role():
+    """`StrRoleAdapter`, registered for one test and then gone."""
+    kept = dict(REGISTRY._adapters)
+    register(StrRoleAdapter())
+    try:
+        yield
+    finally:
+        REGISTRY._adapters.clear()
+        REGISTRY._adapters.update(kept)
+
+
+def test_a_plain_str_call_role_is_read_the_same_way_live_and_in_batch(str_role):
+    """A role equal to a `CallRole` member but not identical to it.
+
+    `replay` asserts the whole of §10.1 -- same graph, same bytes, at every
+    version -- and the roles are what decides the graph here: an identity
+    comparison puts the fulfilling span on the *requesting* side on one path
+    and on the fulfilling side on the other, so the two builds disagree about
+    the `call_result` edge, the `data` edge and the unpaired diagnostics, with
+    nothing reported either side. The role is read by **value**, so both paths
+    read the same side and the pairing is the one the dialect stated.
+    """
+    records = [
+        sr("ask", role="requester", calls=["c1"]),
+        sr("answer", role="fulfiller", calls=["c1"], start=1001.0),
+        sr("saw", receives=["c1"], start=1002.0),
+    ]
+    graph = replay(records).graph()
+
+    assert [
+        (edge.src, edge.dst) for edge in graph.edges(kind=EdgeKind.CALL_RESULT)
+    ] == [("ask", "answer")]
+    assert data_of(graph) == [("answer", "saw", DATA_BASIS)]
+    assert codes.UNPAIRED_CALL not in codes_of(graph)
+    assert codes.UNPAIRED_RESULT not in codes_of(graph)
+
+
+def test_one_span_naming_a_call_id_twice_is_read_the_same_way_live_and_in_batch(
+    str_role,
+):
+    """The same claim where a span names one call id twice, with the enum.
+
+    The live builder walks `sorted(set(span.call_ids))` and the batch builder
+    the same, so neither counts a repeated id as two sides of one call. Pinned
+    rather than argued: the sides feed `call_result` and `data` edges that are
+    deduplicated before they are emitted, so a divergence here is invisible in
+    the bytes today and would stop being invisible the moment anything turned
+    on how many times a side names a node.
+    """
+    records = [
+        sr("ask", role=CallRole.REQUESTER, calls=["c1", "c1"]),
+        sr("answer", role=CallRole.FULFILLER, calls=["c1", "c1"], start=1001.0),
+        sr("saw", receives=["c1", "c1"], start=1002.0),
+    ]
+    graph = replay(records).graph()
+
+    assert [
+        (edge.src, edge.dst) for edge in graph.edges(kind=EdgeKind.CALL_RESULT)
+    ] == [("ask", "answer")]
+    assert data_of(graph) == [("answer", "saw", DATA_BASIS)]
+
+
+def test_a_role_equal_to_neither_member_is_still_read_the_same_way(str_role):
+    """And a role that is neither, which is where comparing by value stops.
+
+    Nothing promises *which* side an unreadable role lands on -- a dialect
+    whose role cannot be read is `None` at the seam (`ADAPTERS.md`), and this
+    is a type violation rather than an input shape -- so nothing here asserts a
+    side. What §10.1 does promise is that the two builders answer alike, and
+    they do because one side is named and the other is the fall-through on both
+    paths, rather than each naming the side it happens to test for.
+    """
+    replay([sr("odd", role="neither", calls=["c1"])])
+
+
+# --------------------------------------------------------------------------
 # What the live graph does not carry
 # --------------------------------------------------------------------------
 

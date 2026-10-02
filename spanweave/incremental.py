@@ -537,10 +537,16 @@ class SpanAbsorber:
         Sorted, both loops. Nothing here may turn on how a set iterates
         (`CLAUDE.md` 4) -- the edges an arrival makes do not depend on the order
         it names its call ids in, and sorting says so rather than relying on it.
+
+        The role is compared by **value**, as `build._call_sides` compares it:
+        `CallRole` is a `StrEnum`, so an adapter may hand over the plain string
+        `"fulfiller"`, and reading that as a requester here while the batch
+        build reads it as a fulfiller would be a §10.1 divergence with no
+        diagnostic to show for it.
         """
         sides: set[str] = set()
         if span.call_ids and span.call_role is not None:
-            fulfils = span.call_role is CallRole.FULFILLER
+            fulfils = span.call_role == CallRole.FULFILLER
             side = self._fulfillers if fulfils else self._requesters
             for call_id in sorted(set(span.call_ids)):
                 side.setdefault(call_id, []).append(node_id)

@@ -634,6 +634,18 @@ def _call_sides(
     **and** where two spans named it differently -- disagreement is not
     something to resolve by picking, and picking would also make the result
     depend on input order, which `CLAUDE.md` 4 forbids outright.
+
+    The role is read by **value** and the ids are deduplicated, both in exactly
+    the spelling the live builder uses (`spanweave/incremental.py`
+    `_index_calls`), because §10.1 makes one builder's answer the other's
+    definition and a seam read two ways is two answers. `CallRole` is a
+    `StrEnum`, so an adapter may hand over the plain string `"fulfiller"` --
+    equal to the member, not identical to it -- and `register` is public with
+    nothing checking the seam's types at runtime. One side is named and the
+    other is the fall-through, so no value can be on neither side here and on
+    both there. A span naming one call id twice is one side of that call, not
+    two: the edges would be deduplicated anyway, but the two unpaired
+    diagnostics are emitted per named node and are not.
     """
     requesters: dict[str, list[NodeId]] = {}
     fulfillers: dict[str, list[NodeId]] = {}
@@ -641,8 +653,8 @@ def _call_sides(
     for span, node_id in zip(spans, ids, strict=True):
         if not span.call_ids or span.call_role is None:
             continue
-        side = requesters if span.call_role is CallRole.REQUESTER else fulfillers
-        for call_id in span.call_ids:
+        side = fulfillers if span.call_role == CallRole.FULFILLER else requesters
+        for call_id in sorted(set(span.call_ids)):
             side.setdefault(call_id, []).append(node_id)
             named = span.call_names.get(call_id)
             if named is not None:

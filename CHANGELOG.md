@@ -1486,6 +1486,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A call role is read the same way live and in batch, and a span naming one
+  call id twice is one side of that call rather than two.** From the run-4 cold
+  review's threads (`WORKPLAN.md` L25). `CallRole` is a `StrEnum`, so the plain
+  string `"fulfiller"` **equals** `CallRole.FULFILLER` without **being** it, and
+  both builders compared the role by identity: an adapter handing over the
+  string — `register` is public and nothing checks the seam's types at runtime —
+  had its fulfilling span read as a *requester* on the live path and as a
+  fulfiller on the batch path. The two builds then disagreed about the
+  `call_result` edge, the `data` edges and which of `unpaired_call` /
+  `unpaired_result` was reported, with no diagnostic to say so: a silent breach
+  of the `SPEC.md` §10.1 promise that a live graph at version *k* **is** the
+  batch graph of the first *k* records. Both sites now compare by value, in one
+  spelling — the fulfilling side is named and the requesting side is the
+  fall-through on both paths — so no role value can be read two ways. Separately,
+  the live builder deduplicated a span's `call_ids` and the batch builder did
+  not; the edges that asymmetry produced were deduplicated before emission, but
+  the two unpaired diagnostics are emitted **per named node** and are not, so a
+  span naming one call id twice drew that warning twice in batch and once live.
+  The batch path now deduplicates as the live one does. No change for either
+  shipped adapter: both use the enum members and both deduplicate their ids
+  before the seam. `ADAPTERS.md` states that a role is compared by value.
+  (`SPEC.md` §10.1, unchanged)
+
 - **A record a live `Builder` refuses no longer leaves a memo behind, so a
   whole-input diagnostic made after it reaches `delta()` and not only
   `graph()`.** From the run-4 cold review (finding A4; `WORKPLAN.md` L23).
