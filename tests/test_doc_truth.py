@@ -624,6 +624,123 @@ def test_the_examples_use_only_the_public_api_the_readme_claims():
     )
 
 
+# -- The public API, held to the README that is supposed to name it ---------
+#
+# The run-4 cold review's §C item 8 (`WORKPLAN.md` L27). Eight names landed on
+# the public surface over one series -- `Builder`, `Delta`, `Records`,
+# `BasisRewrite`, `DeltaUnavailableError`, `read_records`, `delta_dumps`,
+# `delta_to_document` -- and `grep -nE "Builder|read_records|delta" README.md`
+# returned nothing: the README's only change in 42 commits was a row in the
+# Documents table. The whole product of the series was invisible to a stranger,
+# and the test above does not see it, because an unmentioned export breaks no
+# example.
+#
+# The same `TASKS.md` 3.8 shape as everything else in this file: true when
+# written, nothing recomputes it, and the omission is found by whoever cannot
+# check it. So the population is DERIVED from `__all__` and there is no
+# exemption list -- a name exported tomorrow is covered tomorrow, which is the
+# only version of this check worth having. A grandfathered name is a name
+# nobody comes back for.
+
+
+def exports_the_readme_does_not_name(names: list[str]) -> list[str]:
+    """Which of `names` the README never writes inside a code span.
+
+    A code span rather than anywhere in the prose, because the prose is where a
+    coincidence lives: `## Status` is a heading and `Status` is a model type,
+    and "the trajectory dumper" is not `dump`. Matching is word-bounded for the
+    same reason -- `Node` must not be satisfied by `NodeKind`, nor `Delta` by
+    `DeltaUnavailableError` -- while a dotted qualifier counts, so
+    `spanweave.build(trace)` names `build`.
+    """
+    spans = code_spans(read("README.md"))
+    return sorted(
+        name
+        for name in names
+        if not any(
+            re.search(rf"(?<!\w){re.escape(name)}(?!\w)", span) for span in spans
+        )
+    )
+
+
+def test_the_readme_names_every_name_the_package_exports():
+    public = list(spanweave.__all__)
+    assert public, "spanweave exports nothing; the introspection broke"
+    missing = exports_the_readme_does_not_name(public)
+    assert not missing, (
+        f"{len(missing)} name(s) on the public API are nowhere in README.md: "
+        f"{missing}. `CLAUDE.md` says the public API is exactly what "
+        f"`spanweave/__init__.py` exports, so a name exported and unmentioned "
+        f"is a surface a stranger cannot reach. Add it to the README's public "
+        f"API table -- or unexport it, which is the other honest answer."
+    )
+
+
+def test_the_export_scan_reports_a_name_the_readme_does_not_name():
+    """The plant. A guard that has never fired is a guard nobody has read.
+
+    Both directions, because this scan can fail either way: a matcher so loose
+    that every name passes says nothing, and one so tight that a named export
+    is reported would be a README nobody can satisfy.
+    """
+    assert exports_the_readme_does_not_name(["never_exported_by_spanweave"]) == [
+        "never_exported_by_spanweave"
+    ], "the scan missed the plant, so it would miss a real omission too"
+    assert exports_the_readme_does_not_name(["Builder", "read_records"]) == [], (
+        "the scan reports a name the README does name; the word boundary or "
+        "the code-span reading has gone wrong"
+    )
+
+
+# -- The README's live section, run rather than read ------------------------
+
+
+LIVE_SECTION = "\n## Building a graph while the trace is still arriving"
+
+
+def test_the_live_builder_example_prints_what_the_readme_shows():
+    """`TASKS.md` 3.9, applied below `## Install`.
+
+    The quickstart's blocks are the script and two harnesses run them. This
+    section's block is a third paste a reader makes, and an example of a
+    *live* builder is the easiest kind to let drift: its output is five lines
+    of counts and a diagnostic opening and closing, every one of which moves if
+    pairing, canonical order or the delta's definition moves.
+
+    Run from the repository root, because the trace it reads is corpus data
+    that does not ship in the wheel -- which is why this lives here and not in
+    `tests/install_check.py`.
+    """
+    import subprocess
+    import sys
+
+    from tests.readme_quickstart import blocks_of, normalize
+
+    blocks = blocks_of(section(read("README.md"), LIVE_SECTION))
+    assert len(blocks) == 1, (
+        f"the README's live-builder section holds {len(blocks)} python blocks; "
+        f"this check is written about one, and a second one silently unrun is "
+        f"the failure mode it exists for"
+    )
+    block = blocks[0]
+    assert block.expected, "the python block shows no output to compare against"
+    result = subprocess.run(
+        [sys.executable, "-c", block.source],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"the README's live-builder example does not run: exit "
+        f"{result.returncode}\n{result.stderr}"
+    )
+    assert normalize(result.stdout) == normalize(block.expected), (
+        "the README's live-builder example prints something other than what "
+        f"it shows.\n--- printed ---\n{normalize(result.stdout)}\n"
+        f"--- README ---\n{normalize(block.expected)}"
+    )
+
+
 def test_the_readme_status_is_not_written_in_phase_numbers():
     """The rule that would have caught the section this task found stale.
 

@@ -15,6 +15,32 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The README covers the live builder, and a test holds it to `__all__`.**
+  Docs and tests only: nothing under `spanweave/` moves and `SPEC.md` does not
+  move (`WORKPLAN.md` L27, from the run-4 cold review's §C item 8). Eight names
+  landed on the public API over this series — `Builder`, `Delta`, `Records`,
+  `BasisRewrite`, `DeltaUnavailableError`, `read_records`, `delta_dumps`,
+  `delta_to_document` — and the README named none of them; its only change in
+  42 commits was a row in the Documents table, so the whole product of the
+  series was invisible to a stranger. It now carries a section drawn from
+  `SPEC.md` §10 and §7: `feed` and the version it returns, `graph()`,
+  `delta(since=v)` and `fold`, `retain` with the refusal a dropped `since`
+  earns, the three ways to consume it, prefix consistency as the promise under
+  all of them, the facts a builder fed records rather than bytes cannot report
+  (§10.4), `read_records` with §7's sentence about neither buffering nor
+  rejoining across calls, and the delta's own document form (§10.9). Its worked
+  example is **run** by `tests/test_doc_truth.py` and compared to the output
+  shown, the way the quickstart's blocks are — `tests/readme_quickstart.py`
+  gained the one entry point that reads a section below `## Install`, since
+  that example reads corpus data and so cannot run from a wheel.
+  The new check is that every name in `spanweave.__all__` appears in README.md
+  inside a code span. Measured on the parent commit, **36** of the 38 exports
+  did not: the review's eight, plus 28 that predate the series — the whole
+  graph model, the closed vocabularies, the error types, the annotation API and
+  the serializers. So the README also gained a public-API table naming all 38,
+  and the check has **no exemption list**: a name exported tomorrow fails the
+  build tomorrow unless the table names it.
+
 - **`read_records` now takes a `bytearray` or a `memoryview` beside `bytes`**
   (`SPEC.md` §7, `WORKPLAN.md` L13, from the run-2 cold review's T13). That is
   what a receiver actually holds: it appends into one buffer for the life of a

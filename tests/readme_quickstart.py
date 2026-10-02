@@ -99,8 +99,22 @@ def shell_steps(readme: str | None = None) -> list[ShellStep]:
 
 
 def python_blocks(readme: str | None = None) -> list[PythonBlock]:
-    """Every ```python fence, paired with the output fence that follows it."""
-    fences = _fences(quickstart_text(readme))
+    """Every ```python fence in the quickstart, with its output fence."""
+    return blocks_of(quickstart_text(readme))
+
+
+def blocks_of(text: str) -> list[PythonBlock]:
+    """The same pairing over an arbitrary slice of the README.
+
+    The quickstart is not the only runnable block the README carries, and a
+    section further down is read by slicing on its heading rather than by
+    widening `quickstart_text`: the two harnesses that run the quickstart --
+    `make check` against the source tree and `make install-check` against the
+    installed wheel -- must keep reading exactly what a stranger meets before
+    deciding anything, and a section below `## Install` that reads a corpus
+    file cannot run from a wheel at all (the corpus does not ship in one).
+    """
+    fences = _fences(text)
     blocks: list[PythonBlock] = []
     for index, (language, body) in enumerate(fences):
         if language != "python":
