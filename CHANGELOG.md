@@ -448,6 +448,33 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **`Delta.basis_rewritten` is now pinned to name *every* pair it moved, not
+  just the first.** Tests only: nothing under `spanweave/` moves and `SPEC.md`
+  does not move (`WORKPLAN.md` L24, from the run-4 cold review's §C item 1).
+  The gap was in what was *checked*. §4.2.1's rank is a property of a receipt,
+  but the edges that carry it are one per span that **answered** the call, so a
+  receipt whose rank an out-of-order arrival moves holds as many stale edges as
+  the call had fulfillers — and the committed pin used **one** fulfiller, where
+  "every stale edge" and "the first stale edge" are the same one-element list.
+  The review demonstrated that `removed.extend(stale[:1])` in
+  `spanweave/incremental.py:_received` survived the entire suite; re-taken at
+  this commit it is the sole failure in 2991 tests, and the test added here is
+  the one that fails. Under it the delta adds the fresh basis without removing
+  the stale one, so it stops being `graph(until) − graph(since)` (`SPEC.md`
+  §10.6), the fold produces a graph carrying both bases for one relation, and
+  the view — computed from the edge sets, which is why it cannot disagree with
+  them — names one pair of two. The new test uses two fulfillers and an
+  out-of-order receiver, and asserts all four: both pairs in `basis_rewritten`
+  with their before and after, both stale edges in `edges_removed`, the delta
+  equal to the checkpoint diff of the two materialized graphs, and the fold byte
+  for byte. No conformance scenario was added, and the reason is recorded in the
+  commit body: both dialects can render the shape, but any new file under
+  `fixtures/conformance/` moves the tracked corpus census, which durable
+  documents cite and `tests/test_doc_truth.py` gates — a documents change this
+  batch is not. Conformance gate 3 therefore stays vacuous for this mutant, and
+  the only thing standing between it and a release is the test in
+  `tests/test_live.py`.
+
 - **The live-graphs series' two cold reviews are in the repository, and every
   finding either names the batch that closed it or is registered as an open
   thread.** `reviews/2026-09-30-live-run2.md` and

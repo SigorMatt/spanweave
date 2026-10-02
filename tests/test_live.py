@@ -1081,6 +1081,70 @@ def test_a_basis_rewrite_is_one_edge_out_one_in_and_named_as_a_pair():
     assert ("s1", "s3", rewritten[0].after) in added
 
 
+def test_a_basis_rewrite_names_every_pair_it_moved_and_not_just_the_first():
+    """Two spans answered the call, so the receipt whose rank moved holds **two**
+    `data` edges -- and a rewrite is per edge, not per receipt.
+
+    The pin above has one fulfiller, where "every stale edge" and "the first
+    stale edge" are the same one-element list, so it cannot tell them apart.
+    This shape can: `call_a` was answered by `s1` and by `s2` (§4.2.1 -- the
+    declaration is about the result of whatever answered the call, and each
+    answering span earns its own edge), so when the out-of-order receipt `s3`
+    arrives and takes first rank away from `s4`, **both** of `s4`'s edges carry
+    a basis that no longer holds.
+
+    Leaving one of them behind would break the definition and not merely the
+    view: a `Delta` **is** `graph(until) - graph(since)` (`SPEC.md` §10.6), so
+    the stale basis would still stand in the folded graph while the fresh one
+    stood beside it, and `basis_rewritten` -- computed from the edge sets, which
+    is why it cannot disagree with them -- would name one pair of two.
+    """
+    records = [
+        fulfiller("s1", "call_a", t0=1000.0),
+        fulfiller("s2", "call_a", t0=1000.2),
+        receiver("s4", "call_a", t0=1002.0),
+        receiver("s3", "call_a", t0=1001.0),
+    ]
+    builder, built = graphs_of(records)
+    assert data_of(built[3]) == [
+        ("s1", "s4", DATA_BASIS),
+        ("s2", "s4", DATA_BASIS),
+    ]
+    assert data_of(built[4]) == [
+        ("s1", "s3", DATA_BASIS),
+        ("s1", "s4", DATA_LATER_BASIS),
+        ("s2", "s3", DATA_BASIS),
+        ("s2", "s4", DATA_LATER_BASIS),
+    ]
+
+    delta = builder.delta(since=3)
+    assert [(r.src, r.dst, r.before, r.after) for r in delta.basis_rewritten] == [
+        ("s1", "s4", DATA_BASIS, DATA_LATER_BASIS),
+        ("s2", "s4", DATA_BASIS, DATA_LATER_BASIS),
+    ]
+
+    # Both stale edges leave, and the view is over those sets rather than a
+    # fact of its own -- so each pair it names is a removal and an addition.
+    data_removed = [
+        (e.src, e.dst, e.basis) for e in delta.edges_removed if e.kind is EdgeKind.DATA
+    ]
+    data_added = [
+        (e.src, e.dst, e.basis) for e in delta.edges_added if e.kind is EdgeKind.DATA
+    ]
+    assert data_removed == [
+        ("s1", "s4", DATA_BASIS),
+        ("s2", "s4", DATA_BASIS),
+    ]
+    for rewrite in delta.basis_rewritten:
+        assert (rewrite.src, rewrite.dst, rewrite.before) in data_removed
+        assert (rewrite.src, rewrite.dst, rewrite.after) in data_added
+
+    # And the definition itself, both ways: the journal's answer is the diff of
+    # the two materialized graphs, and folding it reproduces the later one.
+    assert delta == oracle_delta(built, 3, 4, delta.restated)
+    assert dumps(delta.fold(built[3])) == dumps(built[4])
+
+
 def test_order_changed_is_about_the_nodes_both_versions_hold():
     """A new sibling slotted between two others moves neither of them, so the
     flag is `False`; a late parent that drags its child past a root moves one,
