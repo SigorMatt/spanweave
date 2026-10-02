@@ -5,11 +5,14 @@ contract, and the receiver boundary. One batch = one sub-agent = one commit
 = one concern. This file plus git is the only state; any session can resume
 cold from it.
 
-Last updated: 2026-10-02 (run 4 done: L20, L21, L22, L15, L16, L17, L18, L19,
-each with CI green on its own pushed tip. All three superlinear `feed` sites
-are fixed, §10.6 is rewritten on numbers measured at the new tip, and both
-cold reviews are archived with every finding dispositioned. Next: cold review
-of run 4 (aux), then decisions. L7 and L8 in run 5).
+Last updated: 2026-10-02 (run 4 done and reviewed: L20, L21, L22, L15, L16,
+L17, L18, L19, each with CI green on its own pushed tip. The run-4 cold review
+(`patches/REVIEW-2026-10-02.md`) found the code sound and every acceptance
+number re-taken independently; what blocks the merge is prose and the series
+close. It is decided (§3) and run 5 is ordered: L23 → L24 → L25 → L26 → L27 →
+L28 in this repo, then a scoped cold review of L23–L25 and L28 (aux) and the
+PR to `main`. L28 deletes this file, so no `plan:` commit follows it. L7 and L8
+move to their own series in `SigorMatt/spanweave-live`).
 Baseline: 40bce13 (PR #2 merged into main, 2026-09-29). `make check` on this
 commit: 2660 passed, 2 skipped, plus 82 gate checks.
 
@@ -185,6 +188,12 @@ never restarts, fixes, or touches anything. Conventions live in
 | L20 | **A record is absorbed whole or not at all.** Review finding 1. `feed` classifies and translates the record, absorbs every span it yields into a staged change, and commits that change — `_claimed`, `_sample`, `_unread`, `_spans`, `_ids`, `_nodes`, `_record_diagnostics`, the tally, the ledger snapshot and `_version` — only when nothing refused; on a refusal every one of them is as it was, including the ledger's snapshot so that `delta(since=0)` after a refusal is the delta of an empty builder. Design the rollback once, as the thing L15/L17's per-edge ledger traffic will also go through. Tests red on the parent: (a) openinference alone — a refused record does not flip `graph()` from refusing to building, `_claimed`/`_sample`/`_unread` unchanged; (b) a test-local adapter yielding two spans per record whose second span collides — `version` unchanged, `graph()` byte-identical, `delta(since=0)` empty, a later `feed` equals `build` of the records minus the refused one. SPEC §10.5: one sentence making the umbrella cover all four bullets, and stating that a record's spans arrive together. Gates 1–3 green. | done | 12 |
 | L21 | **`read_records` tests bite on every container and every branch.** Review findings 2 and 7, tests only. The no-carry property of L11 pinned for the array and the OTLP-document containers as it is for lines: a trailing fragment of each is `malformed_record`/`skipped_records=1` and the next call never sees it, with the review's carry mutation failing each new test **when run alone** (the four results in the body, as L11 did). L13's two refusals get distinct messages or distinct assertions so a branch swap fails a test. | done | 6 |
 | L22 | **Two SPEC sentences made true, and a census that cannot go stale.** Review findings 3 and 4. `SPEC.md:2390` (§10.9) says what `tests/serialized_shape.json` now carries and when it moved; `SPEC.md:709`'s "three carry nothing" becomes the measured count, and a doc-truth check asserts the prose census equals the vocabulary's `null`-source count so the next addition fails `make check` instead of aging. CHANGELOG entry. No behaviour change; say so in the body. | done | 4 |
+| L23 | **`_whole_input_from` is rolled back with everything else.** Review A4. `begin()` snapshots the memo; `rollback_to` restores it after `_tally.rollback()`, so no later derivation short-circuits on a memo the refused arrival wrote. Test red on the parent: the review's reproduction — a refused duplicate, then an unclaimed record, then a claimed one — `delta(since=0).diagnostics_opened` equals `graph().diagnostics` (three codes, not two); extend the L20 attribute probe so `_whole_input_from` is among the attributes compared. SPEC unchanged (§10.5 already promises it). Gates 1–3 green. | todo | 5 |
+| L24 | **`basis_rewritten` reports every pair, pinned.** Review C1. A test in `tests/test_live.py` with two fulfillers and an out-of-order receiver whose arrival rewrites both edges' basis, asserting both pairs and that `delta(since)` removes both stale edges; the mutant `removed.extend(stale[:1])` at `incremental.py:599` must fail it (record the run). Add a conformance scenario carrying an out-of-order basis rewrite if both dialects can render one (`FIXTURES.md` rules, expected graphs regenerated with the explanation); if only one can, say so in the body and the test stands alone. Tests and fixtures only. | todo | 8 |
+| L25 | **A call role is read the same way live and in batch.** Review thread. `incremental.py:525` and `build.py:644` compare `CallRole` with `==`, not `is`; the live `sorted(set(span.call_ids))` dedup is mirrored in `build.py` or the two are asserted equal by a test. Test red on the parent: a test-local adapter yielding `role="fulfiller"` as a plain `str` builds the same graph bytes live and in batch. SPEC §10.1 unchanged; ADAPTERS.md one sentence that a role is compared by value. Gates 1–3 green. | todo | 5 |
+| L26 | **The cost record is exact and re-takeable.** Review A1, C3, C4, C5, B.2, B.4. `SPEC.md` §10.6 `:2412-2417` rewritten in the honest form: the per-record rise is bounded above by the rise in declarations (`(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁`, equality at F = 0), the measured gap is fixed per-record cost, and the 1.5× criterion was unreachable at ~11 µs per edge — an empirical claim about constants, not a consequence of §4.2.1; the same correction in `CHANGELOG.md:513-517`, `TASKS.md:12865-12866` and `tests/live_cost.py:107-111`. The 24.6 figure states its 201-record denominator. `tests/live_cost.py` prints per-segment receipt counts so the declaration ratio is harness output, and the default `make bench` runs the two shapes in separate processes (or the header says the table was taken with `--only`). The heap guard adds `not re.search(r"faster sort", spec, re.I)`. `SPEC.md:2514`'s "and has moved since" corrected to the real order (L12 precedes L14). `OPEN_QUESTIONS.md:3391-3393` marks the subtree recompute as rejected on measurement, citing §10.6. Docs, tests and harness only; say so in the body. | todo | 8 |
+| L27 | **README covers the live builder.** Review C8. A section with `Builder` — `feed` returning the version, `graph()`, `delta(since)`/`fold`, `retain`, the three consumption modes and the prefix-consistency promise in one sentence each — and `read_records` with the no-carry sentence from §7, plus the delta document; one worked example that runs. A doc-truth check that every name in `spanweave.__all__` appears in README, red on the parent for the eight new names. Docs and tests only. | todo | 8 |
+| L28 | **The live-graphs series closes in this repo.** Review A2/A3. One commit, no `plan:` commit after it: `TASKS.md` gains the series registry — one line per batch L0–L28 with status and sha, L16 noting its bound was cleared by L15, L17 noting its criterion unmet and wrong, L5 dropped on measurement, L7/L8 moved to `SigorMatt/spanweave-live` — and §3 of WORKPLAN.md folded in full; `SPEC.md:744`, `:2447`, `:2515` and `tests/test_doc_truth.py:3059`, `:3113`, `:3115` re-pointed to TASKS.md; `WORKPLAN.md` deleted; `README.md:325` row and the `tests/test_doc_truth.py:409` exclusion removed; `reviews/2026-10-02-live-run4.md` byte-for-byte with sha256, every finding dispositioned (A1 L26, A2/A3 here, A4 L23, C1 L24, C3–C5 L26, C8 L27, C6/C7 by this registry, C9/C10 history, threads registered verbatim, the `CallRole` thread closed by L25); the three protocol changes recorded under TASKS.md's lessons section for the next series. CHANGELOG entry. `make check` + `make install-check`; `git ls-files WORKPLAN.md` empty. | todo | 10 |
 
 ---
 
@@ -199,9 +208,11 @@ Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop: c
 review of L9–L14 (aux), decisions, then run 4. Run 4 = L20 → L21 → L22 → L15
 → L16 → L17 → L18 → L19, spanweave repo, then stop: cold review of the range
 (aux), decisions. L20 precedes the cost batches because the rollback it
-introduces is the path their per-edge ledger traffic must take. Run 5 = L7 →
-L8 in `SigorMatt/spanweave-live` once it exists. Every batch: CI green on the
-pushed tip before `done`.
+introduces is the path their per-edge ledger traffic must take. Run 5 = L23 →
+L24 → L25 → L26 → L27 → L28 in this repo; L28 is the last commit and deletes
+this file. Then a scoped cold review of L23–L25 and L28 (aux), decisions, and
+the PR to `main`. The receiver is its own series in `SigorMatt/spanweave-live`
+once the repo exists. Every batch: CI green on the pushed tip before `done`.
 
 L1 and L2 carried no call estimate because they were already written: the two
 memos went in with the series-opening commit, so the series opened at the
@@ -226,6 +237,10 @@ with both of them available.
 | 2026-10-01 | L12 | The array branch's whole-input scope for `undecodable_bytes` is accepted as a thread, not a fix: a receiver that tails exporters feeds lines or documents, and a legitimately written U+FFFD is indistinguishable from a replaced one only on that branch. Revisit if L7 reads arrays. | maintainer |
 | 2026-10-01 | §0.2 | The parent of a code commit is `<sha>^`, derived, never a sha named in a brief: `plan:` commits interleave, and the run-3 brief named a child as a parent. Written into §0.2 in this commit. | maintainer |
 | 2026-10-01 | run 4 | L20 → L21 → L22 → L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo once it exists. | maintainer |
+| 2026-10-02 | review run 4 | A1 accepted in full: 7.1× is the rise in declared work and bounds the ms/record ratio from **above**, with equality only at zero fixed cost; the "floor" word and the sentence built on it are false and leave every place they were copied to (L26). A2/A3 accepted: the series closes in this repo with the §0.6 convention (L28). A4 taken as the brain's call, agreeing with the aux grading over the sub-agent's: a §10.5 sentence added in this series is falsified through public `register`, and the fix is one snapshot (L23). C1 is a pin that must exist before merge (L24). The `CallRole` identity comparison is a live-vs-batch divergence through public API and is fixed, not threaded (L25). C8 is accepted: the series' product must be visible in README before it merges (L27). C3, C4, C5, the 24.6 denominator and the two harness threads go into L26. C6/C7 are satisfied by the registry L28 writes, which carries L16 and L17 truthfully. C9/C10 are history. The remaining threads are registered in L28. | maintainer |
+| 2026-10-02 | L17 | The 1.5× per-record criterion was wrong as written and the correction offered for it was wrong too: the honest statement is that the per-record rise is bounded above by the rise in declarations and that the gap is fixed per-record cost; 1.5× was unreachable for this implementation at ~11 µs per edge, an empirical claim about constants. The registry row says the criterion was unmet and why. | maintainer |
+| 2026-10-02 | protocol | Three §0 changes, carried to the next series' WORKPLAN rather than edited here: (1) §0.2 asks for a mutation that the new test catches, not only the parent run, because a tests-only batch's derived parent is a `plan:` commit and the parent run is vacuous; (2) §0.1 step 5 lets the builder correct a row's acceptance number with the reason in the same plan commit, so a wrong criterion has an owner; (3) aux worktrees are created by absolute path under the scratchpad, never by a relative path. | maintainer |
+| 2026-10-02 | run 5 | L23 → L24 → L25 → L26 → L27 → L28 in this repo, then a scoped cold review of L23–L25 and L28 (aux), then PR to `main`. L28 deletes WORKPLAN.md, so it has no `plan:` commit after it and the run ends on its code commit. The receiver (L7, L8) starts its own series in `SigorMatt/spanweave-live` with its own WORKPLAN §0 once the repo exists; both rows are registered in TASKS.md as moved there. | maintainer |
 
 ---
 
@@ -646,6 +661,12 @@ with both of them available.
   than loosened, and the status cell says so. Next per §2: a cold review of the
   range `71d282f..` by aux, then decisions, then run 5 (L7 → L8) in the
   receiver repo, which still does not exist.
+- 2026-10-02: run-4 cold review read and decided (§3). The code of run 4 is
+  sound and every acceptance number re-took independently; what blocks the
+  merge is prose and the series close. The "declaration floor" was a ceiling
+  and is rewritten; the one rollback hole is closed; the series' product gets
+  a README section; the registry is written and this file goes. Run 5 ends
+  the spanweave half.
 
 ---
 
