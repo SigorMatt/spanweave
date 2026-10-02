@@ -123,7 +123,8 @@ def test_feed_returns_the_new_version_as_an_int():
 
 
 def test_feed_takes_no_delta_flag():
-    """`WORKPLAN.md` §3, L1(4): every delta comes from `delta(since=v)`.
+    """The L1 decision, item (4) (`TASKS.md`, *The live-graphs series*): every
+    delta comes from `delta(since=v)`.
 
     Asserted on the signature rather than left to a comment, because "feed
     returns the new version and nothing else" is the part of the decision a
@@ -1566,8 +1567,8 @@ def test_feeding_sorts_nothing_and_the_other_paths_sort_a_stated_number_of_times
     Canonical order is computed when a graph is materialized and when a delta is
     folded, and **never** while feeding. That is why no incrementally maintained
     order could make `feed` faster -- it has nothing there to replace -- and why
-    the measurement that dropped `WORKPLAN.md` L5 compared the sort against
-    `delta()` rather than against feeding.
+    the measurement that dropped live-graphs L5 (`TASKS.md`) compared the sort
+    against `delta()` rather than against feeding.
 
     The counts are the shape of the cost, not an implementation detail: one sort
     per materialization, **two** per delta because a delta recovers order at

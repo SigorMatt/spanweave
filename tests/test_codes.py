@@ -335,7 +335,8 @@ def test_contracts_counts_the_source_rows_the_spec_states():
 
 
 # --------------------------------------------------------------------------
-# §3.7's own census of that table, which did go stale (`WORKPLAN.md` L22)
+# §3.7's own census of that table, which did go stale (live-graphs L22,
+# registered in `TASKS.md`)
 # --------------------------------------------------------------------------
 #
 # The paragraph introducing the `source` table counts it three ways, and the

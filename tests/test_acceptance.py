@@ -81,9 +81,10 @@ def test_bench_runs_the_two_shapes_in_separate_processes():
     wide shape's `delta()` runs, and the wide `delta()` and its two `ordering()`
     calls come out well above the figures in `tests/live_cost.py`'s header --
     which were taken per shape with `--only` (run-4 cold review §B.2,
-    `WORKPLAN.md` L26). A benchmark whose documented table its own default
-    invocation does not produce is the measurement defect this whole cost family
-    exists to end, so the default is two processes and this holds it there.
+    live-graphs L26, registered in `TASKS.md`). A benchmark whose documented
+    table its own default invocation does not produce is the measurement defect
+    this whole cost family exists to end, so the default is two processes and
+    this holds it there.
     """
     recipe = _recipe("bench")
     runs = [line for line in recipe.splitlines() if "tests.live_cost" in line]

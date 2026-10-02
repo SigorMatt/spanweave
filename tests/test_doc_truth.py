@@ -387,27 +387,25 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    Two exclusions, both because the excluded text is a record of a moment
-    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
-    copied verbatim, and a review that says a file was untracked *when it was
-    read* is reporting, not citing.
+    One exclusion, because the excluded text is a record of a moment rather
+    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
+    verbatim, and a review that says a file was untracked *when it was read*
+    is reporting, not citing.
 
-    `WORKPLAN.md` is the second: a series' own execution state, which owns
-    `patches/` as its scratch drop and is written to be deleted at series
-    close. That is exactly why nothing durable may depend on it. The file has
-    gone and come back repeatedly -- four deletions across the September 2026
-    audit-fix series and its reopenings (`TASKS.md`, *September 2026 audit*),
-    and it is back again for the live-graphs series -- so the exclusion is a
-    fixture of a **series**, not of a file: it travels with whichever plan
-    file is currently live, and leaves with it. A `WORKPLAN.md` in the tree
-    means a series is open; no `WORKPLAN.md` means the clause below matches
-    nothing and costs nothing.
+    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
+    series' own execution state, which owns `patches/` as its scratch drop and
+    is written to be deleted at series close. That is exactly why nothing
+    durable was allowed to depend on it, and it is gone again: the live-graphs
+    series closed and the file went with it (`TASKS.md`, *The live-graphs
+    series*). It has gone five times now -- four across the September 2026
+    audit-fix series and its reopenings, once here -- so the exclusion is a
+    fixture of a **series**, not of a file: the next series' plan file needs
+    it back, and takes it back out at its own close.
     """
     return [
         path
         for path in documents()
-        if path.name != "WORKPLAN.md"
-        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 
@@ -626,7 +624,8 @@ def test_the_examples_use_only_the_public_api_the_readme_claims():
 
 # -- The public API, held to the README that is supposed to name it ---------
 #
-# The run-4 cold review's §C item 8 (`WORKPLAN.md` L27). Eight names landed on
+# The run-4 cold review's §C item 8 (live-graphs batch L27, registered in
+# `TASKS.md`). Eight names landed on
 # the public surface over one series -- `Builder`, `Delta`, `Records`,
 # `BasisRewrite`, `DeltaUnavailableError`, `read_records`, `delta_dumps`,
 # `delta_to_document` -- and `grep -nE "Builder|read_records|delta" README.md`
@@ -3173,7 +3172,8 @@ def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, cap
 # `SPEC.md` §10.6 states what a live build costs. For most of its life that
 # section carried a machine's ratios in its prose -- a seventh, three fifths,
 # "8x the records is 116x the feed" -- taken at commits where three `feed` sites
-# were superlinear. All three were fixed (`WORKPLAN.md` L15-L17) and the prose
+# were superlinear. All three were fixed (live-graphs batches L15-L17,
+# registered in `TASKS.md`) and the prose
 # went on saying what it had said, which is the exact failure this file exists
 # for: nothing recomputes a sentence. So §10.6 now states classes as promises and
 # cites `tests/live_cost.py` for the numbers, with the date, interpreter and
@@ -3227,10 +3227,11 @@ def test_spec_no_longer_claims_a_faster_sort_was_measured():
     """The heap-Kahn claim is gone from SPEC, and gone for a stated reason.
 
     A Kahn sort with a heap was measured once, in the session that wrote
-    `WORKPLAN.md` L5, and the harness for it was not retained -- so nothing in
-    this tree reproduces it and SPEC cannot state it as a property of the
-    library (`WORKPLAN.md` §3, 2026-09-30, N2/T1-T5). It survives as session
-    history in `CHANGELOG.md` and in the harness header, each saying so.
+    live-graphs batch L5, and the harness for it was not retained -- so nothing
+    in this tree reproduces it and SPEC cannot state it as a property of the
+    library (`TASKS.md`, *The live-graphs series*, the 2026-09-30 N2/T1-T5
+    decision). It survives as session history in `CHANGELOG.md` and in the
+    harness header, each saying so.
     """
     spec = read("SPEC.md")
     assert not re.search(r"\bheaps?\b", spec, re.I), (
@@ -3263,8 +3264,9 @@ def test_spec_no_longer_claims_a_faster_sort_was_measured():
 #: The four files that carry the echo shape's declaration ratio: the spec, this
 #: changelog's L18 entry, the task record of the review L18 answered, and the
 #: harness header. The review found the same sentence copied into all four (and
-#: into `WORKPLAN.md`, which the series deletes, and into three commit bodies,
-#: which are history) -- so a correction to one of them is not a correction.
+#: into `WORKPLAN.md`, which the series deleted at its close, and into three
+#: commit bodies, which are history) -- so a correction to one of them is not a
+#: correction.
 WHERE_THE_DECLARATION_RATIO_IS_CITED = (
     "SPEC.md",
     "CHANGELOG.md",

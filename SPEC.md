@@ -741,12 +741,13 @@ Unlike `missing_timestamp` it carries no `node_id` either — §7 says why it is
 one statement about the input rather than one per record.
 
 `undecodable_bytes` joined the `null` rows later still, with the code itself
-(`WORKPLAN.md` L12), and for a third reason: what it reports is not absent and
-not derived, but **unwritable** — the fragment is a byte sequence, and a
-`source` is a `JsonValue`. Nothing is lost by not carrying it, because the
-replacement text is on the record, or on the `malformed_record` for a line
-that would not parse; there is no reading in which a substitution reaches the
-output with no trace of it.
+(batch L12 of the live-graphs series, registered in `TASKS.md`), and for a
+third reason: what it reports is not absent and not derived, but
+**unwritable** — the fragment is a byte sequence, and a `source` is a
+`JsonValue`. Nothing is lost by not carrying it, because the replacement text
+is on the record, or on the `malformed_record` for a line that would not
+parse; there is no reading in which a substitution reaches the output with no
+trace of it.
 
 `duplicate_record` falls under the catch-all and is worth one sentence
 anyway, because its fragment is not *the* offending record but the one copy
@@ -2453,11 +2454,12 @@ is a spec conversation, not an optimization; until it is had, O(n + e) is what a
 delta costs and this paragraph is why.
 
 One narrower alternative was weighed against those numbers and **rejected**:
-recomputing canonical order for the subtree an arrival affects, rather than the
-whole node set (`WORKPLAN.md` L5). It can do nothing for `feed`, which does not
-sort at all, so it could only improve `delta()` — where it would have to reach
-*both* `ordering()` calls, because the two endpoints are two different node sets
-— and the shares above say that is worth having on one of the two shapes and
+recomputing canonical order for the subtree an arrival affects, rather than
+the whole node set (batch L5 of the live-graphs series, registered in
+`TASKS.md`). It can do nothing for `feed`, which does not sort at all, so it
+could only improve `delta()` — where it would have to reach *both*
+`ordering()` calls, because the two endpoints are two different node sets —
+and the shares above say that is worth having on one of the two shapes and
 nothing on the other. It is recorded as rejected and not as deferred: the open
 question is the one in the paragraph above, and the two are not the same
 question.
@@ -2519,17 +2521,19 @@ not move for this: no key is added to it, and the graph half of
 `declared_elsewhere` sections — is unchanged, which is the same promise §10.1
 makes and the reason lifecycle option (a) was taken.
 
-The **file** is a different claim, and an earlier wording of this sentence made
-it wrongly by saying the file itself was unchanged. The artifact specimens both
-documents, so it moved when the delta landed — and in the file's history that
-move is the **most recent** one, in this order: `WORKPLAN.md` L12 (`be16fa8`)
-added `undecodable_bytes` to `diagnostic_source` and to
+The **file** is a different claim, and an earlier wording of this sentence
+made it wrongly by saying the file itself was unchanged. The artifact
+specimens both documents, so it moved when the delta landed — and in the
+file's history that move is the **most recent** one, in this order: L12
+(`be16fa8`; the live-graphs batches are registered in `TASKS.md`) added
+`undecodable_bytes` to `diagnostic_source` and to
 `vocabularies.diagnostic_codes`, which grows the vocabulary of a value a graph
-document already carried rather than its shape, and L14 (`b10c60a`, a descendant
-of it) then added the four `delta_*` sections, which specimen this document
-beside the graph one, and rewrote the `_` head note the gate excludes as prose.
-Neither move touched the four graph sections, and nothing has touched the file
-since the second of them — not L20, not L21, and no batch after them.
+document already carried rather than its shape, and L14 (`b10c60a`, a
+descendant of it) then added the four `delta_*` sections, which specimen this
+document beside the graph one, and rewrote the `_` head note the gate excludes
+as prose. Neither move touched the four graph sections, and nothing has
+touched the file since the second of them — not L20, not L21, and no batch
+after them.
 
 ```
 {"schema_version": "...", "kind": "delta", "since": 11, "until": 15,

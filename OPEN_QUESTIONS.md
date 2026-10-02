@@ -27,8 +27,12 @@ evidence of what was known when it was taken.
 
 **Entries §18–§19 were written as memos opening the live-graphs series**
 (2026-09-29) and refer to a *new* `WORKPLAN.md`, that series' execution state
-and not the audit's. It is in the tree while the series runs and goes the same
-way at its close; what outlives it will land in `TASKS.md` the same way.
+and not the audit's. It went the same way at that series' close on 2026-10-02,
+and everything of it that outlives the series — the batch registry with final
+statuses, the decisions log in full, the three cold reviews with every finding
+dispositioned, and the threads left open — is in `TASKS.md` under *The
+live-graphs series*. These references are kept as written, for the reason the
+audit's are.
 
 ---
 
@@ -3393,8 +3397,8 @@ recommends the subtree recompute with the O(n) resort as the correctness oracle
 in tests.
 
 **That recommendation is closed: rejected on measurement** (`SPEC.md` §10.6,
-which records it as rejected rather than deferred; `WORKPLAN.md` L5 dropped it
-and L26 marks it here). `feed` turned out to sort **nothing** — canonical order
+which records it as rejected rather than deferred; live-graphs L5 dropped it,
+registered in `TASKS.md`, and L26 marks it here). `feed` turned out to sort **nothing** — canonical order
 is computed when a graph is materialized and when a delta is folded, and nowhere
 else — so the subtree recompute has nothing in an arrival to improve and could
 only reach `delta(since=v)`, where it would have to replace *both* `ordering()`
@@ -3543,8 +3547,10 @@ audit's 400-turn probe (`tests/audit/probe2.py`).
    `since`.
 4. API shape above, including that `feed` returns nothing by default.
 
-**Decision:** taken 2026-09-29 by the maintainer on this memo; `WORKPLAN.md`
-§3 carries the same row. The decision, in the words it was recorded in:
+**Decision:** taken 2026-09-29 by the maintainer on this memo; the same row is
+in `TASKS.md`'s *Decisions taken* under *The live-graphs series*, where the
+plan file's log was folded at the close. The decision, in the words it was
+recorded in:
 
 > (1) Prefix-consistency is the definition: at version k the live graph equals
 > `build(records[:k])` byte for byte, arrival order indexing versions,
@@ -3561,8 +3567,8 @@ audit's 400-turn probe (`tests/audit/probe2.py`).
 > reproduces) is the acceptance test for L3–L4.
 
 The refinement in (4) is the one departure from *Decision needed* item 4 above,
-which asked for a `feed` that returns nothing by default; `WORKPLAN.md` §4
-records it as such.
+which asked for a `feed` that returns nothing by default; the decision row
+above records it as the one refinement.
 
 ---
 
@@ -3651,8 +3657,9 @@ receiver project sits between and owns nothing but plumbing and policy.
 4. The live-rules consumer as the series' showcase, built on agentgolden's rules
    unchanged.
 
-**Decision:** taken 2026-09-29 by the maintainer on this memo; `WORKPLAN.md`
-§3 carries the same row. The decision, in the words it was recorded in:
+**Decision:** taken 2026-09-29 by the maintainer on this memo; the same row is
+in `TASKS.md`'s *Decisions taken* under *The live-graphs series*. The decision,
+in the words it was recorded in:
 
 > (1) The receiver is a separate project, `SigorMatt/spanweave-live`, not a
 > subpackage. (2) The only spanweave change L2 needs is the additive

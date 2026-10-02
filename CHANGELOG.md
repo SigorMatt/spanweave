@@ -474,6 +474,43 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The live-graphs series is closed in this repository, and `WORKPLAN.md` is
+  gone with it.** From the run-4 cold review's A2 and A3 (batch L28, this
+  commit): `git ls-tree main` had no `WORKPLAN.md`, so without this close the
+  plan file would have landed on `main` for the first time in the repository's
+  history while `SPEC.md` carried three citations to it and `TASKS.md` carried
+  no batch registry at all. `TASKS.md` now holds everything of the file that
+  outlives the series, under *The live-graphs series*: a registry row per batch
+  **L0-L28** with its final status and commit, the fifteen-row decisions log
+  folded in **verbatim**, the three cold reviews with every finding
+  dispositioned, nineteen threads (twelve open, four closed by run 5, two moot
+  with the plan file, one opened by run 5 itself), and the three protocol
+  changes the next series' plan file has to carry. What is deliberately not
+  carried is §0, the operating protocol, which a future series reads at
+  `git show cebcd77:WORKPLAN.md`. Two rows the registry states plainly because
+  §1 read alone was wrong about both: **L16**'s root-last bound had already
+  been cleared by **L15** (2.48x pre-L15, 1.21x at L16's own parent, 1.05x
+  after it), and **L17**'s first acceptance criterion was not merely unmet but
+  wrong as written -- 1.5x was unreachable at this implementation's roughly
+  11 µs per declaration, an empirical claim about constants rather than a
+  consequence of §4.2.1. **L5** is recorded as dropped on measurement, and
+  **L7/L8** as moved to their own series in `SigorMatt/spanweave-live`, which
+  is why the
+  spanweave half closes complete rather than blocked. The run-4 review is
+  archived byte-for-byte as `reviews/2026-10-02-live-run4.md`
+  (`sha256`
+  `27d7d4fb9a27cb0c00ee635afb7a6d5c20b9997759df29f8eebf13cd3610e549`, `cmp`
+  clean against the untracked scratch copy). `SPEC.md`'s three citations of the
+  deleted file (§3.7, §10.6, §10.9) are re-pointed at `TASKS.md`, as are
+  the ones in `tests/`, the `Makefile`, `.gitignore` and `OPEN_QUESTIONS.md`;
+  the README's Documents row and the `WORKPLAN.md` exclusion in
+  `durable_documents()` are removed, the pair every previous series close has
+  removed. The citations that survive are history by construction: this file's
+  own dated entries, the verbatim archives under `reviews/`, and the quoted
+  decision rows and memo references in `TASKS.md` and `OPEN_QUESTIONS.md`.
+  **No behavior changed**: nothing under `spanweave/` moved and
+  `tests/serialized_shape.json` is untouched.
+
 - **`Delta.basis_rewritten` is now pinned to name *every* pair it moved, not
   just the first.** Tests only: nothing under `spanweave/` moves and `SPEC.md`
   does not move (`WORKPLAN.md` L24, from the run-4 cold review's §C item 1).

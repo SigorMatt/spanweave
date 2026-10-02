@@ -83,7 +83,7 @@ capture:
 stranger:
 	uv run python -m tests.stranger_path $(ARGS)
 
-# What a live build costs (WORKPLAN.md L5, `SPEC.md` §10.6). Feeds the two
+# What a live build costs (live-graphs L5 in TASKS.md, `SPEC.md` §10.6). Feeds the two
 # shapes the September 2026 audit measured -- an agent loop that resends its
 # history, and one root with N children -- and prints what `feed`, `graph()` and
 # `delta()` cost on each, plus the share of `delta()` that the canonical-order
@@ -104,7 +104,7 @@ bench:
 	uv run python -m tests.live_cost --only wide $(ARGS)
 
 # The smoke form of that harness, and the one thing in it `check` DOES run
-# (WORKPLAN.md L18). It feeds eleven records and six, and asserts the SHAPE the
+# (live-graphs L18 in TASKS.md). It feeds eleven records and six, and asserts the SHAPE the
 # numbers above are about -- the receipt count SPEC.md section 4.2.1 promises,
 # one Edge built per edge the prefix holds, zero canonical sorts while feeding
 # against one per materialization and two per delta, and the same bytes from the

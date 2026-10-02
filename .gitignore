@@ -34,9 +34,9 @@ htmlcov/
 # reproducible from the committed fixtures -- not source.
 out/
 
-# The live series' scratch drop (`WORKPLAN.md` sections 0.1-0.2): a
-# `git format-patch` bundle every run, plus the cold reviews as they are
-# written. Untracked on purpose and now ignored too, so a stray `git add -A`
+# A work series' scratch drop (the live-graphs series' plan file, sections
+# 0.1-0.2, now deleted at its close): a `git format-patch` bundle every run,
+# plus the cold reviews as they are written. Untracked on purpose and now ignored too, so a stray `git add -A`
 # cannot commit the bundle. A review that must outlive the series is copied
 # into the tracked `reviews/` and cited there -- `tests/test_doc_truth.py`
 # fails a durable document that cites a `patches/` path instead.

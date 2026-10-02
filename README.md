@@ -474,7 +474,6 @@ make stranger       # walk and time the install path above, from a clean venv
 | `SECURITY.md` | Threat model and reporting. |
 | `CHANGELOG.md` | What changed, written when it lands. Starts at the September 2026 audit-fix series. |
 | `CONTRIBUTING.md` | How to contribute. |
-| `WORKPLAN.md` | Execution state for the live-graphs series (protocol, live batch status, decisions). Items are registered in TASKS.md; this file is removed when the series closes. |
 
 ## License
 

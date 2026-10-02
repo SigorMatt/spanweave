@@ -39,10 +39,11 @@ The two workloads, both from ``tests/audit/probe2.py``:
   edge set, and one sibling group holding all of it.
 
 Measured at `0718ba8` on 2026-10-02, CPython 3.14.6, on one machine, from this
-module's own output (`WORKPLAN.md` L18, which re-took every number here after
-L15-L17 fixed the three superlinear `feed` sites). The absolute values are that
-machine's and will not reproduce elsewhere; what reproduces is the shape, which
-``--smoke`` asserts and `SPEC.md` §10.6 states as a promise.
+module's own output (live-graphs L18, registered in `TASKS.md`, which re-took
+every number here after L15-L17 fixed the three superlinear `feed` sites). The
+absolute values are that machine's and will not reproduce elsewhere; what
+reproduces is the shape, which ``--smoke`` asserts and `SPEC.md` §10.6 states
+as a promise.
 
 **One column, one process.** Each column below was taken with ``--only``, and
 `make bench` now runs the two shapes as two processes for that reason: in one
@@ -93,7 +94,7 @@ after every record pays some two thousand times what feeding costs -- which is
 `1d7ba8f` on 2026-09-30 (same machine, same interpreter), where the same two
 shapes fed in **75.5 s** (94.2 ms/record) and **1,449 s** (72.4 ms/record)
 against the 961.9 ms and 2,395.9 ms above. Three superlinear `feed` sites were
-the difference and all three are fixed (`WORKPLAN.md` L15-L17): a sibling
+the difference and all three are fixed (live-graphs L15-L17): a sibling
 group's temporal chain was rebuilt on every arrival, a call id's `data` edge set
 was rebuilt for every receipt echoed at it -- 10,748,399 `Edge` objects for the
 81,799 the echo shape holds, where it is now 81,799 -- and a late parent
@@ -139,7 +140,7 @@ the root's arrival regroup the whole input inside a single `feed`. Measured at
 2,000: 220.7 ms root-first against 235.9 ms root-last, of which the root's own
 arrival is 19.9 ms -- a ratio of 1.07x on the same records in two orders. The
 same arrival cost 15.4 s before the chain was maintained and 38 ms before the
-whole group moved at once (`WORKPLAN.md` L16, history), so what is now left of it
+whole group moved at once (live-graphs L16, history), so what is now left of it
 is linear in the children.
 """
 
@@ -318,7 +319,7 @@ def _edges_built(records: Sequence[JsonValue]) -> tuple[int, int]:
     string, so `pstats` merges `Edge`, `Node`, `Diagnostic` and the rest under
     one `<string>:2 __init__` row and the count is unreadable there. A raw entry
     carries the **code object**, so the one belonging to `Edge.__init__` is
-    identifiable by identity (`WORKPLAN.md` L15's note to this batch).
+    identifiable by identity (live-graphs L15's note to this batch).
     """
     builder = Builder()
     profile = cProfile.Profile()
@@ -553,7 +554,7 @@ def smoke(turns: int = SMOKE_TURNS, width: int = SMOKE_WIDE) -> None:
       and every one of them is an edge, none suppressed;
     - **one `Edge` built per edge the prefix holds**, on both shapes. That is
       what "the key is amended, not restated" means for the two keys that grow
-      with the stream, so a regression in any of the three sites `WORKPLAN.md`
+      with the stream, so a regression in any of the three sites live-graphs
       L15-L17 fixed shows up here as an edge built more than once -- at eleven
       records, in milliseconds, instead of in a benchmark nobody runs;
     - `feed` sorts **nothing**, a materialization sorts once and a `delta()`

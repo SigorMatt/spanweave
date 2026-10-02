@@ -1441,7 +1441,8 @@ def test_read_records_does_not_open_the_file_a_str_would_have_named(tmp_path):
 # A receiver holding bytes in flight holds them in a `bytearray` it appends to,
 # or in a `memoryview` of one. Refusing those made it write `bytes(buf)` on
 # every call -- a copy charged to the caller by a refusal whose stated reason
-# (a `str` is a path) says nothing about either of them (`WORKPLAN.md` L13).
+# (a `str` is a path) says nothing about either of them (live-graphs L13,
+# registered in `TASKS.md`).
 # The copy, where one is needed at all, is the library's.
 
 
@@ -1534,7 +1535,8 @@ def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes
 
 # --- What one call does not carry into the next (`SPEC.md` §7) ---------------
 #
-# The two properties a receiver is designed against (`WORKPLAN.md` L7): a
+# The two properties a receiver is designed against (live-graphs L7,
+# registered in `TASKS.md`): a
 # `Records` is complete when it is returned, and dedup is a property of one
 # input. Both are about what the reader does **not** remember between calls,
 # which is exactly what a test written inside one call cannot see. Each of the
