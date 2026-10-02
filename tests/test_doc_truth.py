@@ -3121,6 +3121,17 @@ def test_spec_no_longer_claims_a_faster_sort_was_measured():
         "was taken in a batch session whose harness was not retained, so SPEC "
         "would be stating a number nothing in this tree can reproduce"
     )
+    # The words SPEC actually carried, which the check above never read: the
+    # claim was spelled "the way past that is not a faster sort but no sort"
+    # (`0718ba8`'s `SPEC.md:2373`), and `git log -S"heap" -- SPEC.md` finds the
+    # word "heap" in this file's history nowhere. A guard that greps a word the
+    # document never held is green for the wrong reason (review B.4, 2026-10-02).
+    assert not re.search(r"faster sort", spec, re.I), (
+        "`SPEC.md` offers a *faster sort* again. That is the heap claim in the "
+        "spelling SPEC carried it in, and the same measurement is behind it: "
+        "§10.6's answer to the wide shape's sort share is `no sort`, which is "
+        "an open spec conversation and not a speedup this tree can reproduce"
+    )
     retained = "harness not retained"
     for where in ("CHANGELOG.md", "tests/live_cost.py"):
         assert retained in read(where), (
@@ -3128,3 +3139,117 @@ def test_spec_no_longer_claims_a_faster_sort_was_measured():
             f"harness was not retained, which is the whole of why `SPEC.md` "
             f"does not state it"
         )
+
+
+# -- The declaration ratio is a bound from above, in every file that cites it --
+
+#: The four files that carry the echo shape's declaration ratio: the spec, this
+#: changelog's L18 entry, the task record of the review L18 answered, and the
+#: harness header. The review found the same sentence copied into all four (and
+#: into `WORKPLAN.md`, which the series deletes, and into three commit bodies,
+#: which are history) -- so a correction to one of them is not a correction.
+WHERE_THE_DECLARATION_RATIO_IS_CITED = (
+    "SPEC.md",
+    "CHANGELOG.md",
+    "TASKS.md",
+    "tests/live_cost.py",
+)
+
+
+def _declaration_ratio_paragraphs(where: str) -> list[str]:
+    """Paragraphs of one file that state the echo shape's declaration ratio.
+
+    Matched on the two things that make a paragraph *about* that ratio -- the
+    figure and the word "declar" -- rather than on a site, because the defect
+    this guards is a sentence copied to a new place (`audit-R9`'s lesson).
+    """
+    return [
+        flat(paragraph)
+        for paragraph in read(where).split("\n\n")
+        # `x` and the multiplication sign the documents actually use, the
+        # latter escaped so this stays readable to the ambiguous-character lint.
+        if re.search(r"7\.1\s*\**\s*[x\u00d7]", paragraph) and "declar" in paragraph
+    ]
+
+
+def test_the_declaration_ratio_is_stated_as_a_bound_from_above():
+    """7.1x bounds the measured rise from above, and no file calls it a floor.
+
+    The run-4 cold review's blocking finding A1. `SPEC.md` §10.6 said the echo
+    shape's 7.1x rise in declared receipts per record was **the floor** of its
+    ms/record rise for "any implementation that builds each declared relation
+    once", reported a measured 5.43x *below* it, and then explained the gap as
+    fixed per-record cost -- which is the reason it is not a floor. With
+    per-record cost `F + c*d`, `(F + c*d2)/(F + c*d1) <= d2/d1` with equality
+    only at `F = 0`, so the declaration ratio bounds the measured one from
+    **above**; and the ratio has no lower bound at all, because raising `F`
+    drives it toward 1. The sentence drawn from the word -- that a target under
+    7.1x "could only be met by suppressing relations the telemetry stated" --
+    was therefore false, and reaching 1.5x needs a cheaper edge rather than a
+    dropped declaration.
+
+    This test holds the corrected form in every file that states the ratio, and
+    requires each of them to state it at all: a sentence this wrong, copied to
+    four files, was fixed in one place at a time until a check read all four.
+    """
+    for where in WHERE_THE_DECLARATION_RATIO_IS_CITED:
+        paragraphs = _declaration_ratio_paragraphs(where)
+        assert paragraphs, (
+            f"{where} no longer states what the echo shape's two stretches "
+            f"declare, which is the comparison its measured ms/record rise is "
+            f"against (review A1). If the figure moved, this list moves with "
+            f"it; if the claim is gone, say so here rather than leaving the "
+            f"guard reading nothing"
+        )
+        assert any(
+            re.search(r"from \*{0,2}above", paragraph, re.I) for paragraph in paragraphs
+        ), (
+            f"{where} states the declaration ratio in "
+            f"{len(paragraphs)} paragraph(s) and none of them says which way it "
+            f"bounds the measured one: {paragraphs[0][:200]!r}. 'From above' is "
+            f"the whole of finding A1, and a reader who takes it for a floor "
+            f"draws the false conclusion A1 found"
+        )
+        for paragraph in paragraphs:
+            # The word itself is not forbidden: a retraction has to name what
+            # it retracts, and three of these files record the old claim as
+            # history. What is forbidden is the word standing *unattributed* --
+            # which is what a re-assertion looks like.
+            if re.search(r"\bfloor\b", paragraph, re.I):
+                assert re.search(r"\bA1\b", paragraph), (
+                    f"{where} calls the declaration ratio a floor without "
+                    f"citing the finding that withdrew the word: "
+                    f"{paragraph[:200]!r}. It is a bound from above -- "
+                    f"`(F + c*d2)/(F + c*d1) <= d2/d1`, equality only at zero "
+                    f"fixed per-record cost -- so a paragraph using the word "
+                    f"is reporting review A1's history or re-making its error"
+                )
+
+
+def test_the_declared_receipts_per_record_state_their_denominators():
+    """24.6 is 4,950 over **201** records, and 201 is not 100 turns of 2.
+
+    Review B.4's last point: `24.6` cannot be recomputed from §10.6's own words,
+    because turns 1-100 are 200 records and 4,950/200 is 24.75. The denominator
+    is 201 -- the root span is folded into the first stretch -- against 200 for
+    turns 301-400, and the asymmetry existed only in the harness. Both
+    denominators are now stated where the figures are.
+    """
+    for where in ("SPEC.md", "tests/live_cost.py"):
+        paragraphs = [
+            paragraph
+            for paragraph in _declaration_ratio_paragraphs(where)
+            if "24.6" in paragraph
+        ]
+        assert paragraphs, (
+            f"{where} states the declaration ratio but not the per-record "
+            f"receipt counts it is a ratio of"
+        )
+        for paragraph in paragraphs:
+            for figure, denominator in (("4,950", "201"), ("34,950", "200")):
+                assert figure in paragraph and denominator in paragraph, (
+                    f"{where} states 24.6 declarations per record without the "
+                    f"{figure}/{denominator} it comes from: {paragraph[:160]!r}."
+                    f" 4,950 over 200 records would be 24.75; the root span "
+                    f"folded into the first stretch is why it is 201"
+                )

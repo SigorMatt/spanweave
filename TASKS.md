@@ -12860,13 +12860,20 @@ open "no sort" question, and `--smoke` runs under `make check` through a
 acceptance criterion — the echo shape's `feed` ms/record for turns 301–400
 within 1.5× of turns 1–100 — is unmeetable for any correct implementation,
 because §4.2.1 promises that n turns declare n(n−1)/2 receipts with none
-suppressed. L18 replaced it in §10.6 with the declaration floor that implies:
-turns 1–100 declare 24.6 receipts per record against 174.8 for turns 301–400, so
-**7.1× is the floor** of that rise for an implementation that builds each
-declared relation once, the measured rise is 5.43× — *below* the floor — and a
-target under 7.1× could only be met by suppressing relations the telemetry
-stated. L17's status cell records the second criterion as met exactly and the
-first as corrected in L18.
+suppressed. L18 replaced it in §10.6 with what the two stretches declare: turns
+1–100 declare 4,950 receipts over 201 records against 34,950 over 200 for turns
+301–400 — 24.6 against 174.8 per record, a **7.1×** rise in declared work.
+L18 called that a *floor* of the ms/record rise and drew from it that a target
+under 7.1× could only be met by suppressing relations the telemetry stated;
+**both are false, and L26 corrected them** (run-4 review A1). The declaration
+ratio bounds the measured rise **from above**: per-record cost `F + c·d` gives
+`(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁`, equality only at `F = 0`, so the measured 5.43×
+sits under 7.1× exactly because the fixed per-record cost is not zero, and that
+gap *is* the fixed cost. 1.5× was unreachable at this implementation's constants
+— about 11 µs per declaration, where 1.5× needs some 30× less and no declaration
+dropped — which is an empirical claim rather than a consequence of §4.2.1.
+L17's status cell records the second criterion as met exactly and the first as
+corrected in L18 and re-corrected in L26.
 
 **T7 — the correction the review made, in the safe direction.** Its sentences,
 verbatim:

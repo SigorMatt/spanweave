@@ -1,6 +1,8 @@
 """What a live build costs, measured rather than reasoned about.
 
-Run: ``make bench`` (``uv run python -m tests.live_cost``), optionally with
+Run: ``make bench``, which runs ``uv run python -m tests.live_cost --only echo``
+and then ``--only wide``, one shape per process (see "One column, one process"
+below), optionally with
 ``ARGS="--turns 400 --wide 20000 --segments 4 --count-edges"``,
 ``ARGS="--only wide --root-last --wide 2000"``, or ``ARGS="--smoke"`` -- the last
 being the form ``make check`` runs, through the Makefile's ``bench-smoke``
@@ -41,6 +43,13 @@ module's own output (`WORKPLAN.md` L18, which re-took every number here after
 L15-L17 fixed the three superlinear `feed` sites). The absolute values are that
 machine's and will not reproduce elsewhere; what reproduces is the shape, which
 ``--smoke`` asserts and `SPEC.md` §10.6 states as a promise.
+
+**One column, one process.** Each column below was taken with ``--only``, and
+`make bench` now runs the two shapes as two processes for that reason: in one
+process the echo shape's 81,799 edges are still held when the wide shape's
+`delta()` runs, and the wide `delta()` and its two `ordering()` calls then read
+well above the figures in this table -- so the default run would not reproduce
+the table it documents (review B.2, 2026-10-02).
 
 | | echo, 400 turns | wide, 20,000 |
 |---|---|---|
@@ -102,14 +111,27 @@ in its turns because §4.2.1 says the input declares that many relations and tha
 none is suppressed, so a turn carrying 350 declarations cannot cost what a turn
 carrying 25 does. Measured over 400 turns in four stretches: 0.3784, 0.8133,
 1.5593 and 2.0567 ms/record. The right thing to compare that rise against is not
-1 but the **work itself** -- turns 1-100 declare 4,950 receipts over 201 records
-and turns 301-400 declare 34,950 over 200, which is 24.6 against 174.8 per
-record, a floor of **7.1x** for anything that builds each declaration once. The
-measured 5.43x is *below* that floor, so the per-record cost is sublinear in the
-declarations the record carries; the difference is the fixed cost of classifying
-and absorbing a span at all. A number under 7.1x is the good outcome here, and
-any target under it would be a demand that declared relations be dropped, which
-§4.2.1 forbids.
+1 but the **work itself**, which ``--segments`` now prints beside each stretch
+rather than leaving to this docstring's arithmetic: turns 1-100 declare 4,950
+receipts over 201 records (the root span folded into the first stretch) and turns
+301-400 declare 34,950 over 200 -- 24.6 against 174.8 per record, so the declared
+work rises **7.1x**, which bounds the ms/record rise from **above** and not from
+below.
+
+That direction is the whole of the comparison. With a per-record
+cost of `F + c*d` -- `F` the fixed work of classifying and absorbing a span, `c`
+the cost of one declaration, `d` the declarations the record carries --
+`(F + c*d2)/(F + c*d1) <= d2/d1`, with equality only at `F = 0`. So the measured
+5.43x being *under* 7.1x is what a non-zero `F` looks like and not a surprise:
+those two stretch figures put `c` near 11 us per declaration and `F` near 0.10 ms
+per record. Nothing bounds the ratio from **below** at all -- raising `F`, i.e.
+being uniformly slower per span, drives it toward 1 -- so a ratio is a reading
+rather than a target, and the 1.5x figure these stretches were once judged
+against needed an edge some 30x cheaper to build (`c` near 0.37 us). That is an
+empirical claim about this implementation's constants, not a consequence of
+§4.2.1. What §4.2.1 does settle is that no declaration may be dropped to get
+there (review A1, 2026-10-02, which found the earlier wording here calling 7.1x
+a *floor* that the measurement then undercut).
 
 A third site no table of totals can show is the **arrival order** of one record,
 and ``--root-last`` is that measurement: the wide shape fed children-first makes
@@ -313,8 +335,36 @@ def _edges_built(records: Sequence[JsonValue]) -> tuple[int, int]:
     return built, len(builder.graph().edges())
 
 
-def _per_segment(cuts: Sequence[int], marks: Sequence[float], opened: float) -> None:
-    """ms/record over each stretch of the stream, and the last against the first.
+def _declared_receipts(record: JsonValue) -> int:
+    """How many receipts of a call this one record declares (§4.2.1).
+
+    Counted off the record rather than computed from the workload's closed
+    form, because the comparison §10.6 draws -- ms/record against the work the
+    input declares -- is only a measurement if **both** sides of it are read
+    from the same records. The arithmetic is still available as a check, and
+    ``--smoke`` holds this counter to §4.2.1's `n(n-1)/2` so a counter that
+    drifted could not quietly flatter the ratio it feeds.
+
+    The key is the OpenInference spelling the two workloads here are written
+    in; a record of some other dialect declares nothing this reads, and the
+    wide shape declares none at all, which is why the print below states the
+    count beside the ratio instead of only the ratio.
+    """
+    if not isinstance(record, dict):
+        return 0
+    attributes = record.get("attributes")
+    if not isinstance(attributes, dict):
+        return 0
+    return sum(1 for key in attributes if key.endswith(".message.tool_call_id"))
+
+
+def _per_segment(
+    cuts: Sequence[int],
+    marks: Sequence[float],
+    opened: float,
+    declarations: Sequence[int],
+) -> None:
+    """ms/record over each stretch of the stream, against what it declares.
 
     A total says what a workload cost; it does not say whether the cost per
     record is **flat**, and that is the question a superlinear `feed` is asked
@@ -323,19 +373,46 @@ def _per_segment(cuts: Sequence[int], marks: Sequence[float], opened: float) -> 
     rises across the stream is a `feed` whose price depends on how much has
     already arrived, whatever the total looks like.
 
+    Each stretch is printed with the receipts its records declare and the
+    denominator those receipts are divided by, because the rise that means
+    something is ms/record against **declarations/record** and not against 1 --
+    and the declaration ratio bounds the ms ratio from above, so both have to be
+    output of the same run to be compared at all (review A1).
+
     The cuts are the caller's rather than an equal split of the records, because
     a segment boundary that falls mid-turn compares unlike work on a workload
     whose turns are two records each.
     """
     was = opened
     first = last = 0.0
+    first_density = last_density = 0.0
     for index, (cut, mark) in enumerate(zip(cuts, marks, strict=True), start=1):
         started = 1 if index == 1 else cuts[index - 2] + 1
-        each = (mark - was) * 1000 / (cut - started + 1)
+        held = cut - started + 1
+        each = (mark - was) * 1000 / held
+        receipts = sum(declarations[started - 1 : cut])
+        density = receipts / held
         print(f"  {f'records {started}-{cut}':<36} {each:9.4f} ms/record")
+        print(
+            f"  {'  declaring':<36} {receipts:9d} receipts over {held} "
+            f"records = {density:.3f}/record"
+        )
         first, last, was = (each if index == 1 else first), each, mark
+        first_density, last_density = (
+            (density if index == 1 else first_density),
+            density,
+        )
     if first:
         print(f"  {'last segment / first segment':<36} {last / first:9.2f} x")
+    if first_density:
+        print(
+            f"  {'  declarations/record, last / first':<36} "
+            f"{last_density / first_density:9.2f} x"
+        )
+        print(
+            "    the second bounds the first from above, with equality only at "
+            "zero fixed per-record cost"
+        )
 
 
 def measure(
@@ -372,7 +449,7 @@ def measure(
     print(f"  {'feed, per record':<36} {feed * 1000 / len(records):9.4f} ms")
     _count("feed, canonical sorts", len(fed_sorts))
     if marks:
-        _per_segment(cuts, marks, start)
+        _per_segment(cuts, marks, start, [_declared_receipts(r) for r in records])
     if count_edges:
         built, holding = _edges_built(records)
         _count("Edge objects built while feeding", built)
@@ -509,6 +586,14 @@ def smoke(turns: int = SMOKE_TURNS, width: int = SMOKE_WIDE) -> None:
         f"{declared} receipts §4.2.1 says it declares",
         problems,
     )
+    counted = sum(_declared_receipts(record) for record in echo_records(turns))
+    _require(
+        counted == declared,
+        f"the per-segment receipt counter reads {counted} declarations off the "
+        f"records where §4.2.1's closed form says {declared}, and `--segments` "
+        f"divides the measured ms/record by that count",
+        problems,
+    )
     _require(
         fed == 0, f"feeding made {fed} canonical sorts, and §10.6 says 0", problems
     )
@@ -579,8 +664,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--only",
         choices=("echo", "wide"),
-        help="run one workload. The wide one's `feed` is quadratic in its own "
-        "right (see this module's docstring), so 20,000 takes tens of minutes.",
+        help="run one workload. `make bench` passes one of these per process, "
+        "because the table in this module's docstring was taken that way and a "
+        "single process running both does not reproduce it.",
     )
     parser.add_argument(
         "--segments",

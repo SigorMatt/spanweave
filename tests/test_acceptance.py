@@ -74,6 +74,28 @@ def test_the_cost_harness_smoke_form_is_what_check_runs():
     )
 
 
+def test_bench_runs_the_two_shapes_in_separate_processes():
+    """The default run reproduces the table it documents, or it is not a table.
+
+    Run in one process, the echo shape's 81,799 edges are still held while the
+    wide shape's `delta()` runs, and the wide `delta()` and its two `ordering()`
+    calls come out well above the figures in `tests/live_cost.py`'s header --
+    which were taken per shape with `--only` (run-4 cold review §B.2,
+    `WORKPLAN.md` L26). A benchmark whose documented table its own default
+    invocation does not produce is the measurement defect this whole cost family
+    exists to end, so the default is two processes and this holds it there.
+    """
+    recipe = _recipe("bench")
+    runs = [line for line in recipe.splitlines() if "tests.live_cost" in line]
+    assert len(runs) == 2, (
+        f"`make bench` runs the harness {len(runs)} time(s); one process for "
+        f"both shapes does not reproduce the header table (review B.2)"
+    )
+    assert [line for line in runs if "--only echo" in line] and [
+        line for line in runs if "--only wide" in line
+    ], f"`make bench` no longer runs one shape per process: {runs}"
+
+
 def test_lint_checks_formatting_as_well_as_rules():
     recipe = _recipe("lint")
     assert "ruff check" in recipe

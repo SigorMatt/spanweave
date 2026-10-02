@@ -3392,6 +3392,19 @@ for the graph — or accept an O(n) resort per arrival and say so. The memo
 recommends the subtree recompute with the O(n) resort as the correctness oracle
 in tests.
 
+**That recommendation is closed: rejected on measurement** (`SPEC.md` §10.6,
+which records it as rejected rather than deferred; `WORKPLAN.md` L5 dropped it
+and L26 marks it here). `feed` turned out to sort **nothing** — canonical order
+is computed when a graph is materialized and when a delta is folded, and nowhere
+else — so the subtree recompute has nothing in an arrival to improve and could
+only reach `delta(since=v)`, where it would have to replace *both* `ordering()`
+calls, because the two endpoints are two different node sets. The measured
+shares say that is worth having on one of the two shapes and nothing on the
+other. What §10.6 leaves open is a different question, not this one: carrying
+canonical order and the `ordering_cycle` between versions instead of computing
+them, which would make them journalled state and put a second ordering rule in
+the library beside §5.2's — a spec conversation.
+
 ### The model change: diagnostics need a lifecycle
 
 Batch graphs never retract. A live graph must: `unpaired_call` for `call_3` is

@@ -2408,14 +2408,24 @@ root with 20,000 tool children (20,001 records, 20,001 nodes, 39,999 edges).
   stream.** The loop shape feeds at 1.2009 ms/record overall and, over four
   stretches of the same stream, at 0.3784, 0.8133, 1.5593 and 2.0567 ms/record.
   The comparison that means something is not the last stretch against the first
-  but each against what it declares: turns 1–100 declare 24.6 receipts per record
-  and turns 301–400 declare 174.8, so **7.1× is the floor** of that rise for any
-  implementation that builds each declared relation once — and §4.2.1 forbids
-  dropping one. The measured rise is 5.43×, *below* the floor, so the per-record
-  cost is **sublinear in the declarations the record carries**; the difference is
-  the fixed cost of classifying and absorbing a span at all. A number under 7.1×
-  is the good outcome, and a target under it could only be met by suppressing
-  relations the telemetry stated.
+  but each against what it declares, which the harness prints per stretch beside
+  the milliseconds: turns 1–100 declare 4,950 receipts over 201 records — 24.6
+  per record, the root span folded into that first stretch — and turns 301–400
+  declare 34,950 over 200, or 174.8, so the work the input declares rises
+  **7.1×**. That bounds the per-record rise **from above** and not from below.
+  Per-record cost is `F + c·d` — `F` the fixed work of classifying and absorbing
+  a span, `c` the cost of one declaration, `d` the declarations the record
+  carries — so `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁`, with equality only at `F = 0`.
+  The measured rise of 5.43× is therefore *under* 7.1× because `F` is not zero,
+  and the gap between the two is that fixed per-record cost: the two stretch
+  figures above put `c` near 11 µs per declaration and `F` near 0.10 ms per
+  record. Nothing bounds the ratio from below — raising `F`, which is being
+  uniformly slower per span, drives it toward 1 — so this ratio is a reading and
+  not a target. The 1.5× target these two stretches were once judged against
+  needed an edge roughly 30× cheaper to build, which is an empirical claim about
+  this implementation's constants and **not** a consequence of §4.2.1. What
+  §4.2.1 does settle is the one thing no constant can buy: none of the
+  declarations may be dropped to get there.
 - **The arrival that regroups the whole input** — the wide shape's root fed last
   — makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
   root-first, 19.9 ms of it inside that single `feed`.
@@ -2511,13 +2521,15 @@ makes and the reason lifecycle option (a) was taken.
 
 The **file** is a different claim, and an earlier wording of this sentence made
 it wrongly by saying the file itself was unchanged. The artifact specimens both
-documents, so it moved when the delta landed and has moved since.
-`WORKPLAN.md` L14 added its four `delta_*` sections, which specimen this
-document beside the graph one, and rewrote the `_` head note the gate excludes
-as prose; L12 added `undecodable_bytes` to `diagnostic_source` and to
+documents, so it moved when the delta landed — and in the file's history that
+move is the **most recent** one, in this order: `WORKPLAN.md` L12 (`be16fa8`)
+added `undecodable_bytes` to `diagnostic_source` and to
 `vocabularies.diagnostic_codes`, which grows the vocabulary of a value a graph
-document already carried rather than its shape. Neither move touched the four
-graph sections, and neither L20 nor L21 touched the file at all.
+document already carried rather than its shape, and L14 (`b10c60a`, a descendant
+of it) then added the four `delta_*` sections, which specimen this document
+beside the graph one, and rewrote the `_` head note the gate excludes as prose.
+Neither move touched the four graph sections, and nothing has touched the file
+since the second of them — not L20, not L21, and no batch after them.
 
 ```
 {"schema_version": "...", "kind": "delta", "since": 11, "until": 15,

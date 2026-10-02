@@ -92,10 +92,16 @@ stranger:
 # duration threshold in an automated check is a flake that gets tuned until it
 # means nothing. It prints numbers; a human reads them. Not run by `check`.
 # ARGS passes flags through: make bench ARGS="--only echo --turns 100"
-# The wide shape's `feed` is quadratic in its own right (see the module
-# docstring), so the default width takes tens of minutes.
+# Two processes, one per shape, and that is the point rather than tidiness: run
+# in ONE process the echo shape's 81,799 edges are still held while the wide
+# shape's `delta()` runs, and the wide numbers come out well above the table in
+# the module docstring -- which was taken per shape with `--only` (review B.2,
+# 2026-10-02). An `--only` passed through ARGS wins over both lines, so it runs
+# the same shape twice; use `uv run python -m tests.live_cost --only ...` to run
+# one.
 bench:
-	uv run python -m tests.live_cost $(ARGS)
+	uv run python -m tests.live_cost --only echo $(ARGS)
+	uv run python -m tests.live_cost --only wide $(ARGS)
 
 # The smoke form of that harness, and the one thing in it `check` DOES run
 # (WORKPLAN.md L18). It feeds eleven records and six, and asserts the SHAPE the

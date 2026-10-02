@@ -534,15 +534,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   91.2 + 82.5 ms, three fifths of it). The wide shape's `feed` is flat in what
   has arrived — 0.1139 ms/record at 1,000 children, 0.1136 at 8,000.
   **The acceptance ratio the previous entry was written against is corrected, not
-  restated.** "Turns 301–400 within 1.5× of turns 1–100" cannot hold for any
-  correct implementation: §4.2.1 promises `n` turns declare `n(n-1)/2` receipts
-  and that none is suppressed, so those two stretches carry 24.6 and 174.8
-  declarations per record and **7.1× is the floor** of the rise for anything that
-  builds each declaration once. The measured rise is 5.43× — *below* the floor,
-  i.e. the per-record cost is sublinear in the declarations the record carries,
-  the difference being the fixed cost of classifying and absorbing a span at all.
-  §10.6 now states the floor instead of the ratio; a target under it would be a
-  demand to drop relations the telemetry stated.
+  restated.** "Turns 301–400 within 1.5× of turns 1–100" was not met, and §10.6
+  now states what the two stretches declare rather than the ratio: §4.2.1
+  promises `n` turns declare `n(n-1)/2` receipts and that none is suppressed, so
+  those two stretches carry 4,950 receipts over 201 records and 34,950 over 200
+  — 24.6 and 174.8 declarations per record, a **7.1×** rise in declared work.
+  That ratio bounds the ms/record rise **from above**: per-record cost
+  `F + c·d` gives `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁` with equality only at `F = 0`,
+  so the measured 5.43× is under it because the fixed per-record cost is not
+  zero, and the gap between the two *is* that fixed cost. (This entry first
+  called 7.1× a floor and said a target under it could only be met by dropping
+  declared relations; both are false — see the correction entry under **Fixed**
+  above, from review A1 of 2026-10-02.)
   Two claims leave the documents. The **heap-Kahn** figure is no longer in SPEC
   at all and is reworded in this file as session history with the harness not
   retained, because nothing in this tree reproduces it. And the **subtree
@@ -596,9 +599,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   quadratic in the turns and an arrival carrying 175 declarations cannot cost what
   one carrying 25 does. Over the same 400 turns in four stretches, turns 301-400
   cost **5.44x** turns 1-100 (2.0393 against 0.3746 ms/record) where the cubic site
-  gave 52.18x (227.2158 against 4.3547) — below the 7.1x growth of the answer
-  itself, and above the 1.5x the batch was accepted against, which the quadratic
-  edge set makes unreachable. The harness gained `--segments` to measure it.
+  gave 52.18x (227.2158 against 4.3547) — below the 7.1x growth in what those
+  stretches declare, which bounds the measured rise **from above** rather than
+  below, and above the 1.5x the batch was accepted against. (This entry said the
+  quadratic edge set makes 1.5x unreachable. It does not: review A1 of 2026-10-02
+  showed that only a cheaper edge is needed, not a dropped declaration, so the
+  unreachability is a claim about this implementation's constants — about 11 µs
+  per declaration — and not about §4.2.1.) The harness gained `--segments` to
+  measure it.
 
 - **A parent that arrives after its children regroups all of them in one move, so
   the arrival order of one record no longer decides what a trace costs to feed.**
@@ -1485,6 +1493,47 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **The declaration ratio §10.6 states is a bound from *above*, not a floor, and
+  the sentence drawn from it is withdrawn.** Documents, tests and the benchmark
+  harness only; nothing under `spanweave/` moves (`WORKPLAN.md` L26, from the
+  run-4 cold review's blocking finding A1, with C3, C4, C5 and §B.2/§B.4).
+  §10.6 said 7.1× — the rise in receipts per record between turns 1–100 and
+  301–400 of the echo shape — was **the floor** of the ms/record rise "for any
+  implementation that builds each declared relation once", then reported a
+  measured rise of 5.43× *below* it, then explained why in the words that are
+  the reason it is not a floor. With per-record cost `F + c·d`,
+  `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁` and equality holds only at `F = 0`, so the
+  declaration ratio bounds the measured one **from above** and the gap between
+  them is the fixed per-record cost — near 0.10 ms against about 11 µs per
+  declaration, derived from the two stretch figures §10.6 already printed. The
+  false sentence was "a target under it could only be met by suppressing
+  relations the telemetry stated": reaching 1.5× needs an edge roughly 30×
+  cheaper to build and **no** declaration dropped, and the ratio has no lower
+  bound at all, since being uniformly slower per span raises `F` and drives it
+  toward 1. So L17's 1.5× criterion was unreachable at this implementation's
+  constants — an empirical claim, not a consequence of §4.2.1 — and a ratio of
+  this kind is a reading rather than a target. Corrected in all four files that
+  carried the claim: `SPEC.md` §10.6, this file's L18 entry under **Changed**,
+  `TASKS.md`'s run-2 review record, and `tests/live_cost.py`'s header.
+  `tests/test_doc_truth.py` now recomputes it in all four.
+  Three things that made the paragraph hard to check are fixed with it: the 24.6
+  figure states its **201-record** denominator (the root span folded into the
+  first stretch, against 200 records in the fourth), `tests/live_cost.py
+  --segments` **prints the receipts each stretch declares** so both sides of the
+  comparison are output of one run rather than arithmetic in prose, and
+  `make bench` runs the two shapes as **two processes** with `--only`, which is
+  how the table in the harness header was taken — one process holds the echo
+  shape's 81,799 edges while the wide shape's `delta()` runs, and the wide
+  figures then come out well above that table. Also: `SPEC.md` §10.9 said
+  `tests/serialized_shape.json` "moved when the delta landed and has moved
+  since" and then listed the two moves in the opposite order to their history —
+  L12 (`be16fa8`) is an ancestor of L14 (`b10c60a`), so the delta move is the
+  file's most recent and nothing has touched it since — and
+  `OPEN_QUESTIONS.md` §18, whose memo recommended recomputing canonical order
+  for the affected subtree, now records that recommendation as **rejected on
+  measurement**, citing §10.6, instead of leaving a recommendation standing
+  against the spec that rejected it.
 
 - **A call role is read the same way live and in batch, and a span naming one
   call id twice is one side of that call rather than two.** From the run-4 cold
