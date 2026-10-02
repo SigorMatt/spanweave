@@ -1459,6 +1459,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A record a live `Builder` refuses no longer leaves a memo behind, so a
+  whole-input diagnostic made after it reaches `delta()` and not only
+  `graph()`.** From the run-4 cold review (finding A4; `WORKPLAN.md` L23).
+  The whole-input statements — `missing_trace_id` and `duplicate_source_id` —
+  are derived behind a memo of what they were last derived from, so an ordinary
+  arrival pays nothing for two diagnostics it cannot have changed. A refusal
+  re-derives everything *forward* from the surviving spans, which **writes**
+  that memo, and `Tally.rollback` then takes back the diagnostics that
+  derivation made but not the note saying they were made. The memo was left
+  claiming a statement the journal did not hold, and the next legitimate
+  derivation short-circuited on it: after a refusal on an empty builder, two
+  records arriving with no trace id between them opened
+  `missing_timestamp` and `unclaimed_record` in `delta(since=0)` while
+  `graph()` held those **and** `missing_trace_id`. `graph()` stayed right
+  because materializing re-derives from the absorber's own dicts; the journal
+  does not, so the difference was visible in a `delta` alone — which falsifies
+  `SPEC.md` §10.5's "every later `graph()` and `delta()` answer exactly as they
+  would have had the record never arrived" and §10.6's
+  `delta(a, b) = graph(b) − graph(a)`. Now `begin()` snapshots the memo and
+  `rollback_to` restores it **after** `Tally.rollback`, so the memo and the
+  tally agree about what has been stated. One line each way, on the refusal
+  path only; nothing is added to the accepted path. It needs an adapter whose
+  records become more than one span, which neither shipped adapter does — but
+  `register` is public, cardinality is no part of the `Adapter` protocol, and
+  the symptom is a diagnostic quietly missing from a delta rather than a crash.
+  Beside the reproduction, the L20 refusal tests gain a probe that deep-copies
+  **every** value a builder holds and compares it across five refusal shapes,
+  so the next value a refusal fails to put back is caught without anyone
+  remembering to list it. No spec change: §10.5 already promised this.
+
 - **Two `SPEC.md` sentences the repo contradicted, and a census that can no
   longer go stale.** Both from the run-3 cold review (findings 3 and 4;
   `WORKPLAN.md` L22). §10.9 said `tests/serialized_shape.json` "is unchanged",

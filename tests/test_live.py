@@ -12,6 +12,7 @@ call fulfilled two records later, a receipt redeclared out of order -- because
 a corpus file has one order and these need two.
 """
 
+import copy
 import inspect
 import itertools
 import json
@@ -771,6 +772,128 @@ def test_a_half_refused_record_puts_back_the_data_basis_it_rewrote(two_span):
         ("f", "r1", DATA_BASIS),
         ("f", "r2", DATA_LATER_BASIS),
     ]
+
+
+def test_a_refused_record_leaves_no_whole_input_memo_behind(two_span):
+    """A refusal on an **empty** builder, and then two records that arrive.
+
+    The whole-input statements are derived behind a memo of what they were last
+    derived from, so an ordinary arrival pays nothing for two diagnostics it
+    cannot have changed (`spanweave/incremental.py:_restate_whole_input`). A
+    refusal re-derives forward from the survivors, which *writes* that memo,
+    while the tally's snapshot takes back only the diagnostics the derivation
+    made -- so a memo left standing claims a statement the journal does not
+    hold, and the next legitimate derivation short-circuits on it.
+
+    `graph()` would not show it, because materializing re-derives from the
+    absorber's own dicts; `delta()` is where it surfaces, because the journal
+    does not. Hence the assertion: the diagnostics the delta from version 0
+    opened are exactly the diagnostics the graph holds, which is `SPEC.md`
+    §10.6's `delta(0, v) = graph(v) - graph(0)` and §10.5's "every later
+    `graph()` and `delta()` answer exactly as they would have had the record
+    never arrived".
+    """
+    builder = spanweave.Builder()
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(ts("c", "c"))
+
+    builder.feed({"not": "any dialect"})
+    builder.feed(ts("q"))
+
+    assert builder.version == 2
+    graph = builder.graph()
+    assert codes_of(graph) == [
+        codes.MISSING_TIMESTAMP,
+        codes.MISSING_TRACE_ID,
+        codes.UNCLAIMED_RECORD,
+    ]
+    opened = builder.delta(since=0).diagnostics_opened
+    assert [item.code for item in opened] == codes_of(graph)
+    assert opened == graph.diagnostics
+    assert dumps(builder.graph()) == dumps(
+        graph_from_records([{"not": "any dialect"}, ts("q")])
+    )
+
+
+#: What `begin` writes on every arrival and `rollback_to` therefore cannot be
+#: asked to restore: the value between arrivals is nobody's, which is what
+#: `rollback_to`'s own comment says where it resets `_restated`. `_before` is
+#: left describing an arrival that did not happen, unobservably, because
+#: `begin` rewrites it before its only reader. Everything *else* a builder
+#: holds is compared, `_whole_input_from` included -- the memo above is
+#: derived state, not arrival state, so it is not on this list.
+ARRIVAL_SCOPED = frozenset({"_absorber._before", "_absorber._whole_input_before"})
+
+#: The five shapes a refusal can take, as `(label, kept, refused)`: on an empty
+#: builder, after an arrival, where the refused record *restates* every id,
+#: where its first span joins a chain mid-way, and where that span rewrites a
+#: `data` basis. The last three are the tests above; this re-runs them against
+#: every attribute rather than against the graph and the journal.
+REFUSAL_SHAPES = [
+    ("on an empty builder", [], ts("c", "c")),
+    ("after an arrival", [ts("a", "b")], ts("c", "c")),
+    ("restating every id", [ts("a"), ts("b")], ts("a", "a")),
+    ("joining a chain mid-way", [ts("a"), ts("c")], ts("b", "b")),
+    (
+        "rewriting a data basis",
+        [ts("f", fulfils="c"), ts("r2", receives="c", start=1002.0)],
+        ts("r1", "r1", receives="c", start=1001.0),
+    ),
+]
+
+
+def builder_state(builder):
+    """Every value a builder holds, deep-copied, keyed by dotted path.
+
+    The graph and the journal are what the tests above compare, and they are
+    assembled from a *subset* of this: `graph()` re-derives from the absorber's
+    dicts and a `delta` reads the tally, so a value that belongs to neither --
+    a memo, a cache, a count -- can be left wrong by a refusal and show up in
+    neither. This is the probe that closes that gap, and it names nothing: it
+    walks the builder and the spanweave objects it holds, so an attribute added
+    later is compared without anyone remembering to add it.
+    """
+    found, seen = {}, set()
+
+    def walk(obj, prefix):
+        for name, value in sorted(vars(obj).items()):
+            path = f"{prefix}.{name}" if prefix else name
+            held = type(value).__module__.startswith("spanweave")
+            if held and hasattr(value, "__dict__") and id(value) not in seen:
+                seen.add(id(value))
+                walk(value, path)
+            else:
+                found[path] = copy.deepcopy(value)
+
+    walk(builder, "")
+    return {path: value for path, value in found.items() if path not in ARRIVAL_SCOPED}
+
+
+@pytest.mark.parametrize(
+    ("label", "kept", "refused"),
+    REFUSAL_SHAPES,
+    ids=[shape[0] for shape in REFUSAL_SHAPES],
+)
+def test_a_refused_record_moves_no_value_the_builder_holds(
+    two_span, label, kept, refused
+):
+    """The builder is "left as it was" (`SPEC.md` §10.5), attribute by
+    attribute, in all five shapes a refusal takes."""
+    builder = spanweave.Builder()
+    for record in kept:
+        builder.feed(record)
+    if kept:
+        builder.graph()
+    before = builder_state(builder)
+    assert "_absorber._whole_input_from" in before
+
+    with pytest.raises(DuplicateNodeIdError):
+        builder.feed(refused)
+
+    after = builder_state(builder)
+    assert set(after) == set(before)
+    moved = sorted(path for path in before if before[path] != after[path])
+    assert moved == [], f"a refusal {label} moved {moved}"
 
 
 def chain_of(graph):

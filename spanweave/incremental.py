@@ -108,6 +108,13 @@ class SpanAbsorber:
         #: True while the arrival being absorbed restated everything (§10.2).
         self._restated = False
         self._before = Facts()
+        #: The `_whole_input_from` memo as the arrival being absorbed found it.
+        #: Snapshotted by `begin` and put back by `rollback_to`, because that
+        #: memo is the one piece of derived state neither half of the rollback
+        #: reaches: `_restate_every_record` re-derives it *forward* from the
+        #: survivors, and `Tally.rollback` takes back the diagnostics it
+        #: derived but not the note saying they were derived (`SPEC.md` §10.5).
+        self._whole_input_before: tuple[str | None, int, str | None] | None = None
         # The input, in arrival order.
         self._spans: list[NormalizedSpan] = []
         self._producers: list[AdapterInfo | None] = []
@@ -187,6 +194,7 @@ class SpanAbsorber:
         self._tally.begin()
         self._restated = False
         self._before = self.facts()
+        self._whole_input_before = self._whole_input_from
 
     def finish(self) -> Change:
         """Close the entry the last `begin` opened (`SPEC.md` §10.7)."""
@@ -216,6 +224,15 @@ class SpanAbsorber:
           undoing that span by span would be a second implementation of rules
           this module is careful to hold only one copy of.
 
+        One value belongs to neither half, and is the exception that proves why
+        both are needed: `_whole_input_from`, the memo that says what the
+        whole-input statements were last derived from. Re-deriving forward
+        *writes* it, and the tally's snapshot takes back the diagnostics that
+        derivation made but not the memo recording that they were made -- which
+        would leave the memo claiming a statement the journal does not hold, and
+        short-circuit the next legitimate derivation. So it is restored from the
+        snapshot `begin` took, after the tally, so that the two agree.
+
         O(n) and paid on refusals only; nothing is added to the accepted path.
         """
         if len(self._spans) != spans:
@@ -227,6 +244,7 @@ class SpanAbsorber:
             )
             self._restate_whole_input()
         self._tally.rollback()
+        self._whole_input_from = self._whole_input_before
         # `begin` sets this on every arrival, so its value between arrivals is
         # nobody's; it is written here anyway rather than left describing an
         # arrival that did not happen.
