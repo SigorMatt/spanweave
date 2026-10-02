@@ -1557,6 +1557,27 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **L25's dedup test no longer states the premise its own failure disproves.**
+  A docstring; no assertion, no source and no document behaviour moves (from
+  the run-5 scoped cold review, finding L25-1). The test explained itself with
+  run-4 thread 4's premise: that a live/batch divergence in a span's repeated
+  `call_ids` is "invisible in the bytes today" because the edges it feeds are
+  deduplicated, and would become visible only once something turned on how many
+  times a side names a node. **Diagnostics are not deduplicated.** Re-taken at
+  L25's parent `c78b3cb`, the batch builder drew `unpaired_call` once per named
+  occurrence, so the first record alone gave `diagnostic_count` 3 against the
+  live builder's 2 and `replay` fails on `live == batch` at version 1 — which
+  is why L25 mirrored the dedup in `build.py` rather than pinning the two paths
+  equal by a test. The corrected premise lives in `TASKS.md`, as correction 5
+  of the run-5 list (`TASKS.md:13321`, which `TASKS.md:13363-13364` points
+  thread 4 at); the L25 registry row at `TASKS.md:12862` carries it in
+  substance, without the numbers. The archived review still carries the
+  uncorrected sentence verbatim and unannotated
+  (`reviews/2026-10-02-live-run4.md:499`) and keeps
+  it, because an archive that is edited after the fact is no longer one — so
+  the test was the last *live* copy of the withdrawn claim, and the first place
+  a reader of the code meets it.
+
 - **The declaration-ratio guard sweeps the tree, so the eighth copy cannot
   escape the way the seventh did.** Tests only; nothing under `spanweave/`
   moves and no document moves (from the run-5 scoped cold review, finding

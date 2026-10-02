@@ -1021,11 +1021,23 @@ def test_one_span_naming_a_call_id_twice_is_read_the_same_way_live_and_in_batch(
     """The same claim where a span names one call id twice, with the enum.
 
     The live builder walks `sorted(set(span.call_ids))` and the batch builder
-    the same, so neither counts a repeated id as two sides of one call. Pinned
-    rather than argued: the sides feed `call_result` and `data` edges that are
-    deduplicated before they are emitted, so a divergence here is invisible in
-    the bytes today and would stop being invisible the moment anything turned
-    on how many times a side names a node.
+    the same, so neither counts a repeated id as two sides of one call.
+
+    Run 4's review read this as harmless today -- the sides feed `call_result`
+    and `data` edges, identical edges are deduplicated before they are emitted,
+    so a divergence would only become visible once something turned on how many
+    times a side names a node. That premise was false, and this test is what
+    falsified it: **diagnostics are not deduplicated.** Re-taken at L25's parent
+    (`c78b3cb`), the batch builder drew `unpaired_call` once per named
+    occurrence, so the first record alone gave `diagnostic_count` 3 against the
+    live builder's 2 and `replay` fails on `live == batch` at version 1 -- in
+    the bytes, today, not for some later reader. That is why L25 mirrored the
+    dedup in `build.py` rather than pinning the two paths equal by a test.
+
+    The corrected premise is correction 5 of the run-5 list in `TASKS.md`
+    (`TASKS.md:13321`), which `TASKS.md:13363-13364` points thread 4 at; the
+    archived review still carries that sentence verbatim and unannotated
+    (`reviews/2026-10-02-live-run4.md:499`), as a byte-for-byte archive must.
     """
     records = [
         sr("ask", role=CallRole.REQUESTER, calls=["c1", "c1"]),
