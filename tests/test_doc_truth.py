@@ -40,6 +40,7 @@ import json
 import pathlib
 import re
 import shlex
+import subprocess
 from dataclasses import dataclass
 
 import pytest
@@ -3275,8 +3276,13 @@ WHERE_THE_DECLARATION_RATIO_IS_CITED = (
 )
 
 
-def _declaration_ratio_paragraphs(where: str) -> list[str]:
-    """Paragraphs of one file that state the echo shape's declaration ratio.
+#: `x` and the multiplication sign the documents actually use, the latter
+#: escaped so this stays readable to the ambiguous-character lint.
+DECLARATION_RATIO = re.compile(r"7\.1\s*\**\s*[x\u00d7]")
+
+
+def _ratio_paragraphs_of(text: str) -> list[str]:
+    """Paragraphs of some text that state the echo shape's declaration ratio.
 
     Matched on the two things that make a paragraph *about* that ratio -- the
     figure and the word "declar" -- rather than on a site, because the defect
@@ -3284,11 +3290,90 @@ def _declaration_ratio_paragraphs(where: str) -> list[str]:
     """
     return [
         flat(paragraph)
-        for paragraph in read(where).split("\n\n")
-        # `x` and the multiplication sign the documents actually use, the
-        # latter escaped so this stays readable to the ambiguous-character lint.
-        if re.search(r"7\.1\s*\**\s*[x\u00d7]", paragraph) and "declar" in paragraph
+        for paragraph in text.split("\n\n")
+        if DECLARATION_RATIO.search(paragraph) and "declar" in paragraph
     ]
+
+
+def _declaration_ratio_paragraphs(where: str) -> list[str]:
+    """The same, for one file named by its path relative to the repo root."""
+    return _ratio_paragraphs_of(read(where))
+
+
+#: Tracked paths the tree sweep below does not read, each for a reason that is
+#: about the file rather than about the sentence.
+#:
+#: `reviews/` holds cold reviews archived **byte for byte**, and the run-4
+#: archive is where the false claim was first written down. `TASKS.md`
+#: publishes its `sha256`, so editing it to satisfy a guard would break the
+#: digest that makes it an archive at all -- the history has to be allowed to
+#: say the wrong thing it said.
+#:
+#: This file has to quote what it forbids in order to forbid it.
+RATIO_SWEEP_EXEMPT = ("reviews/", "tests/test_doc_truth.py")
+
+
+def _tracked_text() -> list[tuple[str, str]]:
+    """Every tracked file this sweep can read, as `(path, contents)`.
+
+    `git ls-files` rather than `rglob`: the question is what the repository
+    *carries* -- an untracked scratch file is nobody's claim, and a build
+    artifact under `out/` is not a document. Binary and undecodable files are
+    skipped, since a sentence cannot hide in one.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    out = []
+    for name in sorted(path for path in listed.split("\0") if path):
+        if name.startswith(RATIO_SWEEP_EXEMPT):
+            continue
+        try:
+            out.append((name, (ROOT / name).read_text(encoding="utf-8")))
+        except (UnicodeDecodeError, OSError):
+            continue
+    return out
+
+
+def test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor():
+    """The same rule as below, asked of the whole tree rather than four files.
+
+    The list in `WHERE_THE_DECLARATION_RATIO_IS_CITED` says where the ratio
+    *must* be stated. It cannot say where the ratio must not be stated wrongly,
+    and that is the half this defect lives in: review A1's sentence was found
+    in six places, L26 found a seventh by hand, and a guard that re-reads the
+    seven it knows about is blind to the eighth exactly as the first six were
+    blind to the seventh. `audit-R9`'s lesson is that a copied sentence is
+    caught by sweeping, not by enumerating.
+
+    So every tracked, readable file is asked the two questions the four named
+    files are asked: a paragraph stating the ratio has to say which way it
+    bounds the measured rise, and a paragraph calling it a floor has to cite
+    the finding that withdrew the word. A new document that repeats the claim
+    fails here without anyone remembering to add it to a list.
+    """
+    for where, text in _tracked_text():
+        for paragraph in _ratio_paragraphs_of(text):
+            assert re.search(r"from \*{0,2}above", paragraph, re.I) or re.search(
+                r"\bA1\b", paragraph
+            ), (
+                f"{where} states the echo shape's declaration ratio without "
+                f"saying which way it bounds the measured ms/record rise, and "
+                f"without citing review A1 as history: {paragraph[:200]!r}. It "
+                f"is a bound from **above** -- `(F + c*d2)/(F + c*d1) <= "
+                f"d2/d1`, equality only at zero fixed per-record cost -- so a "
+                f"paragraph that leaves the direction out is the sentence A1 "
+                f"found, in a new place"
+            )
+            if re.search(r"\bfloor\b", paragraph, re.I):
+                assert re.search(r"\bA1\b", paragraph), (
+                    f"{where} calls the declaration ratio a floor without "
+                    f"citing the finding that withdrew the word: "
+                    f"{paragraph[:200]!r}"
+                )
 
 
 def test_the_declaration_ratio_is_stated_as_a_bound_from_above():
@@ -3310,6 +3395,10 @@ def test_the_declaration_ratio_is_stated_as_a_bound_from_above():
     This test holds the corrected form in every file that states the ratio, and
     requires each of them to state it at all: a sentence this wrong, copied to
     four files, was fixed in one place at a time until a check read all four.
+    Where the ratio must *not* be stated wrongly is the other half, and a list
+    cannot answer it --
+    `test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor`
+    sweeps the tree for that.
     """
     for where in WHERE_THE_DECLARATION_RATIO_IS_CITED:
         paragraphs = _declaration_ratio_paragraphs(where)

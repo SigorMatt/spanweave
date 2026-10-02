@@ -1557,6 +1557,30 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **The declaration-ratio guard sweeps the tree, so the eighth copy cannot
+  escape the way the seventh did.** Tests only; nothing under `spanweave/`
+  moves and no document moves (from the run-5 scoped cold review, finding
+  L26-G1). The guard L26 left behind re-read a four-name list —
+  `SPEC.md`, `CHANGELOG.md`, `TASKS.md`, `tests/live_cost.py` — which is the
+  right question for *where the ratio must be stated* and no question at all
+  about where it must not be stated wrongly. That is the half the defect lives
+  in: review A1 found the false sentence in six places, L26 found a seventh by
+  hand, and a check that enumerates the seven it knows is blind to the eighth
+  exactly as the first six were blind to the seventh. Demonstrated rather than
+  argued: appending A1's sentence verbatim to `DESIGN.md` left
+  `tests/test_doc_truth.py`, `tests/test_docs.py`,
+  `tests/test_readme_quickstart.py` and `tests/test_gates.py` all green.
+  `test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor` now
+  asks every tracked, readable file the two questions the four named files are
+  asked — a paragraph stating the ratio must say which way it bounds the
+  measured rise, and a paragraph calling it a floor must cite the finding that
+  withdrew the word. The file list comes from `git ls-files`, not `rglob`:
+  untracked scratch is nobody's claim. Two exemptions, each about the file
+  rather than the sentence — `reviews/` holds archives kept **byte for byte**
+  whose `sha256` `TASKS.md` publishes, so the history has to be allowed to say
+  the wrong thing it said; and this test file has to quote what it forbids in
+  order to forbid it. The same plant now fails with the path named.
+
 - **The declaration ratio §10.6 states is a bound from *above*, not a floor, and
   the sentence drawn from it is withdrawn.** Documents, tests and the benchmark
   harness only; nothing under `spanweave/` moves (`WORKPLAN.md` L26, from the
