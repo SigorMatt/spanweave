@@ -1557,6 +1557,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **L25's dedup test no longer states the premise its own failure disproves.**
+  A docstring; no code, no document and no assertion moves (from the run-5
+  scoped cold review, finding L25-1). The test said a live/batch divergence in
+  a span's repeated `call_ids` was "invisible in the bytes today" because the
+  edges it feeds are deduplicated — which is run-4 thread 4's premise, the one
+  L25 corrected and this very test falsified. Diagnostics are not
+  deduplicated: at L25's parent the batch builder drew `unpaired_call` once per
+  named occurrence, giving `diagnostic_count=3` against the live builder's `2`,
+  so `replay` fails on `live == batch` at version 1. The correction was already
+  in `reviews/2026-10-02-live-run4.md` (correction 5) and `TASKS.md`'s L25 row;
+  the test that proved it was the one place still asserting the stale claim,
+  and the place a future reader meets it first.
+
 - **The declaration-ratio guard sweeps the tree, so the eighth copy cannot
   escape the way the seventh did.** Tests only; nothing under `spanweave/`
   moves and no document moves (from the run-5 scoped cold review, finding

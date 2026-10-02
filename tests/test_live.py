@@ -1021,11 +1021,19 @@ def test_one_span_naming_a_call_id_twice_is_read_the_same_way_live_and_in_batch(
     """The same claim where a span names one call id twice, with the enum.
 
     The live builder walks `sorted(set(span.call_ids))` and the batch builder
-    the same, so neither counts a repeated id as two sides of one call. Pinned
-    rather than argued: the sides feed `call_result` and `data` edges that are
-    deduplicated before they are emitted, so a divergence here is invisible in
-    the bytes today and would stop being invisible the moment anything turned
-    on how many times a side names a node.
+    the same, so neither counts a repeated id as two sides of one call.
+
+    Run 4's review read this as harmless today -- the sides feed `call_result`
+    and `data` edges, and identical edges are deduplicated before they are
+    emitted, so a divergence would only become visible once something turned
+    on how many times a side names a node. That premise was false, and this
+    test is what falsified it: **diagnostics are not deduplicated.** At L25's
+    parent (`c78b3cb`) the batch builder emitted `unpaired_call` once per named
+    occurrence, so one span naming `c1` twice gave `diagnostic_count=3` against
+    the live builder's `2`, and `replay` fails on `live == batch` at version 1
+    -- in the bytes, today, not for some later reader. Correction 5 of
+    `reviews/2026-10-02-live-run4.md` records it, and `TASKS.md`'s L25 registry
+    row repeats it.
     """
     records = [
         sr("ask", role=CallRole.REQUESTER, calls=["c1", "c1"]),
