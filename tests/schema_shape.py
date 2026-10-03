@@ -57,6 +57,23 @@ Section 5 reads a document rather than the code, which is a real weakness and
 is named rather than hidden: it catches a `source` shape change only because
 `test_codes.py` forces §3.7 to move when the library does. Two instruments in
 series, and this file is only one of them.
+
+**The delta document, beside the graph one.** `SPEC.md` §10.9 gives a delta its
+**own** top-level document, written by `delta_to_document`. It is a serialized
+surface of this library exactly as the graph document is, and until the batch
+that added these sections the only pin on it was its root key list
+(`tests/test_live.py`): `basis_rewritten[].before` / `.after` and every leaf
+type under it had no guard at all -- the exact defect class this file exists
+for, on a document it could not see. So the delta gets the same two instruments
+the graph gets, in sections of their own: `delta_document` (its key tree, from a
+`Delta` specimen constructed here) and `delta_model` (`Delta` and
+`BasisRewrite`, field by field). Sections of their own rather than entries
+folded into the graph's, because §10.9's claim is that the delta is *additive* —
+that the graph document did not move for it — and an artifact in which the graph
+sections are byte-identical while new ones appear beside them is that claim,
+committed. The passthrough boundary is the same boundary in the delta's
+spelling, derived from `PASSTHROUGH` rather than restated, so the two cannot
+drift apart.
 """
 
 from __future__ import annotations
@@ -68,6 +85,7 @@ from typing import Any
 
 from spanweave import diagnostics
 from spanweave.annotate import Annotation, AnnotationStore
+from spanweave.delta import BasisRewrite, Delta
 from spanweave.graph import Graph
 from spanweave.model import (
     AdapterInfo,
@@ -86,7 +104,7 @@ from spanweave.model import (
     Usage,
     Warrant,
 )
-from spanweave.serialize import to_document
+from spanweave.serialize import delta_to_document, to_document
 from spanweave.version import SCHEMA_VERSION
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -118,6 +136,41 @@ PASSTHROUGH = (
 #: choice here would read as a guarantee the library does not make.
 DECLARED_ELSEWHERE = ("$.diagnostics[].source",)
 
+#: The delta document's node collections, and its diagnostic collections
+#: (`SPEC.md` §10.9). Named here because the two boundaries below are derived
+#: from the graph's rather than restated: a delta writes nodes and diagnostics
+#: with the very functions that write them into a graph, so a region that is
+#: passthrough in one is passthrough in the other, and a rename that moved one
+#: and not the other would be the drift this file exists to catch.
+DELTA_NODE_COLLECTIONS = ("nodes_added", "nodes_removed")
+DELTA_DIAGNOSTIC_COLLECTIONS = ("diagnostics_opened", "diagnostics_resolved")
+
+
+def _respelled(
+    paths: tuple[str, ...], under: str, collections: tuple[str, ...]
+) -> tuple[str, ...]:
+    """The graph's boundary entries under `under`, in the delta's spelling."""
+    return tuple(
+        sorted(
+            path.replace(under, f"$.{collection}[]", 1)
+            for collection in collections
+            for path in paths
+            if path.startswith(under)
+        )
+    )
+
+
+#: `PASSTHROUGH`, in the delta document's spelling. `$.annotations[].value` has
+#: no delta spelling on purpose: a delta carries no annotations (§10.6), so the
+#: consumer-supplied value is not a region of this document at all.
+DELTA_PASSTHROUGH = _respelled(PASSTHROUGH, "$.nodes[]", DELTA_NODE_COLLECTIONS)
+
+#: `DECLARED_ELSEWHERE`, likewise. Section 5's table is per code, not per
+#: document, so it declares these paths too.
+DELTA_DECLARED_ELSEWHERE = _respelled(
+    DECLARED_ELSEWHERE, "$.diagnostics[]", DELTA_DIAGNOSTIC_COLLECTIONS
+)
+
 #: Every dataclass that reaches the serialized document. `AnnotationStore` and
 #: `Graph` are containers rather than serialized shapes and are covered by the
 #: key tree instead.
@@ -132,6 +185,16 @@ SERIALIZED_MODELS = (
     Provenance,
     RawRecord,
     Usage,
+)
+
+#: The dataclasses the *delta* document adds, and nothing the graph already
+#: records: `Delta`'s collections hold the very `Node`, `Edge`, `Diagnostic`
+#: and `AdapterInfo` above. `BasisRewrite` is here because it is the one shape
+#: that exists nowhere else -- `before` and `after` are declared by no other
+#: model, which is precisely why they went unwatched.
+DELTA_MODELS = (
+    BasisRewrite,
+    Delta,
 )
 
 
@@ -219,19 +282,19 @@ def specimen() -> Graph:
     )
 
 
-def key_tree() -> dict[str, str]:
-    """Every serialized path, and what kind of thing sits at it.
-
-    Types of *leaves* are deliberately absent: they would be the specimen's
-    types, not the library's, and the library's are section 2's job.
-    """
+def _tree(
+    document: Any,
+    passthrough: tuple[str, ...],
+    declared_elsewhere: tuple[str, ...],
+) -> dict[str, str]:
+    """The key tree of one serialized document, against one boundary."""
     tree: dict[str, str] = {}
 
     def walk(path: str, value: Any) -> None:
-        if path in PASSTHROUGH:
+        if path in passthrough:
             tree[path] = "passthrough"
             return
-        if path in DECLARED_ELSEWHERE:
+        if path in declared_elsewhere:
             tree[path] = "per-code (see diagnostic_source)"
             return
         if isinstance(value, dict):
@@ -245,13 +308,81 @@ def key_tree() -> dict[str, str]:
         else:
             tree[path] = "leaf"
 
-    walk("$", to_document(specimen()))
+    walk("$", document)
     return tree
+
+
+def key_tree() -> dict[str, str]:
+    """Every serialized path, and what kind of thing sits at it.
+
+    Types of *leaves* are deliberately absent: they would be the specimen's
+    types, not the library's, and the library's are section 2's job.
+    """
+    return _tree(to_document(specimen()), PASSTHROUGH, DECLARED_ELSEWHERE)
+
+
+def delta_specimen() -> Delta:
+    """A delta built HERE, populating every optional field (`SPEC.md` §10.9).
+
+    The graph specimen's reasoning, applied to the other document: constructed
+    rather than produced by a builder, so no fixture and no journal behaviour
+    can move the key tree, and every collection is non-empty because an empty
+    array hides every path beneath it.
+
+    Two details are deliberate. The two edges differ **only** in their basis,
+    so `basis_rewritten` -- a view over the edge sets rather than a field
+    (§10.6) -- is non-empty and its own leaves are watched. And the two
+    `trace_id`s and the two adapter tuples differ, so neither endpoint's key
+    can be mistaken for the other's.
+    """
+    graph = specimen()
+    node = graph.nodes()[0]
+    edge = graph.edges()[0]
+    return Delta(
+        since=1,
+        until=2,
+        nodes_added=(node,),
+        nodes_removed=(dataclasses.replace(node, id="c"),),
+        edges_added=(dataclasses.replace(edge, basis="specimen-after"),),
+        edges_removed=(dataclasses.replace(edge, basis="specimen-before"),),
+        diagnostics_opened=graph.diagnostics,
+        diagnostics_resolved=graph.diagnostics,
+        trace_id_before="specimen-before",
+        trace_id_after="specimen-after",
+        adapters_before=(
+            AdapterInfo(id="specimen", version="0.0.0", declared_confidence=0.4),
+        ),
+        adapters_after=(
+            AdapterInfo(id="specimen", version="0.0.0", declared_confidence=0.5),
+        ),
+        order_changed=True,
+        restated=True,
+    )
+
+
+def delta_key_tree() -> dict[str, str]:
+    """Every path `delta_to_document` emits, against the same boundary."""
+    return _tree(
+        delta_to_document(delta_specimen()),
+        DELTA_PASSTHROUGH,
+        DELTA_DECLARED_ELSEWHERE,
+    )
 
 
 # --------------------------------------------------------------------------
 # 2. The declared model
 # --------------------------------------------------------------------------
+
+
+def _fields(classes: tuple[type, ...]) -> dict[str, dict[str, str]]:
+    return {
+        cls.__name__: {
+            f.name: str(f.type)
+            for f in dataclasses.fields(cls)
+            if not f.name.startswith("_")
+        }
+        for cls in sorted(classes, key=lambda c: c.__name__)
+    }
 
 
 def model_fields() -> dict[str, dict[str, str]]:
@@ -260,14 +391,14 @@ def model_fields() -> dict[str, dict[str, str]]:
     Private fields are skipped: they are not serialized, so moving one is not
     a schema change and should not read as one.
     """
-    return {
-        cls.__name__: {
-            f.name: str(f.type)
-            for f in dataclasses.fields(cls)
-            if not f.name.startswith("_")
-        }
-        for cls in sorted(SERIALIZED_MODELS, key=lambda c: c.__name__)
-    }
+    return _fields(SERIALIZED_MODELS)
+
+
+def delta_model_fields() -> dict[str, dict[str, str]]:
+    """The two the delta document adds. `basis_rewritten` is a property rather
+    than a field, so it appears in the key tree and not here -- which is the
+    right way round: what it is computed from is watched above."""
+    return _fields(DELTA_MODELS)
 
 
 # --------------------------------------------------------------------------
@@ -335,9 +466,11 @@ def shape() -> dict[str, Any]:
     """The whole committed shape. Nothing here reads a fixture."""
     return {
         "_": (
-            "The SHAPE of a serialized graph -- field names, types, nesting. "
-            "Never its contents. Regenerate with `make shape` and commit the "
-            "diff in the same change (tests/schema_shape.py, TASKS.md 3.7)."
+            "The SHAPE of the two documents this library serializes -- a graph, "
+            "and a delta (SPEC.md 10.9), in sections of their own. Field names, "
+            "types, nesting; never their contents. Regenerate with `make shape` "
+            "and commit the diff in the same change (tests/schema_shape.py, "
+            "TASKS.md 3.7)."
         ),
         "document": key_tree(),
         "model": model_fields(),
@@ -345,6 +478,10 @@ def shape() -> dict[str, Any]:
         "passthrough": list(PASSTHROUGH),
         "declared_elsewhere": list(DECLARED_ELSEWHERE),
         "diagnostic_source": diagnostic_source_shapes(),
+        "delta_document": delta_key_tree(),
+        "delta_model": delta_model_fields(),
+        "delta_passthrough": list(DELTA_PASSTHROUGH),
+        "delta_declared_elsewhere": list(DELTA_DECLARED_ELSEWHERE),
     }
 
 

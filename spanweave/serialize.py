@@ -23,9 +23,11 @@ from typing import Any
 
 from spanweave import jsoncodec
 from spanweave.annotate import AnnotationStore
+from spanweave.delta import Delta
 from spanweave.errors import GraphNotSerializableError
 from spanweave.graph import Graph
 from spanweave.model import (
+    AdapterInfo,
     Diagnostic,
     Edge,
     JsonValue,
@@ -47,6 +49,34 @@ ROOT_KEYS = (
     "schema_version",
     "trace_id",
 )
+
+#: The root keys of a **delta** document, which is its own top-level shape and
+#: not a change to the graph document (`SPEC.md` §10.9). `kind` sits here rather
+#: than on the graph because adding a key to the graph document would move a
+#: shape `0.9.x` consumers already read.
+DELTA_ROOT_KEYS = (
+    "adapters_after",
+    "adapters_before",
+    "basis_rewritten",
+    "diagnostics_opened",
+    "diagnostics_resolved",
+    "edges_added",
+    "edges_removed",
+    "kind",
+    "nodes_added",
+    "nodes_removed",
+    "order_changed",
+    "restated",
+    "schema_version",
+    "since",
+    "trace_id_after",
+    "trace_id_before",
+    "until",
+)
+
+#: What `kind` says on a delta document. A graph document has no `kind` at all,
+#: so its absence is the other half of the discriminator.
+DELTA_KIND = "delta"
 
 
 def _a_non_finite_number(value: object) -> float | None:
@@ -186,23 +216,71 @@ def dump(graph: Graph, path: pathlib.Path) -> None:
     path.write_bytes(dumps(graph))
 
 
+def delta_to_document(delta: Delta) -> dict[str, Any]:
+    """A delta as plain JSON data, in its own top-level shape (`SPEC.md` §10.9).
+
+    Nodes, edges and diagnostics are written by the very functions that write
+    them into a graph document, so a consumer that can read one can read the
+    other, and the two cannot drift apart. `basis_rewritten` is written even
+    though it is derived from the edge sets: a reader that wants the pairs
+    should not have to recompute what the producer already knew.
+    """
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": DELTA_KIND,
+        "since": delta.since,
+        "until": delta.until,
+        "nodes_added": [_node(node) for node in delta.nodes_added],
+        "nodes_removed": [_node(node) for node in delta.nodes_removed],
+        "edges_added": [_edge(edge) for edge in delta.edges_added],
+        "edges_removed": [_edge(edge) for edge in delta.edges_removed],
+        "diagnostics_opened": [_diagnostic(d) for d in delta.diagnostics_opened],
+        "diagnostics_resolved": [_diagnostic(d) for d in delta.diagnostics_resolved],
+        "basis_rewritten": [
+            {
+                "src": rewrite.src,
+                "dst": rewrite.dst,
+                "kind": str(rewrite.kind),
+                "before": rewrite.before,
+                "after": rewrite.after,
+            }
+            for rewrite in delta.basis_rewritten
+        ],
+        "trace_id_before": delta.trace_id_before,
+        "trace_id_after": delta.trace_id_after,
+        "adapters_before": [_adapter(item) for item in delta.adapters_before],
+        "adapters_after": [_adapter(item) for item in delta.adapters_after],
+        "order_changed": delta.order_changed,
+        "restated": delta.restated,
+    }
+
+
+def delta_dumps(delta: Delta) -> bytes:
+    """Canonical bytes for a delta -- §5.2's encoding, unchanged."""
+    return canonical_bytes(delta_to_document(delta))
+
+
 def _meta(meta: Meta | None) -> dict[str, Any] | None:
     if meta is None:
         return None
     return {
         "spanweave_version": meta.spanweave_version,
         "adapters": [
-            {
-                "id": adapter.id,
-                "version": adapter.version,
-                "declared_confidence": adapter.declared_confidence,
-            }
+            _adapter(adapter)
             for adapter in sorted(meta.adapters, key=lambda item: item.sort_key)
         ],
         "source_digest": meta.source_digest,
         "node_count": meta.node_count,
         "edge_count": meta.edge_count,
         "diagnostic_count": meta.diagnostic_count,
+    }
+
+
+def _adapter(adapter: AdapterInfo) -> dict[str, Any]:
+    return {
+        "id": adapter.id,
+        "version": adapter.version,
+        "declared_confidence": adapter.declared_confidence,
     }
 
 

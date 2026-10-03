@@ -15,6 +15,212 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The run-5 close review is archived, its one error is marked from outside
+  it, and its sixteen threads are registered.** Documents only: nothing under
+  `spanweave/` moves, no test moves, and `tests/serialized_shape.json` does not
+  move. `reviews/2026-10-02-live-close.md` is the scoped cold review of
+  `3ab6638..a0204a3` copied byte-for-byte from its untracked scratch drop —
+  `cmp` silent, `sha256`
+  `9c546755970e0577fa24c4b98193e51f9607876d5150127a57ae1767e3f22460` on both
+  sides — and `TASKS.md` gains a *Cold review of the live-graphs close* section
+  carrying its two `blocks PR` findings with dispositions (**L26-G1** →
+  `b9324e1`, **L25-1** → `597a1df`, with `ba8a6f0` recorded as the rejected
+  first attempt) and all sixteen threads with the review's own sentences
+  verbatim.
+  **The archive is not edited, including where it is wrong.** Its L25 section
+  claims the run-4 archive "carries it as numbered correction 5 above the
+  threads" and that thread 4's own entry points at that correction. Neither
+  half is true: `reviews/2026-10-02-live-run4.md` carries no numbered
+  corrections and zero occurrences of `diagnostic_count`, and its thread 4
+  still states the withdrawn premise verbatim and unannotated. Correction 5 and
+  the pointer to it live in `TASKS.md`, which is where `597a1df` cites them —
+  and that is the same citation `ba8a6f0` was rejected for, so the review's one
+  error reached the one commit whose purpose was removing a stale claim. A
+  write-once archive whose digest is published has to be allowed to say the
+  wrong thing it said, so the correction is registered beside it instead.
+  Two of the sixteen thread citations do not resolve as written and are
+  corrected in the disposition lines rather than inside the quotes: thread 14's
+  pointer at the L1/L2 registry rows is twelve rows low, and thread 8's
+  "read by value" sits two lines below the line `ADAPTERS.md` is cited at. The
+  rest were re-checked against the tip and resolve, `tests/test_live.py:826`
+  among them — `597a1df` added docstring lines below it, not above.
+
+- **The README covers the live builder, and a test holds it to `__all__`.**
+  Docs and tests only: nothing under `spanweave/` moves and `SPEC.md` does not
+  move (`WORKPLAN.md` L27, from the run-4 cold review's §C item 8). Eight names
+  landed on the public API over this series — `Builder`, `Delta`, `Records`,
+  `BasisRewrite`, `DeltaUnavailableError`, `read_records`, `delta_dumps`,
+  `delta_to_document` — and the README named none of them; its only change in
+  42 commits was a row in the Documents table, so the whole product of the
+  series was invisible to a stranger. It now carries a section drawn from
+  `SPEC.md` §10 and §7: `feed` and the version it returns, `graph()`,
+  `delta(since=v)` and `fold`, `retain` with the refusal a dropped `since`
+  earns, the three ways to consume it, prefix consistency as the promise under
+  all of them, the facts a builder fed records rather than bytes cannot report
+  (§10.4), `read_records` with §7's sentence about neither buffering nor
+  rejoining across calls, and the delta's own document form (§10.9). Its worked
+  example is **run** by `tests/test_doc_truth.py` and compared to the output
+  shown, the way the quickstart's blocks are — `tests/readme_quickstart.py`
+  gained the one entry point that reads a section below `## Install`, since
+  that example reads corpus data and so cannot run from a wheel.
+  The new check is that every name in `spanweave.__all__` appears in README.md
+  inside a code span. Measured on the parent commit, **36** of the 38 exports
+  did not: the review's eight, plus 28 that predate the series — the whole
+  graph model, the closed vocabularies, the error types, the annotation API and
+  the serializers. So the README also gained a public-API table naming all 38,
+  and the check has **no exemption list**: a name exported tomorrow fails the
+  build tomorrow unless the table names it.
+
+- **`read_records` now takes a `bytearray` or a `memoryview` beside `bytes`**
+  (`SPEC.md` §7, `WORKPLAN.md` L13, from the run-2 cold review's T13). That is
+  what a receiver actually holds: it appends into one buffer for the life of a
+  connection and reads a view of it, and the old refusal made it write
+  `bytes(buf)` on every call — a copy charged to the caller by a refusal whose
+  stated reason, *a `str` is a path*, says nothing about either type. The copy,
+  where one is needed at all, is now the **library's**, made once as the buffer
+  is read, so the `Records` returned cannot change under a caller that goes on
+  writing into its buffer. A `memoryview` is read where its items are single
+  bytes laid out contiguously; one over **wider items** is refused, because
+  rendering it to bytes would take the machine's own byte order and the same
+  input would then read differently on another machine (`CLAUDE.md` 4), and a
+  **strided** one is refused because it names no run of bytes — gathering it
+  would assemble bytes that exist nowhere in the caller's buffer. Each refusal
+  says which of the two it is. A `str` is still a `TypeError` with the reason it
+  always had. Nothing about *what* is read changes: the same reader, the same
+  containers, the same one decode site.
+
+- **A byte sequence UTF-8 cannot decode is now a diagnostic rather than a silent
+  substitution.** New code `undecodable_bytes` (`SPEC.md` §3.7), emitted by every
+  reading path — `read_records`, a file, stdin — and at each of the reader's
+  three decode sites (`WORKPLAN.md` L12, from the run-2 cold review's T12, a
+  behaviour change decided 2026-09-30). Nothing about what is *read* changes:
+  those bytes are still replaced with U+FFFD, the record is still read, and
+  `skipped_records` still counts only records that were never read at all. What
+  changes is that the substitution is now **reported** — record-scoped and
+  naming the line where a line produced a record — because a record carrying a
+  character nothing in the input wrote, with nothing saying so, is the reader
+  quietly rewriting what it was handed (`CLAUDE.md` 2). `source` is `null`, and
+  §3.7 states why: the offending fragment is bytes, which a `JsonValue` cannot
+  hold, and the text standing in its place survives on the record itself or on
+  the `malformed_record` for a line that would not parse.
+  It matters most to a **receiver**, which is what the reader's second door was
+  opened for: a chunk tailed off an exporter can split a multi-byte character in
+  half, and the reader neither buffers nor rejoins across calls. So each half is
+  one `undecodable_bytes` and one `malformed_record`, never a record invented out
+  of two calls, and `SPEC.md` §7 now says the consequence out loud — a receiver
+  splits its bytes on `\n` and keeps the remainder for its next call.
+  The one path that decodes the same bytes twice — an input whose first member
+  key is `resourceSpans`, buffered, unparseable, and then read line by line —
+  reports them **once**: publishing the reader's own second attempt would be a
+  second fact about the input. No fixture moves: every file `git ls-files`
+  lists decodes strictly as UTF-8 — checked that way rather than by a walk of
+  the working tree, for the reason `tests/corpus_census.py` gives — so no
+  expected graph gains a diagnostic.
+  `tests/serialized_shape.json` moves by exactly two lines, the new code in
+  `vocabularies.diagnostic_codes` and its `null` in `diagnostic_source`.
+
+- **Records can now be read out of bytes a caller already holds**, which is the
+  one thing the receiver boundary asked the library for (`OPEN_QUESTIONS.md`
+  §19, `WORKPLAN.md` L6). `spanweave.read_records(data)` returns a `Records`:
+  the records in input order, the diagnostics the read produced, and
+  `skipped_records`. It is for telemetry *in flight* rather than a file — an
+  OTLP/HTTP request body, a chunk tailed off an exporter's output, a message off
+  a queue — and it is the **same reader** underneath, so all three containers
+  (`SPEC.md` §7) are recognized identically and an OTLP export cannot read one
+  way from a file and another way in memory. It reads and does not judge: no
+  adapter is consulted, no dialect named, nothing classified; feeding the
+  records to a `Builder` one at a time is the live path (§10), and the dialect
+  question is still asked per record one layer above.
+  Two things it deliberately does not do. It does not **stream**: a `Records` is
+  complete when it is returned, because the bytes were already in memory and a
+  caller reading diagnostics off a half-consumed stream gets a true answer to a
+  question it did not ask. And it does not take a `str`: everywhere else in this
+  library a `str` is a path, so `read_records("trace.jsonl")` is a `TypeError`
+  rather than an empty read with no complaint — or, worse, a function whose
+  contract is that it touches no file opening one.
+  Nothing else moved: no model type, no serialized field,
+  `tests/serialized_shape.json` byte-identical, and the existing public names
+  behave exactly as before. **Cheap to read is not cheap to absorb**, and §7
+  says so beside the API: a whole export read in one call is still one `feed`
+  per span, and §10.6 states what a `feed` costs.
+
+- **A live builder can now say what changed, and a consumer can fold it
+  forward.** `Builder.delta(since=v)` returns a `Delta`, and `delta.fold(graph)`
+  applies it: fold the per-record delta onto the previous graph and you get the
+  current one, byte for byte. A delta is *defined* as the set difference of two
+  prefix graphs -- `graph(b) - graph(a)`, per collection -- so the definition is
+  also the test oracle: `tests/delta_oracle.py` materializes both graphs and
+  diffs them the slow obvious way, and conformance gates 2 and 3 run it against
+  the implementation at **every** `since` of every rendering in the corpus
+  (`SPEC.md` §10.6-§10.9, `FIXTURES.md` §4, `OPEN_QUESTIONS.md` §18). Neither
+  gate writes a new expectation. Both bite: disabling the fold's cancellation
+  fails 25 corpus assertions, dropping the order-derived `ordering_cycle`
+  diagnostic fails 2 on `cyclic_parents`, never restating the whole-input
+  statements fails 4 on `duplicate_span_ids`, and folding without recomputing
+  canonical order fails 5 on `shuffled_order`.
+  The implementation is a **journal** -- one entry per `feed`, folded on demand --
+  and the fold **cancels**: an `unpaired_call` opened at version 12 and resolved
+  at 14 is in neither endpoint graph, so it is in neither collection of
+  `delta(11, 15)`. A delta is a summary of two endpoints, not a log; the
+  per-record deltas are the log.
+  Two findings from the incremental builder shaped it. Node ids **do** move --
+  a majority trace-id change and a span id that stops being unique each
+  re-derive every id (`SPEC.md` §10.2) -- so such an entry is not local, and
+  rather than pretend otherwise it is marked `restated`, a flag that travels
+  onto every delta folded from a window containing one. And `meta` moves between
+  versions on its own (`declared_confidence` is declared over a growing sample,
+  §6.1), so `trace_id` and `meta.adapters` are carried on the delta in their own
+  right; the three `meta` counts are not, because a count that travelled could
+  disagree with the collection it counts.
+  Retention is the caller's policy: `retain(versions=N | "all" | 0)`, default
+  `"all"`, applied at once rather than at the next `feed`. A `since` the journal
+  has dropped raises `DeltaUnavailableError` -- new error code
+  `delta_unavailable` (§3.10) -- and never a truncated delta, because an
+  incomplete one is indistinguishable from a complete one. A `since` that is not
+  a version at all is a `ValueError`, and so is folding onto a graph that does
+  not hold what the delta removes: a graph carries no version number, so the
+  fold cannot check it was handed the right one, and refusing beats a quietly
+  wrong graph.
+  A delta serializes to its **own** top-level document, `kind: "delta"`, written
+  by the very functions that write nodes, edges and diagnostics into a graph
+  document. **The graph document does not move**: no key added,
+  `tests/serialized_shape.json` byte-identical, which is the same promise §10.1
+  made and the reason diagnostic-lifecycle option (a) was taken. New on the
+  public API: `Delta`, `BasisRewrite`, `DeltaUnavailableError`,
+  `delta_to_document`, `delta_dumps`.
+
+- **A graph can now be built from a stream that has not finished arriving.**
+  `spanweave.Builder` takes records one at a time -- `feed(record)` returns the
+  new version as an `int`, `graph()` materializes the graph of everything
+  absorbed so far -- and the contract is that the live graph **is** the batch
+  graph: at version `k` it equals the batch build of the first `k` records, as a
+  value and as the bytes it serializes to (`SPEC.md` §10, `OPEN_QUESTIONS.md`
+  §18). Arrival order indexes versions; inside a version the order is canonical,
+  exactly as §5.2 already stated it. Taking prefix consistency as the
+  *definition* is what keeps this from being a second builder: every invariant
+  transfers unchanged, **the serialized shape does not move at all** (no
+  live-only field, no version on a graph, `tests/serialized_shape.json`
+  untouched), and the conformance corpus becomes the test suite -- every
+  rendering is now replayed record by record and compared at every prefix
+  (`FIXTURES.md` §4, claim 3). No new expectation was written for it.
+  Mechanically, the rules did not move either: `spanweave/build.py`'s per-record,
+  per-call-id and per-sibling-group rules were factored out and the incremental
+  path calls **those**, so an edge, a diagnostic or an id has one definition and
+  cannot drift between the two paths. What the live builder adds is bookkeeping,
+  and the honest part of it is written down: three facts are properties of the
+  whole input rather than of any record -- the most common trace id, whether a
+  dialect span id is unique, whether a source key is -- and because the first is
+  in the material of every derived node id while the other two decide which
+  §3.6 rule an id comes from, an arrival that changes one of them **moves ids
+  already given out** and restates everything. Those arrivals are O(n) and
+  `SPEC.md` §10.2 says so rather than implying the absorb is always local.
+  A live diagnostic is a statement about what has arrived: `unpaired_call` at
+  version 12 and its absence at version 14 are both correct, and a resolved
+  diagnostic is simply absent, as it is in a batch graph. What the builder is
+  fed is records, so it reports no `source_digest` and none of the reader's
+  facts about bytes. Deltas, the journal and retention are **not** here
+  (`WORKPLAN.md` L4).
+
 - **An OTLP JSON export is now read, as a third container format rather than
   as a dialect.** `resourceSpans[].scopeSpans[].spans[]` is unpacked in the
   reader into one flat record per span, so the spans inside it are classified
@@ -297,6 +503,374 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **The live-graphs series is closed in this repository, and `WORKPLAN.md` is
+  gone with it.** From the run-4 cold review's A2 and A3 (batch L28, this
+  commit): `git ls-tree main` had no `WORKPLAN.md`, so without this close the
+  plan file would have landed on `main` for the first time in the repository's
+  history while `SPEC.md` carried three citations to it and `TASKS.md` carried
+  no batch registry at all. `TASKS.md` now holds everything of the file that
+  outlives the series, under *The live-graphs series*: a registry row per batch
+  **L0-L28** with its final status and commit, the fifteen-row decisions log
+  folded in **verbatim**, the three cold reviews with every finding
+  dispositioned, nineteen threads (twelve open, four closed by run 5, two moot
+  with the plan file, one opened by run 5 itself), and the three protocol
+  changes the next series' plan file has to carry. What is deliberately not
+  carried is §0, the operating protocol, which a future series reads at
+  `git show cebcd77:WORKPLAN.md`. Two rows the registry states plainly because
+  §1 read alone was wrong about both: **L16**'s root-last bound had already
+  been cleared by **L15** (2.48x pre-L15, 1.21x at L16's own parent, 1.05x
+  after it), and **L17**'s first acceptance criterion was not merely unmet but
+  wrong as written -- 1.5x was unreachable at this implementation's roughly
+  11 µs per declaration, an empirical claim about constants rather than a
+  consequence of §4.2.1. **L5** is recorded as dropped on measurement, and
+  **L7/L8** as moved to their own series in `SigorMatt/spanweave-live`, which
+  is why the
+  spanweave half closes complete rather than blocked. The run-4 review is
+  archived byte-for-byte as `reviews/2026-10-02-live-run4.md`
+  (`sha256`
+  `27d7d4fb9a27cb0c00ee635afb7a6d5c20b9997759df29f8eebf13cd3610e549`, `cmp`
+  clean against the untracked scratch copy). `SPEC.md`'s three citations of the
+  deleted file (§3.7, §10.6, §10.9) are re-pointed at `TASKS.md`, as are
+  the ones in `tests/`, the `Makefile`, `.gitignore` and `OPEN_QUESTIONS.md`;
+  the README's Documents row and the `WORKPLAN.md` exclusion in
+  `durable_documents()` are removed, the pair every previous series close has
+  removed. The citations that survive are history by construction: this file's
+  own dated entries, the verbatim archives under `reviews/`, and the quoted
+  decision rows and memo references in `TASKS.md` and `OPEN_QUESTIONS.md`.
+  **No behavior changed**: nothing under `spanweave/` moved and
+  `tests/serialized_shape.json` is untouched.
+
+- **`Delta.basis_rewritten` is now pinned to name *every* pair it moved, not
+  just the first.** Tests only: nothing under `spanweave/` moves and `SPEC.md`
+  does not move (`WORKPLAN.md` L24, from the run-4 cold review's §C item 1).
+  The gap was in what was *checked*. §4.2.1's rank is a property of a receipt,
+  but the edges that carry it are one per span that **answered** the call, so a
+  receipt whose rank an out-of-order arrival moves holds as many stale edges as
+  the call had fulfillers — and the committed pin used **one** fulfiller, where
+  "every stale edge" and "the first stale edge" are the same one-element list.
+  The review demonstrated that `removed.extend(stale[:1])` in
+  `spanweave/incremental.py:_received` survived the entire suite; re-taken at
+  this commit it is the sole failure in 2991 tests, and the test added here is
+  the one that fails. Under it the delta adds the fresh basis without removing
+  the stale one, so it stops being `graph(until) − graph(since)` (`SPEC.md`
+  §10.6), the fold produces a graph carrying both bases for one relation, and
+  the view — computed from the edge sets, which is why it cannot disagree with
+  them — names one pair of two. The new test uses two fulfillers and an
+  out-of-order receiver, and asserts all four: both pairs in `basis_rewritten`
+  with their before and after, both stale edges in `edges_removed`, the delta
+  equal to the checkpoint diff of the two materialized graphs, and the fold byte
+  for byte. No conformance scenario was added, and the reason is recorded in the
+  commit body: both dialects can render the shape, but any new file under
+  `fixtures/conformance/` moves the tracked corpus census, which durable
+  documents cite and `tests/test_doc_truth.py` gates — a documents change this
+  batch is not. Conformance gate 3 therefore stays vacuous for this mutant, and
+  the only thing standing between it and a release is the test in
+  `tests/test_live.py`.
+
+- **The live-graphs series' two cold reviews are in the repository, and every
+  finding either names the batch that closed it or is registered as an open
+  thread.** `reviews/2026-09-30-live-run2.md` and
+  `reviews/2026-10-01-live-run3.md`, each archived byte-for-byte from the
+  untracked scratch drop — `sha256`
+  `3800a79dc3e3c7cfea110e35a53919e307b16bb23f2376b03e9672423b23ce38` and
+  `0aa047c4fc7054d4c96af948522b7040e53db33e410b25bbd4bf5ddd837dd8f2`, `cmp`
+  clean on both — with the scratch name and the whole digest written into
+  `TASKS.md` beside each, as runs 5 and 6 of the September 2026 audit did
+  (`WORKPLAN.md` L19). The dispositions are the `WORKPLAN.md` §3 decisions-log
+  rows of 2026-09-30 and 2026-10-01; `TASKS.md` gains a section for the series
+  carrying both, because the plan file those rows live in is written to be
+  deleted at the close and a disposition recorded only there leaves with it.
+  Run 2: seventeen of its twenty-one lettered findings closed by batches L9–L18
+  or corrected in the plan, the three superlinear `feed` sites it confirmed and
+  extended closed one per batch by L15–L17, and **four open threads** —
+  `restated` uncovered by the corpus, the asymmetric edge dedup, the unlabelled
+  `build.py` refactor, and `_numbered`'s one-span-per-record reading — each
+  quoted as the review wrote it. Run 3: findings 1, 2, 3, 4 and 7
+  closed by L20–L22, finding 6 corrected in the plan, finding 5 recorded here as
+  a correction to `b10c60a`'s body (gate 3 was not changed by L14, and is not
+  owed a mid-stream window, because such a window *is* a full-prefix delta of a
+  shorter builder), and **ten threads** registered verbatim, of which eight are
+  open: threads 8 and 17 were closed by `f04cbc8` and `71d282f`. **No behaviour
+  changed**: documents only, nothing under `spanweave/` or `tests/`, and
+  `tests/serialized_shape.json` does not move. (run-2 and run-3 reviews, all
+  findings)
+
+- **`SPEC.md` §10.2 and §10.6 state what a live build costs as *promises* with
+  the numbers cited to the harness, and the harness now measures what the prose
+  attributes.** Nothing under `spanweave/` moves (`WORKPLAN.md` L18, from the
+  2026-09-30 decision on the run-2 cold review's N2 and T1–T5). Those two
+  sections carried a machine's ratios in their prose — a seventh, three fifths,
+  "four times the `feed` that produced it" — all taken at commits where three
+  `feed` sites were superlinear. All three are since fixed (L15–L17) and the
+  prose went on saying what it had said, which is a sentence nobody recomputed.
+  So the classes are now stated as promises the implementation must keep: a
+  `feed` costs the *size* of the keys the arrival touched, with the three former
+  sites named as bounded and the whole-input-fact arrival named as the one
+  exception that restates everything; a `delta(since=v)` is O(n + e); a
+  `graph()` materializes from nothing kept. And one thing is stated as
+  deliberately **not** promised — that an arrival carrying `k` declared
+  relations costs what one carrying none does, because §4.2.1 makes `k` edges
+  the *answer*.
+  The numbers follow, dated and attributed rather than floating: measured at
+  `0718ba8` on 2026-10-02, CPython 3.14.6, one machine, by `tests/live_cost.py`.
+  The agent loop resending its history (400 turns) feeds in **961.9 ms**
+  (1.2009 ms/record) against 75.5 s at `1d7ba8f`, and 20,000 tool children in
+  **2,395.9 ms** (0.1198 ms/record) against 1,449 s; both build exactly **one
+  `Edge` object per edge the prefix holds** (81,799 and 39,999) and make **zero**
+  canonical sorts while feeding, counted rather than read off the code. `graph()`
+  is 249.9 ms and 298.7 ms, of which the materialize sort is 18.0 ms and 86.9 ms.
+  `delta(since=version - 1)` is 245.8 ms and 293.2 ms, and is now split into the
+  four parts §10.6 attributes separately: assembling the held sets (161.5 /
+  77.8 ms), rewinding them to `since` (44.3 / 26.1 ms), and the **two**
+  `ordering()` calls timed one at a time (18.5 + 18.7 ms, a seventh of the call;
+  91.2 + 82.5 ms, three fifths of it). The wide shape's `feed` is flat in what
+  has arrived — 0.1139 ms/record at 1,000 children, 0.1136 at 8,000.
+  **The acceptance ratio the previous entry was written against is corrected, not
+  restated.** "Turns 301–400 within 1.5× of turns 1–100" was not met, and §10.6
+  now states what the two stretches declare rather than the ratio: §4.2.1
+  promises `n` turns declare `n(n-1)/2` receipts and that none is suppressed, so
+  those two stretches carry 4,950 receipts over 201 records and 34,950 over 200
+  — 24.6 and 174.8 declarations per record, a **7.1×** rise in declared work.
+  That ratio bounds the ms/record rise **from above**: per-record cost
+  `F + c·d` gives `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁` with equality only at `F = 0`,
+  so the measured 5.43× is under it because the fixed per-record cost is not
+  zero, and the gap between the two *is* that fixed cost. (This entry first
+  called 7.1× a floor and said a target under it could only be met by dropping
+  declared relations; both are false — see the correction entry under **Fixed**
+  above, from review A1 of 2026-10-02.)
+  Two claims leave the documents. The **heap-Kahn** figure is no longer in SPEC
+  at all and is reworded in this file as session history with the harness not
+  retained, because nothing in this tree reproduces it. And the **subtree
+  recompute** that `WORKPLAN.md` L5 dropped is now named in §10.6 as *rejected on
+  measurement*, beside the still-open "no sort" question, so the two are not read
+  as one.
+  The harness gains `--count-edges` (`Edge` objects built per edge held, read
+  from `cProfile.Profile.getstats()` raw entries, because `pstats` merges every
+  frozen dataclass's `__init__` under one `<string>:2` row) and `--smoke`, which
+  `make check` now runs through a new `bench-smoke` target. The smoke form
+  asserts the **shape** the numbers are about and nothing about the clock: the
+  receipt count §4.2.1 promises, one `Edge` per edge held on both shapes, zero
+  sorts while feeding against one per materialization and two per delta, and the
+  same bytes from the same records fed root-last. It takes about a tenth of a
+  second, so the fast gate stays fast. A duration threshold still appears
+  nowhere, for the reason `make stranger` gives. Two new doc checks hold the
+  prose to the harness: §10.6 and the harness header must name the same measured
+  commit, date and interpreter, and SPEC must not state the heap figure while
+  the files that do record it say the harness was not retained.
+
+- **A call id's `data` edges are amended per declared receipt rather than
+  restated, so a loop resending its history is no longer cubic in its turns.**
+  `SPEC.md` §10.6 gains the case and §10.2's `basis` bullet is narrowed to what
+  actually moves; §4.2's prohibition, §4.2.1's three bases and §10.1's promise do
+  not move (`WORKPLAN.md` L17, from the 2026-09-30 decision on the run-2 cold
+  review's three superlinear `feed` sites — site (ii), the cubic one). A span that
+  declares receipt of a call used to restate that call id's **whole** `data` edge
+  set, because which receipt ranks first decides a `basis` and that is a fact about
+  the whole set; a conversational protocol resends every result it has been given
+  on every turn, so each declaration was rebuilt once per later turn. What the
+  ranking actually turns on is narrower: the receipt that ranks **first**, and
+  whether the second ties with it. The receipts of a call id are now held in
+  §4.2.1's order, and an arrival moves at most two of them — its own, at one edge
+  per span that answered the call, and the one that ranked first before it, if this
+  receipt outranks it (now "not the earliest") or ties with it (now "earliest
+  tied"), at one edge removed and one added. Every other receipt was already not
+  the earliest and stays so, whatever arrives. The rule is not copied: one function
+  answers which of §4.2.1's three strings a receipt earns and the batch path's
+  `data_edges` is now that function over a ranked set, so the live bases are the
+  batch bases by construction. The per-edge traffic goes through the same rollback
+  the chain's does, so a record refused part-way through still leaves the builder
+  exactly as it was — the basis it rewrote put back, not merely its additions
+  withdrawn. `Delta.basis_rewritten` reports the same pairs it always did.
+  Measured with `make bench ARGS="--only echo --turns 400 --segments 4"` on one
+  machine (CPython 3.14.6), echo shape, `feed` only: **958 ms against 75,171 ms**
+  at the parent commit, with `Edge.__init__` at **81,799 against 10,748,399** —
+  one `data` edge built per declared receipt (1.000 at 50, 100, 200 and 400 turns,
+  against 17.0, 33.7, 67.0 and 133.7), so the feed is linear in the receipts the
+  input declares. Per-record cost is **not** flat and cannot be: §4.2.1 says `n`
+  turns declare `n(n-1)/2` receipts and none is suppressed, so the edge set is
+  quadratic in the turns and an arrival carrying 175 declarations cannot cost what
+  one carrying 25 does. Over the same 400 turns in four stretches, turns 301-400
+  cost **5.44x** turns 1-100 (2.0393 against 0.3746 ms/record) where the cubic site
+  gave 52.18x (227.2158 against 4.3547) — below the 7.1x growth in what those
+  stretches declare, which bounds the measured rise **from above** rather than
+  below, and above the 1.5x the batch was accepted against. (This entry said the
+  quadratic edge set makes 1.5x unreachable. It does not: review A1 of 2026-10-02
+  showed that only a cheaper edge is needed, not a dropped declaration, so the
+  unreachability is a claim about this implementation's constants — about 11 µs
+  per declaration — and not about §4.2.1.) The harness gained `--segments` to
+  measure it.
+
+- **A parent that arrives after its children regroups all of them in one move, so
+  the arrival order of one record no longer decides what a trace costs to feed.**
+  `SPEC.md` §10.6 gains the case; §4.3's rule and §10.1's promise do not move
+  (`WORKPLAN.md` L16, from the 2026-09-30 decision on the run-2 cold review's
+  three superlinear `feed` sites — site (iii), the one inside a *single* `feed`).
+  A record's sibling group follows from its `parent` edge, so the arrival that
+  resolves a dangling reference moves every record that was waiting on it; where
+  that reference is a trace's root, which an exporter tailed in completion order
+  delivers last, that is the whole input moving inside one call. They now move
+  **together**: where the records moving are the whole of the group they leave and
+  the group they join holds nothing yet, the chain they had is the chain they keep
+  — a `temporal` edge names its two endpoints and not the group they sit in, and
+  §4.3's key moved for none of them — so the group is **re-keyed and no edge moves
+  at all**. A group only partly emptied is the per-record move the previous entry
+  describes, once per record moved. Nothing is restated and §4.3's rule is not
+  copied a second time, which is the reason this is the bulk move rather than a
+  chain rebuilt once per arrival; the re-key hands the journal nothing, so there
+  is nothing new for a refusal to undo and a record refused part-way through one
+  still leaves the builder exactly as it was.
+  Measured with `make bench ARGS="--only wide --root-last"` on one machine
+  (CPython 3.14.6), wide shape at 2,000, `feed` only: root-last total **1.05x**
+  root-first, with the root's own arrival at **16.3 ms** — against 1.21x and
+  43.1 ms at the parent commit, and 2.48x and 11,316 ms before the chain was
+  maintained at all. The arrival is now linear in the children it un-orphans
+  rather than `n log n`: 8.7 µs per child at 16,000 against 7.4 µs at 1,000.
+  The harness gained the root-last mode to measure it; the previous entry's
+  change is what brought the ratio inside the 2x this one was accepted against,
+  and this one takes it to 1.05x.
+
+- **A sibling group's temporal chain is maintained rather than rebuilt, so a wide
+  trace's `feed` is linear in its records.** `SPEC.md` §10.6 moves; §4.3's rule
+  and §10.1's promise do not (`WORKPLAN.md` L15, from the 2026-09-30 decision on
+  the run-2 cold review's three superlinear `feed` sites). Every arrival used to
+  restate the whole chain of the group it joined — `m - 1` fresh `Edge` objects
+  for a group of `m`, reusing none of the `m - 2` that had not changed — so one
+  wide sibling group, which is the ordinary shape of a trace whose root has many
+  children, made the feed quadratic in `n`. A group's members are now held in
+  §4.3's tie-break order, an arrival is placed in it with a binary search, and
+  only the chain edges adjacent to that place move: **at most one removed and two
+  added**, whatever the group holds. A record given a parent leaves one group and
+  joins another at the same price. The `Edge` objects go to the journal one at a
+  time instead of as a whole key, and are undone by the one rollback the previous
+  batch wrote — a refusal part-way through a record still leaves the builder
+  exactly as it was, the edge the arrival *removed* included.
+  The rule itself is not touched and is not copied: one function makes one link
+  of a chain and the batch path's `temporal_chain` is now that function over
+  consecutive siblings, so the live chain is the batch chain by construction
+  rather than by agreement. Measured with `make bench` on one machine
+  (CPython 3.14.6), wide shape, `feed` only: **0.109 ms/record at k=1,000 and
+  0.112 ms/record at k=8,000, a ratio of 1.02x** against 1.875 and 20.918
+  ms/record (11.15x) at the parent commit — and `Edge.__init__` under `cProfile`
+  falls from 1,999,000 constructions at k=2,000 to 3,999, exactly linear across
+  k = 1,000 / 2,000 / 4,000 / 8,000. The echo shape's `data` edge set was a
+  separate site, and is the entry above.
+
+- **`read_records` is now pinned on every container and every refused shape.**
+  Tests only: nothing under `spanweave/` moves and `SPEC.md` does not move
+  (`WORKPLAN.md` L21, from the run-3 cold review's findings 2 and 7). Two gaps,
+  both in what was *checked* rather than in what the library does.
+  **The no-carry property was pinned only where lines are the unit.** §7 says
+  the reader neither buffers nor rejoins across calls, and that sentence is not
+  qualified by container — but the only test of it handed over half a *line*.
+  The other two containers, the JSON array and the OTLP export document, are
+  precisely the ones the reader buffers whole, so they are where a carry buffer
+  is easiest to write and hardest to see: the review demonstrated that the whole
+  suite stayed green (`2964 passed, 2 skipped`) with either of them silently
+  rejoining a truncated container across two calls and inventing records out of
+  the pair. Each now has a test of its own, in the shape the lines test already
+  had: a container cut short is one `malformed_record` with `skipped_records=1`
+  in the call that received it, the bytes that would complete it yield no record
+  in the next call, and the two joined are stated to be readable so the two
+  empty reads cannot be mistaken for a claim about unreadable bytes.
+  **The two `memoryview` refusals could not tell their branches apart.** They
+  share one message naming both conditions, so `'one byte per item'` and
+  `'contiguous'` are each in it whichever shape was passed, and both tests
+  passed on either — a swap of the branch attribution went unnoticed. Each now
+  asserts the shape the message interpolates (`itemsize 2 with
+  c_contiguous=True` for the wide view, `itemsize 1 with c_contiguous=False` for
+  the strided one) and denies the other's, which is the only discriminator there
+  is. The message itself is unchanged, so this is an assertion added, not a
+  contract moved.
+
+- **Both halves of the delta surface are now pinned where a review found they
+  were not.** Tests only: nothing under `spanweave/` moves and `SPEC.md` does
+  not move (`WORKPLAN.md` L14, from the run-2 cold review's N4 and T9).
+  Two gaps, both in what was *checked* rather than in what the library does.
+  **The delta document had no shape tripwire.** `tests/schema_shape.py`
+  specimened a graph, so `tests/serialized_shape.json` could not see
+  `delta_to_document` at all: the only pin on §10.9's document was its root key
+  list, and `basis_rewritten[].before` / `.after` — declared by no other model —
+  had no guard of any kind. That is the exact defect class the tripwire exists
+  for, on a document it could not see. A `Delta` specimen is now constructed
+  beside the graph one, and the artifact carries four new sections of its own:
+  `delta_document` (its key tree), `delta_model` (`Delta` and `BasisRewrite`,
+  field by field) and the two boundary lists, derived from the graph's rather
+  than restated so the two cannot drift. Sections of their own because §10.9's
+  claim is that the delta is *additive*: every pre-existing section of the
+  artifact is **byte-identical**, and only the human note at its head changed,
+  to say that it now records two documents rather than one.
+  **Conformance gate 2 never compared a mid-stream window against the oracle.**
+  Its window always ended at the final version and gate 3's is always
+  `(k - 1, k)`, so a delta that neither starts at the beginning nor ends at the
+  end — the window a consumer asking "what changed while I was away" actually
+  holds — was checked by nothing. The gate now also takes windows with
+  `until < n` and a width above one, inside the feed loop because a builder's
+  delta always ends at the version it has reached: the three named ones
+  (`(1, n//2)`, `(n//4, 3n//4)`, `(n-3, n-1)`) and, while a rendering is short
+  enough for it to be free, every other such window. Gate 2's assertions go from
+  195 to 257. It bites: disabling the fold's cancellation fails **30 of the 62**
+  new assertions against 27 of the 195 old ones. On a one- or two-record
+  rendering there is no such window at all and 23 of the 53 renderings therefore
+  add none, which is a fact about the corpus rather than a gap: a two-record
+  trace has no version that is neither its first nor its last. What the new
+  windows reach that the old ones structurally cannot is a fact **still open at
+  `until`** and resolved before the end — 19 of the 62 report one, and every
+  window ending at the last version cancels it away.
+
+- **The live series' scratch drop is ignored, so a stray `git add -A` cannot
+  commit it.** One line in `.gitignore` and its comment; nothing under
+  `spanweave/`, `tests/` or `SPEC.md` moves (`WORKPLAN.md` L9, from the run-2
+  cold review's hygiene finding T14). `WORKPLAN.md` §0.1 writes a
+  `git format-patch` bundle into `patches/` every run and §0.2 writes each cold
+  review there, and the directory was untracked but **not** ignored: every one
+  of those files was a candidate for the next `git add -A`, and the packaging
+  audits could not have caught it — they check that the sdist ships nothing git
+  does not track, which is exactly the property an accidental commit would
+  satisfy. Ignoring it changes no rule about durability: a review that must
+  outlive the series is still copied into the tracked `reviews/` and cited
+  there, and `test_a_durable_document_cites_no_untracked_scratch_path` still
+  fails a document that cites into the scratch drop instead.
+
+- **What a live build costs is now measured, and the incremental canonical order
+  it was measured for was dropped.** Nothing under `spanweave/` moves: this is a
+  measurement, a cost statement corrected to match it, and the change the
+  numbers did **not** justify (`WORKPLAN.md` L5, a row that allowed itself to end
+  dropped). New `make bench` (`tests/live_cost.py`) feeds the two shapes the
+  September 2026 audit measured — the 400-turn agent loop that resends its
+  history (801 nodes, 81,799 `data` edges) and one root with 20,000 children —
+  and reports what `feed`, `graph()` and `delta()` each cost, plus the share of
+  `delta()` that the canonical-order sort is. It asserts nothing about the clock,
+  for the reason `make stranger` already gives: a duration threshold in an
+  automated check is a flake that gets tuned until it means nothing.
+  On this machine at `1d7ba8f`, CPython 3.14.6: the loop shape feeds in **75.5 s**
+  (94 ms a record) and its `delta(since=version-1)` costs **229 ms**, of which the
+  two sorts are **32 ms (14%)** and assembling and rewinding the two endpoints'
+  edge sets is **140 ms**; the wide shape feeds in **1,449 s** (72 ms a record)
+  and its delta costs **295 ms**, of which the two sorts are **176.6 ms (60%)**.
+  Three findings, now in `SPEC.md` §10.6. **`feed` does not sort at all** —
+  `build.in_order` is reached from the batch build, from materializing and from
+  `delta`/`fold`, and from nowhere else — so a maintained order has nothing in
+  `feed` to replace and could only add to it; `tests/test_live.py` pins that, and
+  the sort counts of the other three paths, rather than leaving the cost
+  statement resting on a reading of the code. A faster sort is not the lever
+  either: a Kahn sort with a heap emitted the same sequence at about 2.1x the
+  speed, which would move `delta()` by some 3% on the loop shape — **measured in
+  the batch session; harness not retained**, so that figure is session history
+  and nothing in this tree reproduces it. `SPEC.md` states it nowhere, which is
+  the one place it would be read as a property of the library. What the wide
+  shape's 60% points at is therefore **not sorting** at all, which would mean
+  carrying canonical order and `ordering_cycle` between versions instead of
+  computing them from the node and edge sets — a reversal of what §10.6 and
+  §10.7 deliberately promise, and a second ordering rule in the library beside
+  §5.2's. That is a spec conversation, not an optimization, and it is written
+  down as one rather than started.
+  The third finding is about `feed` and not about order: §10.2's "touches only
+  the keys the record names" is true and was being read as "cheap". A key is
+  restated **in full**, so eight times the records of a wide trace cost a
+  hundred and sixteen times the feed — its one sibling group's whole temporal
+  chain is rebuilt on every arrival, and the loop shape rebuilds a call id's
+  whole `data` edge set for every receipt echoed at it. §10.6 now says so.
 
 - **A run is not closed until CI on the pushed tip is green.** Nothing under
   `spanweave/` or `tests/` moves; this records a process failure and the rule
@@ -1012,6 +1586,295 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   produced a derived id. (audit finding 2)
 
 ### Fixed
+
+- **L25's dedup test no longer states the premise its own failure disproves.**
+  A docstring; no assertion, no source and no document behaviour moves (from
+  the run-5 scoped cold review, finding L25-1). The test explained itself with
+  run-4 thread 4's premise: that a live/batch divergence in a span's repeated
+  `call_ids` is "invisible in the bytes today" because the edges it feeds are
+  deduplicated, and would become visible only once something turned on how many
+  times a side names a node. **Diagnostics are not deduplicated.** Re-taken at
+  L25's parent `c78b3cb`, the batch builder drew `unpaired_call` once per named
+  occurrence, so the first record alone gave `diagnostic_count` 3 against the
+  live builder's 2 and `replay` fails on `live == batch` at version 1 — which
+  is why L25 mirrored the dedup in `build.py` rather than pinning the two paths
+  equal by a test. The corrected premise lives in `TASKS.md`, as correction 5
+  of the run-5 list (`TASKS.md:13321`, which `TASKS.md:13363-13364` points
+  thread 4 at); the L25 registry row at `TASKS.md:12862` carries it in
+  substance, without the numbers. The archived review still carries the
+  uncorrected sentence verbatim and unannotated
+  (`reviews/2026-10-02-live-run4.md:499`) and keeps
+  it, because an archive that is edited after the fact is no longer one — so
+  the test was the last *live* copy of the withdrawn claim, and the first place
+  a reader of the code meets it.
+
+- **The declaration-ratio guard sweeps the tree, so the eighth copy cannot
+  escape the way the seventh did.** Tests only; nothing under `spanweave/`
+  moves and no document moves (from the run-5 scoped cold review, finding
+  L26-G1). The guard L26 left behind re-read a four-name list —
+  `SPEC.md`, `CHANGELOG.md`, `TASKS.md`, `tests/live_cost.py` — which is the
+  right question for *where the ratio must be stated* and no question at all
+  about where it must not be stated wrongly. That is the half the defect lives
+  in: review A1 found the false sentence in six places, L26 found a seventh by
+  hand, and a check that enumerates the seven it knows is blind to the eighth
+  exactly as the first six were blind to the seventh. Demonstrated rather than
+  argued: appending A1's sentence verbatim to `DESIGN.md` left
+  `tests/test_doc_truth.py`, `tests/test_docs.py`,
+  `tests/test_readme_quickstart.py` and `tests/test_gates.py` all green.
+  `test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor` now
+  asks every tracked, readable file the two questions the four named files are
+  asked — a paragraph stating the ratio must say which way it bounds the
+  measured rise, and a paragraph calling it a floor must cite the finding that
+  withdrew the word. The file list comes from `git ls-files`, not `rglob`:
+  untracked scratch is nobody's claim. Two exemptions, each about the file
+  rather than the sentence — `reviews/` holds archives kept **byte for byte**
+  whose `sha256` `TASKS.md` publishes, so the history has to be allowed to say
+  the wrong thing it said; and this test file has to quote what it forbids in
+  order to forbid it. The same plant now fails with the path named.
+
+- **The declaration ratio §10.6 states is a bound from *above*, not a floor, and
+  the sentence drawn from it is withdrawn.** Documents, tests and the benchmark
+  harness only; nothing under `spanweave/` moves (`WORKPLAN.md` L26, from the
+  run-4 cold review's blocking finding A1, with C3, C4, C5 and §B.2/§B.4).
+  §10.6 said 7.1× — the rise in receipts per record between turns 1–100 and
+  301–400 of the echo shape — was **the floor** of the ms/record rise "for any
+  implementation that builds each declared relation once", then reported a
+  measured rise of 5.43× *below* it, then explained why in the words that are
+  the reason it is not a floor. With per-record cost `F + c·d`,
+  `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁` and equality holds only at `F = 0`, so the
+  declaration ratio bounds the measured one **from above** and the gap between
+  them is the fixed per-record cost — near 0.10 ms against about 11 µs per
+  declaration, derived from the two stretch figures §10.6 already printed. The
+  false sentence was "a target under it could only be met by suppressing
+  relations the telemetry stated": reaching 1.5× needs an edge roughly 30×
+  cheaper to build and **no** declaration dropped, and the ratio has no lower
+  bound at all, since being uniformly slower per span raises `F` and drives it
+  toward 1. So L17's 1.5× criterion was unreachable at this implementation's
+  constants — an empirical claim, not a consequence of §4.2.1 — and a ratio of
+  this kind is a reading rather than a target. Corrected in all four files that
+  carried the claim: `SPEC.md` §10.6, this file's L18 entry under **Changed**,
+  `TASKS.md`'s run-2 review record, and `tests/live_cost.py`'s header.
+  `tests/test_doc_truth.py` now recomputes it in all four.
+  Three things that made the paragraph hard to check are fixed with it: the 24.6
+  figure states its **201-record** denominator (the root span folded into the
+  first stretch, against 200 records in the fourth), `tests/live_cost.py
+  --segments` **prints the receipts each stretch declares** so both sides of the
+  comparison are output of one run rather than arithmetic in prose, and
+  `make bench` runs the two shapes as **two processes** with `--only`, which is
+  how the table in the harness header was taken — one process holds the echo
+  shape's 81,799 edges while the wide shape's `delta()` runs, and the wide
+  figures then come out well above that table. Also: `SPEC.md` §10.9 said
+  `tests/serialized_shape.json` "moved when the delta landed and has moved
+  since" and then listed the two moves in the opposite order to their history —
+  L12 (`be16fa8`) is an ancestor of L14 (`b10c60a`), so the delta move is the
+  file's most recent and nothing has touched it since — and
+  `OPEN_QUESTIONS.md` §18, whose memo recommended recomputing canonical order
+  for the affected subtree, now records that recommendation as **rejected on
+  measurement**, citing §10.6, instead of leaving a recommendation standing
+  against the spec that rejected it.
+
+- **A call role is read the same way live and in batch, and a span naming one
+  call id twice is one side of that call rather than two.** From the run-4 cold
+  review's threads (`WORKPLAN.md` L25). `CallRole` is a `StrEnum`, so the plain
+  string `"fulfiller"` **equals** `CallRole.FULFILLER` without **being** it, and
+  both builders compared the role by identity: an adapter handing over the
+  string — `register` is public and nothing checks the seam's types at runtime —
+  had its fulfilling span read as a *requester* on the live path and as a
+  fulfiller on the batch path. The two builds then disagreed about the
+  `call_result` edge, the `data` edges and which of `unpaired_call` /
+  `unpaired_result` was reported, with no diagnostic to say so: a silent breach
+  of the `SPEC.md` §10.1 promise that a live graph at version *k* **is** the
+  batch graph of the first *k* records. Both sites now compare by value, in one
+  spelling — the fulfilling side is named and the requesting side is the
+  fall-through on both paths — so no role value can be read two ways. Separately,
+  the live builder deduplicated a span's `call_ids` and the batch builder did
+  not; the edges that asymmetry produced were deduplicated before emission, but
+  the two unpaired diagnostics are emitted **per named node** and are not, so a
+  span naming one call id twice drew that warning twice in batch and once live.
+  The batch path now deduplicates as the live one does. No change for either
+  shipped adapter: both use the enum members and both deduplicate their ids
+  before the seam. `ADAPTERS.md` states that a role is compared by value.
+  (`SPEC.md` §10.1, unchanged)
+
+- **A record a live `Builder` refuses no longer leaves a memo behind, so a
+  whole-input diagnostic made after it reaches `delta()` and not only
+  `graph()`.** From the run-4 cold review (finding A4; `WORKPLAN.md` L23).
+  The whole-input statements — `missing_trace_id` and `duplicate_source_id` —
+  are derived behind a memo of what they were last derived from, so an ordinary
+  arrival pays nothing for two diagnostics it cannot have changed. A refusal
+  re-derives everything *forward* from the surviving spans, which **writes**
+  that memo, and `Tally.rollback` then takes back the diagnostics that
+  derivation made but not the note saying they were made. The memo was left
+  claiming a statement the journal did not hold, and the next legitimate
+  derivation short-circuited on it: after a refusal on an empty builder, two
+  records arriving with no trace id between them opened
+  `missing_timestamp` and `unclaimed_record` in `delta(since=0)` while
+  `graph()` held those **and** `missing_trace_id`. `graph()` stayed right
+  because materializing re-derives from the absorber's own dicts; the journal
+  does not, so the difference was visible in a `delta` alone — which falsifies
+  `SPEC.md` §10.5's "every later `graph()` and `delta()` answer exactly as they
+  would have had the record never arrived" and §10.6's
+  `delta(a, b) = graph(b) − graph(a)`. Now `begin()` snapshots the memo and
+  `rollback_to` restores it **after** `Tally.rollback`, so the memo and the
+  tally agree about what has been stated. One line each way, on the refusal
+  path only; nothing is added to the accepted path. It needs an adapter whose
+  records become more than one span, which neither shipped adapter does — but
+  `register` is public, cardinality is no part of the `Adapter` protocol, and
+  the symptom is a diagnostic quietly missing from a delta rather than a crash.
+  Beside the reproduction, the L20 refusal tests gain a probe that deep-copies
+  **every** value a builder holds and compares it across five refusal shapes,
+  so the next value a refusal fails to put back is caught without anyone
+  remembering to list it. No spec change: §10.5 already promised this.
+
+- **Two `SPEC.md` sentences the repo contradicted, and a census that can no
+  longer go stale.** Both from the run-3 cold review (findings 3 and 4;
+  `WORKPLAN.md` L22). §10.9 said `tests/serialized_shape.json` "is unchanged",
+  which is true of the **graph half** and false of the file: L14 added its four
+  `delta_*` sections and L12 added `undecodable_bytes` to `diagnostic_source`
+  and `vocabularies.diagnostic_codes`. §10.9 now names the four graph sections
+  the promise is about, says when and why the file moved, and records that L20
+  and L21 left it alone. §3.7's census paragraph above the `source` table read
+  "two carry an object, three carry nothing"; the table says **three**, **four**
+  and one, the `null` count having aged the moment L12 added a row. Correcting
+  the numbers alone would only move the expiry date, so all three are now
+  measured from the table itself by `tests/test_codes.py`
+  (`test_the_source_census_in_the_spec_is_the_census_of_its_own_table`), beside
+  the `CONTRACTS.md` count that was the only one anything asserted — the next
+  row added to that table fails `make check` in the same change. A second test
+  pins the measurement, so a marker the table stops using fails loudly instead
+  of agreeing with a wrong prose number. Documents and tests only: nothing
+  under `spanweave/` changes behaviour, and no serialized form moves.
+
+- **A record a live `Builder` refuses is now absorbed whole or not at all — the
+  atomic region reaches `_translate` and spans a record of more than one span.**
+  `SPEC.md` §10.5's promise was false two ways with the code that shipped, and
+  the run-3 cold review falsified both. First, `Builder._translate` wrote
+  `_claimed`, the detection `_sample` and `_unread` *before* the spans were
+  absorbed, so a refusal raised after it left all three moved — and `_claimed`
+  is what `graph()`'s own refusal is gated on, so a record that was claimed and
+  then refused flipped a builder from "nothing here can read this" to a one-node
+  graph. **Reachable with the shipped adapters alone**, no third-party adapter
+  needed: a record nobody claims takes an id derived from its own digest (§3.6
+  rule 2), and a second record stating that id as its `span_id` resolves to the
+  same node. Second, `feed` looped `absorb` once per span and each `absorb` was
+  atomic while the loop was not, so a record that became two spans whose second
+  collided left the first absorbed at an unmoved `version` — `graph()` showing a
+  node the journal had no entry for, and `delta(since=0)` then presenting that
+  node as having always been in an empty builder. That one needs an adapter that
+  yields two spans per record, which neither shipped adapter does; cardinality is
+  no part of the `Adapter` protocol and `register` is public, and the failure
+  when reached was silent rather than loud, which is worse than the crash the
+  previous fix removed. Now: `_translate` computes what the arrival would commit
+  and writes nothing, the spans are absorbed, and `_commit` writes `_claimed`,
+  `_sample` and `_unread` only once all of them landed. A refusal inside the
+  loop calls one `rollback_to`, which puts the tally back from the snapshot
+  `begin` already opens on every arrival — the undo of the mechanism `add`,
+  `drop` and `clear` all go through, so finer-grained ledger traffic later needs
+  no second rollback — and re-derives the absorber's own state from the
+  surviving spans, because an arrival can restate every record (§10.2) and
+  undoing that span by span would be a second copy of rules this library keeps
+  one copy of. Including the ledger's snapshot: `delta(since=0)` after a refusal
+  is the delta of the builder the refusal did not change. O(n), paid on refusals
+  only; nothing is added to the accepted path, and no accepted record's answer
+  moves. Five tests in `tests/test_live.py`, four of them red on `71d282f` — the
+  claimed-then-refused record not flipping `graph()`, with `_claimed`, `_sample`
+  and `_unread` named because two of them are unobservable through either
+  shipped adapter; and a test-local two-span adapter whose second span collides,
+  as the first arrival, after one good arrival, and on the restating path.
+  (`WORKPLAN.md` L20, run-3 cold review finding 1)
+
+- **The two properties a receiver reads bytes against are now pinned, each by a
+  test that bites on its own.** `read_records` is specified to hold nothing
+  between calls (`SPEC.md` §7: a `Records` is complete when it is returned, and
+  a duplicate is a fact about one input), and both halves of that were resting
+  on tests written inside a single call. An unterminated trailing line -- the
+  ordinary last bytes of a tail off an exporter -- had **no** test at all: the
+  nearest one passed a malformed *complete* line. The cross-call duplicate had
+  one, incidentally, and it passed when run alone, because what made it fail was
+  another test having read the same bytes earlier in the same file. Two tests in
+  `tests/test_read.py` now state each property whole and carry their own bytes:
+  the tail is one `malformed_record` with `skipped_records=1` in the call that
+  received it and the next call never yields it; the same record handed over
+  twice is read twice with no `duplicate_record`, while two copies *inside* one
+  call still collapse to one record and one report. Each was run by its own node
+  id in a throwaway worktree, alone, under a mutation that breaks it -- a
+  module-level fragment buffer for the first, a cross-call digest memory (both
+  the form that drops the record and the form that only reports it) for the
+  second -- and each failed there and passes unmutated. Under the fragment
+  buffer the 166 pre-existing tests of `tests/test_read.py` and
+  `tests/test_live.py` all passed, which is what these two are for. Tests only:
+  nothing under `spanweave/` moved, `SPEC.md` did not move, and
+  `tests/serialized_shape.json` is byte-identical. (`WORKPLAN.md` L11, run-2
+  cold review B2 and N1)
+
+- **A record a live `Builder` refuses now leaves the builder as it was.**
+  `SPEC.md` §10.5 promised "there is no half-arrival" and the node-id collision
+  of §3.6 did not keep it: `absorb` appended the arriving span to its input list
+  *before* deriving the id that refuses it, so the refused span stayed on while
+  nothing else in the state had an entry for it. From that point the builder
+  answered every later `feed` with a bare `IndexError` and every `graph()` with
+  a bare `KeyError` -- not a `spanweave` error, and not recoverable. The case is
+  an exporter resending one span, which `WORKPLAN.md` L6 recorded as expected
+  input: `read_records` does no cross-call dedup, so a retry reaches `feed`
+  intact. Every check that can refuse now runs before any state moves -- the
+  arriving span's id is derived first, on a *reading* of the three whole-input
+  counts rather than on the counts themselves, and only then is anything
+  appended, counted or journalled. The id that check derives is the id the
+  absorb then uses, so the two cannot disagree, and the restating path (§10.2,
+  where this refusal is actually reached, because a second claim on a source key
+  moves ids already given out) gets its assignment from the same `ids.assign`
+  the batch path calls. Nothing about an accepted record changed, and no
+  arrival pays more than it did: the ordinary path still derives one id, the
+  restating path still derives `n`. Five tests in `tests/test_live.py`, four of
+  them red on `55f0467`: `version` unchanged, `graph()` byte-identical to the
+  graph the accepted prefix makes, the next `feed` landing as the batch build of
+  the records that arrived, no id moved off rule 1, and a `delta` spanning the
+  refusal reporting only the record that landed. The two-adapter bullet, which
+  was already clean, now carries the `graph()` assertion too.
+  `SPEC.md` §10.5 states the promise once for **every** refusal it lists rather
+  than inside the two-adapter bullet, which is where it sat while the bullet
+  three lines below it went uncovered. No model type, no serialized field,
+  `tests/serialized_shape.json` byte-identical. (`WORKPLAN.md` L10, run-2 cold
+  review B1)
+
+- **The last eleven tests that wrote a recursion ceiling down now measure
+  it.** `546bdfa` did this for the first four and named, in its own body, the
+  **11 other** tests still carrying a `100_000` under a comment calling it
+  "far past any interpreter's limit" -- left alone there because each was its
+  own reading of the same lesson. This is that diff. Nothing in the library
+  moves. The constant was reachable on the interpreters CI runs and false the
+  moment the stack grew: measured here on CPython 3.14.6, `json.loads` reads
+  **40,106** levels at the runner's 8 MB default and **322,402** under
+  `ulimit -s 65536`, and `json.dumps` writes **37,240** dicts / **74,481**
+  lists at 8 MB and **299,372** / **598,745** at 64 MB. Under that larger
+  stack, at `aac1915`, all eleven fail -- a `malformed_record` that never
+  arrives in `test_read.py`, `test_cli.py` and the two adapters' text parse
+  paths, and a `DID NOT RAISE GraphNotSerializableError` from the digest and
+  the encoder. **Nine** literal sites across five files feed those eleven
+  tests plus a twelfth, `test_inspect_on_a_deep_graph_file_is_a_refusal_not_a_traceback`,
+  which went on passing at 64 MB for a reason that had nothing to do with
+  depth -- its comment says the sniff dies on the file's first byte, and it
+  did not. Each site now derives its depth from `tests/json_depth.py`:
+  `too_deep_for_nested_lists()` where the code under test parses bracket
+  text, and a new **`too_deep_for_nested_dicts()`** -- memoized per shape by
+  a shared `_too_deep` -- where it encodes a record or a graph, because the
+  two shapes' ceilings are **not** the same number (~37,000 levels apart on
+  3.14.6) and assuming they were is exactly how R6's pin came to be green on
+  an interpreter where the sentence it pinned was false (run-3 review F1).
+  `test_cli.py`'s own private `_parser_limit()` went the same way: it
+  bisected up to a hard-coded `200_000` and **returned that cap** where
+  nothing under it was refused, so at 64 MB the nine depths it walks either
+  side of "the parser's limit" were nine depths the parser reads without
+  complaint; it now calls `deepest_accepted`, which fails rather than
+  answers. Verified full-suite on 3.11.15, 3.12.13, 3.13.14 and 3.14.6 at the
+  default stack, and on 3.14.6 under `ulimit -s 65536` -- **2,660 passed**
+  where eleven failed before -- and each derived depth checked directly on
+  all five configurations: the value it produces really is refused by the
+  `json.loads`, `record_digest` or `canonical_bytes` the test reaches, and
+  one level below the measurement is still accepted. `SPEC.md` §7 said an
+  embedder that resizes the stack "moves every number in" its ceiling table;
+  it now carries the measurement showing that it moves them all by about
+  eightfold. (`SPEC.md` §7; `WORKPLAN.md` L0, audit thread 80)
 
 - **A recursion ceiling is measured in the process that asserts it, and the
   probe/writer property is stated as the one-directional guarantee it is.**

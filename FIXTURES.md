@@ -128,9 +128,9 @@ An adapter that only handles happy paths is not done.
 
 ## 4. The equivalence rule
 
-The corpus makes **two** claims, and they were conflated until Phase 2 forced
-them apart. Keeping them separate is what lets a dialect disagreement be
-recorded instead of erased.
+The corpus makes **three** claims, and the first two were conflated until
+Phase 2 forced them apart. Keeping them separate is what lets a dialect
+disagreement be recorded instead of erased.
 
 **Claim 1 — fidelity, within a dialect.** Every rendering reproduces its
 scenario's expectation *in full*:
@@ -154,6 +154,44 @@ where `≡` additionally sets aside the fields a scenario has **declared**
 dialect-varying (§4.4). It is the library's central claim, and the reason a
 declaration is a file in the corpus rather than a branch in the comparison
 code.
+
+**Claim 3 — prefix consistency, one record at a time.** Every rendering is
+also replayed through the incremental builder (`SPEC.md` §10), and at every
+version the live graph must equal the batch build of the records absorbed so
+far:
+
+```
+Builder() fed Dᵢ[:k] . graph()  ==  build(Dᵢ[:k]),  for every k
+```
+
+It writes **no new expectation**: the corpus is reused at every prefix of every
+file it already holds, which is the whole reason prefix consistency was chosen
+as the definition rather than designed as a second builder. The degenerate
+fixtures are what give it teeth — a parent whose child came first, a call
+nothing fulfils yet, a receipt redeclared, two records claiming one span id —
+because each is a prefix where the live graph and the finished graph must
+differ, and differ in exactly the way the batch builder says. It is enforced by
+`test_the_live_graph_is_the_batch_graph_at_every_prefix`, with
+`test_the_finished_live_graph_is_the_scenario_s_canonical_graph` tying the
+finished replay back to claim 1 — so the two builders cannot agree with each
+other and both be wrong.
+
+Claim 3 carries two more assertions, over the same replay and still with no new
+expectation, because a delta is *defined* as the difference between two prefix
+graphs (`SPEC.md` §10.6):
+
+```
+delta(k-1, k)                    == checkpoint diff of graph(k-1), graph(k)
+delta(k-1, k) . fold(graph(k-1)) == graph(k)
+```
+
+The first is the journal measured against its own definition — the oracle in
+`tests/delta_oracle.py` diffs two materialized graphs and knows nothing about
+how the journal is kept — and it is run over wide windows as well as adjacent
+ones, because cancellation is only visible in a window that contains both the
+opening and the closing of the same fact. The second is the fold, compared byte
+for byte. `test_every_delta_is_the_difference_between_its_two_versions` and
+`test_folding_every_delta_reproduces_the_next_version` enforce them.
 
 **How much claim 2 actually covers, counted rather than assumed.** A field that
 every scenario declares is a field claim 2 never tests, and the count is not

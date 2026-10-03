@@ -605,6 +605,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
+| `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
@@ -705,8 +706,11 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; two carry an object, three carry nothing, and one carries something
-the library computed rather than something it was given.
+arrived as; three carry an object, four carry nothing, and one carries something
+the library computed rather than something it was given. Those three counts are
+measured from the table below by `tests/test_codes.py`, beside the count
+`CONTRACTS.md` states, so the next row added fails the build instead of ageing
+this sentence.
 
 | Code | `source` |
 |---|---|
@@ -717,6 +721,7 @@ the library computed rather than something it was given.
 | `missing_trace_id` | `null` — there is no fragment. The absence being reported is the graph's own empty `trace_id`, and there is no node to point at either |
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
+| `undecodable_bytes` | `null` — the offending fragment is a byte sequence, and JSON has no way to write one, so there is nothing of it to carry. The text that stands in its place survives where the record does: on the record itself, or on the `malformed_record` for a line that would not parse |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
@@ -734,6 +739,15 @@ batch A4, registered in `TASKS.md`), for the same reason as `missing_timestamp`:
 it reports something **absent**, so there is no fragment of the input to carry.
 Unlike `missing_timestamp` it carries no `node_id` either — §7 says why it is
 one statement about the input rather than one per record.
+
+`undecodable_bytes` joined the `null` rows later still, with the code itself
+(batch L12 of the live-graphs series, registered in `TASKS.md`), and for a
+third reason: what it reports is not absent and not derived, but
+**unwritable** — the fragment is a byte sequence, and a `source` is a
+`JsonValue`. Nothing is lost by not carrying it, because the replacement text
+is on the record, or on the `malformed_record` for a line that would not
+parse; there is no reading in which a substitution reaches the output with no
+trace of it.
 
 `duplicate_record` falls under the catch-all and is worth one sentence
 anyway, because its fragment is not *the* offending record but the one copy
@@ -985,6 +999,7 @@ SpanweaveError:
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
+| `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
 codes: adding one is deliberate, and renaming one after the freeze needs a
@@ -1561,7 +1576,58 @@ declares reaches `0.5`.
   break it into two that do not. The consequence is stated rather than hidden:
   a CR-only file is **one line**, and one line that long is one
   `malformed_record` carrying its text — a loud refusal, not a silent misread.
-- Read from a path or from stdin (`-`).
+- **The encoding is UTF-8, and bytes that are not it are replaced rather than
+  refused.** A byte sequence the decoder cannot read becomes U+FFFD — Unicode's
+  own substitution — and the record is still read, because what did decode is
+  still there and dropping the record would lose it. The replacement is
+  reported as `undecodable_bytes` (§3.7), record-scoped and naming the line
+  where a line produced a record, and `skipped_records` does not count it: the
+  record was read. **The reader neither buffers nor rejoins across calls**, so
+  a multi-byte character split between two chunks is half a character in each —
+  a receiver reading bytes in flight splits them on `\n` and keeps the
+  remainder for its next call, rather than handing over an arbitrary boundary.
+- Read from a path, from stdin (`-`), or from **bytes already in memory**. A
+  `str` is always a path and never content, in every one of these forms.
+- **`spanweave.read_records(data)` reads records out of bytes and builds
+  nothing**, for a caller holding telemetry in flight rather than a file: an
+  OTLP/HTTP request body, a chunk tailed off an exporter's output, a message
+  taken off a queue (`OPEN_QUESTIONS.md` §19). It returns a `Records` — the
+  records in input order, the diagnostics the read produced, and
+  `skipped_records` — and all three containers above are recognized by the same
+  code the path and stdin forms use, so an export cannot read one way from a
+  file and another way in memory.
+  - It **reads; it does not judge.** No adapter is consulted, no dialect is
+    named, nothing is classified. The records it hands back are the records
+    `build` would have classified, and feeding them to a `Builder` one at a
+    time is the live path §10 specifies.
+  - **Cheap to read is not cheap to absorb.** A whole export read in one call
+    is still one `feed` per span, and a `feed` pays for every key the record
+    touches — most of them restated in full (§10.6). Reading is where the
+    container form stops mattering; it is not where absorbing becomes free.
+  - A `Records` is **complete when it is returned**: the bytes were already in
+    memory, so there is nothing to stream and no diagnostic that arrives later.
+    That is the one thing it does not share with the reader behind it, and the
+    reason it is a value rather than a stream — a caller reading diagnostics
+    off a half-consumed stream gets a true answer to a question it did not ask.
+  - It **raises nothing an unreadable input can cause**: a line that is not
+    JSON is a `malformed_record` on the result, a record sent twice is one
+    `duplicate_record` and one record, exactly as on a file.
+  - `data` is **bytes, a `bytearray`, or a `memoryview` of single bytes laid
+    out contiguously** — what a receiver actually holds, since it accumulates
+    into one buffer and reads a view of it. The copy that turns either of the
+    latter two into the bytes the reader takes is the **library's**, made once,
+    so the `Records` returned does not change under a caller that goes on
+    writing into its buffer. A view over items **wider than one byte** is
+    refused, and so is a **strided** one: the first would be read in the
+    machine's own byte order, so the same input would read differently on
+    another machine, and the second names no run of bytes at all — gathering it
+    would assemble bytes that exist nowhere in the caller's buffer. A `str` is
+    refused with a `TypeError` rather than read. Reading one as content would
+    make `read_records("trace.jsonl")` an empty read with no complaint; passing
+    it through would open that file from the one function whose contract is
+    that it touches none.
+  - It reports **no digest**. `build` is what fingerprints an input (§3.5),
+    and a builder fed records carries none in any case (§10.4).
 - **One input = one trace.** If records carry more than one `trace_id`, the
   builder uses the most common one, emits `multi_trace_input`, and keeps the
   foreign records as nodes with a diagnostic. Splitting multi-trace inputs is
@@ -1674,7 +1740,12 @@ declares reaches `0.5`.
     or an embedder that resizes the stack moves every number in it, and three
     successive attempts to state this quantity as a fact about the library
     each measured one interpreter and were falsified on another (`TASKS.md`,
-    the September 2026 audit's open threads).
+    the September 2026 audit's open threads). The stack clause is not
+    hypothetical: the same 3.14.6 build, measured again under
+    `ulimit -s 65536` instead of the 8 MB default, reads **322,402** levels
+    and writes **299,372** for dicts and **598,745** for lists — every figure
+    in the table multiplied by roughly eight, by changing nothing but the
+    stack the process was given.
     **The containment stays regardless**, for reasons that do not depend on
     which of the two an interpreter gives you: the depth at which either
     gives out belongs to the interpreter and not to this library — it moves
@@ -2038,5 +2109,454 @@ well-implemented.
 - **Execution or unsafe deserialization of trace content** (`SECURITY.md`).
 
 Deferred (not permanent, but not now): §4.3 richer causal edges from frameworks
-that emit real dataflow, streaming/tail mode, cross-trace stitching, OTLP
-protobuf. See `ROADMAP.md` north star.
+that emit real dataflow, cross-trace stitching, OTLP protobuf. See `ROADMAP.md`
+north star. **Tail mode** — a core that watches a file or a socket for records —
+stays deferred and the listener half stays a non-goal above; what §10 adds is a
+builder a caller feeds, which moves neither line.
+
+## 10. Incremental build
+
+A graph can be built from a stream of records that has not finished arriving.
+The class is `Builder`, and it is the batch build taken one record at a time —
+not a second builder with rules of its own.
+
+```
+b = spanweave.Builder(adapter=None, temporal=True)   # same wiring as build()
+b.feed(record) -> int                                # the new version
+b.version      -> int                                # records absorbed
+b.graph()      -> Graph                              # the prefix graph
+b.delta(since=v) -> Delta                            # what changed since v
+b.retain(versions=N | "all" | 0) -> None             # journal policy
+
+spanweave.read_records(data) -> Records              # bytes in flight -> records
+```
+
+Records come from wherever the caller gets them. A caller holding bytes rather
+than a file — an exporter's output being appended to, an OTLP/HTTP body — reads
+them with `read_records` (§7), which is the container rules and nothing else: it
+classifies nothing, builds nothing, and touches no file.
+
+### 10.1 Prefix consistency is the definition
+
+Let `records[:k]` be the first `k` records **in arrival order**. At version `k`,
+`b.graph()` is *equal to the graph the batch builder produces from those same
+`k` records* — as a value and as the bytes it serializes to. That is the whole
+contract; every other statement below follows from it.
+
+Two orders are in play and they are not the same order. **Arrival order indexes
+versions**: `version` counts records absorbed, and nothing else. **Inside a
+version the order is canonical**, exactly as §5.2 states it — a topological sort
+over `parent` and `call_result`, tie-broken by `(started_at or +inf, node_id)`.
+A parent that arrives after its child is the case that makes the two visibly
+differ, and it is ordinary.
+
+Because the definition is equality with the batch build, every invariant
+transfers unchanged and none is re-proved: determinism (§5) becomes "same
+prefix, same graph"; losslessness, warrant, canonical order and neutrality are
+inherited. It also means the **serialized shape does not move** for this
+feature. There is no live-only field, and no graph carries a version number.
+
+### 10.2 What an arriving record can change
+
+Everything a batch build would say differently about `k` records than about
+`k-1`, and nothing else:
+
+- its own node, and the `parent` or `link` edges it states;
+- an earlier `orphan_parent` becoming false, because the parent has now arrived;
+- a `call_result` edge and the end of an `unpaired_call` / `unpaired_result`;
+- the `basis` of a `data` edge, when this record declares receipt of a call no
+  later than the span that declared it earliest so far (§4.2.1) — which moves
+  **that one span's** basis and no other's, because every other span declaring
+  the same receipt was already not the earliest and still is;
+- the `temporal` chain of the sibling group it joins, and of the group it leaves
+  when it is given a parent;
+- the canonical position of every node, and — where it changes one of the three
+  facts below — every derived **node id**.
+
+Three facts are properties of the whole input rather than of any record: the
+most common trace id (§7), whether a dialect span id is unique, and whether a
+source key is. The first is in the material of every derived id and the other
+two decide which rule of §3.6 an id comes from, so a record that changes one of
+them moves ids already given out. Those arrivals restate everything held, and
+they are the only ones that do; every other arrival touches only the keys the
+record names, at the price §10.6 states for each of them. Materializing is a
+third cost and not either of those: `graph()` sorts the nodes and indexes them
+afresh every time it is asked, so a loop that feeds without materializing pays
+for bookkeeping only.
+
+### 10.3 A live diagnostic is true when it is made
+
+`unpaired_call` at version 12 and its absence at version 14 are both correct:
+the fulfilling span arrived in between. Nothing on a live graph is a prediction,
+and nothing is a retraction either — the graph at a version says what the
+records up to it support. A graph therefore carries no notion of a *resolved*
+diagnostic: a resolved diagnostic is simply absent, exactly as it is in a batch
+graph (`OPEN_QUESTIONS.md` §18, lifecycle option (a)).
+
+### 10.4 What the builder is not fed, and so cannot report
+
+It is fed records, not bytes. So it reports **no `source_digest`**, and none of
+the reader's facts about an input: a line that was not JSON (`malformed_record`),
+a record sent twice (`duplicate_record`), a record skipped before any adapter
+saw it. Those belong to whoever read the records (§7), and a builder claiming
+them would be describing an input it never saw. Unpacking a container — an OTLP
+JSON export — is reading, and so is also the caller's: `read_records` (§7) is
+that reading, on bytes in flight rather than on a path, and it hands back the
+diagnostics the builder cannot.
+
+### 10.5 Refusals
+
+A record is classified on its own, as every record in a batch build is (§6.1),
+and a record becomes however many spans its adapter yields — all of which
+arrive together, so a refusal reached on the second of them absorbs neither.
+Two of the four outcomes below are refusals of the **record** — *two adapters
+claim it* and *two records resolving to one node id* — and a refusal of the
+record means it is **not** absorbed, `version` does not move, and the builder
+is left as it was: the next `feed` and every later `graph()` and `delta()`
+answer exactly as they would have had the record never arrived, whatever it
+became and however far through it the refusal came. There is no half-arrival.
+This holds for *both* of them, including the node-id collision, which is
+reached on the path that restates every record (§10.2): an exporter resending
+one span is refused and costs nothing else. The other two outcomes are not
+refusals of an arrival at all — an unclaimed record **is** absorbed and does
+move `version`, and a refusing `graph()` is a statement about everything read
+so far rather than about any one record — and the umbrella covers them in the
+same sense: neither is a reason for anything else to be half-written.
+
+- **Two adapters claim it** — refused, naming the record's arrival index.
+- **Nobody claims it** — kept as an `unknown` node carrying the record verbatim,
+  with `unclaimed_record`, exactly as in a batch build.
+- **No record any adapter claimed** — `graph()` refuses, with the same code and
+  the same declared confidences a whole input nothing claims earns (§6.1).
+  An empty builder is that case, so `Builder().graph()` refuses rather than
+  returning an empty graph, because `build` of an empty input does. A record
+  that was claimed and *then* refused has not claimed anything: it does not
+  turn this refusal into a graph.
+- **Two records resolving to one node id** — refused as §3.6 refuses it.
+
+### 10.6 A delta is the difference between two versions
+
+`b.delta(since=v)` says what changed between version `v` and the current one,
+and the answer is *defined* as the set difference of the two graphs:
+
+```
+delta(a, b) = graph(b) − graph(a)
+```
+
+per collection — nodes, edges, diagnostics — added and removed, plus the two
+facts a graph carries that no collection holds (its `trace_id` and its
+`meta.adapters`) and one flag saying whether canonical order moved. Anything
+that computes it faster is an **implementation** and must agree with that
+definition, which is why the definition is also a test: a checkpoint diff of
+two materialized graphs is the oracle, run against the implementation at every
+version of every rendering in the corpus (`FIXTURES.md` §4, claim 3).
+
+A `Delta` comes **only** from `delta(since=v)`. `feed` returns the new version
+and never a delta (§10); the per-record mode is `delta(since=version - 1)`.
+
+```
+Delta:
+  since, until                  int             the two versions
+  nodes_added / nodes_removed   Node[]          by id
+  edges_added / edges_removed   Edge[]          by (kind, src, dst, basis)
+  diagnostics_opened / _resolved  Diagnostic[]  by (code, node_id, message)
+  trace_id_before / trace_id_after   str
+  adapters_before / adapters_after   AdapterInfo[]
+  order_changed                 bool            canonical order moved
+  restated                      bool            §10.7
+  basis_rewritten               a view over the edge sets, not a fact of its own
+```
+
+Every collection is in the graph's own canonical order (§5.2), so two deltas
+over the same window are equal or they disagree — there is no order to argue
+about.
+
+Three things a delta deliberately is not:
+
+- **It is not a log.** It is the difference between two endpoints, so it
+  **cancels**: an `unpaired_call` opened at version 12 and resolved at 14 is in
+  neither `graph(11)` nor `graph(15)`, so it appears in neither collection of
+  `delta(11, 15)`. The history inside the window is the journal's (§10.7), and
+  a consumer that wants it keeps the per-record deltas.
+- **It carries no annotations.** A builder never annotates, so there is nothing
+  to carry; annotations are the consumer's own facts (§8). `fold` keeps the
+  annotations of the graph it is handed.
+- **It is not a graph.** No version number appears on any graph (§10.1), and
+  none appears on a node or an edge either.
+
+`basis_rewritten` is a **view**, not a field: a `data` edge whose `basis`
+changed because an earlier receiver arrived (§4.2.1) is one edge removed and
+one added, since an edge's identity includes its basis (§3.8). The view names
+those pairs so a consumer need not rediscover them, and it is computed from the
+edge sets so it cannot disagree with them.
+
+**Folding.** `delta.fold(graph)` applies the difference and returns a new graph:
+
+```
+b.delta(since=k-1).fold(graph_at_version_k_minus_1)  ==  b.graph()
+```
+
+byte for byte, which is the third claim the corpus makes about the live builder.
+Canonical order is not carried in the delta: it is a function of the nodes and
+the edges (§5.2), so the fold recomputes it from what it has just applied, and
+so is the `ordering_cycle` diagnostic that the same sort reports. `meta`'s three
+counts are recomputed for the same reason — a count that travelled could
+disagree with the collection it counts.
+
+A graph carries no version, so the fold **cannot** check that it was handed the
+`since` version. What it does check is that the difference applies: a node, edge
+or diagnostic it must remove and cannot find, or one it adds that is already
+there, raises `ValueError` rather than producing a quietly wrong graph.
+
+**What each costs, as a promise rather than an observation.** The three classes
+below are what the implementation must keep; they are not a report on the
+implementation, and a measurement that disagreed with one of them would be a
+defect rather than a correction. The numbers behind them are measured by
+`tests/live_cost.py` (`make bench`) and cited, with their provenance, further
+down.
+
+- A **`feed`** costs the keys the arrival touched (§10.2) — their *size* and not
+  their number — and appends a journal entry of that size. Three sites once made
+  that promise false in practice and each is now bounded, with its own paragraph
+  below: a sibling group's temporal chain, a call id's `data` edges, and a
+  parent arriving after its children. The arrival that changes one of §10.2's
+  three whole-input facts is the exception, and the only one: it restates
+  everything held.
+- A **`delta(since=v)`** costs **O(n + e)**, not O(the changes): the two things a
+  delta does not carry are functions of the whole node and edge set, so it sorts
+  both endpoints to find them, exactly as `graph()` sorts once to materialize.
+  The gain over materializing is therefore what the *answer* is — a handful of
+  nodes and edges instead of the world resent — and not yet the sort.
+- A **`graph()`** materializes from nothing kept: a fresh sort over every node
+  and a fresh index. So a consumer asking for a graph after every record pays
+  one sort per record, and one asking for a delta after every record pays two.
+
+And one thing that is deliberately **not** promised: that an arrival carrying `k`
+declared relations costs what one carrying none does. §4.2.1 says the input
+declares what it declares and that none of it is suppressed, so `k` edges is the
+*answer*, and no bookkeeping makes building `k` edges cost what building none
+costs. What is promised is that each is built **once**.
+
+What §10.2 does not say, and a reader should not read into it: most keys are
+restated **in full**, so what an arrival costs is usually the *size* of the keys
+it touched and not their number. **Two** keys are not, and they are exactly the
+two that grow with the stream rather than with the record — a sibling group's
+temporal chain and a call id's `data` edges — so each is stated below rather than
+left to be the worst of them, as is the arrival that moves a whole group at once.
+All three shapes occur in real telemetry, all three are measured by `make bench`
+(`tests/live_cost.py`), and its `--smoke` form — which `make check` runs — asserts
+that each of the three still builds one edge where it once built many.
+
+A sibling group's temporal chain is **not** restated, and the exception is stated
+because it would otherwise be the worst of them: one wide
+sibling group is the whole input. A group's members are kept in §4.3's order, so
+a joining record is placed by a search and only the chain edges adjacent to that
+place change — **at most one removed and two added**, whatever the group already
+holds — and a record given a parent (§10.2) leaves one group and joins another at
+the same price. One arrival can give a parent to *every* record waiting on it, a
+trace's root arriving after its children being the ordinary case, and then the
+move is made **once** rather than once per child: where the records moving are
+the whole of the group they leave and the group they join holds nothing yet, the
+chain they had is the chain they keep — a `temporal` edge names its two endpoints
+and not the group they sit in, and §4.3's key moved for none of them — so the
+group is re-keyed and **no edge moves at all**. A move that empties only part of
+a group is the per-record price above, once per record moved. The rule is §4.3's
+unchanged, and the chain is the one a batch build of the same prefix emits, which
+is §10.1; what is bounded is only how much of it an arrival rebuilds.
+
+A call id's `data` edges are **not** restated either, for the mirror reason: a
+conversational protocol resends its history, so a call id's declared receipts grow
+with the turns while the two sides that decide its `call_result` edge do not
+(§4.2.1, §4.4). The receipts are kept in §4.2.1's ranking, and what that ranking
+decides is narrower than it looks — which receipt is **first**, and whether the
+second ties with it — so an arrival moves at most two receipts' worth of edges:
+its own, at one edge per span that answered the call, and the one that ranked
+first before it, if this receipt outranks it (now "not the earliest") or ties with
+it (now "earliest tied"), at **one removed and one added** per edge. No other
+receipt moves, which is §10.2's bullet: a receipt that is not the earliest stays
+so whatever arrives. What is **not** bounded is the answer. `n` turns of a loop
+resending its history declare `n(n-1)/2` receipts and every one of them is an edge
+the telemetry stated (§4.2.1), so feeding such a loop is quadratic in its turns
+because its *graph* is — and the promise is only that each declaration is built
+once, never that an arrival carrying `k` declarations costs what one carrying none
+does. A requester or fulfiller arriving restates that call id's two sides in full,
+because they are one span each in every shape anyone has captured.
+
+**Where the sort is, and is not, the cost.** `feed` does not sort **at all** —
+canonical order is computed when a graph is materialized and when a delta is
+folded, and nowhere else — so an incrementally maintained order has nothing in
+`feed` to replace and could only add to it. That is a property of the code and
+`tests/test_live.py` pins it by counting the sorts of all four paths. Inside
+`delta(since=v)` the sort's share is a property of the *shape* instead, and so is
+measured and not reasoned about: it is small where the edge set is quadratic in
+the nodes, because assembling and rewinding that edge set is the call, and it is
+most of the call where the edge set is linear and the node set is large.
+
+**The numbers, and where they were taken.** Measured at `0718ba8` on 2026-10-02,
+CPython 3.14.6, by `tests/live_cost.py` (`make bench`) on one machine, whose
+header holds the full table; the absolute values are that machine's and do not
+reproduce elsewhere, which is why the classes above are stated without them and
+these are dated. The two shapes are the September 2026 audit's: an agent loop
+resending its history (400 turns — 801 records, 801 nodes, 81,799 edges) and one
+root with 20,000 tool children (20,001 records, 20,001 nodes, 39,999 edges).
+
+- **A `feed` is flat in what has already arrived, where the answer is.** The wide
+  shape feeds at 0.1139 ms/record at 1,000 children and 0.1136 ms/record at
+  8,000, and builds exactly **one `Edge` object per edge the prefix holds**
+  (39,999 for 39,999; 81,799 for 81,799 on the loop shape). Feeding makes **zero**
+  canonical sorts, counted rather than assumed.
+- **Where the answer is not flat, the cost follows the answer and not the
+  stream.** The loop shape feeds at 1.2009 ms/record overall and, over four
+  stretches of the same stream, at 0.3784, 0.8133, 1.5593 and 2.0567 ms/record.
+  The comparison that means something is not the last stretch against the first
+  but each against what it declares, which the harness prints per stretch beside
+  the milliseconds: turns 1–100 declare 4,950 receipts over 201 records — 24.6
+  per record, the root span folded into that first stretch — and turns 301–400
+  declare 34,950 over 200, or 174.8, so the work the input declares rises
+  **7.1×**. That bounds the per-record rise **from above** and not from below.
+  Per-record cost is `F + c·d` — `F` the fixed work of classifying and absorbing
+  a span, `c` the cost of one declaration, `d` the declarations the record
+  carries — so `(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁`, with equality only at `F = 0`.
+  The measured rise of 5.43× is therefore *under* 7.1× because `F` is not zero,
+  and the gap between the two is that fixed per-record cost: the two stretch
+  figures above put `c` near 11 µs per declaration and `F` near 0.10 ms per
+  record. Nothing bounds the ratio from below — raising `F`, which is being
+  uniformly slower per span, drives it toward 1 — so this ratio is a reading and
+  not a target. The 1.5× target these two stretches were once judged against
+  needed an edge roughly 30× cheaper to build, which is an empirical claim about
+  this implementation's constants and **not** a consequence of §4.2.1. What
+  §4.2.1 does settle is the one thing no constant can buy: none of the
+  declarations may be dropped to get there.
+- **The arrival that regroups the whole input** — the wide shape's root fed last
+  — makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
+  root-first, 19.9 ms of it inside that single `feed`.
+- **A materialization's sort** is 18.0 ms of a 249.9 ms `graph()` on the loop
+  shape and 86.9 ms of 298.7 ms on the wide one: a fourteenth of the call where
+  the nodes are few and the edges many, and three tenths of it where they are
+  not.
+- **Inside `delta(since=version - 1)`** the four parts are timed one at a time.
+  Loop shape, 245.8 ms: assembling the held sets 161.5 ms, rewinding them to
+  `since` 44.3 ms, and the two `ordering()` calls 18.5 ms and 18.7 ms — a seventh
+  of the call. Wide shape, 293.2 ms: the held sets 77.8 ms, the rewind 26.1 ms,
+  the two sorts 91.2 ms and 82.5 ms — **three fifths** of it. That same 293.2 ms
+  answers for an arrival whose `feed` cost 0.1198 ms, which is what "O(n + e),
+  not O(the changes)" is in milliseconds.
+
+The wide shape's three fifths is therefore the only place where touching ordering
+could pay at all, and what it points at is **no sort**: carrying the two facts
+the sorts recover — canonical order, and the `ordering_cycle` that the same sort
+reports — between versions instead of computing them from the sets. This section
+and §10.7 take that the other way round on purpose: carrying them would make
+them journalled state, and
+would put a second ordering rule in the library beside the one §5.2 states, which
+every materialized graph and every folded one would then have to agree with. It
+is a spec conversation, not an optimization; until it is had, O(n + e) is what a
+delta costs and this paragraph is why.
+
+One narrower alternative was weighed against those numbers and **rejected**:
+recomputing canonical order for the subtree an arrival affects, rather than
+the whole node set (batch L5 of the live-graphs series, registered in
+`TASKS.md`). It can do nothing for `feed`, which does not sort at all, so it
+could only improve `delta()` — where it would have to reach *both*
+`ordering()` calls, because the two endpoints are two different node sets —
+and the shares above say that is worth having on one of the two shapes and
+nothing on the other. It is recorded as rejected and not as deferred: the open
+question is the one in the paragraph above, and the two are not the same
+question.
+
+### 10.7 The journal, and the entries that are not local
+
+Each `feed` appends one **entry** to a journal: the difference that arrival
+made, as added and removed sets over the same three collections.
+`delta(since=v)` folds the entries after `v`, and the fold is where the
+cancellation above happens. The journal is the log; the delta is a summary of
+two endpoints.
+
+Two kinds of entry, and the difference between them is the whole of §10.2:
+
+- **Local.** The arrival touched only its own facts, the references it made,
+  the call ids it named and the sibling group it joined. The entry is that
+  small.
+- **Restated.** The arrival changed one of the three whole-input facts (§10.2),
+  so every node id was derived again and ids already given out may have moved.
+  The entry describes the **whole state**, and it is marked `restated` — which
+  travels onto every `Delta` folded from a window containing one. The sets are
+  still exact and still minimal; what the mark adds is that this was not a
+  small change to a stable graph, and a consumer holding node ids has to know
+  the difference. A journal that reported such an arrival as a local diff would
+  be describing an event that did not happen.
+
+One thing that moves between versions and is **not** a restatement:
+`meta.adapters[].declared_confidence` is declared over a sample that grows as
+records arrive (§6.1), so it changes while the sample fills. No id moves with
+it, which is why the adapter tuple is carried on the delta in its own right
+rather than folded into the meaning of `restated`.
+
+### 10.8 Retention is the caller's policy, and a `since` it dropped raises
+
+`b.retain(versions=N | "all" | 0)`, default `"all"`.
+
+| `versions` | The journal keeps |
+|---|---|
+| `"all"` | every entry, so any version this builder has reached can be a `since` |
+| `N` | the last `N` entries, so `since` may be as old as `version - N` |
+| `0` | nothing: `delta(since=version)` is the empty delta and any earlier `since` raises |
+
+Retention is applied when it is set and after every `feed`, so a policy takes
+effect at once rather than at some later convenient moment.
+
+A `since` the journal no longer holds raises `DeltaUnavailableError`, code
+`delta_unavailable` (§3.10). It is never a truncated delta, never an
+approximate one, and never a full graph offered in its place: a caller that
+asked what changed and was handed something else could not tell. A `since` that
+is not a version this builder has reached — negative, or greater than `version`
+— is a caller error and raises `ValueError`, as an annotation with no namespace
+does (§8).
+
+### 10.9 The delta document form is additive
+
+A delta serializes to its **own** top-level document. The graph document does
+not move for this: no key is added to it, and the graph half of
+`tests/serialized_shape.json` — its `document`, `model`, `passthrough` and
+`declared_elsewhere` sections — is unchanged, which is the same promise §10.1
+makes and the reason lifecycle option (a) was taken.
+
+The **file** is a different claim, and an earlier wording of this sentence
+made it wrongly by saying the file itself was unchanged. The artifact
+specimens both documents, so it moved when the delta landed — and in the
+file's history that move is the **most recent** one, in this order: L12
+(`be16fa8`; the live-graphs batches are registered in `TASKS.md`) added
+`undecodable_bytes` to `diagnostic_source` and to
+`vocabularies.diagnostic_codes`, which grows the vocabulary of a value a graph
+document already carried rather than its shape, and L14 (`b10c60a`, a
+descendant of it) then added the four `delta_*` sections, which specimen this
+document beside the graph one, and rewrote the `_` head note the gate excludes
+as prose. Neither move touched the four graph sections, and nothing has
+touched the file since the second of them — not L20, not L21, and no batch
+after them.
+
+```
+{"schema_version": "...", "kind": "delta", "since": 11, "until": 15,
+ "nodes_added": [...], "nodes_removed": [...],
+ "edges_added": [...], "edges_removed": [...],
+ "diagnostics_opened": [...], "diagnostics_resolved": [...],
+ "basis_rewritten": [...], "trace_id_before": "...", "trace_id_after": "...",
+ "adapters_before": [...], "adapters_after": [...],
+ "order_changed": false, "restated": false}
+```
+
+Nodes, edges and diagnostics are written by exactly the same functions that
+write them into a graph document, so a consumer that can read one can read the
+other. `kind` is the discriminator, and it is on the **delta** rather than on
+the graph because adding a key to the graph document would move a shape that
+`0.9.x` consumers already read. Encoding is §5.2's, unchanged: sorted keys,
+compact separators, one trailing newline.
+
+### 10.10 Out of scope here
+
+One builder per trace: records of two traces in one builder are kept and
+reported as a multi-trace input is (§7), and partitioning a stream by trace is
+the caller's. **Completion is not the library's**: OTel has no end marker, "this
+trace is finished" is a timeout policy a caller sets, and no diagnostic is
+emitted about it. No threads, no sockets, no clock, no subscription callbacks —
+§9 is unchanged.

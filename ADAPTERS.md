@@ -33,6 +33,15 @@ record (`SPEC.md` §6.1, `OPEN_QUESTIONS.md` §16). If the input you want to
 support differs from a supported one only in how the spans are *packed*, you
 want a container, not an adapter, and that is a `SPEC.md` §7 conversation.
 
+**The unpacking is reachable without a file, and it is still not an adapter.**
+`spanweave.read_records(data)` reads bytes a caller already holds — an OTLP/HTTP
+request body, a chunk tailed off an exporter — and hands back records and
+diagnostics (`SPEC.md` §7, `OPEN_QUESTIONS.md` §19). It is the same reader, so
+an export cannot read one way from a file and another way in flight; and it
+consults no adapter, names no dialect, and classifies nothing. A live consumer
+reads with it and then feeds a `Builder` (`SPEC.md` §10) — which is to say the
+dialect question is still asked per record, one layer above this one.
+
 ## 2. The protocol
 
 ```python
@@ -242,7 +251,10 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   them belong in it. Deduplicate, and do not worry about order — the builder
   joins on the ids and sorts what it emits.
 - `call_role` — `requester` on the span that asked, `fulfiller` on the span that
-  answered. One role per span, shared by all of its ids.
+  answered. One role per span, shared by all of its ids. `CallRole` is a
+  `StrEnum` and the builder compares it **by value**, so the plain string
+  `"fulfiller"` is read exactly as `CallRole.FULFILLER` is, on the batch path
+  and the live one alike.
 - **Take a requester id only from what the span itself produced.** Nearly
   every chat protocol resends the conversation on each turn, so a later span
   carries the earlier turn's call id as *input context*. If you match the id

@@ -177,6 +177,158 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
 - **Dialect-agnostic core.** Adding a dialect is a new *adapter*, never a change
   to the graph model.
 
+## Building a graph while the trace is still arriving
+
+A file is the finished case. When records are still arriving — off a socket,
+tailed out of an exporter, one OTLP/HTTP body at a time — the same build runs
+one record at a time (`SPEC.md` §10). `Builder` is that build taken
+incrementally, not a second builder with rules of its own:
+
+- **`Builder()` takes the wiring `build()` takes** — an `adapter` name, or none
+  for the same auto-selection, and `temporal` to switch off the derived
+  timeline.
+- **`feed(record)` absorbs one record and returns the new version**, an integer
+  counting records absorbed in arrival order and nothing else.
+- **`graph()` materializes the prefix graph** — an ordinary `Graph`, carrying no
+  version number and indistinguishable from one built from a file.
+- **`delta(since=v)` says what changed** between version `v` and now: nodes,
+  edges and diagnostics added and removed, each collection in the graph's own
+  canonical order. It is *defined* as the difference between the two graphs, so
+  it cancels — a diagnostic that opened and closed inside the window is in
+  neither half, because it is in neither endpoint.
+- **`fold(graph)` on a `Delta` applies that difference** and returns a new
+  graph, byte for byte the `graph()` of the later version. Something it must
+  remove and cannot find raises rather than producing a quietly wrong graph.
+- **`retain(versions=N | "all" | 0)` is your journal policy**, `"all"` by
+  default. A `since` the journal no longer holds raises
+  `DeltaUnavailableError` — never a truncated delta, and never a whole graph
+  offered in its place, because a caller that asked what changed and was handed
+  something else could not tell.
+
+**Three ways to consume it, and the corpus replays all three over every
+rendering it holds** (`FIXTURES.md` §4): feed silently and materialize once at
+the end; feed and materialize after every record; feed and take
+`delta(since=version - 1)` each time, folding it onto the graph you already
+hold. A `Delta` comes only from `delta(since=v)` — `feed` returns the version
+and never a delta.
+
+**The promise under all of it is prefix consistency.** At version `k`,
+`graph()` is the graph the batch builder produces from those same `k` records,
+as a value and as the bytes it serializes to (`SPEC.md` §10.1). Determinism,
+losslessness, warrant and canonical order are inherited from that equality
+rather than restated for the live path — and so is the serialized shape, which
+does not move for this feature: there is no live-only field, and no graph
+carries a version.
+
+**What it cannot tell you, because it was never told.** A builder is fed
+records, not bytes, so it reports no `meta.source_digest` and none of a
+reader's facts about an input — a line that was not JSON, a record sent twice,
+a record skipped before any adapter saw it (`SPEC.md` §10.4). Those belong to
+whoever read the records, and a builder claiming them would be describing an
+input it never saw.
+
+**`read_records(data)` is that reader, on bytes instead of a path.** It takes
+`bytes`, a `bytearray` or a `memoryview` of single bytes — what a receiver
+actually holds — recognizes the same three containers the file and stdin forms
+do, and returns a `Records`: the records in input order, the diagnostics the
+read produced, and `skipped_records`. It consults no adapter, names no dialect
+and builds nothing. **The reader neither buffers nor rejoins across calls**, so
+a multi-byte character split between two chunks is half a character in each: a
+receiver reading bytes in flight splits them on `\n` and keeps the remainder
+for its next call, rather than handing over an arbitrary boundary
+(`SPEC.md` §7).
+
+**A delta serializes to its own top-level document** — `delta_to_document` for
+the mapping, `delta_dumps` for the bytes — with `kind` telling it from a
+graph's. Nodes, edges and diagnostics are written by the same functions that
+write them into a graph document, so a consumer that reads one reads the other,
+and the graph document gains no key for any of this (`SPEC.md` §10.9).
+`basis_rewritten` is a *view* over the edge sets rather than a field: an edge's
+identity includes its `basis`, so a `data` edge whose basis changed is one edge
+removed and one added, and the view pairs them as `BasisRewrite` so a consumer
+need not rediscover them.
+
+Worked, from a checkout. The trace is the one the quickstart uses, read as
+bytes rather than as a file, and fed one record at a time:
+
+```python
+import pathlib
+
+import spanweave
+
+# Bytes already in memory -- an OTLP/HTTP body, a chunk tailed off an
+# exporter, a message off a queue. This one came off disk so it runs here.
+trace = "fixtures/conformance/llm_tool_llm/dialects/openinference.jsonl"
+records = spanweave.read_records(pathlib.Path(trace).read_bytes())
+print(len(records.records), "records,", records.skipped_records, "skipped")
+
+builder = spanweave.Builder()
+for record in records:
+    version = builder.feed(record)
+    change = builder.delta(since=version - 1)
+    print(
+        f"v{version}",
+        f"+{len(change.nodes_added)} nodes",
+        f"+{len(change.edges_added)} edges",
+        "opened", sorted(d.code for d in change.diagnostics_opened),
+        "resolved", sorted(d.code for d in change.diagnostics_resolved),
+    )
+
+# A delta over a wider window, in its own document form.
+document = spanweave.delta_to_document(builder.delta(since=2))
+print(document["kind"], document["since"], "->", document["until"])
+
+# Prefix consistency, and the one fact a builder cannot carry.
+live = spanweave.to_document(builder.graph())
+batch = spanweave.to_document(spanweave.build(trace))
+print("documents differ in:", [k for k in batch if live[k] != batch[k]])
+print("meta differs in:",
+      [k for k in batch["meta"] if live["meta"][k] != batch["meta"][k]])
+```
+
+```
+4 records, 0 skipped
+v1 +1 nodes +0 edges opened [] resolved []
+v2 +1 nodes +1 edges opened ['unmapped_attributes', 'unpaired_call'] resolved []
+v3 +1 nodes +3 edges opened [] resolved ['unpaired_call']
+v4 +1 nodes +3 edges opened ['unmapped_attributes'] resolved []
+delta 2 -> 4
+documents differ in: ['meta']
+meta differs in: ['source_digest']
+```
+
+`unpaired_call` is open at version 2 and gone at version 3, and both are
+correct: the fulfilling span arrived in between. Nothing on a live graph is a
+prediction and nothing is a retraction — the graph at a version says what the
+records up to it support, so a resolved diagnostic is simply absent, exactly as
+it is in a batch graph (`SPEC.md` §10.3).
+
+One builder per trace. Completion is not the library's: OTel has no end marker,
+"this trace is finished" is a timeout policy you set, and no threads, sockets,
+clocks or callbacks come with any of this (`SPEC.md` §10.10).
+
+## The public API, in one table
+
+`import spanweave` gives you exactly these names. Everything else is internal
+and may be refactored without notice (`CLAUDE.md`), so a consumer that reaches
+past this list is on its own — which is a rule the examples are held to by a
+test, not a request.
+
+| For | Names |
+|---|---|
+| Building a graph | `build`, `Builder` |
+| Reading records without building one | `read_records`, `Records` |
+| The graph and what it holds | `Graph`, `Node`, `Edge`, `Diagnostic`, `Meta`, `Payload`, `Provenance`, `RawRecord`, `Status`, `Usage` |
+| The closed vocabularies | `NodeKind`, `EdgeKind`, `Warrant`, `PayloadState`, `DiagnosticLevel` |
+| What changed between two versions | `Delta`, `BasisRewrite` |
+| Your own facts, kept beside ours | `Annotation`, `AnnotationStore` |
+| Serializing and checking | `dumps`, `dump`, `to_document`, `delta_dumps`, `delta_to_document`, `validate` |
+| Refusals, matched on `.code` | `SpanweaveError`, `AdapterSelectionError`, `DeltaUnavailableError`, `DuplicateNodeIdError`, `GraphNotSerializableError`, `UnknownAdapterError` |
+| Versions | `__version__`, `SCHEMA_VERSION`, `SCHEMA_FROZEN` |
+
+The table is held to `spanweave.__all__` by a test, so an export that lands
+without a line here fails the build rather than going unmentioned.
+
 ## Exit codes
 
 | Exit | Meaning |

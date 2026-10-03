@@ -28,7 +28,12 @@ Two things this layer must get right:
   terminator**, because a lone CR is legal JSON whitespace *inside* a record
   (RFC 8259): splitting on it would take a record that parses and break it in
   two, which is the tolerance reaching content -- the one thing this bullet
-  forbids.
+  forbids. The **encoding** is UTF-8, and bytes it cannot decode are replaced
+  with U+FFFD rather than refused, because what did decode is still a record
+  and dropping it would lose that. The replacement is reported
+  (``undecodable_bytes``): a record carrying a character nothing in the input
+  wrote, with nothing saying so, is this layer quietly rewriting what it was
+  handed (``SPEC.md`` §3.7).
 * **A transport envelope is a container, not a dialect.** An OTLP JSON export
   is an object whose ``resourceSpans`` is a list, and the spans inside it are
   in whatever dialect their instrumentor speaks -- possibly two dialects in
@@ -51,6 +56,18 @@ Two things this layer must get right:
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
   itself forces: an array cannot be known complete until its closing bracket.
+* **It has a second door, and it is the same room.** ``read_records`` reads
+  bytes a caller already holds -- an OTLP/HTTP body, a chunk tailed off an
+  exporter, a message off a queue -- and hands back the records plus what the
+  read could not do (`SPEC.md` §7, `OPEN_QUESTIONS.md` §19). It is the *same*
+  `RecordStream` underneath, deliberately: an export that read one way from a
+  file and another way in flight would be two readers wearing one contract.
+  What it does not share is the laziness, which buys nothing once the bytes are
+  in memory and leaves a caller the trap of reading `diagnostics` too early.
+  What it does share is this layer's one decode (`_decoded`), whatever buffer
+  the caller handed over: a `bytearray` and a `memoryview` of one are read
+  beside `bytes` (`SPEC.md` §7), because a receiver accumulates into the first
+  and reads the second, and the copy that gets them here is the library's.
 """
 
 from __future__ import annotations
@@ -62,12 +79,13 @@ import pathlib
 import re
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 from spanweave import diagnostics as codes
 from spanweave import jsoncodec
 from spanweave.diagnostics import DiagnosticCollector
 from spanweave.errors import GraphNotSerializableError
-from spanweave.model import DiagnosticLevel, JsonValue
+from spanweave.model import Diagnostic, DiagnosticLevel, JsonValue
 
 #: A path, a path-like, ``"-"`` for stdin, or the bytes themselves.
 Source = bytes | str | os.PathLike[str]
@@ -231,7 +249,9 @@ class RecordStream:
         self._consumed = True
 
     def _read_array(self, data: bytes) -> Iterator[JsonValue]:
-        text = data.decode("utf-8", errors="replace")
+        text, undecodable = _decoded(data)
+        if undecodable:
+            self._report_undecodable("the input")
         try:
             document = jsoncodec.loads(text)
         # RecursionError is how `json` reports nesting it will not descend;
@@ -264,15 +284,21 @@ class RecordStream:
         per line begins with exactly these bytes. When the buffered input is
         not a single document it is read line by line, which is byte for byte
         what this input did before this branch existed -- including its
-        diagnostics, which is why none is emitted here.
+        diagnostics, which is why the fallback below emits none of its own.
         """
-        text = data.decode("utf-8", errors="replace")
+        text, undecodable = _decoded(data)
         try:
             document = jsoncodec.loads(text)
         # RecursionError: see `_read_array`. The line reader reports it.
         except (ValueError, RecursionError):
             yield from self._read_lines(data, iter(()))
             return
+        # Reported only on the branch that keeps this reading. The fallback
+        # above hands the same bytes to the line reader, which decodes them
+        # again and reports each line itself; reporting here as well would
+        # publish this layer's second attempt as a second fact about the input.
+        if undecodable:
+            self._report_undecodable("the input")
         yield document
 
     def _read_lines(self, head: bytes, chunks: Iterator[bytes]) -> Iterator[JsonValue]:
@@ -300,7 +326,10 @@ class RecordStream:
         yield from self._read_line(number, buffered)
 
     def _read_line(self, number: int, raw_line: bytes) -> Iterator[JsonValue]:
-        line = raw_line.decode("utf-8", errors="replace").strip()
+        text, undecodable = _decoded(raw_line)
+        if undecodable:
+            self._report_undecodable(f"line {number}")
+        line = text.strip()
         if not line:
             # A blank line is not a record, and losing it drops nothing.
             return
@@ -317,6 +346,44 @@ class RecordStream:
                 f"else for it to survive",
                 source=line,
             )
+
+    def _report_undecodable(self, what: str) -> None:
+        """Say that U+FFFD stands where the input did not hold UTF-8.
+
+        ``what`` names where: the line, or the whole buffered container, which
+        has no line of its own. No ``source``: the bytes are not a `JsonValue`
+        -- JSON has no way to write them -- and the text they were replaced by
+        survives where the record does, on the record itself or on the
+        ``malformed_record`` for a line that would not parse (`SPEC.md` §3.7).
+
+        It does **not** touch ``skipped_records``. That number answers one
+        question -- was any record of this input never read at all -- and this
+        record was read; counting it here would tell
+        `build_contributed_graph` a record is missing when the record is there.
+        """
+        self._collector.add(
+            codes.UNDECODABLE_BYTES,
+            f"{what} holds bytes that are not UTF-8; each such sequence was "
+            f"read as U+FFFD, the substitution Unicode defines for it, and "
+            f"the rest was read as written -- so no record was skipped, and "
+            f"this is the only report that what arrived is not, character for "
+            f"character, what the input holds",
+        )
+
+
+def _decoded(data: bytes) -> tuple[str, bool]:
+    """``(the text these bytes hold, whether any of them did not decode)``.
+
+    Strict first, and the replacing decode only where the strict one refused,
+    so the ordinary input pays one pass and nothing else. The replacement is
+    kept -- returning the text is the point -- and the flag is what makes it
+    reportable rather than silent: ``errors="replace"`` on its own hands back a
+    string that looks like the input and is not (`SPEC.md` §7).
+    """
+    try:
+        return data.decode("utf-8"), False
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="replace"), True
 
 
 def _canonical_text(record: JsonValue) -> str:
@@ -792,3 +859,105 @@ def read_trace(source: Source) -> RecordStream:
         return RecordStream("<stdin>", _chunks_of_stdin())
     path = pathlib.Path(source)
     return RecordStream(str(path), _chunks_of_file(path))
+
+
+@dataclass(frozen=True, slots=True)
+class Records:
+    """What one read of bytes produced: the records, and what it could not read.
+
+    Complete when it is handed over, unlike the stream behind it -- the bytes
+    were already in memory, so there was nothing to stream and there is no
+    diagnostic that can arrive later. Iterating it yields the records, so it
+    goes straight into a loop that feeds a `Builder`.
+    """
+
+    #: The records, in input order, each one exactly what an adapter is given.
+    records: tuple[JsonValue, ...]
+    #: What the read could not do, sorted as every other collection of these
+    #: is (`SPEC.md` §5.2). Empty is the ordinary case.
+    diagnostics: tuple[Diagnostic, ...]
+    #: How much of the input never became a record at all -- one per
+    #: `malformed_record`, and never a duplicate, which was read (`SPEC.md` §7).
+    skipped_records: int
+
+    def __iter__(self) -> Iterator[JsonValue]:
+        return iter(self.records)
+
+
+def read_records(data: bytes | bytearray | memoryview) -> Records:
+    """Read records out of bytes, and build nothing (`SPEC.md` §7).
+
+    For a caller holding telemetry *in flight* rather than a file: an OTLP/HTTP
+    request body, a chunk tailed off an exporter's output, a message taken off a
+    queue. All three containers are recognized here, by the same code the path
+    and stdin forms use, so an export cannot read one way from a file and
+    another way in memory (`OPEN_QUESTIONS.md` §19).
+
+    It **reads; it does not judge**: no adapter is consulted, no dialect is
+    named, nothing is classified. The records handed back are the records
+    `build` would have classified, and feeding them to a `Builder` one at a time
+    is the live path (`SPEC.md` §10). Cheap to read is not cheap to absorb --
+    a `feed` restates in full every key the record touches (§10.6), so a large
+    export read in one call is still one `feed` per span.
+
+    ``data`` is bytes, a ``bytearray``, or a ``memoryview`` of single bytes --
+    which is what a receiver actually holds, since it accumulates into the
+    second and reads the third. The copy that turns one of those into the bytes
+    this reader takes is made **here**, once, so the result cannot change under
+    a caller that goes on writing into its buffer (`SPEC.md` §7). A ``str`` is
+    refused rather than read, because everywhere else in this library a ``str``
+    is a path: reading one as content would turn ``read_records("trace.jsonl")``
+    into an empty read with no complaint, and passing it through would open that
+    file from a function whose whole point is that it touches none.
+    """
+    stream = read_trace(_as_bytes(data))
+    records = tuple(stream)
+    return Records(
+        records=records,
+        diagnostics=stream.diagnostics.collected(),
+        skipped_records=stream.skipped_records,
+    )
+
+
+def _as_bytes(data: object) -> bytes:
+    """The bytes a caller handed over, copied where a copy is owed.
+
+    Typed `object` so the check is reachable rather than merely declared. Three
+    buffers are read and the difference between them is only who copies: `bytes`
+    is already what the reader wants and is passed through, and a `bytearray` or
+    a `memoryview` is copied once, here. That copy is the library's on purpose
+    (`SPEC.md` §7): a receiver appends to one buffer for the life of the
+    connection, so making *it* write `bytes(buf)` charges it the same copy plus
+    the refusal, and leaves a result whose independence from the next write is a
+    rule the caller has to know rather than something this function guarantees.
+
+    A `memoryview` is read only where its items are **single bytes laid out
+    contiguously** -- i.e. where it names a run of bytes. A view over wider
+    items renders to bytes in the machine's own endianness, so the same input
+    would read differently on another machine, which is the determinism
+    invariant (`CLAUDE.md` 4) rather than a matter of taste; a strided view
+    names no run at all, and gathering one would assemble bytes that exist
+    nowhere in the caller's buffer. Both are refused, saying which.
+    """
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, memoryview) and (data.itemsize != 1 or not data.c_contiguous):
+        raise TypeError(
+            f"read_records reads a memoryview of one byte per item, laid out "
+            f"contiguously, and got itemsize {data.itemsize} with "
+            f"c_contiguous={data.c_contiguous}. A view over wider items would "
+            f"be read in this machine's byte order, and a strided view names "
+            f"no run of bytes to read (`SPEC.md` §7). Pass `bytes(view)` if "
+            f"those are the bytes you mean -- that is a decision about the "
+            f"input, and it is yours to make"
+        )
+    if isinstance(data, (bytearray, memoryview)):
+        return bytes(data)
+    raise TypeError(
+        f"read_records reads bytes already in memory -- bytes, a bytearray, or "
+        f"a memoryview of single bytes -- and got {type(data).__name__}. Trace "
+        f"content is bytes here: a `str` is a path everywhere else in this "
+        f"library (`SPEC.md` §7), so reading one as content would make "
+        f"read_records('trace.jsonl') an empty read with no complaint. Encode "
+        f"the text, or build from the path with spanweave.build()"
+    )

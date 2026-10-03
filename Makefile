@@ -2,9 +2,9 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance shape stranger capture clean
+.PHONY: check install-check lint types test gates conformance shape stranger bench bench-smoke capture clean
 
-check: lint types test gates
+check: lint types test gates bench-smoke
 	uv run spanweave --version
 
 lint:
@@ -82,6 +82,37 @@ capture:
 # ARGS passes flags through: make stranger ARGS="--repeat 3 --quiet"
 stranger:
 	uv run python -m tests.stranger_path $(ARGS)
+
+# What a live build costs (live-graphs L5 in TASKS.md, `SPEC.md` §10.6). Feeds the two
+# shapes the September 2026 audit measured -- an agent loop that resends its
+# history, and one root with N children -- and prints what `feed`, `graph()` and
+# `delta()` cost on each, plus the share of `delta()` that the canonical-order
+# sort actually is. That share is the number L5 turned on.
+# It asserts NOTHING about the clock, for the reason `stranger` states above: a
+# duration threshold in an automated check is a flake that gets tuned until it
+# means nothing. It prints numbers; a human reads them. Not run by `check`.
+# ARGS passes flags through: make bench ARGS="--only echo --turns 100"
+# Two processes, one per shape, and that is the point rather than tidiness: run
+# in ONE process the echo shape's 81,799 edges are still held while the wide
+# shape's `delta()` runs, and the wide numbers come out well above the table in
+# the module docstring -- which was taken per shape with `--only` (review B.2,
+# 2026-10-02). An `--only` passed through ARGS wins over both lines, so it runs
+# the same shape twice; use `uv run python -m tests.live_cost --only ...` to run
+# one.
+bench:
+	uv run python -m tests.live_cost --only echo $(ARGS)
+	uv run python -m tests.live_cost --only wide $(ARGS)
+
+# The smoke form of that harness, and the one thing in it `check` DOES run
+# (live-graphs L18 in TASKS.md). It feeds eleven records and six, and asserts the SHAPE the
+# numbers above are about -- the receipt count SPEC.md section 4.2.1 promises,
+# one Edge built per edge the prefix holds, zero canonical sorts while feeding
+# against one per materialization and two per delta, and the same bytes from the
+# same records fed in a different order. Still nothing about the clock, for the
+# reason `bench` and `stranger` both give: what belongs in a gate is the part
+# that can be true or false. Milliseconds, so the fast gate stays fast.
+bench-smoke:
+	uv run python -m tests.live_cost --smoke
 
 # Prove that what SHIPS works (TASKS.md 3.6). Everything `check` runs happens
 # under `uv run`, with the source tree on the path, so every gate it runs

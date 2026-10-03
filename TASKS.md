@@ -12784,6 +12784,1021 @@ open (60 of 79 before).
     `546bdfa` and deliberately not done here: each is its own reading of thread
     10's rule, and a docs commit is not where a test's constant gets replaced.
 
+## The live-graphs series  *(closed 2026-10-02)*
+
+The incremental builder, the delta contract and the receiver boundary, run as a
+series of batches on branch `live-graphs` from `main` at `40bce13` — one batch
+per commit, one concern per batch — in **five runs**, with a cold review and a
+maintainer decision between each pair of them. Run 1 was `L0` and the two memos
+that opened the series at a decision point. Run 2 built the builder and the
+delta (`L3`, `L4`, `L6`, with `L5` dropped on measurement). Run 3 answered the
+six run-2 review findings a batch could answer. Run 4 was the three superlinear
+`feed` sites, the §10.6 rewrite on fresh numbers, and the first two review
+archives. Run 5 is the close: the run-4 review's prose and process blockers,
+`L23` through `L28`.
+
+**What this repo does not contain.** `L7` and `L8` — the receiver skeleton and
+the live-rules showcase — are the receiver's own series in
+`SigorMatt/spanweave-live`, decided on 2026-09-29 (L2) and confirmed at run 5's
+ordering. That repository did not exist while this series ran and this one will
+never hold those batches, which is why the spanweave half closes **complete**
+rather than blocked: every batch that was ever going to run here has run.
+
+`WORKPLAN.md` was the series' execution state: the operating protocol, the batch
+list with live statuses, the decisions log, and a dated resume note per batch. It
+was written to be **deleted at series close**, and this close deletes it — the
+fifth deletion in this repository's history, after the four across the September
+2026 audit-fix series. Everything of it that outlives the series is in this
+section: the batch registry with each batch's final status and commit, the
+decisions log in full, the three cold reviews with every finding dispositioned,
+the threads the series did **not** close, and the protocol changes the next
+series' plan file has to carry. What is deliberately *not* carried is §0, the
+operating protocol itself — execution machinery for a series that has ended,
+which would go stale unread. A future series reads it verbatim at
+`git show cebcd77:WORKPLAN.md`, the file's last state. Its §0 does carry the one
+extension the audit series' close asked for in writing, and this is the only
+place that ask was honoured: §0.1 step 8 and §0.4's copy of it both say that a
+successful push is not a finished run until CI on the pushed tip is green, or
+every failing check is explained in the run report.
+
+**This section is the item registry.** Statuses were deliberately not duplicated
+here while the series ran — two places to read a status is one place to read a
+stale one — so they land here once, at the close. The `L<n>` ids collide with
+nothing else in this file and keep their spelling.
+
+### The batches, with final status
+
+Legend: **done** · **done (decided)** — a memo batch whose decision was taken
+and logged below · **dropped** — measured and deliberately not implemented ·
+**moved** — registered, never run here, and now another repository's series.
+
+| Batch | What it did | Final status | Commit |
+|---|---|---|---|
+| L0 | Eleven "too deep" ceilings derived from `tests/json_depth.py` rather than hard-coded | **done** — and the row's own count was wrong in a way worth keeping: nine literal `100_000` sites feed twelve tests, not eleven. Count the constants, not the tests | `f07b321` |
+| L1 | Memo: prefix-consistent incremental build (`OPEN_QUESTIONS.md` §18) | **done (decided)** 2026-09-29 | `aac1915`, decided in `27ec3db` |
+| L2 | Memo: the receiver boundary (`OPEN_QUESTIONS.md` §19) | **done (decided)** 2026-09-29 | `aac1915`, decided in `27ec3db` |
+| L3 | `Builder` with `feed`/`graph()`/`version`, the absorb rules, conformance gate 1 | **done** — and node ids *do* move, twice over, so L4 had to carry a non-local journal entry | `58d3e69` |
+| L4 | The journal, `Delta`, `delta(since)` with cancellation, retention, gates 2 and 3 | **done** — §10.6 is renumbered territory from here on, and `delta(since=v)` is O(n + e) where `feed` is not | `7f1f40c` |
+| L5 | Canonical order without the resort | **dropped on measurement** — `feed` sorts nothing, so a maintained order could only reach `delta()`, and the wide shape's sort share is not reachable by a *faster* sort. What landed is the benchmark, one §10.6 cost statement and one test | `79a63f4` |
+| L6 | `read_records`: records out of bytes a caller already holds | **done** — eager, `bytes` only, no adapter, three properties the receiver must design around | `b5145de` |
+| L7 | Receiver project skeleton: file-tail ingest, per-trace builders, completion policy, delta fan-out | **moved to `SigorMatt/spanweave-live`** — never run here; its own series with its own plan file once that repository exists | — |
+| L8 | Live rules showcase: agentgolden's rules per delta, first-failure version recorded | **moved to `SigorMatt/spanweave-live`** — never run here; waits on L7 there | — |
+| L9 | `patches/` is ignored | **done** — proven by a counter-check in a throwaway worktree, not by a green `git status` | `ad257bc` |
+| L10 | A refused record leaves the builder as it was | **done** — and the row's "SPEC §10.5 unchanged (it already promises this)" was **wrong**: the promise sat inside one bullet, so §10.5 moved after all | `b40dac9` |
+| L11 | The two receiver properties pinned, each by a test that bites alone | **done** — the negative control is the result: under the review's carry mutation all 166 pre-existing tests passed | `4807ae6` |
+| L12 | Undecodable bytes are a diagnostic, not a silent replacement | **done** — two censuses had to move with the code, and `tests/serialized_shape.json` moved for the first time in the series | `be16fa8` |
+| L13 | `read_records` accepts `bytearray` and `memoryview` | **done** — six tests, not two, because accepting a buffer means deciding what a buffer is; two refusals reached the right outcome by the wrong route on the parent | `6b2e866` |
+| L14 | The delta surface pinned: the shape artifact specimens a `Delta`, gate 2 gains 62 mid-stream windows | **done** — and honestly short of its hope: the new windows isolate no bug the old family misses, because a builder's delta always ends at its current version | `b10c60a` |
+| L15 | A sibling group's temporal chain maintained, not rebuilt | **done** — 1.02× against the row's ≤1.5×, `Edge.__init__` linear in n, and it cleared **L16's** bound as well as its own | `cda7f74` |
+| L16 | A late parent regroups its waiting children once | **done**, and its bound was **already cleared by L15**: wide n=2000 root-last/root-first is 2.48× pre-L15, 1.21× at L16's own parent and 1.05× here, so the row's ≤2× had failed at the commit it was written against and L15 is what moved it. What L16 adds is the move made **once**, with no edge moving at all | `e708ed5` |
+| L17 | A call id's `data` edges maintained per receipt | **done**, split: the second criterion met **exactly** (1.000 `data` edge per declared receipt, against 133.7 at the parent), the first — turns 301–400 within 1.5× of turns 1–100 — **unmet, and wrong as written**; see the note below | `7ddd630` |
+| L18 | §10.6 on fresh numbers, and a harness that measures what the prose says | **done** — all seven row items, `--smoke` under `make check`, both shapes re-taken; its replacement for L17's criterion was itself wrong and L26 re-corrected it | `60a831b` |
+| L19 | The run-2 and run-3 reviews archived, every finding dispositioned | **done** — and three places where the row's disposition did not match what happened are in the commit body rather than smoothed over | `a97a525` |
+| L20 | A record is absorbed whole or not at all | **done** — one rollback mechanism in two halves, written once because L15's and L17's per-edge ledger traffic had to reverse through it | `f04cbc8` |
+| L21 | `read_records` tests bite on every container and every branch | **done**, tests only — the distinct-assertions route was the only one available, because the refusal message already interpolated the shape | `6d39fe0` |
+| L22 | Two SPEC sentences made true, and a census that cannot go stale | **done** — the census was stale in **two** places, not the one the finding named | `369e826` |
+| L23 | `_whole_input_from` is rolled back with everything else | **done** — four of the review's five refusal shapes are green on the parent, so the probe needed the fifth to bite; the attribute probe is now tracked and walks 59 paths across all five | `5803afb` |
+| L24 | `basis_rewritten` reports every pair, pinned | **done** — the named mutant is dead, but at `incremental.py:619`, not the `:599` the review and the row cite (L23 moved it). The conformance scenario was **declined on scope, not on renderability**; see the thread below | `ed6d3f6` |
+| L25 | A call role is read the same way live and in batch | **done** — and the review thread it came from was wrong in the reader's favour, which is why the dedup was mirrored rather than pinned | `effcafe` |
+| L26 | The cost record is exact and re-takeable | **done** — the false sentence had **seven** copies, not the review's six; five were editable and all five are corrected | `a82fd30` |
+| L27 | README covers the live builder | **done** — the gap was **36** uncovered exports, not the review's eight, so no exemption was taken and the README gained a full public-API table | `8d04106` |
+| L28 | The series closes in this repo: this registry, the decisions log folded in, the citations re-pointed, `WORKPLAN.md` deleted, the run-4 review archived and dispositioned | **done** | the closing commit of the series |
+
+**L17's first criterion, which the registry records as unmet.** The honest
+statement is the one L26 arrived at and not the one L18 wrote: the per-record
+rise is bounded **above** by the rise in the work the input declares, the gap
+between them is fixed per-record cost, and 1.5× was unreachable for *this
+implementation* at about 11 µs per declaration — an empirical claim about
+constants, not a consequence of §4.2.1. The full account, including the
+arithmetic and the two wrong words it replaces, is under *Cold review of
+live-graphs run 2* below, where the cost family was decided.
+
+### Decisions taken  *(the plan file's §3, folded in full)*
+
+All fifteen rows of the plan file's decisions log, in full and verbatim: the
+maintainer's answers to the two opening memos, to each of the three cold
+reviews, and the run orderings taken between them. They are the only part of
+the file this close copies rather than summarises, because a decision reworded
+is a decision re-taken. The two rows that mention `WORKPLAN.md` are quoted as
+they were written — quoting a document is not the place to re-point its
+citations — and no id needed respelling, since the series' `L<n>` ids collide
+with nothing in this file.
+
+| Date | Batch | Decision | By |
+|---|---|---|---|
+| 2026-09-29 | L1 | (1) Prefix-consistency is the definition: at version k the live graph equals `build(records[:k])` byte for byte, arrival order indexing versions, canonical order inside a version. (2) Diagnostic lifecycle option (a): the graph schema does not move; open/resolved history lives only in the journal. (3) Journal implementation with the checkpoint set-difference as the test oracle; the fold must cancel; retention is caller policy (`retain(versions=N \| "all" \| 0)`, default "all"); a `since` older than retention raises with a code. (4) API as sketched with one refinement: `feed(record)` always returns the new version `int` (never a graph, never a delta); every delta comes from `delta(since=v)`; the per-record mode is `delta(since=version - 1)`. `graph()` materializes on demand. The three-mode conformance gate (silent feed then compare; compare after every record; fold reproduces) is the acceptance test for L3–L4. | maintainer |
+| 2026-09-29 | L2 | (1) The receiver is a separate project, `SigorMatt/spanweave-live`, not a subpackage. (2) The only spanweave change L2 needs is the additive envelope-to-records API (L6). (3) Completion is receiver policy; spanweave emits nothing about it. (4) The showcase (L8) is agentgolden's rules evaluated per delta, rules file unchanged, bringing its own trace since no conformance fixture carries the scenario. | maintainer |
+| 2026-09-30 | review run 2 | B1 and B2 are accepted as blocking L7 and are fixed before it (L10, L11). N1 is folded into L11. N4 and T9 are one test-only batch (L14). N5 and T7 are corrections to this file, made in this commit. T12 is a behaviour change decided here: an undecodable byte sequence is a diagnostic, never a silent replacement (L12). T13 is accepted (L13). T14 is a one-line chore (L9). T6, T8, T10, T11 are threads, registered in L19. | maintainer |
+| 2026-09-30 | L5 / §10.6 | The review's independent re-measurement (90.2× vs the note's 116×; three superlinear sites, one cubic, one inside a single `feed`) stands as the record. The drop of the *resort* batch holds — ordering is not the cost. The three sites in `feed` are implementation, not spec: §10.1 is the promise, §10.2/§10.6's cost paragraphs describe the implementation and are rewritten on fresh numbers once the sites are fixed (L15–L18). The "no sort" conversation about carrying canonical order between versions stays deferred and gets no batch; it is revisited only after L18's numbers, since `delta()` at a few hundred ms on 20k spans is not what makes the builder unusable — `feed` is. | maintainer |
+| 2026-09-30 | N2, T1–T5 | SPEC states complexity classes as promises and cites `tests/live_cost.py` for numbers with their provenance; bare machine ratios leave SPEC. The heap-Kahn claim is removed from SPEC and reworded in CHANGELOG as "measured in the batch session; harness not retained", because nothing can reproduce it. §10.6 names the rejected subtree-recompute alternative (T2). `make bench` gains a smoke form that `make check` runs (T5); the harness times what the prose attributes (N3, T3, T4). All in L18, after the numbers have changed. | maintainer |
+| 2026-09-30 | runs | Run 3 = L9 → L10 → L11 → L12 → L13 → L14, spanweave repo, then stop for a cold review. Run 4 = L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo, which still does not exist. A receiver is not designed against a `feed` that costs 72 ms/record, so the cost batches precede L7. | maintainer |
+| 2026-10-01 | review run 3 | Finding 1 (§10.5's atomicity promise is false two ways: `_translate` commits `_claimed`/`_sample`/`_unread` before the absorb loop, and the span loop is not atomic, leaving a *silently* corrupt builder) is one batch, L20, and it runs **before** L15/L17 so the rollback is derived once, before `Tally.set_edges` becomes per-edge ledger traffic. Finding 2 (a carry buffer in the array or document container is uncaught) and finding 7 (L13's two refusals indistinguishable) are one tests-only batch, L21. Findings 3 and 4 (`SPEC.md:2390` false; `SPEC.md:709` census stale) are one docs batch, L22, with a doc-truth check so the census cannot go stale again. Finding 5 is a correction recorded in L19, not a batch: the review showed mid-stream windows are full-prefix deltas of a shorter builder by construction, so gate 3 gains nothing from them. Finding 6 is corrected in this commit. The ten threads go to L19. | maintainer |
+| 2026-10-01 | L14 | The 62 windows stay. They are redundant against every mutation tried because `until` is hard-wired to the current version (`api.py:226`); their value is the 19/62 windows that report a still-open fact, and the lever for selectivity is a longer fixture, not more windows. No further window batches. | maintainer |
+| 2026-10-01 | L12 | The array branch's whole-input scope for `undecodable_bytes` is accepted as a thread, not a fix: a receiver that tails exporters feeds lines or documents, and a legitimately written U+FFFD is indistinguishable from a replaced one only on that branch. Revisit if L7 reads arrays. | maintainer |
+| 2026-10-01 | §0.2 | The parent of a code commit is `<sha>^`, derived, never a sha named in a brief: `plan:` commits interleave, and the run-3 brief named a child as a parent. Written into §0.2 in this commit. | maintainer |
+| 2026-10-01 | run 4 | L20 → L21 → L22 → L15 → L16 → L17 → L18 → L19, then stop for a cold review. Run 5 = L7 → L8 in the receiver repo once it exists. | maintainer |
+| 2026-10-02 | review run 4 | A1 accepted in full: 7.1× is the rise in declared work and bounds the ms/record ratio from **above**, with equality only at zero fixed cost; the "floor" word and the sentence built on it are false and leave every place they were copied to (L26). A2/A3 accepted: the series closes in this repo with the §0.6 convention (L28). A4 taken as the brain's call, agreeing with the aux grading over the sub-agent's: a §10.5 sentence added in this series is falsified through public `register`, and the fix is one snapshot (L23). C1 is a pin that must exist before merge (L24). The `CallRole` identity comparison is a live-vs-batch divergence through public API and is fixed, not threaded (L25). C8 is accepted: the series' product must be visible in README before it merges (L27). C3, C4, C5, the 24.6 denominator and the two harness threads go into L26. C6/C7 are satisfied by the registry L28 writes, which carries L16 and L17 truthfully. C9/C10 are history. The remaining threads are registered in L28. | maintainer |
+| 2026-10-02 | L17 | The 1.5× per-record criterion was wrong as written and the correction offered for it was wrong too: the honest statement is that the per-record rise is bounded above by the rise in declarations and that the gap is fixed per-record cost; 1.5× was unreachable for this implementation at ~11 µs per edge, an empirical claim about constants. The registry row says the criterion was unmet and why. | maintainer |
+| 2026-10-02 | protocol | Three §0 changes, carried to the next series' WORKPLAN rather than edited here: (1) §0.2 asks for a mutation that the new test catches, not only the parent run, because a tests-only batch's derived parent is a `plan:` commit and the parent run is vacuous; (2) §0.1 step 5 lets the builder correct a row's acceptance number with the reason in the same plan commit, so a wrong criterion has an owner; (3) aux worktrees are created by absolute path under the scratchpad, never by a relative path. | maintainer |
+| 2026-10-02 | run 5 | L23 → L24 → L25 → L26 → L27 → L28 in this repo, then a scoped cold review of L23–L25 and L28 (aux), then PR to `main`. L28 deletes WORKPLAN.md, so it has no `plan:` commit after it and the run ends on its code commit. The receiver (L7, L8) starts its own series in `SigorMatt/spanweave-live` with its own WORKPLAN §0 once the repo exists; both rows are registered in TASKS.md as moved there. | maintainer |
+
+### The cold reviews, and what answered each
+
+Each run's cold review was archived into `reviews/` and dispositioned here while
+the series was still **open**, because a disposition recorded only in the plan
+file leaves with it. That is the failure the September 2026 audit's run-1 review
+was nearly lost to — the citation survived in this file and the review did not.
+The maintainer's dispositions are the decisions-log rows of **2026-09-30**
+(applied in `ce9ff17`), **2026-10-01** (`71d282f`) and **2026-10-02**
+(`3ab6638`), each taken from a decisions file written beside the review it
+answers. All three archives are kept byte-for-byte, so each one's scratch name
+and whole digest are written here rather than in the file. The scratch name is
+provenance and not a path to open, because `patches/` is absent from a clean
+checkout and `test_a_durable_document_cites_no_untracked_scratch_path` refuses a
+durable citation into it; the archive is the citation.
+
+### Cold review of live-graphs run 2 — 2026-09-30
+
+`reviews/2026-09-30-live-run2.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-09-30.md` directly under
+`patches/`: `cmp` clean, and `sha256`
+`3800a79dc3e3c7cfea110e35a53919e307b16bb23f2376b03e9672423b23ce38` on both
+sides.
+
+An aux cold read of `27ec3db..2cde61f`, one sub-agent per code commit — L3
+`58d3e69`, L4 `7f1f40c`, L5 `79a63f4`, L6 `b5145de` — with the four `plan:`
+commits checked for hygiene only. Its verdict is that run 2 is mechanically
+clean and that **two findings block run 3**, and it named the shape every
+finding shared: what run 2 pinned was not what run 2 decided, so the claims run
+3 was asked to build on were prose. It also confirmed both superlinear `feed`
+sites L5's drop note named, found a **third** that note missed, and
+re-measured L5's headline ratio independently.
+
+**Every finding, and what answered it.**
+
+| Finding | Disposition |
+|---|---|
+| B1 — a refused duplicate node id leaves the `Builder` permanently corrupt | closed by L10 (`b40dac9`) |
+| B2 — L6 property (a), "no buffering across calls", has no test at all | closed by L11 (`4807ae6`) |
+| N1 — L6 property (b) is half-pinned, and pinned incidentally | folded into L11 (`4807ae6`), as the §3 row decided |
+| N2 — §10.6 carries one machine's ratios as flat fact, pinned by nothing | closed by L18 (`60a831b`) |
+| N3 — `graph()`'s own sort is claimed in three places and measured in none | closed by L18 (`60a831b`) |
+| N4 — the delta *document* ships with no shape tripwire | closed by L14 (`b10c60a`) |
+| N5 — §4 says "60 renderings"; the corpus has 53 | **a correction** to `WORKPLAN.md`, made in `ce9ff17` — not a batch |
+| T1–T5 — the five cost threads (heap-Kahn, the unnamed alternative, the untimed rewind, the doubled `ordering()` sample, `make bench` unrun) | closed by L18 (`60a831b`) |
+| T6, T8, T10, T11 | **open threads**, registered below |
+| T7 — the L4 note's claim (3), wrong in the safe direction | **a correction**, recorded below and made in `ce9ff17` |
+| T9 — gate 2's window always ends at the final version | closed by L14 (`b10c60a`) |
+| T12 — undecodable bytes become U+FFFD with no diagnostic | closed by L12 (`be16fa8`) |
+| T13 — `bytearray` / `memoryview` are a `TypeError` | closed by L13 (`6b2e866`) |
+| T14 — `patches/` is untracked but **not** in `.gitignore` | closed by L9 (`ad257bc`) |
+| *The two quadratics in `feed` — confirmed, and there are three* | closed one site per batch: L15 (`cda7f74`) site (i), L17 (`7ddd630`) site (ii), L16 (`e708ed5`) site (iii) |
+
+Two rows of that table are spelled differently in the `WORKPLAN.md` L19 row
+that ordered this subsection, and the table is what happened. **N5 was not
+closed by a batch**: it is a correction the maintainer made to `WORKPLAN.md` in
+the decisions commit, together with T7, exactly as `ce9ff17`'s body says. And
+**T1–T5, T9 and T14 are closed too**, which the row's "B1, B2, N1–N5, T12, T13"
+list does not name — nothing from this review was left hanging, and the four
+open threads are the four the §3 row of 2026-09-30 registered as threads.
+
+**The cost family was one decision, and one of its numbers was corrected rather
+than met.** N2, N3 and T1–T5 landed together in L18, as the review's own
+suggested disposition asked: §10.2 and §10.6 now state the complexity classes as
+promises and cite `tests/live_cost.py` for every number with its date,
+interpreter and commit, the heap-Kahn claim is gone from the spec including its
+weaker surviving form, the rejected subtree recompute is named beside the still
+open "no sort" question, and `--smoke` runs under `make check` through a
+`bench-smoke` target so the only artifact holding the numbers cannot rot unrun
+(T5). One number in that family was **corrected, not met**: L17's first
+acceptance criterion — the echo shape's `feed` ms/record for turns 301–400
+within 1.5× of turns 1–100 — is unmeetable for any correct implementation,
+because §4.2.1 promises that n turns declare n(n−1)/2 receipts with none
+suppressed. L18 replaced it in §10.6 with what the two stretches declare: turns
+1–100 declare 4,950 receipts over 201 records against 34,950 over 200 for turns
+301–400 — 24.6 against 174.8 per record, a **7.1×** rise in declared work.
+L18 called that a *floor* of the ms/record rise and drew from it that a target
+under 7.1× could only be met by suppressing relations the telemetry stated;
+**both are false, and L26 corrected them** (run-4 review A1). The declaration
+ratio bounds the measured rise **from above**: per-record cost `F + c·d` gives
+`(F + c·d₂)/(F + c·d₁) ≤ d₂/d₁`, equality only at `F = 0`, so the measured 5.43×
+sits under 7.1× exactly because the fixed per-record cost is not zero, and that
+gap *is* the fixed cost. 1.5× was unreachable at this implementation's constants
+— about 11 µs per declaration, where 1.5× needs some 30× less and no declaration
+dropped — which is an empirical claim rather than a consequence of §4.2.1.
+L17's status cell records the second criterion as met exactly and the first as
+corrected in L18 and re-corrected in L26.
+
+**T7 — the correction the review made, in the safe direction.** Its sentences,
+verbatim:
+
+> **T7 (L4) — correction, in the safe direction.** The L4 resume note's claim
+> (3) says the two accountings in `incremental.py` are proven to agree "only by
+> conformance gate 2". Gate 3 catches it too: mutating `Tally.set_edges` to
+> return early for `temporal` keys, with only gate 3 selected, gives
+> `30 failed, 23 passed`. A batch unifying them must keep **both** gates green;
+> gate 2 alone is not the sufficient bar the note implies.
+
+Made in `ce9ff17`, in `WORKPLAN.md` §4's L4 note. L15 and L17 then replaced
+`Tally.set_edges` with per-edge ledger traffic and kept gates 1–3 green on every
+rendering, which is the bar T7 said was the real one.
+
+**The four open threads**, registered with the review's sentences verbatim.
+
+**T6 — `restated` has zero corpus coverage in either gate.**
+
+> **T6 (L4)** — `restated` has zero corpus coverage in either gate.
+> `tests/test_conformance.py:1288` hands the oracle `restated=actual.restated`
+> — the field comes from the thing under test. `tests/delta_oracle.py:15-19`
+> documents why (two graphs cannot carry it) and points at
+> `tests/test_live.py:550-592`, which does pin it, but on four hand-built
+> builders. A batch that changes when `restated` fires gets no signal from all
+> 106 assertions.
+
+Open at this tip. The line has moved and the property has not: the oracle still
+takes `restated=actual.restated` at `tests/test_conformance.py:1365`, and L14's
+mid-stream windows widened gate 2 without widening this.
+
+**T8 — edge dedup is asymmetric between `materialize` and `fold`.**
+
+> **T8 (L4)** — edge dedup is asymmetric between `materialize` and `fold`.
+> `incremental.py:203,513-522` run `build.deduplicated`; `Ledger.end`
+> (`delta.py:138-151`) returns raw added/removed, and `Delta.fold` *raises* on
+> an edge identity the graph already holds (`delta.py:450-452`). All 142 corpus
+> versions have 0 cross-key duplicate edge identities, so `deduplicated` is dead
+> on the tally path. If a dialect ever produces one, the batch build absorbs it
+> and `fold()` refuses with a "same delta folded twice" message that is wrong
+> about the cause.
+
+Open at this tip. `build.deduplicated` still runs on the tally path
+(`spanweave/incremental.py:291`) and on the fold's own edge assembly
+(`spanweave/delta.py:571`), and `fold` still refuses with the "same delta folded
+twice" message (`spanweave/delta.py:601`). L15 and L17 moved the ledger to
+per-edge add and drop without touching the asymmetry.
+
+**T10 — the `build.py` refactor rode along unlabelled inside the feature
+commit.**
+
+> **T10 (L3)** — the 658-line `build.py` refactor rides along unlabelled inside
+> the feature commit: 31 functions renamed/split, 274 deleted lines. It is
+> genuinely required by the feature (the live path must call the same rules) and
+> the body says so, but a reviewer cannot separate "extracted verbatim" from
+> "changed" without reading all 658 lines. A preceding pure refactor commit
+> would have left a ~600-line behaviour diff.
+
+Open and unclosable: it is a fact about how a commit that has landed was shaped,
+which no later commit can undo. Registered so the next series' first code batch
+can split a refactor from the feature it serves before writing either.
+
+**T11 — `api.py:_numbered` assumes one record yields exactly one span.**
+
+> **T11 (L3)** — `api.py:_numbered` assumes one record yields exactly one span
+> (`if span.raw.line_number == 1 and position != 1`). True today (`read_trace`
+> unpacks the OTLP containers, so both `otlp_container` renderings give
+> `len(list(parse([r]))) == 1`), unasserted, and never exercised on the
+> named-adapter path: `tests/test_live.py:253` replays one record under
+> `adapter=`, so the `position != 1` branch is untaken there.
+
+Open, and narrowed by L20 (`f04cbc8`) rather than closed. L20's `TwoSpanAdapter`
+feeds a record that becomes two spans at an arrival index above one, so
+`_numbered`'s `position != 1` branch is now exercised — but through detection,
+not through `adapter=`, and `_numbered`'s one-span-per-record reading of
+`ADAPTERS.md` §2 is still asserted nowhere. What L20 *did* close is the
+consequence: a record that becomes more than one span now arrives whole or not
+at all, so the partial arrival `WORKPLAN.md` §4's L10 note sent to this list is
+no longer reachable.
+
+### Cold review of live-graphs run 3 — 2026-10-01
+
+`reviews/2026-10-01-live-run3.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-10-01.md` directly under
+`patches/`: `cmp` clean, and `sha256`
+`0aa047c4fc7054d4c96af948522b7040e53db33e410b25bbd4bf5ddd837dd8f2` on both
+sides.
+
+An aux cold read of `ce9ff17..9d7179a` — twelve commits, one sub-agent per code
+commit (L10 `b40dac9`, L11 `4807ae6`, L12 `be16fa8`, L13 `6b2e866`, L14
+`b10c60a`), with `ad257bc` and the six `plan:` commits for hygiene only. Its
+verdict is that **nothing blocks run 4**: every §0.2 checklist item passes on
+all five code commits, CI is green on every tip including `9d7179a`, and no
+`CLAUDE.md` invariant is breached in the range. It also tracked
+`tests/serialized_shape.json` across the whole range by a method of its own and
+found both regenerations exactly as claimed. It raised **seven** findings binned
+*next batch* and **ten** threads, and it carried one sequencing requirement: its
+strongest finding had to be settled before L15 started.
+
+**The seven findings, and what answered each.**
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | §10.5's atomicity promise is false with the shipped adapters | closed by L20 (`f04cbc8`) |
+| 2 | a carry buffer in the array or OTLP-document container is uncaught | closed by L21 (`6d39fe0`) |
+| 3 | `SPEC.md:2390` is now false | closed by L22 (`369e826`) |
+| 4 | `SPEC.md:709`'s prose census is stale | closed by L22 (`369e826`) |
+| 5 | gate 3 still has no mid-stream window | **a correction** to `b10c60a`'s body, below — not a batch |
+| 6 | two wrong numbers in L14's own §4 note and commit body | **corrected in the plan**, in `71d282f` |
+| 7 | L13's two refusing tests cannot tell their branches apart | closed by L21 (`6d39fe0`) |
+
+The sequencing requirement was honoured: the §3 row of 2026-10-01 put finding 1
+in its own batch ahead of the cost batches, and run 4 ran L20 → L21 → L22 → L15
+→ L16 → L17 → L18, so the rollback was derived once — `Ledger.rollback`,
+`Contributions.rollback` and `SpanAbsorber.rollback_to` — before L15 and L17
+turned `Tally.set_edges` into per-edge ledger traffic that a rollback has to
+reverse.
+
+Two of those closures are worth saying plainly, because the L19 row describes
+them less exactly than the commits do.
+
+- **L21 closed findings 2 and 7 without touching `spanweave/`.** The row allowed
+  L13's two refusals "distinct messages or distinct assertions"; the assertions
+  route was the one available, because the refusal message already interpolates
+  `itemsize N with c_contiguous=B` and the two tests simply never read it. So
+  each test now asserts the shape the existing message states and denies the
+  other's, proven by a branch-swap mutation under which the parent's two tests
+  pass and the rewritten two each fail alone. `git diff --stat <sha>^ <sha> --
+  spanweave/` is empty for that commit, `SPEC.md` did not move, and
+  `tests/serialized_shape.json` did not move.
+- **Finding 4's census was stale in two places, not the one the finding named.**
+  The finding named "three carry nothing", which `undecodable_bytes` had made
+  four. The same sentence also said "two carry an object" where there were
+  three, which the review itself flagged in a closing parenthesis as separate
+  and pre-existing at the parent. L22 corrected both and added the third clause
+  the table needed — one `source` carries something the library computed — and
+  then derived all three counts from the table in `tests/test_codes.py`, so the
+  next row that moves fails `make check` instead of ageing in prose. Its red
+  proof includes exactly that case: a fifth `null` row planted with the prose
+  left at the true "four" fails the new census test.
+
+**Finding 5 — a correction to `b10c60a`'s body, not a batch.** The review read
+that body as stating T9 as covering gate 3 and then fixing only gate 2 without
+saying so. Two things are true and the body says only one of them. **Gate 3 was
+not changed by L14** — only gate 2 gained the mid-stream windows. And gate 3 is
+not owed one, for the reason the same review established in the section that
+answered the prompted question about those windows: `Builder.delta` hard-wires
+`until` to `self._version`, and a gate reaches `until < n` only by calling
+`delta()` inside the feed loop, on a builder that has absorbed `records[:until]`
+and whose journal holds nothing later — so a mid-stream window **is** a
+full-prefix delta of a shorter builder, bit for bit, and the review's verdict on
+the 62 was *redundant by design*. A wider window for gate 3's fold would
+therefore be the same fold on a shorter builder, which the per-record gate
+already runs at every prefix. What the body should have said is that it names
+gate 3's `(k−1, k)` shape as context and changes gate 2 alone. The §3 row of
+2026-10-01 made that call — "Finding 5 is a correction recorded in L19, not a
+batch" — and this is the record. A commit body cannot be amended, which is why
+it is here.
+
+**Finding 6 — corrected in the plan.** `71d282f` fixed both numbers where a
+resuming cold session reads them, `WORKPLAN.md` §4's L14 note: `(1, n//2)`
+survives on **0** renderings rather than always, because it needs six records
+and the corpus tops out at five, and `(n−3, n−1)` survives on **30** rather
+than 13. The commit body that first stated them cannot be amended and stands as
+written.
+
+**The ten threads**, registered with the review's sentences verbatim, numbered
+as the review's own threads table numbers them.
+
+**Thread 8 — closed by L20 (`f04cbc8`).**
+
+> §10.5's umbrella is loose over two of its four bullets — one absorbs the
+> record, one is a `graph()` refusal with no `version` to move.
+
+L20 did more than the thread asked: §10.5's umbrella now names the two outcomes
+that are refusals of the record, says what the other two are instead — an
+unclaimed record **is** absorbed and does move `version`; a refusing `graph()`
+is a statement about everything read so far rather than about any one record —
+and covers all four in the one sense that holds for all of them.
+
+**Thread 9 — open.**
+
+> `undecodable_bytes` on the **array** branch is whole-input scoped although the
+> branch yields many records; a receiver cannot localise it, and scanning for
+> U+FFFD is ambiguous because a legitimately written U+FFFD emits nothing.
+
+**Thread 10 — open.**
+
+> `spanweave.build(bytearray(...))` raises a bare stdlib `TypeError` from
+> `pathlib` — `Source` was not widened with `read_records`, so the receiver that
+> motivated L13 gets an unframed error one call over.
+
+`Source` is still `bytes | str | os.PathLike[str]` at `spanweave/read.py:91`.
+
+**Thread 11 — open.**
+
+> "`bytes` passed through, no copy" is claimed in code, CHANGELOG and §4, and
+> pinned by no test.
+
+**Thread 12 — open.**
+
+> SPEC §7 and the docstring present the **strided** refusal beside the wide-item
+> one; only the latter is invariant 4. The strided case is a deliberately narrow
+> contract, not an ambiguity — `bytes(view[::2])` is perfectly deterministic —
+> and should say so, lest a later widening read as a determinism regression.
+
+**Thread 13 — open.**
+
+> L11's property (b) is pinned one commit ahead of the sentence that states it
+> (`be16fa8`'s §7), inverting spec-first. Harmless only because the behaviour was
+> already right.
+
+**Thread 14 — open.**
+
+> `MID_STREAM_CEILING = 64` is dead code given a 5-record corpus, and its
+> quadratic-guard rationale does not hold at that value (1953 windows at n=64, 3
+> at n=65).
+
+**Thread 15 — open.**
+
+> A retention `oldest` off-by-one survives **both** gate-2 families — gate 2
+> never sets a retention policy, so §10.8's boundary is outside it. Pinned
+> elsewhere (`tests/test_live.py:698-742`), but gate 2's coverage claims should
+> not be read as covering it.
+
+**Thread 16 — open.**
+
+> `ensure_ascii` disagrees between the shape writer (`False`) and its own
+> encoding gate (default `True`). Latent while the artifact is all-ASCII; the
+> first em dash in a prose row breaks a correctly regenerated file.
+
+`tests/schema_shape.py:519` still writes with `ensure_ascii=False` and
+`tests/test_schema_shape.py:70` still compares against the default.
+
+**Thread 17 — closed by `71d282f`, the decisions commit.**
+
+> **Against §0.2, not the code:** this review's brief named the wrong parent for
+> `4807ae6` (`cff4bb5`, the child, instead of `e8b5db9`). The `plan:` commits
+> interleave, so a code commit's predecessor in the log is not its parent. §0.2
+> should say the parent is `<sha>^`, derived.
+
+§0.2 lived in `WORKPLAN.md`, and that commit is where it changed: it said a
+code commit's parent is `<sha>^`, derived, never a sha a brief names. Every
+batch of run 4 took its red proof in a `git worktree` on that derived parent and
+said which sha it resolved to.
+
+Eight of the ten are open. Threads 8 and 17 are closed, each by a commit of this
+series rather than by a batch raised for it, and each checked here against the
+tree rather than read off a report.
+
+### Cold review of live-graphs run 4 — 2026-10-02
+
+`reviews/2026-10-02-live-run4.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-10-02.md` directly under
+`patches/`: `cmp` clean, and `sha256`
+`27d7d4fb9a27cb0c00ee635afb7a6d5c20b9997759df29f8eebf13cd3610e549` on both
+sides.
+
+An aux cold read of `71d282f..e2df391` — sixteen commits, one sub-agent per code
+commit (L20 `f04cbc8`, L21 `6d39fe0`, L22 `369e826`, L15 `cda7f74`, L16
+`e708ed5`, L17 `7ddd630`, L18 `60a831b`, L19 `a97a525`), the eight `plan:`
+commits for hygiene only, and six prompted questions answered in its §B. Its
+verdict is that **the eight code commits are individually sound and what blocks
+a PR to `main` is prose and process**: every acceptance number in L15, L16 and
+L17 re-took independently, gates 1–3 were proven untouched by blob identity
+rather than by reading hunks, and CI was green on every pushed tip. It raised
+four blockers, ten *next batch* items and seventeen threads, and it named one
+condition for READY — a single close commit, which is this one.
+
+**The four blockers, and what answered each.**
+
+| Finding | Disposition |
+|---|---|
+| A1 — the "declaration floor" is a ceiling, and the sentence drawn from it is false | closed by L26 (`a82fd30`) |
+| A2 — the series close has not happened, and `WORKPLAN.md` would land on `main` | closed by **this close** |
+| A3 — `SPEC.md`, the public source of truth, cites the file built to be deleted | closed by **this close** |
+| A4 — `_whole_input_from` survives the rollback L20 built | closed by L23 (`5803afb`), the maintainer taking the aux grading over the sub-agent's |
+
+**The ten *next batch* items, and what answered each.**
+
+| # | Item | Disposition |
+|---|---|---|
+| C1 | L17's "every pair" is unpinned, and both named pins are blind to it | closed by L24 (`ed6d3f6`) |
+| C2 | A4, on the review's grading rather than the sub-agent's | closed by L23 (`5803afb`) |
+| C3 | `SPEC.md:2514`'s "and has moved since" is false in ordering | closed by L26 (`a82fd30`) |
+| C4 | the heap guard greps a word `SPEC.md` never contained | closed by L26 (`a82fd30`) |
+| C5 | `OPEN_QUESTIONS.md` still recommends what SPEC records as rejected | closed by L26 (`a82fd30`) |
+| C6 | `0718ba8`'s subject overstates, and L17's row still demands 1.5× at the tip | **satisfied by the registry above**, whose L17 row records the criterion as unmet and why |
+| C7 | L16's row is a bare `done` against a superseded premise | **satisfied by the registry above**, whose L16 row names L15 as the mover and gives the three measurements |
+| C8 | eight new public API names ship with zero README coverage | closed by L27 (`8d04106`) — and the gap was 36 names, not eight |
+| C9 | L15 left a second §10.6 sentence false while claiming it left none | **history**: closed at the tip by L18, recorded by the review because the scope judgement was wrong by one sentence |
+| C10 | three numbers for two quantities disagreed inside `e708ed5` | **history**: L18 reconciled them at the tip |
+
+**Five corrections run 5 made to this review, recorded because each is new
+information the review and the decisions file do not carry.** They were found by
+the batches that closed the findings, and each is in the registry row above as
+well as here.
+
+1. **The false cost sentence had seven copies, not six.** The review listed
+   `SPEC.md`, `CHANGELOG.md`, `TASKS.md`, `tests/live_cost.py`, `WORKPLAN.md` and
+   three commit bodies. L26's grep found a **seventh**, in weaker words:
+   `CHANGELOG.md`'s L17 entry said "the quadratic edge set makes 1.5x
+   unreachable", which is the same claim — that 1.5× was unreachable as a
+   consequence of §4.2.1 rather than as an empirical claim about constants. Five
+   of the seven were editable and all five are corrected; `WORKPLAN.md` was left
+   by rule, because this close deletes it, and three commit bodies are history.
+   At that tip the derived constants are `c` = 11.179 µs, `F` = 0.1031 ms, and
+   1.5× would need 0.374 µs — 29.9× less.
+2. **C8's "eight names" was 36.** The review counted the eight exports this
+   series added. L27's doc-truth check, run on its own parent, named **36** of
+   the 38 — the eight plus 28 that predate the series entirely: the graph model,
+   the closed vocabularies, the error types, the annotation API, the serializers.
+   Only `build` and `validate` were named in README at all. That changed the
+   batch's shape: no exemption was taken, and the README gained a full
+   public-API table beside the live-builder section, because covering the eight
+   alone would have left a check that passes while the README stayed 28 names
+   short.
+3. **C1's mutant is at `incremental.py:619`, not `:599`.** L23 moved it. The
+   review's premise re-took exactly as written on the way: the old pin at
+   `tests/test_live.py:1062` still passes under the mutant, because it uses one
+   fulfiller and `stale[:1]` and `stale` are indistinguishable there.
+4. **L24's conformance scenario was declined on scope, not on renderability.**
+   The row offered an escape if only one dialect could render an out-of-order
+   basis rewrite; both can — `receipt_redeclared` already renders a redeclared
+   receipt in both, and it needs a second answering span and a reordered file —
+   so the escape does not apply. It was declined because any new file under
+   `fixtures/conformance/` moves the tracked corpus census, which this file,
+   `OPEN_QUESTIONS.md` and `ROADMAP.md` cite present-tense and
+   `test_the_cited_corpus_figures_are_the_tracked_census` gates: a figures change
+   L24 excluded. The consequence is registered as an open thread below.
+5. **The dedup thread's premise was wrong in the reader's favour.** It called the
+   live/batch `call_ids` divergence "harmless today only because
+   `build.deduplicated` collapses identical edges". It was not harmless:
+   **diagnostics are not deduplicated**. A span naming one call id twice drew
+   `unpaired_call` **twice in batch and once live** (`diagnostic_count` 3 against
+   2), so §10.1 was broken on a second axis the thread did not see. That is why
+   L25 mirrored the dedup in `build.py` rather than pinning the two paths equal
+   by a test — the row allowed either, and a test alone would have pinned an
+   inequality.
+
+**The seventeen threads**, registered with the review's sentences verbatim, in
+the review's own order, plus one this run opened. Four are closed by a batch of
+run 5, two are moot with the plan file, and twelve are open.
+
+**Thread 1 — open.** The handle is concrete: `tests/test_live.py`'s
+`ARRIVAL_SCOPED` names `_absorber._before`, and whichever batch takes this drops
+that name from it; L23's tracked attribute probe excludes it by name and gives
+that reason.
+
+> **`api.py`'s guard ends one statement too early** (B.1) — `finish()` clears
+> the snapshot a rollback would need.
+
+**Thread 2 — open**, and the same handle: this is the other half of L23's
+exclusion. `rollback_to` leaves `_before` describing an arrival that did not
+happen, unobservable today only because `begin()` rewrites it before its only
+reader.
+
+> **`rollback_to` resets `_restated` but not `_before`** (B.1).
+
+**Thread 3 — closed by L25 (`effcafe`).**
+
+> **A `StrEnum` compared with `is` across the seam.** `incremental.py:525` and
+> `build.py:644` both use identity on `CallRole`. An adapter passing the equal
+> plain string `"fulfiller"` is read as a *requester* live and a *fulfiller* in
+> batch — a silent §10.1 live-vs-batch divergence with no diagnostic, hit for
+> real by a probe run. Adapter misuse against the annotation, but `register` is
+> public and nothing checks it at runtime. Pre-existing, not from this range.
+
+L25 made the role comparison one rule on both paths — the fulfilling side named,
+the requesting side the fall-through — so that no value, including one SPEC does
+not speak to, can read two ways.
+
+**Thread 4 — closed by L25 (`effcafe`)**, with its premise corrected: see
+correction 5 above.
+
+> **A new live/batch divergence introduced by a cost commit.**
+> `incremental.py:526` now dedups with `sorted(set(span.call_ids))`; batch
+> `build.py:644` still iterates `span.call_ids`. Harmless today only because
+> `build.deduplicated` collapses identical edges; nothing pins it and no
+> fixture has a span naming one call id twice.
+
+**Thread 5 — open.**
+
+> **An unstated invariant.** `incremental.py:598` reads `stale[0].basis` as
+> "the basis all of this receipt's edges carry". It holds, asserted nowhere.
+
+**Thread 6 — open.**
+
+> **L16's two unreachable branches are commented as if exercised.** By
+> mutation at the tip: `if True` for the guard fails exactly one test and
+> **no** conformance gate; dropping `and now not in self._groups` leaves all
+> 2976 green; `sorted(moves)` → plain dict iteration leaves all 2976 green.
+> They survive because the fast path is sound *by construction* — every record
+> an arrival un-orphans awaits the same span id, so all share one destination
+> key, which cannot hold members before the arrival resolves it. Worth
+> recording, because it means the defences are sound rather than lucky. But the
+> comment at `:753-757` describes a tie-break ("where two moves name one
+> group, which goes first decides which takes the re-key") that no accepted
+> input can produce; say they are unreachable today.
+
+**Thread 7 — open.**
+
+> **L21's document-container test does not reach the document container.** Both
+> halves are diagnosed by the **line** reader — any truncation of JSON makes a
+> document unparseable, so that branch is unreachable by truncation. The test
+> still catches a carry at the `read_records` seam and the docstring discloses
+> this honestly (`tests/test_read.py:1665`), but the row's "pinned for … the
+> OTLP-document container" is stronger than what runs. Needs non-truncation
+> bytes (two complete documents in two calls).
+
+**Thread 8 — open.**
+
+> **L21 hard-codes a platform width.** `tests/test_read.py:1507`/`:1525` pin
+> `"itemsize 2 with c_contiguous=True"`; `itemsize` is the platform's
+> `unsigned short`, not the library's — the exact CONTRIBUTING bar item about
+> asserting only the library's part. Interpolate `wide.itemsize`.
+
+**Thread 9 — open.**
+
+> **L21's body cites shuffle seeds the repo cannot re-run.** Neither
+> `pytest-randomly` nor `pytest-random-order` is a dev dependency and no
+> shuffle harness exists. The property holds (verified by shuffling collected
+> ids), but the claim is not reproducible as written. Likewise "branch swap"
+> overstates the structure — there is one `raise` in `_as_bytes`.
+
+**Thread 10 — closed by L26 (`a82fd30`).**
+
+> **`make bench`'s default mode is contaminated by its own first workload**
+> (B.2).
+
+The default now runs the two shapes in separate processes, pinned by an
+acceptance test, and its numbers reproduce the harness header's table within
+0.3% — so the table is re-takeable by a stranger running the default, which it
+was not before.
+
+**Thread 11 — closed by L26 (`a82fd30`).**
+
+> **L17's declaration figures are not re-takeable from the harness** (B.2).
+
+`tests/live_cost.py` now prints per-segment receipt counts, so the declaration
+ratio the correction turns on is harness output rather than arithmetic quoted
+beside it.
+
+**Thread 12 — open.**
+
+> **Comments escape the neutrality gate.** `spanweave/api.py:316` (added by
+> `f04cbc8`) reads `# ... so the copy costs nothing that`. `tests/gates.py:245-259`
+> scans only AST identifiers and string literals, while
+> `no_dialect_outside_adapters` (`:274`) deliberately scans raw lines
+> "comments included". L6's note records the gate catching `cost` in a
+> *docstring*; a comment is the gap. Benign in meaning; the asymmetry is the
+> finding. Pre-existing peers at `errors.py:37`, `adapters/otel_genai.py:134`.
+
+**Thread 13 — open.**
+
+> **FIXTURES.md §4.2's must-not-build category is asserted by zero fixtures**
+> (B.3).
+
+The two suite-level skips the review traced to it are not new and are not in
+gates 1–3: `FAILING_RENDERINGS` is empty because no corpus scenario carries
+`expected_error`.
+
+**Thread 14 — moot with the plan file.**
+
+> **Gate-counting convention drift in the plan.** §4's L3/L4 entries call gates
+> 1–3 "106 assertions" (53 × 2 `assert` statements) where the dynamic
+> executions are 479 / 257 / 231. Gate 2's 257 matches L14's own later number,
+> so L14 switched convention without L3/L4 being restated. Identical at both
+> ends — nothing weakened, but two numbers in one doc now mean different things.
+
+The two numbers were in `WORKPLAN.md` §4, which this close deletes. Recorded
+because the convention is what outlives it: a gate's size is 53 parametrized
+cases and 479 / 257 / 231 dynamic assertions, and "106" was the count of
+`assert` statements in the source — a different quantity with the same shape.
+
+**Thread 15 — open.**
+
+> **L22's census gate is marker-shaped.** It measures the three markers the
+> table uses today (`` `{ ``, `` `null` ``, `Derived, not transcribed``);
+> a future object row spelled `` `dict[str, int]` `` would leave "three carry
+> an object" green and false. The `null` count — the one the row names — is
+> robust. Both sides also come from `SPEC.md`, so the body's "measured, not
+> guessed" is measured against a *document*, not against emitted diagnostics.
+
+**Thread 16 — moot with the plan file.**
+
+> **Plan-commit template nit.** `0718ba8` and `e2df391` extend
+> `plan: <batch> done` with a second clause. Both still start `plan: ` and name
+> the batch, and both clauses record something a reader needs; if the template
+> is meant to be literal, §0.1 step 5 should say a clause is allowed.
+
+§0.1 is not carried here, and run 5's `plan:` commits kept extending the subject
+with a clause for the same reason. The next series' plan file should say a clause
+is allowed.
+
+**Thread 17 — open, and local by nature.**
+
+> **Three root scratch files** (`corpus_review.log`, `phase.py`,
+> `review_corpus.py`) are hidden by `.git/info/exclude`, not `.gitignore`, so
+> `git status` cleanliness here is partly local-only.
+
+Still true at this close: the three files exist in this working tree and only
+`.git/info/exclude` hides them, so no clone reproduces that cleanliness. The
+tracked half of the same concern was closed by L9, which put `patches/` in
+`.gitignore`.
+
+**Thread 18 — open, and opened by run 5 rather than by the review.**
+L24 closed C1 with a test and declined the conformance scenario on scope
+(correction 4), so the pin is `tests/test_live.py` alone and **conformance gate 3
+remains vacuous for the `removed.extend(stale[:1])` mutant**: no corpus fixture
+performs an out-of-order basis rewrite, and `if False and …` at the rewrite site
+leaves all 813 conformance tests green. Closing it needs a scenario with two
+fulfillers of one call id and the corpus-census figures updated in the same
+change. Whether that belongs to a batch of its own is the maintainer's call.
+
+### Cold review of the live-graphs close — 2026-10-03
+
+`reviews/2026-10-02-live-close.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-10-02-close.md` directly
+under `patches/`: `cmp` silent, and `sha256`
+`9c546755970e0577fa24c4b98193e51f9607876d5150127a57ae1767e3f22460` on both
+sides.
+
+A scoped cold read of `3ab6638..a0204a3` — eleven commits, one sub-agent per code
+commit (L23 `5803afb`, L24 `ed6d3f6`, L25 `effcafe`, L28 `a0204a3`) and a hygiene
+pass over L26 `a82fd30`, L27 `8d04106` and the five `plan:` commits `b729bd0`,
+`c78b3cb`, `32a37c7`, `01261f1`, `cebcd77`. Every parent derived as `<sha>^`, and
+every code commit asked for a mutation at the tip the new test catches rather
+than only a parent run — the protocol change this series ends on. Its verdict is
+**READY after the two commits it required**, with no correctness defect found in
+shipped behaviour.
+
+**The two `blocks PR` findings, and what answered each.**
+
+| Finding | Disposition |
+|---|---|
+| L26-G1 — the declaration-ratio guard greps a fixed four-file list, so the eighth copy escapes as the seventh did | closed by `b9324e1` |
+| L25-1 — L25's dedup test states, in its docstring, the premise that this very commit corrected and its own failure disproves | closed by `597a1df`; `ba8a6f0` was a first attempt, rejected — see below |
+
+**The archive carries one error, and it is marked here rather than there.** The
+review's L25 section (`reviews/2026-10-02-live-close.md:232-237`) says of the
+corrected dedup premise: "not only in a commit body —
+`reviews/2026-10-02-live-run4.md` carries it as numbered correction 5 above the
+threads, thread 4's own entry says 'with its premise corrected: see correction 5
+above', and `TASKS.md:13324` repeats it in the L25 registry row with these
+numbers." Each clause was re-taken at this tip and every one of them is false:
+
+- **The run-4 archive carries no numbered corrections.** Its numbered lists are
+  run 4's own §C *next batch* items (`reviews/2026-10-02-live-run4.md:431-476`)
+  and the three A-findings at `:636-642`; `grep -c diagnostic_count` over the
+  file returns **0**, so the numbers the clause attributes to it are not in it.
+  `git log` on the path returns one commit, `a0204a3` — it is write-once, and
+  nothing has been added since it was archived.
+- **Its thread 4 still states the withdrawn premise verbatim and unannotated**,
+  at `reviews/2026-10-02-live-run4.md:497-501`, the sentence at `:499-500`:
+  "Harmless today only because `build.deduplicated` collapses identical edges."
+  There is no "see correction 5 above" in that file; that sentence is this
+  file's, at `TASKS.md:13363-13364`.
+- **Correction 5 lives here**, at `TASKS.md:13321-13329`, beginning "**The dedup
+  thread's premise was wrong in the reader's favour.**" The review's
+  `TASKS.md:13324` does land inside it — on "**diagnostics are not
+  deduplicated**", one line above the `diagnostic_count` figures at `:13325` —
+  but that is correction 5, not the L25 registry row. The registry row is
+  `TASKS.md:12862`, and it carries the premise in substance with no numbers at
+  all.
+
+Not one byte of the archive is edited to say so. Its `sha256` is published two
+paragraphs above, and the run-5 sweep that `b9324e1` installed exempts
+`reviews/` for the same reason (`tests/test_doc_truth.py:3303-3313`): a
+write-once archive whose digest is the proof it is one has to be allowed to say
+the wrong thing it said.
+
+**The same citation sank a commit.** `ba8a6f0`, the review's own fix for L25-1,
+repeated the claim in both places it wrote — the test docstring and a CHANGELOG
+entry — crediting "correction 5 of `reviews/2026-10-02-live-run4.md`". It was
+rejected in the run-5 verification pass for exactly that and replaced by
+`597a1df`, which cites `TASKS.md:13321` and `TASKS.md:13363-13364` instead and
+says plainly that the archive does not carry the correction. The irony is worth
+recording once: the review's one error propagated into the one commit whose
+purpose was removing a stale claim.
+
+**The sixteen threads**, registered with the review's sentences verbatim, in the
+review's own order, from its `thread` section at
+`reviews/2026-10-02-live-close.md:420`. None is a correctness defect in shipped
+behaviour, and none is closed by a commit. Every `file:line` inside them was
+re-checked against this tip; two do not resolve as written, and the correction is
+in the disposition line rather than in the quote, because a quoted sentence that
+is quietly adjusted is no longer a quotation.
+
+**Thread 1 — open.** Both citations resolve: `spanweave/incremental.py:234` is
+the sentence that asserts the ordering ("restored from the snapshot `begin`
+took, after the tally, so that the two agree"), and `Tally.rollback` is at
+`spanweave/delta.py:310-318` — the cited `:310-317` lands on the method and
+stops one statement short of its last.
+
+> **The "after `Tally.rollback`" ordering the fix documents is not real.**
+> `spanweave/incremental.py:234`, the commit body and the CHANGELOG all assert an
+> ordering dependency. `Tally.rollback` (`spanweave/delta.py:310-317`) only
+> restores its own `_groups`/`_now`; it cannot touch `_whole_input_from`.
+> Swapping the two lines gives `3000 passed, 2 skipped`. The fix is right; the
+> explanation of *why that position* is not.
+
+**Thread 2 — open**, and the same surface thread 1 and thread 2 of run 4 name.
+The citation still resolves exactly: `tests/test_live.py:826` is
+`ARRIVAL_SCOPED = frozenset({"_absorber._before", "_absorber._whole_input_before"})`,
+two entries as the thread says. `597a1df` added its docstring lines at `:1021`,
+below it, so nothing moved.
+
+> **`ARRIVAL_SCOPED` is the probe's one hand-maintained surface.**
+> `tests/test_live.py:826`. Two entries, each with a written reason. The escape
+> it permits is deliberate — someone must add a name — not silent. Worth naming
+> so a later batch does not grow it quietly.
+
+**Thread 3 — open.** The bar it names is `CONTRIBUTING.md:46`, "Adds or updates
+conformance fixtures, including at least one degenerate"; the thread gives no
+line and the sentence resolves. The reasoning it says lives only in the review
+now lives here too, which is half the remedy.
+
+> **No conformance fixture, and the reason lives only in the review.**
+> `CONTRIBUTING.md`'s bar asks for one. None is added, correctly: the defect
+> needs a refusal followed by arrivals, which the dialect-rendering corpus
+> cannot express. That reasoning is in the review, not in the commit or the
+> CHANGELOG.
+
+**Thread 4 — open, and already registered as thread 18 above**, which is what it
+says. `TASKS.md:13497` resolves to that thread.
+
+> **The parent run is vacuous, as the body says.** Disclosed verbatim and
+> substituted by the mutation; already `TASKS.md:13497` thread 18 and protocol
+> change 1, so nothing is hidden by the plan's deletion.
+
+**Thread 5 — open, and the same subject as thread 18 above**, which records the
+same vacuity with the mutant named and the closing condition stated. No
+`file:line` to check.
+
+> **Conformance gate 3 stays vacuous for the `stale[:1]` mutant.** The only
+> death in the whole-suite run is in `tests/test_live.py`; no conformance test
+> bites. Disclosed in the body, the CHANGELOG and thread 18.
+
+**Thread 6 — open, and reporting rather than citing.** `.gitignore:43` resolves
+— it is the line `patches/`. The scratch path the thread names is written below
+without backticks: `test_a_durable_document_cites_no_untracked_scratch_path`
+forbids a durable document from offering an untracked `patches/` file inside a
+code span, which is the same rule that put this review in `reviews/`. The words
+are the review's; only those two backticks are not.
+
+> **The body's origin citation is an untracked path.**
+> patches/REVIEW-2026-10-02.md is `.gitignore`d (`.gitignore:43`). The tracked
+> copy only becomes tracked at `a0204a3`, so the citation resolves at the PR tip
+> but not at `ed6d3f6`. Content verified to match.
+
+**Thread 7 — open.** `tests/delta_oracle.py:14-18` resolves: it is the paragraph
+beginning "One field it cannot compute is `restated`."
+
+> **The oracle is independent except for one field it is handed.**
+> `delta == oracle_delta(built, 3, 4, delta.restated)` feeds `restated` from the
+> object under test. `tests/delta_oracle.py:14-18` documents why two endpoint
+> graphs cannot compute it. Noted, not a defect.
+
+**Thread 8 — open, and one citation is two lines short.** `SPEC.md:2139` is the
+§10.1 heading, `SPEC.md:853` is "Edges are **unique** on `(src, dst, kind,
+basis)`", and `SPEC.md:1420` is `call_role: requester | fulfiller | None` — all
+three resolve. `ADAPTERS.md:253` opens the `call_role` bullet, but the phrase the
+thread is about, "the builder compares it **by value**", is at `ADAPTERS.md:255`.
+
+> **`SPEC.md` unchanged is right for the role half, wrong-by-silence for the
+> dedup half.** §10.1 (`SPEC.md:2139`) pre-promises the role fix, so nothing was
+> owed there. But the commit also changed observable *batch* output for a span
+> naming one call id twice, and SPEC speaks only of edges ("Edges are unique on
+> `(src, dst, kind, basis)`", `:853`) — never of a span's duplicate `call_ids`,
+> never of one diagnostic per node per call id. The new rule lives in
+> `build.py`'s docstring and the CHANGELOG only. "Read by value" likewise lives
+> only in `ADAPTERS.md:253`, while `SPEC.md:1420` still presents `call_role` as
+> the closed type.
+
+**Thread 9 — open**, and the one of the sixteen that is about the library rather
+than about a document. No `file:line` to check.
+
+> **An unreadable role is silently read as "requester", with no diagnostic.**
+> `"FULFILLER"` and `" fulfiller"` fall through to the requesting side on both
+> paths: two `unpaired_call`s, nothing saying the role was unreadable. §10.1
+> holds — that is the fix — but "degrade honestly" does not. The commit
+> knowingly asserts no side.
+
+**Thread 10 — open, and it survives `b9324e1` exactly as it says.**
+`tests/live_cost.py:122-134` resolves. The named test is at
+`tests/test_doc_truth.py:3379` and the tree sweep `b9324e1` added at `:3341`,
+and both read the same `_ratio_paragraphs_of`, which splits on `"\n\n"` at
+`:3293` — so the inheritance the thread predicts is in the one helper.
+
+> **Within a listed file the direction is asserted with `any()`.**
+> `test_the_declaration_ratio_is_stated_as_a_bound_from_above` requires only
+> that *some* matching paragraph says "from above"; a second paragraph stating
+> 7.1× with no direction passes. Already latent at
+> `tests/live_cost.py:122-134`. Worse, `TASKS.md`'s decision table has no blank
+> lines, so `split("\n\n")` reads the whole table as one paragraph containing
+> both "from above" and "A1" — a false sentence added to a row there is guarded
+> by nothing. (The new tree sweep inherits the same paragraph splitter, so this
+> thread survives `b9324e1`.)
+
+**Thread 11 — open.** `SPEC.md:2421-2427` resolves: the three constants and the
+"30× cheaper" sentence are all inside it.
+
+> **`c ≈ 11 µs`, `F ≈ 0.10 ms` and "30× cheaper" are prose arithmetic with no
+> harness.** `SPEC.md:2421-2427`. Correct, but the only §10.6 numbers nothing
+> recomputes.
+
+**Thread 12 — open.** The named test is at `tests/test_doc_truth.py:3201`; the
+thread gives no line and the name resolves.
+
+> **§10.6 duplicates ~22 machine figures from the harness header, and only the
+> provenance line is checked.** `test_spec_cost_numbers_cite_the_harness_that_took_them`
+> compares the `Measured at <sha> on <date>, CPython <v>` triple, not the
+> figures. A hand-edit to one copy drifts silently. No drift at the tip.
+
+**Thread 13 — open.** `Makefile:102-104` resolves exactly — `bench:` and the two
+`$(ARGS)` lines. `tests/live_cost.py:5-9` is the docstring's Run paragraph, and
+the documented `ARGS="--only wide --root-last --wide 2000"` is at `:7` inside
+it, so the span resolves.
+
+> **The harness header's documented `ARGS` runs one shape twice.**
+> `tests/live_cost.py:5-9` documents `ARGS="--only wide --root-last --wide 2000"`,
+> but `Makefile:102-104` appends `$(ARGS)` to both lines, so the echo line
+> becomes `--only echo --only wide` (argparse: last wins) and the wide shape
+> runs twice. Same for `ARGS="--smoke"`.
+
+**Thread 14 — open, and its one citation does not resolve.** The L1/L2 registry
+rows are at `TASKS.md:12838-12839`, not `:12850-12851`, which are L13 and L14 —
+twelve rows low. This is not drift: `TASKS.md` is byte-identical between
+`a0204a3` and `597a1df`, so the citation was already wrong at the review's own
+tip. Everything else in the thread re-takes: both rows read "`aac1915`, decided
+in `27ec3db`", both subjects begin `plan:`, and `aac1915` touched
+`OPEN_QUESTIONS.md`, `README.md`, `WORKPLAN.md` and `tests/test_doc_truth.py` —
+so it is indeed the one `plan:` commit of the series that is not WORKPLAN-only.
+
+> **L1/L2 cite a `plan:`-subject commit as their batch commit, and that commit
+> is the series' only `plan:` commit that is not WORKPLAN-only.**
+> `TASKS.md:12850-12851` cite `aac1915`, decided in `27ec3db`; both subjects
+> start `plan:`. The citation is substantively right — `aac1915` is where the
+> memos landed, adding `## 18. L1:` and `## 19. L2:` to `OPEN_QUESTIONS.md` —
+> so the registry is not lying. But `aac1915` also touched `README.md` and
+> `tests/test_doc_truth.py`, so the §0 rule the run-2/3/4 reviews each verified
+> ("every `plan:` commit touches `WORKPLAN.md` and nothing else") does not hold
+> for it, and no review covered it: run 1 had no cold review and run 2's range
+> began at `27ec3db`. Register it so the next series' §0 says what a
+> memo-opening commit may touch.
+
+**Thread 15 — open.** `TASKS.md:13278` resolves to the C6 row, and its cell
+reads as quoted. The clause the thread asks for is not added, because adding it
+would edit a disposition the run-4 entry already settled; the thread is the
+record that one clause is missing, and the next series' close can take it.
+
+> **C6's first half is not actually answered.** `TASKS.md:13278` says C6 is
+> "satisfied by the registry above, whose L17 row records the criterion as
+> unmet and why" — which answers the second clause only. A commit subject in
+> history cannot be edited, so the registry *is* the only available remedy, but
+> the cell does not say that, and a reader checking C6 against
+> `git log -1 0718ba8` still finds the overstatement with no note beside it.
+> One clause would close it.
+
+**Thread 16 — open, and its CHANGELOG citation moved under this commit.**
+`TASKS.md:12865` resolves: the L28 commit cell reads "the closing commit of the
+series". `CHANGELOG.md:477` resolved at `597a1df` and is `CHANGELOG.md:507`
+after this commit, which inserted an entry above it. The sha the thread asks for
+is `a0204a3`, recorded here so the PR body is not the only place it is written.
+
+> **L28's own row is unresolvable to a sha from `TASKS.md` alone.**
+> `TASKS.md:12865`'s commit cell reads "the closing commit of the series".
+> Unavoidable in the commit that writes it, and `CHANGELOG.md:477` dates the
+> close — but once this is on `main`, L28 is the one registry row a reader
+> cannot `git show`. The PR body should name `a0204a3`.
+
+### The lessons for the next series
+
+**Three protocol changes, decided on 2026-10-02 and deliberately not edited into
+the plan file that was about to be deleted.** A series that restores the
+builder/aux protocol takes all three with it:
+
+1. **§0.2 asks for a mutation the new test catches, not only the parent run.**
+   Six of run 4's eight derived parents are `plan:` commits, and for a
+   tests-only batch that makes "the new test fails on the parent" **vacuous by
+   construction** — `spanweave/` is byte-identical. Mutation testing is what
+   actually discharged §0.2 for L21, and what exposed C1 for L17.
+2. **§0.1 step 5 lets the builder correct a row's acceptance number, with the
+   reason, in the same plan commit.** Step 5 authorised only "status → `done`,
+   one line under §4", and §0.3 forbade the sub-agent from touching the plan at
+   all, so when L17's criterion turned out to be unmeetable **no role was
+   empowered to fix it**: the correction was deferred to L18, L18's row said the
+   plan's numbers were history, and the row still demanded 1.5× at the tip. A
+   wrong criterion needs an owner.
+3. **An aux worktree is created by absolute path under the scratchpad, never by
+   a relative one.** The run-4 review records its own breach: a `git worktree`
+   with a relative path landed at `/home/msi/git/spanweave/verify-wi`, inside
+   the repository, for about a minute. It was removed and nothing was staged,
+   but aux's contract is to leave the real tree untouched, and a relative path
+   is how that contract gets broken silently.
+
+**The lesson the series ends on.** The code of this series was sound at every
+cold review; what the reviews kept finding is **prose that stopped being true
+when the code improved** — a ratio cited after its denominator was cut 180×, a
+census that aged at the commit that added a row, a guard grepping a word the
+document never held, a "floor" that the next paragraph's own measurement
+undercut. Every one of them was recomputable from the tree, and none was caught
+by the suite until a check was written for it. The series' answer, and the
+convention to carry: a number in a document is either a promise or a citation,
+and a citation needs a test that re-derives it. The three added here —
+`test_spec_cost_numbers_cite_the_harness_that_took_them`, the §3.7 census gate,
+and the `__all__`-against-README check — are each the shape that works: they
+fail `make check` when the next addition ages the sentence, instead of ageing in
+prose until a stranger reads it.
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK, OTLP JSON;

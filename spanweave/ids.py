@@ -92,6 +92,56 @@ def derive(
     return f"{DERIVED_PREFIX}{digest[:DERIVED_LENGTH]}"
 
 
+def identify(
+    span: NormalizedSpan,
+    adapter_id: str | None,
+    trace_id: str | None,
+    *,
+    span_id_is_unique: bool,
+    source_key_is_unique: bool,
+) -> NodeId:
+    """One span's id under the three rules, given how unique its keys are.
+
+    The rules in one place, taking the two facts that are properties of the
+    whole input rather than of the span: whether any other record claims this
+    span id, and whether any other record shares its source key. A builder
+    absorbing one record at a time keeps those as counts and asks here
+    (`SPEC.md` §10), which is why they are parameters instead of being counted
+    from a list -- and why an arriving record that makes either of them false
+    moves an id that was already given out.
+    """
+    if span.span_id is not None and span_id_is_unique:
+        return span.span_id
+    if source_key_is_unique:
+        return derive(adapter_id, trace_id, span.source_key)
+    return derive(adapter_id, trace_id, span.source_key, record_digest(span.raw.source))
+
+
+def collision(
+    node_id: NodeId, first: NormalizedSpan, second: NormalizedSpan
+) -> DuplicateNodeIdError:
+    """The refusal two records resolving to one node id earn (`SPEC.md` §3.6).
+
+    A silent overwrite would drop a record, and losslessness is not
+    negotiable. Better to refuse the whole graph than to publish one that is
+    quietly missing a span.
+
+    No trace file reaches here: rule 3 separates two records that share a
+    source key, and the reader has already collapsed the case where they do
+    not differ at all. What is left is a SHA-256 collision, or a caller that
+    built two identical spans itself -- and for those two there is still
+    nothing to derive a second id from.
+    """
+    return DuplicateNodeIdError(
+        f"two records resolve to the node id {node_id!r}: "
+        f"source keys {first.source_key!r} (record "
+        f"{first.raw.line_number}) and "
+        f"{second.source_key!r} (record "
+        f"{second.raw.line_number}). Refusing to overwrite one with "
+        f"the other."
+    )
+
+
 def assign(
     spans: Sequence[NormalizedSpan],
     adapter_ids: str | Sequence[str | None] | None,
@@ -122,19 +172,15 @@ def assign(
         # source key is normally that same id, those records also share a
         # source key -- rule 3's case, where the record's own digest is what
         # tells them apart. Both are kept; the duplication is reported below.
-        if span.span_id is not None and seen[span.span_id] == 1:
-            ids.append(span.span_id)
-        elif keys[span.source_key] == 1:
-            ids.append(derive(adapter_id, trace_id, span.source_key))
-        else:
-            ids.append(
-                derive(
-                    adapter_id,
-                    trace_id,
-                    span.source_key,
-                    record_digest(span.raw.source),
-                )
+        ids.append(
+            identify(
+                span,
+                adapter_id,
+                trace_id,
+                span_id_is_unique=span.span_id is not None and seen[span.span_id] == 1,
+                source_key_is_unique=keys[span.source_key] == 1,
             )
+        )
 
     _refuse_collisions(ids, spans)
     duplicates = tuple(sorted(key for key, count in seen.items() if count > 1))
@@ -163,20 +209,4 @@ def _refuse_collisions(ids: Sequence[NodeId], spans: Sequence[NormalizedSpan]) -
         if first is None:
             positions[node_id] = index
             continue
-        # A silent overwrite would drop a record, and losslessness is not
-        # negotiable. Better to refuse the whole graph than to publish one
-        # that is quietly missing a span (SPEC.md §3.6).
-        #
-        # No trace file reaches here: rule 3 separates two records that share
-        # a source key, and the reader has already collapsed the case where
-        # they do not differ at all. What is left is a SHA-256 collision, or a
-        # caller that built two identical spans itself -- and for those two
-        # there is still nothing to derive a second id from.
-        raise DuplicateNodeIdError(
-            f"two records resolve to the node id {node_id!r}: "
-            f"source keys {spans[first].source_key!r} (record "
-            f"{spans[first].raw.line_number}) and "
-            f"{spans[index].source_key!r} (record "
-            f"{spans[index].raw.line_number}). Refusing to overwrite one with "
-            f"the other."
-        )
+        raise collision(node_id, spans[first], spans[index])

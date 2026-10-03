@@ -20,6 +20,7 @@ import json
 import pytest
 
 import spanweave
+from spanweave.api import graph_from_records
 from spanweave.errors import ERROR_CODES, SpanweaveError
 from spanweave.read import read_trace
 from spanweave.serialize import canonical_bytes, dumps, to_document, validate
@@ -38,6 +39,7 @@ from tests.conformance import (
     split_erasures,
     unsupported,
 )
+from tests.delta_oracle import checkpoint_delta
 
 SCENARIOS = scenarios()
 BUILDABLE = [s for s in SCENARIOS if s.dialects and s.expected_error is None]
@@ -1186,4 +1188,221 @@ def test_forcing_one_adapter_over_the_mixed_trace_keeps_the_node_count(caplog):
         assert (
             sum(1 for node in forced.nodes() if node.kind is spanweave.NodeKind.UNKNOWN)
             == 2
+        )
+
+
+# --------------------------------------------------------------------------
+# Conformance gate 1: the live builder over the whole corpus (SPEC.md 10)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_live_graph_is_the_batch_graph_at_every_prefix(rendering):
+    """The whole of `SPEC.md` §10, asserted on every fixture the corpus has.
+
+    Prefix consistency is the *definition* of the live graph
+    (`OPEN_QUESTIONS.md` §18), which is why this is a conformance gate and not
+    a unit test: it writes no new expectation. Every scenario already pins one
+    graph, and feeding that scenario's records one at a time must reproduce
+    the batch build of every prefix -- as a value and as the bytes it
+    serializes to.
+
+    The degenerate fixtures are what make it bite. A parent whose child came
+    first, a call nothing fulfils yet, a receipt redeclared, two records
+    claiming one span id, two trace ids, an unknown kind: each is a prefix
+    where the live graph and the finished graph must differ, and differ in
+    exactly the way the batch builder says.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    assert records, f"{rendering.label} has no records to replay"
+    builder = spanweave.Builder()
+    for version, record in enumerate(records, start=1):
+        assert builder.feed(record) == version
+        live = builder.graph()
+        batch = graph_from_records(records[:version])
+        assert dumps(live) == dumps(batch), (
+            f"{rendering.label} at version {version}: the live graph is not "
+            f"the graph of its first {version} records"
+        )
+        # Byte equality cannot see a field the writer does not serialize, so
+        # the value is compared as well -- `raw.line_number` is the one that
+        # would otherwise slip through, and it is exactly what the live path
+        # has to renumber (`SPEC.md` §3.5).
+        assert live == batch
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_the_finished_live_graph_is_the_scenario_s_canonical_graph(rendering):
+    # The other end of the same claim: gate 1 compares the live builder against
+    # the batch builder, and this compares it against the corpus's own
+    # expectation. Without it, both builders could agree and both be wrong.
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    builder = spanweave.Builder()
+    for record in read_trace(rendering.path):
+        builder.feed(record)
+    assert canonical(to_document(builder.graph()), rendering.scenario.erase) == (
+        rendering.scenario.expected_graph_for(rendering.dialect)
+    )
+
+
+# --------------------------------------------------------------------------
+# Conformance gates 2 and 3: the journal and the fold (SPEC.md 10.6-10.7)
+# --------------------------------------------------------------------------
+
+#: Above this many records, the mid-stream windows below are the three named
+#: ones rather than every window there is. Nothing in the corpus is near it --
+#: the longest rendering is five records -- and it exists so that a captured
+#: trace of real length, added later, cannot quietly turn one gate into a
+#: quadratic number of O(n + e) deltas. The three named windows are always
+#: included, so this ceiling narrows the set and never empties it.
+MID_STREAM_CEILING = 64
+
+
+def mid_stream_windows(n: int) -> tuple[tuple[int, int], ...]:
+    """Windows `(since, until)` with `until < n` **and** width greater than 1.
+
+    The window the corpus used to test always ended at the final version
+    (`until = n`), and gate 3's per-record window is always `(k - 1, k)`, so a
+    delta that neither starts at the beginning nor ends at the end was never
+    compared against the oracle at all. That is the class of window a consumer
+    asking "what changed while I was away" actually holds, and it is the one
+    where cancellation has both halves inside it *and* a live tail outside it.
+
+    Three windows are named because they are the ones worth naming -- one off
+    the front, one straddling the middle, one off the back -- and every other
+    window is added too while a rendering is short enough for that to be free.
+    A window is kept only if it is a window: `since` at least 0, `until` at
+    most `n - 1`, and at least two versions between them. On a rendering of
+    one or two records that leaves **nothing**, which is a fact about the
+    corpus rather than a gap in the gate: a two-record trace has no version
+    that is neither its first nor its last.
+
+    What this is *not*: a different mechanism. A builder's delta always ends at
+    the version it has reached, so asking mid-stream is the same code at an
+    earlier point of the same stream -- equivalently, the full-prefix loop run
+    on every prefix. The coverage it adds is real all the same, and one thing
+    it reaches is unreachable without it: a fact **still open at `until`** and
+    resolved before the end, which every window ending at the last version
+    cancels away and can therefore never report.
+    """
+    candidates = {(1, n // 2), (n // 4, 3 * n // 4), (n - 3, n - 1)}
+    if n <= MID_STREAM_CEILING:
+        candidates |= {
+            (since, until) for until in range(2, n) for since in range(until - 1)
+        }
+    return tuple(
+        sorted(
+            (since, until)
+            for since, until in candidates
+            if since >= 0 and until <= n - 1 and until - since > 1
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_every_delta_is_the_difference_between_its_two_versions(rendering):
+    """Gate 2, and it writes no new expectation either.
+
+    `SPEC.md` §10.6 defines a delta as the set difference of two prefix graphs,
+    so the oracle is that difference, computed from two materialized graphs by
+    `tests/delta_oracle.py` -- which knows nothing about how the journal is
+    kept and therefore cannot share a mistake with it.
+
+    Every `since` from 0 to the end, not just the adjacent one: cancellation is
+    only visible in a window that holds both the opening and the closing of the
+    same fact, and the degenerate fixtures are full of those -- a call
+    unfulfilled for a record or two, an orphan parent that arrives, a receipt
+    whose basis is rewritten under it.
+
+    And every window that ends **before** the end as well
+    (`mid_stream_windows`), which the full prefixes below cannot reach: a
+    builder's delta always runs to the version it has reached, so a window with
+    `until < n` is only askable while the stream is still arriving. That is why
+    they are taken inside the feed loop rather than after it.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    windows: dict[int, list[int]] = {}
+    for since, ends_at in mid_stream_windows(len(records)):
+        windows.setdefault(ends_at, []).append(since)
+
+    builder = spanweave.Builder()
+    built: list[spanweave.Graph | None] = [None]
+    for version, record in enumerate(records, start=1):
+        builder.feed(record)
+        built.append(builder.graph())
+        for since in windows.get(version, ()):
+            mid = builder.delta(since=since)
+            assert mid == checkpoint_delta(
+                built[since],
+                built[version],
+                since=since,
+                until=version,
+                restated=mid.restated,
+            ), (
+                f"{rendering.label}: delta(since={since}) at version {version} "
+                f"is not the difference between those two versions"
+            )
+
+    until = len(records)
+    for since in range(until + 1):
+        actual = builder.delta(since=since)
+        expected = checkpoint_delta(
+            built[since],
+            built[until],
+            since=since,
+            until=until,
+            restated=actual.restated,
+        )
+        assert actual == expected, (
+            f"{rendering.label}: delta(since={since}) is not the difference "
+            f"between version {since} and version {until}"
+        )
+
+
+@pytest.mark.parametrize(
+    "rendering", BUILDABLE_RENDERINGS, ids=labels(BUILDABLE_RENDERINGS)
+)
+def test_folding_every_delta_reproduces_the_next_version(rendering):
+    """Gate 3: the fold, byte for byte, per record and over every window.
+
+    Per record is the mode a live consumer runs (`SPEC.md` §10.6:
+    `delta(since=version - 1)`), and the wide windows are what prove the fold
+    is a function of the delta rather than of the arrival that produced it.
+    """
+    if not rendering.supported:
+        pytest.skip(rendering.skip_reason)
+    records = list(read_trace(rendering.path))
+    builder = spanweave.Builder()
+    built: list[spanweave.Graph | None] = [None]
+    for version, record in enumerate(records, start=1):
+        builder.feed(record)
+        current = builder.graph()
+        built.append(current)
+        previous = built[version - 1]
+        if previous is not None:
+            folded = builder.delta(since=version - 1).fold(previous)
+            assert dumps(folded) == dumps(current), (
+                f"{rendering.label}: folding delta({version - 1}, {version}) "
+                f"onto version {version - 1} is not version {version}"
+            )
+
+    until = len(records)
+    final = built[until]
+    for since in range(1, until + 1):
+        earlier = built[since]
+        assert earlier is not None and final is not None
+        assert dumps(builder.delta(since=since).fold(earlier)) == dumps(final), (
+            f"{rendering.label}: folding delta({since}, {until}) onto version "
+            f"{since} is not version {until}"
         )

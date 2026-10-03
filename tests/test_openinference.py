@@ -21,7 +21,7 @@ from spanweave.build import (
 from spanweave.model import AdapterInfo, EdgeKind, NodeKind, PayloadState, Status
 from spanweave.read import read_trace
 from spanweave.seam import CallRole
-from tests.json_depth import nested_lists, too_deep_for_nested_lists
+from tests.json_depth import lists_text, nested_lists, too_deep_for_nested_lists
 
 FIXTURE = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -202,10 +202,15 @@ def test_unparseable_json_stays_present_and_is_diagnosed():
 def test_a_deeply_nested_payload_stays_present_and_is_diagnosed():
     # Audit finding 3. Deep nesting is answered by `json.loads` with
     # RecursionError, not ValueError, so it escaped the guard above and took
-    # the whole build down. 100k brackets is far past any interpreter's limit
-    # and costs microseconds: the parser gives up at its own limit, not at the
-    # end of the string.
-    deep = "[" * 100_000 + "]" * 100_000
+    # the whole build down. Cheap to reject whatever the depth: the parser
+    # gives up at its own limit, not at the end of the string.
+    #
+    # And the depth is that limit, measured here. It was a flat 100,000 and a
+    # comment calling it "far past any interpreter's limit"; `json.loads`
+    # reads 40,106 levels on CPython 3.14.6 at an 8 MB stack and 322,402
+    # under `ulimit -s 65536`, where this payload parsed and the assertions
+    # below described a span the adapter never produced.
+    deep = lists_text(too_deep_for_nested_lists())
     span = span_of(
         {
             "openinference.span.kind": "TOOL",

@@ -40,6 +40,7 @@ import json
 import pathlib
 import re
 import shlex
+import subprocess
 from dataclasses import dataclass
 
 import pytest
@@ -392,14 +393,15 @@ def durable_documents() -> list[pathlib.Path]:
     verbatim, and a review that says a file was untracked *when it was read*
     is reporting, not citing.
 
-    A second exclusion stood here while the September 2026 audit-fix series
-    ran -- `WORKPLAN.md`, a series' own execution state, which owned
-    `patches/` as its scratch drop and was written to be deleted at series
-    close. That is exactly why nothing durable was allowed to depend on it,
-    and it is gone: the series closed and the file went with it (`TASKS.md`,
-    *September 2026 audit*). It has gone four times now, coming back for
-    each reopening, so the exclusion is a fixture of a **series**, not of a
-    file: a future series' plan file needs it back.
+    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
+    series' own execution state, which owns `patches/` as its scratch drop and
+    is written to be deleted at series close. That is exactly why nothing
+    durable was allowed to depend on it, and it is gone again: the live-graphs
+    series closed and the file went with it (`TASKS.md`, *The live-graphs
+    series*). It has gone five times now -- four across the September 2026
+    audit-fix series and its reopenings, once here -- so the exclusion is a
+    fixture of a **series**, not of a file: the next series' plan file needs
+    it back, and takes it back out at its own close.
     """
     return [
         path
@@ -618,6 +620,124 @@ def test_the_examples_use_only_the_public_api_the_readme_claims():
     assert not offenders, (
         "an example reaches past the public API, which the README says none "
         f"of them does: {offenders}"
+    )
+
+
+# -- The public API, held to the README that is supposed to name it ---------
+#
+# The run-4 cold review's §C item 8 (live-graphs batch L27, registered in
+# `TASKS.md`). Eight names landed on
+# the public surface over one series -- `Builder`, `Delta`, `Records`,
+# `BasisRewrite`, `DeltaUnavailableError`, `read_records`, `delta_dumps`,
+# `delta_to_document` -- and `grep -nE "Builder|read_records|delta" README.md`
+# returned nothing: the README's only change in 42 commits was a row in the
+# Documents table. The whole product of the series was invisible to a stranger,
+# and the test above does not see it, because an unmentioned export breaks no
+# example.
+#
+# The same `TASKS.md` 3.8 shape as everything else in this file: true when
+# written, nothing recomputes it, and the omission is found by whoever cannot
+# check it. So the population is DERIVED from `__all__` and there is no
+# exemption list -- a name exported tomorrow is covered tomorrow, which is the
+# only version of this check worth having. A grandfathered name is a name
+# nobody comes back for.
+
+
+def exports_the_readme_does_not_name(names: list[str]) -> list[str]:
+    """Which of `names` the README never writes inside a code span.
+
+    A code span rather than anywhere in the prose, because the prose is where a
+    coincidence lives: `## Status` is a heading and `Status` is a model type,
+    and "the trajectory dumper" is not `dump`. Matching is word-bounded for the
+    same reason -- `Node` must not be satisfied by `NodeKind`, nor `Delta` by
+    `DeltaUnavailableError` -- while a dotted qualifier counts, so
+    `spanweave.build(trace)` names `build`.
+    """
+    spans = code_spans(read("README.md"))
+    return sorted(
+        name
+        for name in names
+        if not any(
+            re.search(rf"(?<!\w){re.escape(name)}(?!\w)", span) for span in spans
+        )
+    )
+
+
+def test_the_readme_names_every_name_the_package_exports():
+    public = list(spanweave.__all__)
+    assert public, "spanweave exports nothing; the introspection broke"
+    missing = exports_the_readme_does_not_name(public)
+    assert not missing, (
+        f"{len(missing)} name(s) on the public API are nowhere in README.md: "
+        f"{missing}. `CLAUDE.md` says the public API is exactly what "
+        f"`spanweave/__init__.py` exports, so a name exported and unmentioned "
+        f"is a surface a stranger cannot reach. Add it to the README's public "
+        f"API table -- or unexport it, which is the other honest answer."
+    )
+
+
+def test_the_export_scan_reports_a_name_the_readme_does_not_name():
+    """The plant. A guard that has never fired is a guard nobody has read.
+
+    Both directions, because this scan can fail either way: a matcher so loose
+    that every name passes says nothing, and one so tight that a named export
+    is reported would be a README nobody can satisfy.
+    """
+    assert exports_the_readme_does_not_name(["never_exported_by_spanweave"]) == [
+        "never_exported_by_spanweave"
+    ], "the scan missed the plant, so it would miss a real omission too"
+    assert exports_the_readme_does_not_name(["Builder", "read_records"]) == [], (
+        "the scan reports a name the README does name; the word boundary or "
+        "the code-span reading has gone wrong"
+    )
+
+
+# -- The README's live section, run rather than read ------------------------
+
+
+LIVE_SECTION = "\n## Building a graph while the trace is still arriving"
+
+
+def test_the_live_builder_example_prints_what_the_readme_shows():
+    """`TASKS.md` 3.9, applied below `## Install`.
+
+    The quickstart's blocks are the script and two harnesses run them. This
+    section's block is a third paste a reader makes, and an example of a
+    *live* builder is the easiest kind to let drift: its output is five lines
+    of counts and a diagnostic opening and closing, every one of which moves if
+    pairing, canonical order or the delta's definition moves.
+
+    Run from the repository root, because the trace it reads is corpus data
+    that does not ship in the wheel -- which is why this lives here and not in
+    `tests/install_check.py`.
+    """
+    import subprocess
+    import sys
+
+    from tests.readme_quickstart import blocks_of, normalize
+
+    blocks = blocks_of(section(read("README.md"), LIVE_SECTION))
+    assert len(blocks) == 1, (
+        f"the README's live-builder section holds {len(blocks)} python blocks; "
+        f"this check is written about one, and a second one silently unrun is "
+        f"the failure mode it exists for"
+    )
+    block = blocks[0]
+    assert block.expected, "the python block shows no output to compare against"
+    result = subprocess.run(
+        [sys.executable, "-c", block.source],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"the README's live-builder example does not run: exit "
+        f"{result.returncode}\n{result.stderr}"
+    )
+    assert normalize(result.stdout) == normalize(block.expected), (
+        "the README's live-builder example prints something other than what "
+        f"it shows.\n--- printed ---\n{normalize(result.stdout)}\n"
+        f"--- README ---\n{normalize(block.expected)}"
     )
 
 
@@ -3046,3 +3166,298 @@ def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, cap
     assert printed == shown, (
         f"the README shows\n  {shown}\nand the CLI prints\n  {printed}"
     )
+
+
+# -- §10.6's numbers against the harness that took them ---------------------
+
+# `SPEC.md` §10.6 states what a live build costs. For most of its life that
+# section carried a machine's ratios in its prose -- a seventh, three fifths,
+# "8x the records is 116x the feed" -- taken at commits where three `feed` sites
+# were superlinear. All three were fixed (live-graphs batches L15-L17,
+# registered in `TASKS.md`) and the prose
+# went on saying what it had said, which is the exact failure this file exists
+# for: nothing recomputes a sentence. So §10.6 now states classes as promises and
+# cites `tests/live_cost.py` for the numbers, with the date, interpreter and
+# commit they were taken at -- and this check holds the two files to the *same*
+# provenance, because a number in SPEC attributed to a measurement the harness
+# header does not share is a citation with no referent.
+#
+# What it cannot check, said plainly: whether the numbers are the ones the
+# harness would print today. That needs minutes of CPU on a loaded machine and
+# would be a duration assertion in the fast gate, which is the flake `make
+# stranger` and `make bench` both refuse. What it checks is that prose and
+# harness agree on *what was measured, when, and where* -- and `make bench
+# ARGS="--smoke"`, which `make check` runs, checks the shape those numbers are
+# about.
+
+#: `Measured at `<sha>` on <date>, CPython <version>` -- the one spelling, so
+#: that history recorded in either file (which names its own commit and date)
+#: cannot be mistaken for the measurement the two must agree on.
+PROVENANCE = re.compile(
+    r"[Mm]easured at `([0-9a-f]{7,40})` on (\d{4}-\d{2}-\d{2}), (CPython [\d.]+)"
+)
+
+
+def test_spec_cost_numbers_cite_the_harness_that_took_them():
+    spec = flat(section(read("SPEC.md"), "### 10.6"))
+    harness = flat(read("tests/live_cost.py"))
+    assert "tests/live_cost.py" in spec, (
+        "`SPEC.md` §10.6 states cost numbers without naming the harness that "
+        "took them; a number in SPEC is either a promise or a citation"
+    )
+    in_spec = PROVENANCE.findall(spec)
+    in_harness = PROVENANCE.findall(harness)
+    assert len(in_spec) == 1, (
+        f"`SPEC.md` §10.6 states its measurement provenance {len(in_spec)} "
+        f"time(s) in the one spelling this check reads ('Measured at `<sha>` on "
+        f"<date>, CPython <version>'); exactly one is what keeps the citation "
+        f"unambiguous"
+    )
+    assert len(in_harness) == 1, (
+        f"`tests/live_cost.py` states its measurement provenance "
+        f"{len(in_harness)} time(s) in that spelling, and §10.6 cites it"
+    )
+    assert in_spec == in_harness, (
+        f"`SPEC.md` §10.6 attributes its numbers to {in_spec[0]} and "
+        f"`tests/live_cost.py` says its table was taken at {in_harness[0]}. One "
+        f"of the two was re-measured and the other was not"
+    )
+
+
+def test_spec_no_longer_claims_a_faster_sort_was_measured():
+    """The heap-Kahn claim is gone from SPEC, and gone for a stated reason.
+
+    A Kahn sort with a heap was measured once, in the session that wrote
+    live-graphs batch L5, and the harness for it was not retained -- so nothing
+    in this tree reproduces it and SPEC cannot state it as a property of the
+    library (`TASKS.md`, *The live-graphs series*, the 2026-09-30 N2/T1-T5
+    decision). It survives as session history in `CHANGELOG.md` and in the
+    harness header, each saying so.
+    """
+    spec = read("SPEC.md")
+    assert not re.search(r"\bheaps?\b", spec, re.I), (
+        "`SPEC.md` names a heap again. The one measurement behind that claim "
+        "was taken in a batch session whose harness was not retained, so SPEC "
+        "would be stating a number nothing in this tree can reproduce"
+    )
+    # The words SPEC actually carried, which the check above never read: the
+    # claim was spelled "the way past that is not a faster sort but no sort"
+    # (`0718ba8`'s `SPEC.md:2373`), and `git log -S"heap" -- SPEC.md` finds the
+    # word "heap" in this file's history nowhere. A guard that greps a word the
+    # document never held is green for the wrong reason (review B.4, 2026-10-02).
+    assert not re.search(r"faster sort", spec, re.I), (
+        "`SPEC.md` offers a *faster sort* again. That is the heap claim in the "
+        "spelling SPEC carried it in, and the same measurement is behind it: "
+        "§10.6's answer to the wide shape's sort share is `no sort`, which is "
+        "an open spec conversation and not a speedup this tree can reproduce"
+    )
+    retained = "harness not retained"
+    for where in ("CHANGELOG.md", "tests/live_cost.py"):
+        assert retained in read(where), (
+            f"{where} records the heap-Kahn measurement without saying the "
+            f"harness was not retained, which is the whole of why `SPEC.md` "
+            f"does not state it"
+        )
+
+
+# -- The declaration ratio is a bound from above, in every file that cites it --
+
+#: The four files that carry the echo shape's declaration ratio: the spec, this
+#: changelog's L18 entry, the task record of the review L18 answered, and the
+#: harness header. The review found the same sentence copied into all four (and
+#: into `WORKPLAN.md`, which the series deleted at its close, and into three
+#: commit bodies, which are history) -- so a correction to one of them is not a
+#: correction.
+WHERE_THE_DECLARATION_RATIO_IS_CITED = (
+    "SPEC.md",
+    "CHANGELOG.md",
+    "TASKS.md",
+    "tests/live_cost.py",
+)
+
+
+#: `x` and the multiplication sign the documents actually use, the latter
+#: escaped so this stays readable to the ambiguous-character lint.
+DECLARATION_RATIO = re.compile(r"7\.1\s*\**\s*[x\u00d7]")
+
+
+def _ratio_paragraphs_of(text: str) -> list[str]:
+    """Paragraphs of some text that state the echo shape's declaration ratio.
+
+    Matched on the two things that make a paragraph *about* that ratio -- the
+    figure and the word "declar" -- rather than on a site, because the defect
+    this guards is a sentence copied to a new place (`audit-R9`'s lesson).
+    """
+    return [
+        flat(paragraph)
+        for paragraph in text.split("\n\n")
+        if DECLARATION_RATIO.search(paragraph) and "declar" in paragraph
+    ]
+
+
+def _declaration_ratio_paragraphs(where: str) -> list[str]:
+    """The same, for one file named by its path relative to the repo root."""
+    return _ratio_paragraphs_of(read(where))
+
+
+#: Tracked paths the tree sweep below does not read, each for a reason that is
+#: about the file rather than about the sentence.
+#:
+#: `reviews/` holds cold reviews archived **byte for byte**, and the run-4
+#: archive is where the false claim was first written down. `TASKS.md`
+#: publishes its `sha256`, so editing it to satisfy a guard would break the
+#: digest that makes it an archive at all -- the history has to be allowed to
+#: say the wrong thing it said.
+#:
+#: This file has to quote what it forbids in order to forbid it.
+RATIO_SWEEP_EXEMPT = ("reviews/", "tests/test_doc_truth.py")
+
+
+def _tracked_text() -> list[tuple[str, str]]:
+    """Every tracked file this sweep can read, as `(path, contents)`.
+
+    `git ls-files` rather than `rglob`: the question is what the repository
+    *carries* -- an untracked scratch file is nobody's claim, and a build
+    artifact under `out/` is not a document. Binary and undecodable files are
+    skipped, since a sentence cannot hide in one.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    out = []
+    for name in sorted(path for path in listed.split("\0") if path):
+        if name.startswith(RATIO_SWEEP_EXEMPT):
+            continue
+        try:
+            out.append((name, (ROOT / name).read_text(encoding="utf-8")))
+        except (UnicodeDecodeError, OSError):
+            continue
+    return out
+
+
+def test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor():
+    """The same rule as below, asked of the whole tree rather than four files.
+
+    The list in `WHERE_THE_DECLARATION_RATIO_IS_CITED` says where the ratio
+    *must* be stated. It cannot say where the ratio must not be stated wrongly,
+    and that is the half this defect lives in: review A1's sentence was found
+    in six places, L26 found a seventh by hand, and a guard that re-reads the
+    seven it knows about is blind to the eighth exactly as the first six were
+    blind to the seventh. `audit-R9`'s lesson is that a copied sentence is
+    caught by sweeping, not by enumerating.
+
+    So every tracked, readable file is asked the two questions the four named
+    files are asked: a paragraph stating the ratio has to say which way it
+    bounds the measured rise, and a paragraph calling it a floor has to cite
+    the finding that withdrew the word. A new document that repeats the claim
+    fails here without anyone remembering to add it to a list.
+    """
+    for where, text in _tracked_text():
+        for paragraph in _ratio_paragraphs_of(text):
+            assert re.search(r"from \*{0,2}above", paragraph, re.I) or re.search(
+                r"\bA1\b", paragraph
+            ), (
+                f"{where} states the echo shape's declaration ratio without "
+                f"saying which way it bounds the measured ms/record rise, and "
+                f"without citing review A1 as history: {paragraph[:200]!r}. It "
+                f"is a bound from **above** -- `(F + c*d2)/(F + c*d1) <= "
+                f"d2/d1`, equality only at zero fixed per-record cost -- so a "
+                f"paragraph that leaves the direction out is the sentence A1 "
+                f"found, in a new place"
+            )
+            if re.search(r"\bfloor\b", paragraph, re.I):
+                assert re.search(r"\bA1\b", paragraph), (
+                    f"{where} calls the declaration ratio a floor without "
+                    f"citing the finding that withdrew the word: "
+                    f"{paragraph[:200]!r}"
+                )
+
+
+def test_the_declaration_ratio_is_stated_as_a_bound_from_above():
+    """7.1x bounds the measured rise from above, and no file calls it a floor.
+
+    The run-4 cold review's blocking finding A1. `SPEC.md` §10.6 said the echo
+    shape's 7.1x rise in declared receipts per record was **the floor** of its
+    ms/record rise for "any implementation that builds each declared relation
+    once", reported a measured 5.43x *below* it, and then explained the gap as
+    fixed per-record cost -- which is the reason it is not a floor. With
+    per-record cost `F + c*d`, `(F + c*d2)/(F + c*d1) <= d2/d1` with equality
+    only at `F = 0`, so the declaration ratio bounds the measured one from
+    **above**; and the ratio has no lower bound at all, because raising `F`
+    drives it toward 1. The sentence drawn from the word -- that a target under
+    7.1x "could only be met by suppressing relations the telemetry stated" --
+    was therefore false, and reaching 1.5x needs a cheaper edge rather than a
+    dropped declaration.
+
+    This test holds the corrected form in every file that states the ratio, and
+    requires each of them to state it at all: a sentence this wrong, copied to
+    four files, was fixed in one place at a time until a check read all four.
+    Where the ratio must *not* be stated wrongly is the other half, and a list
+    cannot answer it --
+    `test_no_tracked_file_anywhere_states_the_declaration_ratio_as_a_floor`
+    sweeps the tree for that.
+    """
+    for where in WHERE_THE_DECLARATION_RATIO_IS_CITED:
+        paragraphs = _declaration_ratio_paragraphs(where)
+        assert paragraphs, (
+            f"{where} no longer states what the echo shape's two stretches "
+            f"declare, which is the comparison its measured ms/record rise is "
+            f"against (review A1). If the figure moved, this list moves with "
+            f"it; if the claim is gone, say so here rather than leaving the "
+            f"guard reading nothing"
+        )
+        assert any(
+            re.search(r"from \*{0,2}above", paragraph, re.I) for paragraph in paragraphs
+        ), (
+            f"{where} states the declaration ratio in "
+            f"{len(paragraphs)} paragraph(s) and none of them says which way it "
+            f"bounds the measured one: {paragraphs[0][:200]!r}. 'From above' is "
+            f"the whole of finding A1, and a reader who takes it for a floor "
+            f"draws the false conclusion A1 found"
+        )
+        for paragraph in paragraphs:
+            # The word itself is not forbidden: a retraction has to name what
+            # it retracts, and three of these files record the old claim as
+            # history. What is forbidden is the word standing *unattributed* --
+            # which is what a re-assertion looks like.
+            if re.search(r"\bfloor\b", paragraph, re.I):
+                assert re.search(r"\bA1\b", paragraph), (
+                    f"{where} calls the declaration ratio a floor without "
+                    f"citing the finding that withdrew the word: "
+                    f"{paragraph[:200]!r}. It is a bound from above -- "
+                    f"`(F + c*d2)/(F + c*d1) <= d2/d1`, equality only at zero "
+                    f"fixed per-record cost -- so a paragraph using the word "
+                    f"is reporting review A1's history or re-making its error"
+                )
+
+
+def test_the_declared_receipts_per_record_state_their_denominators():
+    """24.6 is 4,950 over **201** records, and 201 is not 100 turns of 2.
+
+    Review B.4's last point: `24.6` cannot be recomputed from §10.6's own words,
+    because turns 1-100 are 200 records and 4,950/200 is 24.75. The denominator
+    is 201 -- the root span is folded into the first stretch -- against 200 for
+    turns 301-400, and the asymmetry existed only in the harness. Both
+    denominators are now stated where the figures are.
+    """
+    for where in ("SPEC.md", "tests/live_cost.py"):
+        paragraphs = [
+            paragraph
+            for paragraph in _declaration_ratio_paragraphs(where)
+            if "24.6" in paragraph
+        ]
+        assert paragraphs, (
+            f"{where} states the declaration ratio but not the per-record "
+            f"receipt counts it is a ratio of"
+        )
+        for paragraph in paragraphs:
+            for figure, denominator in (("4,950", "201"), ("34,950", "200")):
+                assert figure in paragraph and denominator in paragraph, (
+                    f"{where} states 24.6 declarations per record without the "
+                    f"{figure}/{denominator} it comes from: {paragraph[:160]!r}."
+                    f" 4,950 over 200 records would be 24.75; the root span "
+                    f"folded into the first stretch is why it is 201"
+                )

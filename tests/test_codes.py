@@ -17,6 +17,7 @@ from spanweave import diagnostics
 from spanweave.errors import (
     ERROR_CODES,
     AdapterSelectionError,
+    DeltaUnavailableError,
     DuplicateNodeIdError,
     SpanweaveError,
     UnknownAdapterError,
@@ -54,6 +55,7 @@ def test_every_error_type_carries_a_registered_code():
         AdapterSelectionError,
         UnknownAdapterError,
         DuplicateNodeIdError,
+        DeltaUnavailableError,
     ):
         if error_type is SpanweaveError:
             continue  # the base class's placeholder is not a contract
@@ -329,6 +331,79 @@ def test_contracts_counts_the_source_rows_the_spec_states():
         f"SPEC.md §3.7 states {len(source_shapes())} `source` rows and "
         f"CONTRACTS.md's `diagnostics[].source` row does not say so. A count "
         f"in prose goes stale the first time the table grows"
+    )
+
+
+# --------------------------------------------------------------------------
+# §3.7's own census of that table, which did go stale (live-graphs L22,
+# registered in `TASKS.md`)
+# --------------------------------------------------------------------------
+#
+# The paragraph introducing the `source` table counts it three ways, and the
+# count above is the only one anything asserted. So when L12 added a fourth
+# `null` row the sentence became false and `make check` stayed green -- the
+# exact defect class the comment one table up describes, one paragraph over.
+# ("two carry an object" was already off by one before that, since
+# `timestamp_unit_suspect` is a third.) The remedy is the same remedy: derive
+# all three numbers from the table rather than correcting them.
+
+CENSUS = re.compile(
+    r"Most codes carry the offending fragment as the type it arrived as; "
+    r"(\w+) carry an object, (\w+) carry nothing, and (\w+) carries something "
+    r"the library computed"
+)
+
+
+def source_census() -> dict[str, int]:
+    """The three counts §3.7's census paragraph makes, measured from the table."""
+    shapes = source_shapes()
+    return {
+        "an object": sum(1 for shape in shapes.values() if shape.startswith("`{")),
+        "nothing": len(codes_declared_empty()),
+        "the library computed": sum(
+            1 for shape in shapes.values() if "Derived, not transcribed" in shape
+        ),
+    }
+
+
+def test_the_source_census_in_the_spec_is_the_census_of_its_own_table():
+    """Three numbers in one sentence, each recomputed from the rows below it.
+
+    The `null` count is the one that aged: it read "three" from the day
+    `missing_trace_id` joined until L12 made it four. Asserting it here means
+    the next row added to the table fails this test in the same change rather
+    than leaving a false sentence for a stranger to find.
+    """
+    section = SPEC[SPEC.index("### 3.7 Diagnostic") : SPEC.index("### 3.8")]
+    stated = CENSUS.search(re.sub(r"\s+", " ", section))
+    assert stated is not None, (
+        "SPEC.md §3.7's census sentence above the `source` table is no longer "
+        "in the shape this check reads. The sentence is the thing being kept "
+        "true; if it was rewritten, move this with it rather than deleting "
+        "either"
+    )
+    counted = source_census()
+    assert stated.groups() == tuple(NUMBER_WORDS[n] for n in counted.values()), (
+        f"SPEC.md §3.7's census says {list(stated.groups())} rows carry "
+        f"{list(counted)}; its own table says "
+        f"{[NUMBER_WORDS[n] for n in counted.values()]}. A count in prose goes "
+        f"stale the first time the table grows"
+    )
+
+
+def test_the_census_counts_the_rows_it_claims_to_count():
+    # The measurement itself, pinned: each of the three families matches at
+    # least one row, and together they leave the catch-all something to cover.
+    # A marker the table stopped using would otherwise make a family measure
+    # zero and the prose would simply be corrected down to meet it.
+    counted = source_census()
+    assert all(n > 0 for n in counted.values()), (
+        f"a `source` census family measured zero rows: {counted}. One of the "
+        f"three markers the table uses has moved"
+    )
+    assert sum(counted.values()) < len(source_shapes()), (
+        "the census families cover every stated row, so the catch-all's "
+        "'most codes carry the offending fragment' has nothing left to be true of"
     )
 
 

@@ -9,6 +9,7 @@ import pytest
 
 from spanweave.cli import main
 from tests import digit_limit
+from tests.json_depth import deepest_accepted, lists_text, too_deep_for_nested_lists
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures/conformance"
 TRACE = str(FIXTURES / "llm_tool_llm/dialects/openinference.jsonl")
@@ -335,10 +336,17 @@ def test_no_other_missing_path_gets_the_hint_and_the_first_line_never_moves(
 # reads without complaint.
 # --------------------------------------------------------------------------
 
-#: A record the reader parses fine and a record nested past any interpreter's
+#: A record the reader parses fine and a record nested past *this* process's
 #: recursion limit. The deep one is second so the file is still JSONL: a file
 #: whose FIRST byte is '[' is the array container, which is a different path.
-DEEP_VALUE = b"[" * 100_000 + b"]" * 100_000
+#:
+#: The depth is measured here, not written down. It was a flat 100,000 under
+#: a comment saying "past any interpreter's recursion limit"; `json.loads`
+#: reads 40,106 levels of brackets on CPython 3.14.6 at an 8 MB stack and
+#: **322,402** under `ulimit -s 65536`, where this file parsed cleanly, the
+#: two tests below stopped seeing the `malformed_record` they assert, and the
+#: third went on passing for a reason that had nothing to do with depth.
+DEEP_VALUE = lists_text(too_deep_for_nested_lists()).encode()
 SHALLOW_RECORD = (
     b'{"trace_id":"t1","span_id":"s0","parent_id":null,"name":"n",'
     b'"start_time":1.0,"end_time":2.0,"status":"OK",'
@@ -420,17 +428,17 @@ def test_build_contains_a_payload_at_the_edge_of_the_parsers_limit(tmp_path, cap
 
 
 def _parser_limit():
-    """The deepest array this interpreter's JSON parser will read."""
-    low, high = 1, 200_000
-    while low < high:
-        middle = (low + high + 1) // 2
-        try:
-            json.loads("[" * middle + "]" * middle)
-        except RecursionError:
-            high = middle - 1
-        else:
-            low = middle
-    return low
+    """The deepest array this interpreter's JSON parser will read.
+
+    The bisection lives in `tests/json_depth.py` rather than here. A private
+    copy searched up to a hard-coded 200,000 and *returned that cap* where
+    nothing under it was refused, which is the same assumption the constants
+    above carried: on CPython 3.14.6 under `ulimit -s 65536` the parser reads
+    322,402 levels, so the band this test walks would have been nine depths
+    the parser reads without complaint, asserted to be the edge of something.
+    `deepest_accepted` fails there instead of answering.
+    """
+    return deepest_accepted(lambda depth: json.loads(lists_text(depth)))
 
 
 # --------------------------------------------------------------------------

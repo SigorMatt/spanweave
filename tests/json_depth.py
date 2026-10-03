@@ -1,13 +1,17 @@
 """Where `json` gives out, measured rather than assumed.
 
-Shared by `tests/test_serialize.py` (the write side) and `tests/test_read.py`
-(the reader's digest), because both ask the same question of the interpreter
-and the answer must be one measurement rather than two. Three consecutive
-attempts to state this quantity as a fact about the library -- A6, the run-2
-review, R6 -- each measured one interpreter and wrote a universal, and R6's
-pin was green on CPython 3.14 only because it nested **lists** where a graph
-document nests **dicts** (run-3 review F1). So the shape is named in every
-helper here, and nothing in this module asserts a direction.
+Shared by every test that needs a nesting the interpreter will not take --
+`test_serialize.py` (the write side), `test_read.py` (the reader's digest and
+its two container formats), `test_cli.py`, `test_graph.py` and the two
+adapters' text parse paths -- because they all ask the same question of the
+interpreter and the answer must be one measurement rather than nine.
+
+Three consecutive attempts to state this quantity as a fact about the library
+-- A6, the run-2 review, R6 -- each measured one interpreter and wrote a
+universal, and R6's pin was green on CPython 3.14 only because it nested
+**lists** where a graph document nests **dicts** (run-3 review F1). So the
+shape is named in every helper here, and nothing in this module asserts a
+direction.
 """
 
 from __future__ import annotations
@@ -57,9 +61,9 @@ def dicts_text(depth):
 #: Where the doubling search gives up looking for a ceiling. A test that
 #: steps *past* a ceiling is vacuous if there is no ceiling to step past, so
 #: the search says so rather than running until the machine swaps: 2,000,000
-#: is an order of magnitude past the deepest ceiling ever measured here
-#: (CPython 3.14.6, lists, ~74,500) and small enough to build in under a
-#: second.
+#: is past the deepest ceiling ever measured here -- CPython 3.14.6, lists,
+#: ~74,500 at the 8 MB stack CI runs with and ~598,700 under
+#: `ulimit -s 65536` -- and small enough to build in under a second.
 SEARCH_CAP = 2_000_000
 
 
@@ -123,6 +127,27 @@ MEASUREMENT_NOISE = 256
 #: bounded rather than ignored.
 CALL_PATH_SLACK = 64
 
+
+def _too_deep(cache, build, text):
+    """Past both of this process's ceilings for one container shape.
+
+    `json.dumps` of the built value and `json.loads` of the same nesting
+    written out as text are two different ceilings -- on CPython 3.14.6 they
+    are 74,481 and 40,106 for lists and 37,240 and 40,106 for dicts -- and a
+    caller that only knows "this must be too deep to handle" does not know
+    which of the two the code under test will reach first. Taking the larger
+    and stepping `MEASUREMENT_NOISE` past it is too deep for either.
+
+    Memoized per shape: every call site asks one question of the interpreter,
+    and bisecting it once per site would answer it once per site.
+    """
+    if not cache:
+        encoder = deepest_accepted(lambda depth: json.dumps(build(depth)))
+        parser = deepest_accepted(lambda depth: json.loads(text(depth)))
+        cache.append(max(encoder, parser) + MEASUREMENT_NOISE)
+    return cache[0]
+
+
 _too_deep_for_nested_lists = []
 
 
@@ -136,13 +161,29 @@ def too_deep_for_nested_lists():
     is running. A constant cannot do this job: the same 100,000 that is 100x
     the ceiling on CPython 3.11 (991) is *under* it on 3.14.6 (74,481 for
     lists), where the check is against the real C stack pointer and a runner
-    with a larger stack moves it again.
-
-    Measured once per process, because the four call sites ask one question
-    and bisecting it four times would answer it four times over.
+    with a larger stack moves it again -- to 598,745 under `ulimit -s 65536`.
     """
-    if not _too_deep_for_nested_lists:
-        encoder = deepest_accepted(lambda depth: json.dumps(nested_lists(depth)))
-        parser = deepest_accepted(lambda depth: json.loads(lists_text(depth)))
-        _too_deep_for_nested_lists.append(max(encoder, parser) + MEASUREMENT_NOISE)
-    return _too_deep_for_nested_lists[0]
+    return _too_deep(_too_deep_for_nested_lists, nested_lists, lists_text)
+
+
+_too_deep_for_nested_dicts = []
+
+
+def too_deep_for_nested_dicts():
+    """A nesting of **dicts** that `json` will not take in this process.
+
+    The lists helper's question asked of the shape a graph document actually
+    has at every level (`nested_dicts`), because the two ceilings are not the
+    same number and assuming they were is how a pin came to be green on an
+    interpreter where the sentence it pinned was false (run-3 review F1). On
+    CPython 3.14.6 the encoder gives out ~37,000 levels earlier for dicts
+    than for lists, so the lists answer is not usable here in the direction
+    that matters: it would be a depth `json.dumps` refuses either way, but
+    nothing would have measured the ceiling the code under test is standing
+    on.
+
+    Every caller of this one reaches the *encoder* -- `record_digest` and
+    `canonical_bytes`, both of which recurse from deeper in the stack than a
+    bare `json.dumps` and so give out no later than it does.
+    """
+    return _too_deep(_too_deep_for_nested_dicts, nested_dicts, dicts_text)

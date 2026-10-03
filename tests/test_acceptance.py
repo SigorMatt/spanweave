@@ -44,13 +44,57 @@ def _recipe(target: str) -> str:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("prerequisite", ["lint", "types", "test", "gates"])
+@pytest.mark.parametrize(
+    "prerequisite", ["lint", "types", "test", "gates", "bench-smoke"]
+)
 def test_check_depends_on_every_stage(prerequisite):
     assert prerequisite in _recipe("check").splitlines()[0]
 
 
 def test_check_smoke_tests_the_installed_entrypoint():
     assert "spanweave --version" in _recipe("check")
+
+
+def test_the_cost_harness_smoke_form_is_what_check_runs():
+    """`check` runs the harness, and runs the form that asserts rather than times.
+
+    The live-cost harness (`tests/live_cost.py`, `make bench`) is a benchmark and
+    deliberately asserts nothing about the clock, so for most of its life nothing
+    ran it and a change could leave it measuring something `SPEC.md` §10.6 no
+    longer says. Its `--smoke` form asserts the *shape* those numbers are about
+    -- declared-receipt counts, one `Edge` per edge held, where the sorts are --
+    which is exactly the part a gate can hold. This test is here because a stage
+    silently dropped from `check` is indistinguishable from a stage that passes.
+    """
+    recipe = _recipe("bench-smoke")
+    assert "tests.live_cost" in recipe, "bench-smoke no longer runs the harness"
+    assert "--smoke" in recipe, (
+        "bench-smoke runs the harness in a form that TIMES rather than asserts; "
+        "a duration in the fast gate is the flake `make stranger` warns about"
+    )
+
+
+def test_bench_runs_the_two_shapes_in_separate_processes():
+    """The default run reproduces the table it documents, or it is not a table.
+
+    Run in one process, the echo shape's 81,799 edges are still held while the
+    wide shape's `delta()` runs, and the wide `delta()` and its two `ordering()`
+    calls come out well above the figures in `tests/live_cost.py`'s header --
+    which were taken per shape with `--only` (run-4 cold review §B.2,
+    live-graphs L26, registered in `TASKS.md`). A benchmark whose documented
+    table its own default invocation does not produce is the measurement defect
+    this whole cost family exists to end, so the default is two processes and
+    this holds it there.
+    """
+    recipe = _recipe("bench")
+    runs = [line for line in recipe.splitlines() if "tests.live_cost" in line]
+    assert len(runs) == 2, (
+        f"`make bench` runs the harness {len(runs)} time(s); one process for "
+        f"both shapes does not reproduce the header table (review B.2)"
+    )
+    assert [line for line in runs if "--only echo" in line] and [
+        line for line in runs if "--only wide" in line
+    ], f"`make bench` no longer runs one shape per process: {runs}"
 
 
 def test_lint_checks_formatting_as_well_as_rules():
