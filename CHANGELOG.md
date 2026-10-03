@@ -15,6 +15,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The run-5 close review is archived, its one error is marked from outside
+  it, and its sixteen threads are registered.** Documents only: nothing under
+  `spanweave/` moves, no test moves, and `tests/serialized_shape.json` does not
+  move. `reviews/2026-10-02-live-close.md` is the scoped cold review of
+  `3ab6638..a0204a3` copied byte-for-byte from its untracked scratch drop —
+  `cmp` silent, `sha256`
+  `9c546755970e0577fa24c4b98193e51f9607876d5150127a57ae1767e3f22460` on both
+  sides — and `TASKS.md` gains a *Cold review of the live-graphs close* section
+  carrying its two `blocks PR` findings with dispositions (**L26-G1** →
+  `b9324e1`, **L25-1** → `597a1df`, with `ba8a6f0` recorded as the rejected
+  first attempt) and all sixteen threads with the review's own sentences
+  verbatim.
+  **The archive is not edited, including where it is wrong.** Its L25 section
+  claims the run-4 archive "carries it as numbered correction 5 above the
+  threads" and that thread 4's own entry points at that correction. Neither
+  half is true: `reviews/2026-10-02-live-run4.md` carries no numbered
+  corrections and zero occurrences of `diagnostic_count`, and its thread 4
+  still states the withdrawn premise verbatim and unannotated. Correction 5 and
+  the pointer to it live in `TASKS.md`, which is where `597a1df` cites them —
+  and that is the same citation `ba8a6f0` was rejected for, so the review's one
+  error reached the one commit whose purpose was removing a stale claim. A
+  write-once archive whose digest is published has to be allowed to say the
+  wrong thing it said, so the correction is registered beside it instead.
+  Two of the sixteen thread citations do not resolve as written and are
+  corrected in the disposition lines rather than inside the quotes: thread 14's
+  pointer at the L1/L2 registry rows is twelve rows low, and thread 8's
+  "read by value" sits two lines below the line `ADAPTERS.md` is cited at. The
+  rest were re-checked against the tip and resolve, `tests/test_live.py:826`
+  among them — `597a1df` added docstring lines below it, not above.
+
 - **The README covers the live builder, and a test holds it to `__all__`.**
   Docs and tests only: nothing under `spanweave/` moves and `SPEC.md` does not
   move (`WORKPLAN.md` L27, from the run-4 cold review's §C item 8). Eight names

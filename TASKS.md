@@ -13503,6 +13503,263 @@ leaves all 813 conformance tests green. Closing it needs a scenario with two
 fulfillers of one call id and the corpus-census figures updated in the same
 change. Whether that belongs to a batch of its own is the maintainer's call.
 
+### Cold review of the live-graphs close — 2026-10-03
+
+`reviews/2026-10-02-live-close.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-10-02-close.md` directly
+under `patches/`: `cmp` silent, and `sha256`
+`9c546755970e0577fa24c4b98193e51f9607876d5150127a57ae1767e3f22460` on both
+sides.
+
+A scoped cold read of `3ab6638..a0204a3` — eleven commits, one sub-agent per code
+commit (L23 `5803afb`, L24 `ed6d3f6`, L25 `effcafe`, L28 `a0204a3`) and a hygiene
+pass over L26 `a82fd30`, L27 `8d04106` and the five `plan:` commits `b729bd0`,
+`c78b3cb`, `32a37c7`, `01261f1`, `cebcd77`. Every parent derived as `<sha>^`, and
+every code commit asked for a mutation at the tip the new test catches rather
+than only a parent run — the protocol change this series ends on. Its verdict is
+**READY after the two commits it required**, with no correctness defect found in
+shipped behaviour.
+
+**The two `blocks PR` findings, and what answered each.**
+
+| Finding | Disposition |
+|---|---|
+| L26-G1 — the declaration-ratio guard greps a fixed four-file list, so the eighth copy escapes as the seventh did | closed by `b9324e1` |
+| L25-1 — L25's dedup test states, in its docstring, the premise that this very commit corrected and its own failure disproves | closed by `597a1df`; `ba8a6f0` was a first attempt, rejected — see below |
+
+**The archive carries one error, and it is marked here rather than there.** The
+review's L25 section (`reviews/2026-10-02-live-close.md:232-237`) says of the
+corrected dedup premise: "not only in a commit body —
+`reviews/2026-10-02-live-run4.md` carries it as numbered correction 5 above the
+threads, thread 4's own entry says 'with its premise corrected: see correction 5
+above', and `TASKS.md:13324` repeats it in the L25 registry row with these
+numbers." Each clause was re-taken at this tip and every one of them is false:
+
+- **The run-4 archive carries no numbered corrections.** Its numbered lists are
+  run 4's own §C *next batch* items (`reviews/2026-10-02-live-run4.md:431-476`)
+  and the three A-findings at `:636-642`; `grep -c diagnostic_count` over the
+  file returns **0**, so the numbers the clause attributes to it are not in it.
+  `git log` on the path returns one commit, `a0204a3` — it is write-once, and
+  nothing has been added since it was archived.
+- **Its thread 4 still states the withdrawn premise verbatim and unannotated**,
+  at `reviews/2026-10-02-live-run4.md:497-501`, the sentence at `:499-500`:
+  "Harmless today only because `build.deduplicated` collapses identical edges."
+  There is no "see correction 5 above" in that file; that sentence is this
+  file's, at `TASKS.md:13363-13364`.
+- **Correction 5 lives here**, at `TASKS.md:13321-13329`, beginning "**The dedup
+  thread's premise was wrong in the reader's favour.**" The review's
+  `TASKS.md:13324` does land inside it — on "**diagnostics are not
+  deduplicated**", one line above the `diagnostic_count` figures at `:13325` —
+  but that is correction 5, not the L25 registry row. The registry row is
+  `TASKS.md:12862`, and it carries the premise in substance with no numbers at
+  all.
+
+Not one byte of the archive is edited to say so. Its `sha256` is published two
+paragraphs above, and the run-5 sweep that `b9324e1` installed exempts
+`reviews/` for the same reason (`tests/test_doc_truth.py:3303-3313`): a
+write-once archive whose digest is the proof it is one has to be allowed to say
+the wrong thing it said.
+
+**The same citation sank a commit.** `ba8a6f0`, the review's own fix for L25-1,
+repeated the claim in both places it wrote — the test docstring and a CHANGELOG
+entry — crediting "correction 5 of `reviews/2026-10-02-live-run4.md`". It was
+rejected in the run-5 verification pass for exactly that and replaced by
+`597a1df`, which cites `TASKS.md:13321` and `TASKS.md:13363-13364` instead and
+says plainly that the archive does not carry the correction. The irony is worth
+recording once: the review's one error propagated into the one commit whose
+purpose was removing a stale claim.
+
+**The sixteen threads**, registered with the review's sentences verbatim, in the
+review's own order, from its `thread` section at
+`reviews/2026-10-02-live-close.md:420`. None is a correctness defect in shipped
+behaviour, and none is closed by a commit. Every `file:line` inside them was
+re-checked against this tip; two do not resolve as written, and the correction is
+in the disposition line rather than in the quote, because a quoted sentence that
+is quietly adjusted is no longer a quotation.
+
+**Thread 1 — open.** Both citations resolve: `spanweave/incremental.py:234` is
+the sentence that asserts the ordering ("restored from the snapshot `begin`
+took, after the tally, so that the two agree"), and `Tally.rollback` is at
+`spanweave/delta.py:310-318` — the cited `:310-317` lands on the method and
+stops one statement short of its last.
+
+> **The "after `Tally.rollback`" ordering the fix documents is not real.**
+> `spanweave/incremental.py:234`, the commit body and the CHANGELOG all assert an
+> ordering dependency. `Tally.rollback` (`spanweave/delta.py:310-317`) only
+> restores its own `_groups`/`_now`; it cannot touch `_whole_input_from`.
+> Swapping the two lines gives `3000 passed, 2 skipped`. The fix is right; the
+> explanation of *why that position* is not.
+
+**Thread 2 — open**, and the same surface thread 1 and thread 2 of run 4 name.
+The citation still resolves exactly: `tests/test_live.py:826` is
+`ARRIVAL_SCOPED = frozenset({"_absorber._before", "_absorber._whole_input_before"})`,
+two entries as the thread says. `597a1df` added its docstring lines at `:1021`,
+below it, so nothing moved.
+
+> **`ARRIVAL_SCOPED` is the probe's one hand-maintained surface.**
+> `tests/test_live.py:826`. Two entries, each with a written reason. The escape
+> it permits is deliberate — someone must add a name — not silent. Worth naming
+> so a later batch does not grow it quietly.
+
+**Thread 3 — open.** The bar it names is `CONTRIBUTING.md:46`, "Adds or updates
+conformance fixtures, including at least one degenerate"; the thread gives no
+line and the sentence resolves. The reasoning it says lives only in the review
+now lives here too, which is half the remedy.
+
+> **No conformance fixture, and the reason lives only in the review.**
+> `CONTRIBUTING.md`'s bar asks for one. None is added, correctly: the defect
+> needs a refusal followed by arrivals, which the dialect-rendering corpus
+> cannot express. That reasoning is in the review, not in the commit or the
+> CHANGELOG.
+
+**Thread 4 — open, and already registered as thread 18 above**, which is what it
+says. `TASKS.md:13497` resolves to that thread.
+
+> **The parent run is vacuous, as the body says.** Disclosed verbatim and
+> substituted by the mutation; already `TASKS.md:13497` thread 18 and protocol
+> change 1, so nothing is hidden by the plan's deletion.
+
+**Thread 5 — open, and the same subject as thread 18 above**, which records the
+same vacuity with the mutant named and the closing condition stated. No
+`file:line` to check.
+
+> **Conformance gate 3 stays vacuous for the `stale[:1]` mutant.** The only
+> death in the whole-suite run is in `tests/test_live.py`; no conformance test
+> bites. Disclosed in the body, the CHANGELOG and thread 18.
+
+**Thread 6 — open, and reporting rather than citing.** `.gitignore:43` resolves
+— it is the line `patches/`. The scratch path the thread names is written below
+without backticks: `test_a_durable_document_cites_no_untracked_scratch_path`
+forbids a durable document from offering an untracked `patches/` file inside a
+code span, which is the same rule that put this review in `reviews/`. The words
+are the review's; only those two backticks are not.
+
+> **The body's origin citation is an untracked path.**
+> patches/REVIEW-2026-10-02.md is `.gitignore`d (`.gitignore:43`). The tracked
+> copy only becomes tracked at `a0204a3`, so the citation resolves at the PR tip
+> but not at `ed6d3f6`. Content verified to match.
+
+**Thread 7 — open.** `tests/delta_oracle.py:14-18` resolves: it is the paragraph
+beginning "One field it cannot compute is `restated`."
+
+> **The oracle is independent except for one field it is handed.**
+> `delta == oracle_delta(built, 3, 4, delta.restated)` feeds `restated` from the
+> object under test. `tests/delta_oracle.py:14-18` documents why two endpoint
+> graphs cannot compute it. Noted, not a defect.
+
+**Thread 8 — open, and one citation is two lines short.** `SPEC.md:2139` is the
+§10.1 heading, `SPEC.md:853` is "Edges are **unique** on `(src, dst, kind,
+basis)`", and `SPEC.md:1420` is `call_role: requester | fulfiller | None` — all
+three resolve. `ADAPTERS.md:253` opens the `call_role` bullet, but the phrase the
+thread is about, "the builder compares it **by value**", is at `ADAPTERS.md:255`.
+
+> **`SPEC.md` unchanged is right for the role half, wrong-by-silence for the
+> dedup half.** §10.1 (`SPEC.md:2139`) pre-promises the role fix, so nothing was
+> owed there. But the commit also changed observable *batch* output for a span
+> naming one call id twice, and SPEC speaks only of edges ("Edges are unique on
+> `(src, dst, kind, basis)`", `:853`) — never of a span's duplicate `call_ids`,
+> never of one diagnostic per node per call id. The new rule lives in
+> `build.py`'s docstring and the CHANGELOG only. "Read by value" likewise lives
+> only in `ADAPTERS.md:253`, while `SPEC.md:1420` still presents `call_role` as
+> the closed type.
+
+**Thread 9 — open**, and the one of the sixteen that is about the library rather
+than about a document. No `file:line` to check.
+
+> **An unreadable role is silently read as "requester", with no diagnostic.**
+> `"FULFILLER"` and `" fulfiller"` fall through to the requesting side on both
+> paths: two `unpaired_call`s, nothing saying the role was unreadable. §10.1
+> holds — that is the fix — but "degrade honestly" does not. The commit
+> knowingly asserts no side.
+
+**Thread 10 — open, and it survives `b9324e1` exactly as it says.**
+`tests/live_cost.py:122-134` resolves. The named test is at
+`tests/test_doc_truth.py:3379` and the tree sweep `b9324e1` added at `:3341`,
+and both read the same `_ratio_paragraphs_of`, which splits on `"\n\n"` at
+`:3293` — so the inheritance the thread predicts is in the one helper.
+
+> **Within a listed file the direction is asserted with `any()`.**
+> `test_the_declaration_ratio_is_stated_as_a_bound_from_above` requires only
+> that *some* matching paragraph says "from above"; a second paragraph stating
+> 7.1× with no direction passes. Already latent at
+> `tests/live_cost.py:122-134`. Worse, `TASKS.md`'s decision table has no blank
+> lines, so `split("\n\n")` reads the whole table as one paragraph containing
+> both "from above" and "A1" — a false sentence added to a row there is guarded
+> by nothing. (The new tree sweep inherits the same paragraph splitter, so this
+> thread survives `b9324e1`.)
+
+**Thread 11 — open.** `SPEC.md:2421-2427` resolves: the three constants and the
+"30× cheaper" sentence are all inside it.
+
+> **`c ≈ 11 µs`, `F ≈ 0.10 ms` and "30× cheaper" are prose arithmetic with no
+> harness.** `SPEC.md:2421-2427`. Correct, but the only §10.6 numbers nothing
+> recomputes.
+
+**Thread 12 — open.** The named test is at `tests/test_doc_truth.py:3201`; the
+thread gives no line and the name resolves.
+
+> **§10.6 duplicates ~22 machine figures from the harness header, and only the
+> provenance line is checked.** `test_spec_cost_numbers_cite_the_harness_that_took_them`
+> compares the `Measured at <sha> on <date>, CPython <v>` triple, not the
+> figures. A hand-edit to one copy drifts silently. No drift at the tip.
+
+**Thread 13 — open.** `Makefile:102-104` resolves exactly — `bench:` and the two
+`$(ARGS)` lines. `tests/live_cost.py:5-9` is the docstring's Run paragraph, and
+the documented `ARGS="--only wide --root-last --wide 2000"` is at `:7` inside
+it, so the span resolves.
+
+> **The harness header's documented `ARGS` runs one shape twice.**
+> `tests/live_cost.py:5-9` documents `ARGS="--only wide --root-last --wide 2000"`,
+> but `Makefile:102-104` appends `$(ARGS)` to both lines, so the echo line
+> becomes `--only echo --only wide` (argparse: last wins) and the wide shape
+> runs twice. Same for `ARGS="--smoke"`.
+
+**Thread 14 — open, and its one citation does not resolve.** The L1/L2 registry
+rows are at `TASKS.md:12838-12839`, not `:12850-12851`, which are L13 and L14 —
+twelve rows low. This is not drift: `TASKS.md` is byte-identical between
+`a0204a3` and `597a1df`, so the citation was already wrong at the review's own
+tip. Everything else in the thread re-takes: both rows read "`aac1915`, decided
+in `27ec3db`", both subjects begin `plan:`, and `aac1915` touched
+`OPEN_QUESTIONS.md`, `README.md`, `WORKPLAN.md` and `tests/test_doc_truth.py` —
+so it is indeed the one `plan:` commit of the series that is not WORKPLAN-only.
+
+> **L1/L2 cite a `plan:`-subject commit as their batch commit, and that commit
+> is the series' only `plan:` commit that is not WORKPLAN-only.**
+> `TASKS.md:12850-12851` cite `aac1915`, decided in `27ec3db`; both subjects
+> start `plan:`. The citation is substantively right — `aac1915` is where the
+> memos landed, adding `## 18. L1:` and `## 19. L2:` to `OPEN_QUESTIONS.md` —
+> so the registry is not lying. But `aac1915` also touched `README.md` and
+> `tests/test_doc_truth.py`, so the §0 rule the run-2/3/4 reviews each verified
+> ("every `plan:` commit touches `WORKPLAN.md` and nothing else") does not hold
+> for it, and no review covered it: run 1 had no cold review and run 2's range
+> began at `27ec3db`. Register it so the next series' §0 says what a
+> memo-opening commit may touch.
+
+**Thread 15 — open.** `TASKS.md:13278` resolves to the C6 row, and its cell
+reads as quoted. The clause the thread asks for is not added, because adding it
+would edit a disposition the run-4 entry already settled; the thread is the
+record that one clause is missing, and the next series' close can take it.
+
+> **C6's first half is not actually answered.** `TASKS.md:13278` says C6 is
+> "satisfied by the registry above, whose L17 row records the criterion as
+> unmet and why" — which answers the second clause only. A commit subject in
+> history cannot be edited, so the registry *is* the only available remedy, but
+> the cell does not say that, and a reader checking C6 against
+> `git log -1 0718ba8` still finds the overstatement with no note beside it.
+> One clause would close it.
+
+**Thread 16 — open, and its CHANGELOG citation moved under this commit.**
+`TASKS.md:12865` resolves: the L28 commit cell reads "the closing commit of the
+series". `CHANGELOG.md:477` resolved at `597a1df` and is `CHANGELOG.md:507`
+after this commit, which inserted an entry above it. The sha the thread asks for
+is `a0204a3`, recorded here so the PR body is not the only place it is written.
+
+> **L28's own row is unresolvable to a sha from `TASKS.md` alone.**
+> `TASKS.md:12865`'s commit cell reads "the closing commit of the series".
+> Unavoidable in the commit that writes it, and `CHANGELOG.md:477` dates the
+> close — but once this is on `main`, L28 is the one registry row a reader
+> cannot `git show`. The PR body should name `a0204a3`.
+
 ### The lessons for the next series
 
 **Three protocol changes, decided on 2026-10-02 and deliberately not edited into
