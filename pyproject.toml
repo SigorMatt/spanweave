@@ -49,6 +49,16 @@ Issues = "https://github.com/SigorMatt/spanweave/issues"
 [tool.hatch.build.targets.wheel]
 # Ship the library only. capture/, examples/, fixtures/, and tests/ are
 # development or human-run and are not part of the distributed package.
+#
+# The PEP 561 marker `spanweave/py.typed` ships because it lives inside the
+# package directory this line names -- there is no second declaration to keep
+# in step, and adding one would be a line that can rot while the marker still
+# ships. What holds it is therefore a test rather than a declaration: an
+# `exclude` here, or a deleted marker, fails `make install-check`'s "wheel:
+# ships the PEP 561 marker" and "install: the installed distribution carries
+# the PEP 561 marker", and the `no-py-typed` plant proves both are live.
+# Without the marker a consumer's `mypy --strict` refuses to analyse
+# `spanweave` at all, whatever the `Typing :: Typed` classifier above says.
 packages = ["spanweave"]
 
 [tool.hatch.build.targets.sdist]

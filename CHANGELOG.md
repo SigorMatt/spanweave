@@ -15,6 +15,41 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The package ships `py.typed` (PEP 561).** No behaviour change: one empty
+  file under `spanweave/`, plus the checks that keep it shipping. The
+  distribution has advertised `Typing :: Typed` and `mypy --strict` since Phase
+  0, and carried no marker — so the annotations were a fact about the *source*
+  and not about the *artifact*. `spanweave-live`, consuming the published wheel,
+  found that `mypy --strict` **refuses to analyse `spanweave` at all** without
+  one and had to carry a `follow_untyped_imports = true` override for
+  `spanweave.*` to type-check its own code (receiver series, run-1 review,
+  2026-10-05); `ignore_missing_imports` would have been worse, widening every
+  imported `spanweave` type to `Any`. The marker is the one-line upstream fix
+  that lets the override be deleted.
+  Nothing in `pyproject.toml` had to be added to get it into the wheel —
+  hatchling ships it because it lives under the package directory
+  `[tool.hatch.build.targets.wheel].packages` already names, and the sdist's
+  `/spanweave` include carries it too. A second declaration would be a line
+  that can rot while the marker still ships, so **what holds it is tests, not a
+  declaration**: `make install-check` asserts it twice — `wheel: ships the PEP
+  561 typing marker` over the built artifact and `install: the installed
+  distribution carries the PEP 561 marker` read from inside the
+  throwaway venv, where a consumer's type checker actually looks — plus a
+  classifier/marker agreement check, because an index renders the classifier
+  and a type checker reads the marker and either alone is the drift. The new
+  `--plant no-py-typed` excludes the marker from the wheel and must fail
+  **exactly** those two and the generic `wheel: ships every file under
+  spanweave/` sweep, which is also the record that **nothing else notices**:
+  the distribution still installs, imports, and runs every probe green. The
+  fast gate holds the source-tree half
+  (`tests/test_acceptance.py::test_the_packaging_configuration_keeps_the_pep_561_marker_included`):
+  the marker exists, git tracks it, the wheel target still names the package
+  and excludes nothing matching it, and the classifier is declared. It
+  deliberately does not assert the file is non-empty — PEP 561's marker is a
+  presence, and empty is the conventional form.
+  `DESIGN.md` §7 and the README's Install section now state it, since what a
+  distribution ships is a public-contract fact.
+
 - **The run-5 close review is archived, its one error is marked from outside
   it, and its sixteen threads are registered.** Documents only: nothing under
   `spanweave/` moves, no test moves, and `tests/serialized_shape.json` does not

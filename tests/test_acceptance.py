@@ -214,6 +214,10 @@ def test_install_check_plants_a_violation_for_each_direction_it_claims():
         # over an expected difference. The plant redirects pyproject's `readme`
         # and must fail that check and nothing else.
         "readme-decoupled",
+        # The PEP 561 marker dropped from the wheel. Its absence is invisible
+        # to every other check -- the package installs, imports and runs -- and
+        # a consumer's `mypy --strict` refuses to analyse spanweave at all.
+        "no-py-typed",
     }
     # A plant that expects nothing to fail would "hold" against a check that
     # does nothing at all.
@@ -232,6 +236,60 @@ def test_the_sdist_contents_are_declared_rather_than_defaulted():
     metadata = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     sdist = metadata["tool"]["hatch"]["build"]["targets"]["sdist"]
     assert "/spanweave" in sdist["include"]
+
+
+def test_the_packaging_configuration_keeps_the_pep_561_marker_included():
+    """The source-tree half of the typing-marker claim (PEP 561).
+
+    `make install-check` is the only gate that can see an *installed* tree, and
+    it is where the marker's shipping is actually asserted — twice, over the
+    wheel and from inside the throwaway venv, with `--plant no-py-typed` to
+    prove both are live. This test is the half `make check` can hold: the
+    configuration that gets the marker into the artifact, pinned so that a
+    regression costs the fast gate rather than only the slow one.
+
+    What the marker is for: without it, a consumer running `mypy --strict`
+    cannot analyse `spanweave` at all, however completely annotated the source
+    is (`DESIGN.md` §7). The `Typing :: Typed` classifier is asserted here too
+    because the two are one claim — the classifier is what an index renders, the
+    marker is what a type checker reads, and either alone is the drift.
+
+    Deliberately NOT a check that the file is non-empty: PEP 561's marker is a
+    presence, and an empty file is the conventional form.
+    """
+    import tomllib
+
+    marker = REPO / "spanweave/py.typed"
+    assert marker.is_file(), (
+        "spanweave/py.typed is missing. mypy --strict in a consumer refuses to "
+        "analyse the package without it, whatever the classifiers say."
+    )
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "spanweave/py.typed"],
+        cwd=REPO,
+        capture_output=True,
+        check=False,
+    )
+    assert tracked.returncode == 0, (
+        "spanweave/py.typed is untracked, so it is absent from a clean checkout "
+        "and from the sdist allowlist's view of `/spanweave`"
+    )
+
+    metadata = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    wheel = metadata["tool"]["hatch"]["build"]["targets"]["wheel"]
+    # The marker ships because it lives under the package directory this
+    # declares; there is no second declaration, so what must hold is that this
+    # one still names the package and that nothing excludes the marker again.
+    assert "spanweave" in wheel["packages"]
+    excluded = [
+        pattern
+        for key in ("exclude", "force-exclude")
+        for pattern in wheel.get(key, [])
+        if "py.typed" in pattern or pattern in ("spanweave", "spanweave/")
+    ]
+    assert not excluded, f"the wheel target excludes the typing marker: {excluded}"
+    assert "Typing :: Typed" in metadata["project"]["classifiers"]
 
 
 def test_the_citation_guard_sees_a_top_level_directory_citation():

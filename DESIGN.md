@@ -225,6 +225,13 @@ to the north star itself — do not build them now.
 - **Optional extras:** `otlp` (protobuf) at Phase 4; `dev` (ruff, mypy, pytest).
 - **Packaging:** hatchling; the wheel ships `spanweave/` only — `examples/`,
   `fixtures/`, and `tests/` stay out.
+- **PEP 561:** the distribution ships `spanweave/py.typed`. "Fully typed" is a
+  claim about the *source* until the marker makes it a claim about the
+  *distribution*: without it a consumer's `mypy --strict` refuses to analyse
+  `spanweave` at all and has to carry a per-module override to type-check its
+  own code, so the annotations above reach nobody downstream. It ships because
+  it lives inside the package directory, and `make install-check` asserts it
+  over both the wheel and the installed tree rather than trusting that.
 
 ## 8. Why `examples/` lives outside the package
 

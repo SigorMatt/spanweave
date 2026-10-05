@@ -40,6 +40,13 @@ then re-runs the existing zero-dependencies gate over the **shipped bytes**
 rather than the tree's, so a lazy `import something_not_shipped` inside a
 function is caught even though no probe executes that line.
 
+One shipped file is named rather than left to that sweep: the PEP 561 marker
+`spanweave/py.typed`. It is the file whose absence is invisible to everything
+else here — the package imports, every module imports, every probe passes, and
+a consumer's `mypy --strict` still refuses to analyse `spanweave` at all. So it
+is asserted twice, once about the wheel and once from inside the installed
+interpreter, and `--plant no-py-typed` proves both assertions are live.
+
 The sdist is audited too, because `uv build` builds the wheel *from* it and
 because it is the other half of what gets published: it must contain
 everything the wheel does, and it must contain nothing git does not track.
@@ -75,6 +82,8 @@ the check to fail, naming which checks must fail:
   existing gate rules over the planted source and reports that they find
   nothing.
 - `path-leak` — the working tree on `PYTHONPATH`. Described above.
+- `no-py-typed` — the PEP 561 marker excluded from the wheel. Nothing else
+  fails: the distribution still installs, imports and runs.
 
 Run everything with no arguments; `make install-check` does.
 
@@ -105,6 +114,12 @@ from tests import gates
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = "spanweave"
+
+#: The PEP 561 marker, as it is spelled inside the wheel and inside the
+#: installed package directory. A distribution without it is not type-checkable
+#: by a consumer however completely annotated its source is: `mypy --strict`
+#: refuses the import rather than reading the annotations.
+TYPING_MARKER = f"{PACKAGE}/py.typed"
 
 #: Traces the installed CLI is run over. Absolute paths are handed to the
 #: installed `spanweave`, so the fixtures stay where they are; nothing about
@@ -543,6 +558,7 @@ def audit_wheel(wheel: pathlib.Path, tree: pathlib.Path, report: Report) -> None
         )
 
     _audit_wheel_carries_the_readme(metadata_text, tree, report)
+    _audit_wheel_ships_the_typing_marker(members, metadata_text, report)
 
     expected = _tree_files(tree)
     missing = sorted(expected - members)
@@ -654,6 +670,50 @@ def _audit_wheel_carries_the_readme(
     )
 
 
+def _audit_wheel_ships_the_typing_marker(
+    members: set[str], metadata_text: str, report: Report
+) -> None:
+    """PEP 561: an annotated library ships a marker or is not type-checkable.
+
+    This is the one shipped file whose absence no other check here can see.
+    The package installs, every module imports, every CLI probe passes — and a
+    consumer running `mypy --strict` over code that imports `spanweave` gets
+    *"Skipping analyzing "spanweave": module is installed, but missing library
+    stubs or py.typed marker"* and has to carry an override to type-check its
+    own code. `spanweave-live` carried `follow_untyped_imports = true` for
+    exactly that reason (receiver series, run-1 review, 2026-10-05), which is
+    the weaker of two bad options: `ignore_missing_imports` would have made
+    every imported `spanweave` type `Any` and type-checked nothing.
+
+    The classifier is asserted beside it because the two are one claim. A
+    distribution advertising `Typing :: Typed` without the marker tells an index
+    something its consumers' type checkers cannot act on, and either half alone
+    is the drift.
+    """
+    report.check(
+        "wheel: ships the PEP 561 marker",
+        TYPING_MARKER in members,
+        (
+            f"{TYPING_MARKER} is not in the wheel. Without it a consumer's "
+            f"`mypy --strict` refuses to analyse spanweave, however completely "
+            f"annotated the source is. The marker ships because it lives under "
+            f"the package directory `[tool.hatch.build.targets.wheel].packages` "
+            f"names, so either the file is gone from the tree or something now "
+            f"excludes it."
+        ),
+    )
+    classifiers = email.message_from_string(metadata_text).get_all("Classifier") or []
+    report.check(
+        "wheel: METADATA advertises the typing the marker backs",
+        "Typing :: Typed" in classifiers,
+        (
+            "METADATA carries no `Typing :: Typed` classifier while the wheel "
+            "ships py.typed. The classifier is what an index renders; the "
+            "marker is what a type checker reads. They are one claim."
+        ),
+    )
+
+
 def _venv_bin(venv: pathlib.Path) -> pathlib.Path:
     return venv / ("Scripts" if sys.platform == "win32" else "bin")
 
@@ -699,7 +759,7 @@ def install_wheel(wheel: pathlib.Path, venv: pathlib.Path, report: Report) -> bo
 
 #: Runs inside the throwaway venv. Reports facts; the harness judges them.
 PROBE = f"""
-import importlib, json, pkgutil, sys, sysconfig
+import importlib, json, os.path, pkgutil, sys, sysconfig
 
 report = {{"sys_path": list(sys.path), "purelib": sysconfig.get_paths()["purelib"]}}
 # Everything the interpreter loaded on its own -- site.py, and the .pth
@@ -714,6 +774,11 @@ except BaseException as error:
     raise SystemExit(0)
 
 report["package_file"] = package.__file__
+# PEP 561: what a consumer's type checker looks for, read where it looks --
+# beside the installed `__init__.py`, not in the wheel and not in the tree.
+report["typing_marker"] = os.path.isfile(
+    os.path.join(os.path.dirname(package.__file__), "py.typed")
+)
 failed, found = {{}}, []
 for info in pkgutil.walk_packages(package.__path__, "{PACKAGE}."):
     found.append(info.name)
@@ -756,6 +821,7 @@ def probe_runtime(
             "runtime: every shipped module imports",
             "runtime: every module in the tree is importable from the install",
             "isolation: the import drags in nothing outside the install",
+            "install: the installed distribution carries the PEP 561 marker",
         ):
             report.skipped(name, _decode(result.stderr))
         return
@@ -780,6 +846,7 @@ def probe_runtime(
             "runtime: every shipped module imports",
             "runtime: every module in the tree is importable from the install",
             "isolation: the import drags in nothing outside the install",
+            "install: the installed distribution carries the PEP 561 marker",
         ):
             report.skipped(name, "the package did not import")
         return
@@ -788,6 +855,20 @@ def probe_runtime(
         "isolation: the imported package is the installed one",
         _is_under(facts["package_file"], purelib),
         f"imported {facts['package_file']}, which is not under {purelib}",
+    )
+
+    # Read from inside the interpreter under test, beside the installed
+    # `__init__.py`, because that is the only place a consumer's type checker
+    # looks. A marker present in the wheel and absent from the install, or the
+    # reverse, is the state this and the wheel audit together rule out.
+    report.check(
+        "install: the installed distribution carries the PEP 561 marker",
+        facts.get("typing_marker") is True,
+        (
+            f"no py.typed beside {facts['package_file']}. `mypy --strict` in a "
+            f"consumer skips analysing spanweave entirely and the consumer has "
+            f"to carry an override to type-check its own code."
+        ),
     )
 
     report.check(
@@ -1075,6 +1156,22 @@ PLANTS = (
         ),
     ),
     Plant(
+        name="no-py-typed",
+        what="the PEP 561 marker excluded from the wheel — everything else passes",
+        must_fail=frozenset(
+            {
+                "wheel: ships the PEP 561 marker",
+                "install: the installed distribution carries the PEP 561 marker",
+                # The generic sweep sees it too, and that is worth recording
+                # rather than hiding: the named checks exist because the sweep
+                # cannot say WHY the file matters, and a future `exclude` that
+                # the sweep stopped covering would still fail the two above.
+                "wheel: ships every file under spanweave/",
+            }
+        ),
+        exactly=True,
+    ),
+    Plant(
         name="readme-decoupled",
         what="the wheel's long description pointed at a file that is not README.md",
         must_fail=frozenset(
@@ -1101,6 +1198,24 @@ def _plant_missing_module(source: pathlib.Path) -> str:
     )
     pyproject.write_text(text, encoding="utf-8")
     return f"excluded {victim} from the wheel"
+
+
+def _plant_no_py_typed(source: pathlib.Path) -> str:
+    """Drop the marker from the wheel, leaving the distribution otherwise whole.
+
+    Excluded rather than deleted, because deleting it from the copied tree would
+    also remove it from the set the generic sweep measures against and the
+    plant would then prove less than it claims: the question is whether a file
+    present in the tree and missing from the artifact is caught.
+    """
+    pyproject = source / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8").replace(
+        "[tool.hatch.build.targets.wheel]\n",
+        f'[tool.hatch.build.targets.wheel]\nexclude = ["{TYPING_MARKER}"]\n',
+        1,
+    )
+    pyproject.write_text(text, encoding="utf-8")
+    return f"excluded {TYPING_MARKER} from the wheel"
 
 
 def _plant_readme_decoupled(source: pathlib.Path) -> str:
@@ -1159,6 +1274,7 @@ def run_plant(plant: Plant) -> bool:
             source = _copy_tree(sandbox / "repo")
             planter = {
                 "missing-module": _plant_missing_module,
+                "no-py-typed": _plant_no_py_typed,
                 "outside-file": _plant_outside_file,
                 "readme-decoupled": _plant_readme_decoupled,
             }[plant.name]
