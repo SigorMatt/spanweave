@@ -115,6 +115,11 @@ Any of the three gives you `import spanweave` and the `spanweave` command with
 pulled in behind them: on a fresh `pip install spanweave`, `pip show spanweave`
 reports an empty `Requires`.
 
+The distribution is **typed for consumers**: it carries the PEP 561 marker
+`spanweave/py.typed`, so `mypy --strict` in your own code reads spanweave's
+annotations instead of skipping the import — no `ignore_missing_imports` and no
+`follow_untyped_imports` override.
+
 The conformance corpus in `fixtures/` is deliberately **not** in the wheel — it
 is development data, not library code. The paths in the section above therefore
 resolve from a checkout or an unpacked sdist, which is where a first look
