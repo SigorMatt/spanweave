@@ -3909,3 +3909,91 @@ series that supplies the freeze's precondition is what `schema_shape.py`
 calls blinding the instrument, and a per-graph list answers the wrong
 question; option 2 because a scope is a fact, not a gap; option 4 because
 nothing is left to carry. The row's numbers are corrected as (d) says.
+
+## 22. T4: Can an `exception_event` diagnostic carry level `error`?
+
+*Written 2026-10-14 by batch T4 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`, parent `288c8ea`), as the halt its brief names: "if
+completing the batch would require a model or schema change ... or a rule the
+spec does not already state — stop". Nothing in this commit changes
+behaviour.*
+
+**(a) The question.** T4's row reports each OTLP `exception` span event as an
+`exception_event` diagnostic "(level `error`, ...)". `DiagnosticLevel` is a
+closed enum of two members, `info` and `warning` (`spanweave/model.py`), and
+SPEC §3.7 states the field's contract in its type line: `level: info |
+warning  # never "error": errors raise`. The row cannot be met as written
+without changing that contract.
+
+**(b) Why it is a model change and not a vocabulary word.**
+
+- A third `DiagnosticLevel` member is a new value of a closed enum on a
+  serialized model. `tests/serialized_shape.json` carries it in
+  `vocabularies.DiagnosticLevel`; the 2026-10-14 Option 3 decision allows the
+  **diagnostic code** vocabulary to grow (`diagnostic_codes`,
+  `diagnostic_source`) and nothing else, so this is outside what "no schema
+  change this series" permits.
+- It contradicts a rule §3.7 states, not one it omits. §3.7: the level
+  "grades how loudly to report a mapping gap — nothing about the trace", and
+  the `level`/`severity` paragraph exists to keep core from grading what the
+  telemetry *means* (CLAUDE.md invariant 1). `error` on an exception would be
+  the first level that grades the trace — "the span failed" — rather than the
+  report, and `error` already means "raises" in §3.10.
+- The graph already sees the failure: Z5's two `http_get` tool nodes carry
+  `status` `error` from the span's own status (`Status` vocabulary). What the
+  graph cannot see is the event's type/message/time; that part needs no level.
+
+**(c) Options.**
+
+1. **`exception_event` at level `warning`.** Everything else as the row says
+   (`source: {type, message, escaped, time}`, record-scoped, `<record>.events`
+   leaves `unmapped_attributes` on unpacked records only, per T3 (a)). The
+   code vocabulary grows by two words (`exception_event`, `span_event`), the
+   artifact moves in `vocabularies.diagnostic_codes` and `diagnostic_source`
+   only. "An exception is an error the graph can see" is then true through
+   the node's `status` plus a diagnostic naming the exception, not through
+   the level.
+2. **Both codes at level `info`.** As 1, but an exception event is no louder
+   than any other event: neither is a mapping gap, both are facts the
+   transport stated that the model has no field for. Keeps `warning` meaning
+   "something the library could not map", which `attributes_dropped` already
+   stretches.
+3. **Add `error` to `DiagnosticLevel`.** As the row says. Moves
+   `vocabularies.DiagnosticLevel` and §3.7's type line; the Option 3
+   restatement must be widened to allow it, and §3.7's "nothing about the
+   trace" paragraph rewritten. Declined by this batch only in the sense that
+   it cannot take it unasked.
+4. **Split T4.** Land `span_event` (info) and `<record>.events` leaving
+   `unmapped_attributes` now; carry `exception_event` to a decision.
+
+**(d) Further choices any option needs, for the same decision.**
+
+- *Where `exception.*` is read.* `exception` and `exception.type` /
+  `.message` / `.escaped` are OTel trace semantic conventions, not OTLP
+  proto fields. The event list (`name`, `timeUnixNano`, `attributes`) is
+  envelope; reading `exception.*` keys inside it in `seam.py` is arguably a
+  dialect read outside the adapters. Alternatives: read them in the seam as
+  the OTLP convention both adapters inherit (no adapter branches on them), or
+  in each adapter (OpenInference and OTel GenAI both use them).
+- *Rendering of `escaped` and `time`.* Z5 states `exception.escaped` as the
+  string `"False"`, not a `boolValue`. Carry the value as the attribute
+  states it (verbatim `"False"`), or read it as a bool (a rule §7 does not
+  state). `time`: the event's `timeUnixNano` read in float seconds by T2's
+  rule (`seam.stated_time`), kept as reported even past the node's
+  `ended_at` (Z2: both events are after `ended_at`, by ~6.6 s and ~0.48 s on
+  the real capture).
+- *Exposure.* §3.7's keys-only rule is for `unmapped_attributes`, but
+  `exception.message` is content (Z5's names a URL); the row copies it into
+  `source`. `exception.stacktrace` is left out by the row. To confirm.
+- *Unclaimed spans.* As `attributes_dropped` (T3 (c)): an unpacked span no
+  adapter claimed reports its events too, `adapter` null.
+
+**(e) Measured on `288c8ea`.** Z5 (both captures): two `exception` events,
+one per `http_get` tool node with `status` `error`, `exception.type`
+`ConnectionError`, messages ending "(attempt 1)" / "(attempt 2)". Z2: four
+`First Token Stream Event` events (two in `-real`, one each in `0002.json`
+and `0003.json`; two in `-recorded/0001.json`), each `timeUnixNano` after its
+span's `endTimeUnixNano`. No other capture carries events. Five
+`unmapped_attributes` name `<record>.events` across Z2 and Z5, and none names
+it alone, so removing the key moves no `unmapped_attributes` count; the
+census moves only by the new codes.
