@@ -13815,9 +13815,12 @@ prose until a stranger reads it.
   names `tests/test_conformance.py` and `tests/test_zoo.py` only. T6 added the
   module and left the Makefile alone. `make check` runs the module, so it is
   gated, but not by the target that "runs the zoo". For the maintainer.
-- **S13 has no disposition.** No row, no decision and no resume note names it,
-  and `ADAPTERS.md` §7 does not answer it. See the probe table below. It is
-  registered here as open, not as read right.
+- **S13 is dispositioned after the close, and what it found is for the
+  maintainer to read.** The close registered it as open. The post-close test
+  (decisions 2026-10-14e, commit 1) found that Z5's two graphs differ in more
+  than the ids and times the exporter generated, by two generated UUIDs that
+  are not in the mask. See the probe table below: every probe, S1–S22, now
+  has a disposition (22 of 22).
 - **Choices made beyond their rows are unconfirmed**: T4 (a)–(c),
   T5 (a)–(d), and T6's two. They are listed below under *Choices beyond
   the row*. T1's three and T3's four were confirmed during the series, as
@@ -13919,7 +13922,8 @@ record:
 
 Dispositions are taken from the rows, the decisions log, the resume note's
 corrections, and `ADAPTERS.md` §7, where §7.3's readings are re-derived by
-`tests/test_zoo_readings.py`. *Change* means a batch moved behaviour.
+`tests/test_zoo_readings.py`. S13's comes from a test in the same module,
+added after the close. *Change* means a batch moved behaviour.
 *Reading* means the rendering is right, for the reason given.
 
 | Probe | Disposition | By |
@@ -13936,7 +13940,7 @@ corrections, and `ADAPTERS.md` §7, where §7.3's readings are re-derived by
 | S10 — nine Z3 `llm` steps carry no model | **Change and reading.** The record states a dropped count and names nothing dropped, so the count is reported (`attributes_dropped`) and the model stays absent. Whether the model was among the dropped attributes cannot be read from the record | T3 |
 | S11 — Z5's two `exception` events an unmapped key | **Change.** Each is an `exception_event` diagnostic at `info`, and the failure stays in the node's `status` (§22, option 2) | T4 |
 | S12 — `orphan_parent` × 2 on Z5's rootless trace | **Reading.** `orphan_parent`'s `source` names the absent parent's id (it already did at T0). The row kept it so | T1 |
-| S13 — Z5's real and recorded graphs, equal size, not byte-identical | **Not dispositioned.** No batch, decision or resume note names it, and the plan's §5 gives it no origin row. It stays open here: whether the two graphs differ beyond exporter-generated ids and times. The census holds both Z5 captures to equal counts, but that is not an answer to a byte question | — |
+| S13 — Z5's real and recorded graphs, equal size, not byte-identical | **Reading, and a finding.** The answer is not "nothing but ids and times". `test_z5_s_real_and_recorded_graphs_differ_past_ids_and_times_in_two_uuids` builds both graphs and masks what the exporter generated: the trace id, every node and parent id by position in `started_at` order, every time (`started_at`, `ended_at`, each diagnostic's `source.time`), and the `raw.source` fields carrying those values. After masking, the graphs differ at exactly eight paths, and nowhere else, byte for byte. Two values account for them, and neither is an exporter id or time. (1) `nodes[0..3].raw.source.resource_spans.resource.attributes[3].value.stringValue` is the SDK's `service.instance.id`, a UUID per process: `87de38a6-473a-4b0e-8ae1-2d4d738fdb8b` real, `2728ccd6-0b17-4ca7-885f-8b8009e66799` recorded. (2) `nodes[0..3].raw.source.attributes.metadata` is LangGraph's `metadata` attribute. Its `langgraph_checkpoint_ns` (and `checkpoint_ns` on the two `http_get` tool spans) is a UUID per graph step: step 1 `fetch:13c8cbdc-e06c-6927-60b8-a6f5cfee2d2f` real and `fetch:e884de76-fa1f-0901-db68-19647c7fb66c` recorded (nodes 0–2), step 2 `fetch:f99eb4f6-24b7-ba6a-d068-37e54a2e9909` real and `fetch:c7ae6562-c7f2-7791-f2dc-9e87927276e5` recorded (node 3). Names, kinds, payloads, statuses, the exception messages and stacktraces, edges, diagnostics and `meta` are equal. Both values are verbatim record content in `raw`, and neither is mapped. The mask was not widened to hide them | post-close (decisions 2026-10-14e) |
 | S14 — `PROMPT` becomes an `unknown` node | **Reading.** `PROMPT`, `RERANKER`, `GUARDRAIL` and `EVALUATOR` are `unknown` by design. `NodeKind` is closed (§3.2) and the kind is kept as `reported_kind` (series decision, 2026-10-14) | T6 |
 | S15 — every child's record before its parent's | **Reading.** Right as rendered, and the probe asks nothing of spanweave. The census feeds records in exporter order and holds incremental equal to batch on every capture | T0 |
 | S16 — Z2's fan-out ordered by start | **Reading.** Right: §4.3 orders the `call_tool` siblings by `started_at`, an order and not a precedence | T0, T6 |

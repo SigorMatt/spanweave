@@ -23,6 +23,10 @@ and every reading that states a number or a set is held to the corpus here:
   at each end (S6, S17), the absence of any call id on a tool span (S9, S5),
   the `llm` node's normalized attributes (S20), and the four OpenInference
   kinds that stay `unknown` (S14).
+* **S13, after the close** (decisions 2026-10-14e, commit 1). Z5's real and
+  recorded graphs, with the ids and times the exporter generated masked,
+  differ at exactly the paths `S13_DIFFERENCES` lists and nowhere else, byte
+  for byte.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ import collections
 import json
 import pathlib
 import re
+from typing import Any
 
 import pytest
 
@@ -272,3 +277,154 @@ def test_four_openinference_kinds_are_unknown_with_the_kind_kept(kind):
     assert span.kind is spanweave.NodeKind.UNKNOWN
     assert span.attributes["reported_kind"] == kind
     assert [d.code for d in span.diagnostics] == ["unknown_span_kind"]
+
+
+# --- S13: Z5's real and recorded graphs (TASKS.md, stranger's-trace) --------
+
+#: Z5's two captures: one agent, one script, a real model and a recorded one.
+Z5 = tuple(capture for capture in CAPTURES if _project(capture) == "Z5")
+#: The `raw.source` keys that carry a node's times as the record stated them.
+RAW_TIMES = ("start_time", "end_time")
+
+
+def _z5_masked(capture: Capture) -> dict[str, object]:
+    """Z5's graph with what the exporter generated masked, and nothing else.
+
+    Masked, as the S13 decision names them (decisions 2026-10-14e, commit 1):
+    the trace id; every node id and every parent id, by the node's position
+    in `started_at` order -- an absent parent by the position of the node that
+    states it; and every time -- `started_at`, `ended_at`, each diagnostic's
+    `source.time`, and the `raw.source` fields that carry those values
+    (`start_time`, `end_time`, each event's `timeUnixNano`). An id is masked
+    wherever the serialized graph carries it, a diagnostic's message included.
+    `edges` and `diagnostics` are serialized in an order the ids decide, so
+    once the ids are masked each is put in the order of its masked entries.
+    """
+    graph = graph_from_records([r.record for r in zoo_census.records(capture)])
+    nodes = sorted(graph.nodes(), key=lambda node: node.started_at or 0.0)
+    # The premise the positions rest on: the graph's own order is start order.
+    assert [node.id for node in graph.nodes()] == [node.id for node in nodes]
+    masks = {capture.trace_id: "<trace>"}
+    masks.update({node.id: f"<node {i}>" for i, node in enumerate(nodes)})
+    for i, node in enumerate(nodes):
+        parent = spanweave.envelope(node.raw.source).parent_id
+        if parent is not None and parent not in masks:
+            masks[parent] = f"<parent of node {i}>"
+    text = spanweave.dumps(graph).decode("utf-8")
+    for value, mask in masks.items():
+        text = text.replace(value, mask)
+    document = json.loads(text)
+    for node in document["nodes"]:
+        node["started_at"] = node["ended_at"] = "<time>"
+        source = node["raw"]["source"]
+        for key in RAW_TIMES:
+            if key in source:
+                source[key] = "<time>"
+        for event in source.get("events", []):
+            event["timeUnixNano"] = "<time>"
+    for diagnostic in document["diagnostics"]:
+        if isinstance(diagnostic["source"], dict) and "time" in diagnostic["source"]:
+            diagnostic["source"]["time"] = "<time>"
+    for key in ("edges", "diagnostics"):
+        document[key].sort(key=lambda entry: json.dumps(entry, sort_keys=True))
+    return document
+
+
+Path = tuple[str | int, ...]
+
+
+def _differences(
+    real: object, recorded: object, path: Path = ()
+) -> dict[Path, tuple[object, object]]:
+    """Every path at which two JSON documents differ, with both values."""
+    if type(real) is not type(recorded):
+        return {path: (real, recorded)}
+    found: dict[Path, tuple[object, object]] = {}
+    if isinstance(real, dict) and isinstance(recorded, dict):
+        for key in sorted(set(real) | set(recorded)):
+            if key not in real or key not in recorded:
+                missing = "<missing>"
+                found[(*path, key)] = (
+                    real.get(key, missing),
+                    recorded.get(key, missing),
+                )
+            else:
+                found.update(_differences(real[key], recorded[key], (*path, key)))
+    elif isinstance(real, list) and isinstance(recorded, list):
+        if len(real) != len(recorded):
+            found[(*path, "<length>")] = (len(real), len(recorded))
+        for i, (a, b) in enumerate(zip(real, recorded, strict=False)):
+            found.update(_differences(a, b, (*path, i)))
+    elif real != recorded:
+        found[path] = (real, recorded)
+    return found
+
+
+def _metadata(step: int, namespace: str, echoed: bool) -> str:
+    """The `metadata` attribute LangGraph's instrumentor wrote on a Z5 span."""
+    echo = f', "checkpoint_ns": "fetch:{namespace}"' if echoed else ""
+    return (
+        f'{{"ls_integration": "langgraph", "langgraph_step": {step}, '
+        '"langgraph_node": "fetch", "langgraph_triggers": ["branch:to:fetch"], '
+        '"langgraph_path": ["__pregel_pull", "fetch"], '
+        f'"langgraph_checkpoint_ns": "fetch:{namespace}"{echo}}}'
+    )
+
+
+#: LangGraph's checkpoint namespace, a UUID per graph step: (real, recorded).
+STEP_1 = (
+    "13c8cbdc-e06c-6927-60b8-a6f5cfee2d2f",
+    "e884de76-fa1f-0901-db68-19647c7fb66c",
+)
+STEP_2 = (
+    "f99eb4f6-24b7-ba6a-d068-37e54a2e9909",
+    "c7ae6562-c7f2-7791-f2dc-9e87927276e5",
+)
+#: The SDK's `service.instance.id`, a UUID per process: (real, recorded).
+INSTANCE = (
+    "87de38a6-473a-4b0e-8ae1-2d4d738fdb8b",
+    "2728ccd6-0b17-4ca7-885f-8b8009e66799",
+)
+#: Per node, in start order: (langgraph step, its namespaces, `checkpoint_ns`
+#: echoed). Nodes 1 and 3 are the `http_get` tool spans.
+METADATA = {
+    0: (1, STEP_1, False),
+    1: (1, STEP_1, True),
+    2: (1, STEP_1, False),
+    3: (2, STEP_2, True),
+}
+RESOURCE_ATTRIBUTE = ("raw", "source", "resource_spans", "resource", "attributes")
+#: S13's answer: what still differs once the exporter's ids and times are
+#: masked. Two values, neither one the decision named: the SDK's
+#: `service.instance.id` on every node's resource, and LangGraph's checkpoint
+#: namespace inside every node's `metadata` attribute. Everything else --
+#: names, kinds, payloads, statuses, the exception messages and stacktraces,
+#: edges, diagnostics, meta -- is equal.
+S13_DIFFERENCES: dict[Path, tuple[object, object]] = {
+    **{
+        ("nodes", i, "raw", "source", "attributes", "metadata"): (
+            _metadata(step, real, echoed),
+            _metadata(step, recorded, echoed),
+        )
+        for i, (step, (real, recorded), echoed) in METADATA.items()
+    },
+    **{
+        ("nodes", i, *RESOURCE_ATTRIBUTE, 3, "value", "stringValue"): INSTANCE
+        for i in range(4)
+    },
+}
+
+
+def test_z5_s_real_and_recorded_graphs_differ_past_ids_and_times_in_two_uuids():
+    """S13: past the exporter's ids and times, two generated UUIDs and no more."""
+    assert [c.run for c in Z5] == ["z5/2026-10-13-real", "z5/2026-10-13-recorded"]
+    real, recorded = (_z5_masked(capture) for capture in Z5)
+    assert _differences(real, recorded) == S13_DIFFERENCES
+    # The list is the whole difference, byte for byte: with those values
+    # carried across, the two serialized graphs are the same bytes.
+    for (*parents, last), (value, _) in S13_DIFFERENCES.items():
+        target: Any = recorded
+        for step in parents:
+            target = target[step]
+        target[last] = value
+    assert json.dumps(real, sort_keys=True) == json.dumps(recorded, sort_keys=True)

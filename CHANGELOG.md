@@ -15,6 +15,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **S13 is answered: Z5's real and recorded graphs differ past the exporter's
+  ids and times, in two generated UUIDs** (after the stranger's-trace close;
+  decisions 2026-10-14e). No behaviour change. The close registered S13 as
+  open. `tests/test_zoo_readings.py` now builds both Z5 graphs and masks what
+  the exporter generated: the trace id, every node and parent id by position
+  in `started_at` order, and every time with the `raw.source` fields that
+  carry it. It holds the graphs to differ at exactly eight paths and nowhere
+  else, byte for byte. On every node, the SDK's `service.instance.id` (a UUID
+  per process) differs, and so does LangGraph's checkpoint namespace inside
+  the `metadata` attribute (a UUID per graph step). Both are verbatim record
+  content in `raw`, and the mask was not widened to hide them. `TASKS.md`
+  states the paths and values, and every zoo probe, S1–S22, now has a
+  disposition.
 - **The adapters say what they do not map, and the zoo's three instrumentations
   are described** (stranger's-trace series, T6). No behaviour change.
   `ADAPTERS.md` §7 adds two tables, one for `openinference` and one for
