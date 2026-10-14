@@ -15,22 +15,27 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
-- **S13 is answered: Z5's real and recorded graphs differ past the exporter's
-  ids and times, in two generated UUIDs** (after the stranger's-trace close;
-  decisions 2026-10-14e). No behaviour change. The close registered S13 as
-  open. `tests/test_zoo_readings.py` now builds both Z5 graphs and masks what
-  the exporter generated: the trace id, every node and parent id by position
-  in `started_at` order, and every time with the `raw.source` fields that
-  carry it. It holds the graphs to differ at exactly eight paths and nowhere
-  else, byte for byte. On every node, the SDK's `service.instance.id` (a UUID
-  per process) differs, and so does LangGraph's checkpoint namespace inside
-  the `metadata` attribute (a UUID per graph step). Both are verbatim record
-  content in `raw`, and the mask was not widened to hide them. `TASKS.md`
-  states the paths and values, and every zoo probe, S1–S22, now has a
-  disposition.
-- **The adapters say what they do not map, and the zoo's three instrumentations
-  are described** (stranger's-trace series, T6). No behaviour change.
-  `ADAPTERS.md` §7 adds two tables, one for `openinference` and one for
+- **S13 is answered: Z5's real and recorded graphs differ in exactly eight
+  paths, all per-run identifiers the SDK and LangGraph generate, none the
+  library's** (after the stranger's-trace close; decisions 2026-10-14e and
+  2026-10-14f). No behaviour change. The close registered S13 as open.
+  `tests/test_zoo_readings.py` now builds both Z5 graphs and masks what the
+  exporter generated: the trace id, every node and parent id by position in
+  `started_at` order, and every time with the `raw.source` fields that carry
+  it. It holds the graphs to differ at exactly eight paths and nowhere else,
+  byte for byte. On every node, the SDK's `service.instance.id` (its
+  per-process resource UUID) differs, and so does LangGraph's `checkpoint_ns`
+  UUID inside the `metadata` attribute (a UUID per graph step). Both are
+  verbatim record content in `raw`. The mask stays as it is: widening it would
+  hide the next such identifier. `c8de748`'s subject, "differ only in what the
+  exporter generated", predates its finding and is too narrow; it is not
+  amended. The graphs are 16,137 and 16,136 bytes today, against the audit's
+  17,691: T3 and T4 left fewer keys unmapped. The test, not the audit's
+  number, is the citation. `TASKS.md` states the paths and values, and every
+  zoo probe, S1–S22, now has a disposition.
+- **The adapters say what they do not map, and the zoo's two dialects, six
+  instrumentors are described** (stranger's-trace series, T6). No behaviour
+  change. `ADAPTERS.md` §7 adds two tables, one for `openinference` and one for
   `otel_genai`. Each lists every attribute key the zoo's twelve captures leave
   unmapped, with indices folded to `<n>`, and gives each key's disposition:
   *reported, not mapped* with the reason, or *mapped at T3/T4* for the six
@@ -623,13 +628,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
     batch, decision or reading names it, so it is registered as open;
   - the choices T4, T5 and T6 made beyond their rows, carried as
     **unconfirmed**;
-  - the zoo run recorded against `ROADMAP.md` Phase 4's
-    third-dialect-was-run condition, as T7's row asks. The record states what
-    the run was, which is twelve captures from `SigorMatt/spanweave-zoo`
-    `7eb5b69` held by `tests/zoo_census.py`. It also states what the run was
-    not: it adds no adapter, and it takes no part in the cross-dialect
-    equivalence test. Whether it discharges ROADMAP's condition as written is
-    left to the maintainer, and `ROADMAP.md` is not edited.
+  - the zoo corpus and the census recorded as the stranger corpus: twelve
+    captures from `SigorMatt/spanweave-zoo` `7eb5b69` held by
+    `tests/zoo_census.py`, read by the two dialects the library already has.
+    It adds no adapter and takes no part in the cross-dialect equivalence
+    test, so `ROADMAP.md` Phase 4's gate is not met, as `ROADMAP.md` now says
+    (decisions 2026-10-14e, commit 3). T7's row had asked for the run to be
+    recorded as the third dialect having been run; that was the plan's
+    mistake.
 
   The README's Documents row for `WORKPLAN.md` and the `WORKPLAN.md` exclusion
   in `durable_documents()` are removed, the pair every series close removes.
