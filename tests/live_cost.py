@@ -136,7 +136,9 @@ a *floor* that the measurement then undercut).
 
 A third site no table of totals can show is the **arrival order** of one record,
 and ``--root-last`` is that measurement: the wide shape fed children-first makes
-the root's arrival regroup the whole input inside a single `feed`. Measured at
+the root's arrival resolve the whole input's `parent` edges inside a single
+`feed` (since batch T5 it moves no child between sibling groups, `SPEC.md` §4.3;
+the figures below were taken before). Measured at
 2,000: 220.7 ms root-first against 235.9 ms root-last, of which the root's own
 arrival is 19.9 ms -- a ratio of 1.07x on the same records in two orders. The
 same arrival cost 15.4 s before the chain was maintained and 38 ms before the
@@ -502,10 +504,10 @@ def arrival_order(width: int) -> None:
     Where one record arrives is a cost case of its own, and the only one the two
     `measure` workloads cannot show: a parent that arrives after its children
     gives **all** of them a parent inside a single `feed` (`SPEC.md` §10.2,
-    §10.6), so the whole of the shape's regrouping happens in one call instead of
-    being spread one record at a time over the stream. Both orders build the same
-    graph -- that is §10.1, and `tests/test_live.py` asserts it rather than this
-    module, which times things and asserts nothing.
+    §10.6), so the whole of the shape's `parent` resolution happens in one call
+    instead of being spread one record at a time over the stream. Both orders
+    build the same graph -- that is §10.1, and `tests/test_live.py` asserts it
+    rather than this module, which times things and asserts nothing.
 
     Printed as a ratio against the same records fed root-first, because that is
     the comparison that says whether the arrival order matters, and the absolute
@@ -616,8 +618,9 @@ def smoke(turns: int = SMOKE_TURNS, width: int = SMOKE_WIDE) -> None:
         (f"wide {width}", wide),
         # The same records with the root last, because that is the third site
         # (§10.6's late parent) and the only one a root-first feed cannot show:
-        # the arrival that gives every waiting child a parent moves the whole
-        # group, and a group that moves whole keeps the chain it had.
+        # the arrival that gives every waiting child a parent moves none of them
+        # between groups (§4.3: the group is the parent each states), so the
+        # chain they had is the chain they keep.
         (f"wide {width}, root last", [*wide[1:], wide[0]]),
     ):
         built, holding = _edges_built(records)

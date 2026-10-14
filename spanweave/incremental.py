@@ -49,11 +49,6 @@ from spanweave.model import AdapterInfo, Diagnostic, Edge, Meta, Node, NodeId
 from spanweave.seam import CallRole, NormalizedSpan
 from spanweave.version import SCHEMA_VERSION, __version__
 
-#: The sibling group of a node with no parent in this graph (`SPEC.md` §4.3).
-#: Trace root is a group like any other, and a node whose stated parent has not
-#: arrived is in it -- because in *this* graph it has no parent.
-ROOT_GROUP = ""
-
 #: The tally's key for the statements that are about the **whole input** and so
 #: have no record and no call id to hang on: `duplicate_source_id` and
 #: `missing_trace_id` (`SPEC.md` §3.7, §7).
@@ -182,7 +177,6 @@ class SpanAbsorber:
         # the two relations an arrival completes for a record already absorbed.
         self._awaiting_parent: dict[str, set[int]] = {}
         self._awaiting_link: dict[str, set[int]] = {}
-        self._group_of: dict[int, str] = {}
         self._groups: dict[str, list[int]] = {}
 
     # ----------------------------------------------------------------------
@@ -509,12 +503,11 @@ class SpanAbsorber:
                 for other in sorted(self._awaiting_parent.get(span.span_id, ()))
                 if other != position
             ]
+            # Their `parent` edges and `orphan_parent`s, and nothing else: a
+            # sibling group is the parent a record *states*, so a parent's
+            # arrival moves no record between groups (`SPEC.md` §4.3, §10.2).
             for other in given:
                 self._restate_parent(other)
-            # Every one of them in one move, not one move each: in the shape
-            # where a trace's root arrives after its children, `given` is the
-            # whole input (`SPEC.md` §10.6).
-            self._regroup_many(given)
             for other in sorted(self._awaiting_link.get(span.span_id, ())):
                 if other != position:
                     self._restate_links(other)
@@ -639,13 +632,9 @@ class SpanAbsorber:
     def _restate_parent(self, position: int) -> None:
         """One record's `parent` edge and `orphan_parent`, as they stand now.
 
-        The sibling group a record belongs to follows from this edge, but the
-        move is **not** made here. One arrival can give a parent to every record
-        waiting on it, and `_regroup_many` moves all of them in one operation
-        rather than one each, which is what makes a late parent O(n) in the
-        records it un-orphans instead of O(n log n) (`SPEC.md` §10.6). The
-        arriving record is not moved at all: it has not been placed yet, and
-        `_place` reads the same edge.
+        The sibling group a record belongs to does **not** follow from this
+        edge: it is the parent the record states, present or not
+        (`SPEC.md` §4.3), so restating the edge moves no record between groups.
         """
         collector = DiagnosticCollector()
         edge = build.parent_edge(
@@ -731,69 +720,9 @@ class SpanAbsorber:
                 ("no_start_time", str(position)), self._missing_timestamp[position]
             )
             return
-        group = self._group_key(position)
-        self._group_of[position] = group
-        self._join(group, position)
-
-    def _regroup_many(self, positions: Sequence[int]) -> None:
-        """Every record one arrival gave a parent, moved to its group **once**.
-
-        A record's group follows from its `parent` edge, so an arrival that
-        resolves a reference moves every record that was waiting on it -- and
-        where that reference is a trace's root arriving after its children, the
-        records waiting on it are the whole input, moved inside a single `feed`
-        (`SPEC.md` §10.2, §10.6). Moving them one at a time is correct, and is
-        what the second half below does; moving them together is what the first
-        half does instead, and the difference is the whole of this method.
-
-        The case it is worth separating is that the records moving are **all** of
-        the group they leave and the group they join holds nothing yet -- the
-        orphaned children of one parent, with nothing else at trace root. Then
-        the chain they had *is* the chain they keep. A `temporal` edge names its
-        two endpoints and the group they sit in is not one of its fields, and
-        their order inside the group cannot have moved either, because §4.3's key
-        is `(started_at, node_id)` and a regroup changes neither. So the group is
-        **re-keyed** and no edge moves at all: no ledger traffic, nothing to roll
-        back, and -- the reason this is the bulk move rather than a chain rebuilt
-        once per arrival -- no second spelling of §4.3's rule.
-
-        Otherwise the records leave and join one at a time, one `_leave` and one
-        `_join` each, because a group that keeps some of its members ends up with
-        a chain that has holes in it and the edges bridging those holes are
-        exactly the ones `_leave` already makes.
-
-        A record that was never placed is never moved: one with no `started_at`
-        is in no group (§4.3), and the arriving record is put in its group by
-        `_place`, after this, from the same edge.
-        """
-        moves: dict[tuple[str, str], list[int]] = {}
-        for position in positions:
-            was = self._group_of.get(position)
-            if was is None:
-                continue
-            now = self._group_key(position)
-            if now != was:
-                moves.setdefault((was, now), []).append(position)
-        # Sorted rather than in insertion order: nothing here may turn on how a
-        # dict iterates (`CLAUDE.md` 4). Where two moves name one group, which of
-        # them goes first decides which takes the re-key and never the chains
-        # either leaves behind, so the order is a tie-break and not a rule.
-        for was, now in sorted(moves):
-            movers = moves[(was, now)]
-            if len(movers) == len(self._groups[was]) and now not in self._groups:
-                self._groups[now] = self._groups.pop(was)
-                self._temporal_edges[now] = self._temporal_edges.pop(was)
-                for position in movers:
-                    self._group_of[position] = now
-                continue
-            for position in movers:
-                self._leave(was, position)
-                self._group_of[position] = now
-                self._join(now, position)
-
-    def _group_key(self, position: int) -> str:
-        edge = self._parent_edges.get(position)
-        return edge.src if edge is not None else ROOT_GROUP
+        # The batch path's `build.sibling_group`: the parent the record
+        # states, so a record joins one group once and never moves (§4.3).
+        self._join(build.sibling_group(self._spans[position]), position)
 
     def _rank(self, position: int) -> tuple[int | float, str]:
         """Where this record sits in its group's order -- §4.3's tie-break key.
@@ -803,13 +732,11 @@ class SpanAbsorber:
         spelling of it would put an arrival in a place the batch build does not,
         which is a determinism bug and not a slow path (`CLAUDE.md` 4).
 
-        It is **unique** within a group and **stable** while a record is in one,
-        which together are what let `_leave` find a member by searching for it
-        rather than by scanning: unique because the key ends in a node id and two
-        records resolving to one id is refused (§3.6), and stable because the key
-        is read off a node built once in `_absorb_at` and the one thing that can
-        move a node id -- a whole-input fact changing (§10.2) -- throws every
-        group away and rebuilds it.
+        It is **unique** within a group, because the key ends in a node id and
+        two records resolving to one id is refused (§3.6), and **stable** while a
+        record is in one, because the key is read off a node built once in
+        `_absorb_at` and the one thing that can move a node id -- a whole-input
+        fact changing (§10.2) -- throws every group away and rebuilds it.
         """
         return build.tie_break(self._nodes[position])
 
@@ -848,33 +775,6 @@ class SpanAbsorber:
         stop = cut + (1 if before is not None and after is not None else 0)
         removed = chain[cut:stop]
         chain[cut:stop] = added
-        self._tally.amend_edges(removed, added)
-
-    def _leave(self, group: str, position: int) -> None:
-        """One record out of a group: its two chain edges for the one that
-        bridges the neighbours it was between. The inverse of `_join`, down to
-        the same slice."""
-        members = self._groups[group]
-        chain = self._temporal_edges[group]
-        index = bisect.bisect_left(members, self._rank(position), key=self._rank)
-        before = chain[index - 1] if index > 0 else None
-        after = chain[index] if index + 1 < len(members) else None
-        removed = [edge for edge in (before, after) if edge is not None]
-        added = (
-            [
-                build.temporal_edge(
-                    self._nodes[members[index - 1]], self._nodes[members[index + 1]]
-                )
-            ]
-            if before is not None and after is not None
-            else []
-        )
-        cut = max(index - 1, 0)
-        chain[cut : cut + len(removed)] = added
-        members.pop(index)
-        if not members:
-            self._groups.pop(group, None)
-            self._temporal_edges.pop(group, None)
         self._tally.amend_edges(removed, added)
 
     # ----------------------------------------------------------------------

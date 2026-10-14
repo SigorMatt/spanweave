@@ -169,6 +169,16 @@ def _capture(
 # `First Token Stream Event`s per capture (`-real`: one each in 0002 and 0003;
 # `-recorded`: two in 0001) are `span_event`s; Z5's two `exception` events,
 # one on each failed `http_get`, are `exception_event`s.
+#
+# **One count moved at batch T5: `temporal`, on Z5 only.** A sibling group is
+# the parent a record *states* (`SPEC.md` §4.3; `PROBES.md` S18): a root's
+# group is "no parent", an orphan's is the id it named. Z5's feed holds no root:
+# `fetch` names one absent parent and the second `http_get` another, and both
+# sat at trace root, chained -- an order between two nodes the telemetry puts
+# under different parents. They are now two groups of one, so Z5 2 -> 1 on both
+# captures. Every other count holds: no other feed holds orphans naming
+# different parents (Z4's audit feed has four, all naming the absent root), so
+# no other group moved.
 _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     nodes=31,
     parent=30,
@@ -259,7 +269,9 @@ _Z4_WHOLE = Census(
 _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     nodes=4,
     parent=2,
-    temporal=2,
+    # Report: 2; 1 since T5 (above): the edge between `fetch` and the second
+    # `http_get` is gone -- both are orphans, stating different absent parents.
+    temporal=1,
     orphan_parent=2,
     unpaired_call=0,
     unknown=0,

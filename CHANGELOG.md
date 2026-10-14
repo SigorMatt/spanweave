@@ -568,6 +568,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **Siblings are grouped by the parent the record states** (T5; zoo S18, L3;
+  `SPEC.md` §4.3, §10.2, §10.6). A `temporal` chain's group is `None` for a
+  root and the stated parent id for every other node, present or absent — so an
+  orphan is ordered only against nodes stating the same parent, never against a
+  root or an orphan of another absent parent. Before, every orphan sat at trace
+  root, so a partial input (a sampled trace, any prefix of a child-before-parent
+  stream) asserted orders its complete graph withdraws. Z2's first body alone
+  now yields one `temporal` edge, not two; Z5's census moves `temporal` 2 → 1 on
+  both captures (its `fetch` and second `http_get` are orphans of different
+  absent parents); every other census count and every conformance expected
+  graph is unchanged. A parent arriving after its children now moves no record
+  between groups, so the live builder's group move (`_regroup_many`,
+  `_leave`) is gone; incremental still equals batch at every prefix. New gate:
+  no arrival-order prefix of any zoo capture orders two nodes the whole capture
+  leaves unordered.
 - **A span's events are reported, and an exception is one the graph can see**
   (stranger's-trace series, T4; the zoo's S11, S17; `OPEN_QUESTIONS.md` §22,
   option 2; `SPEC.md` §3.7, §7). On a record the reader unpacked from an

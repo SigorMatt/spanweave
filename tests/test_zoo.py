@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 
+import spanweave
 from spanweave.adapters import classify
 from spanweave.api import graph_from_records
 from tests import zoo_census
@@ -307,3 +308,50 @@ def test_z2_states_four_first_token_events_over_its_two_captures():
         graph = graph_from_records(zoo_census.audit_feed(capture))
         total += sum(d.code == "span_event" for d in graph.diagnostics)
     assert total == 4
+
+
+# --- Siblings are grouped by the parent the record states (batch T5) ---------
+#
+# `PROBES.md` S18: the zoo's exporters send a child before its parent (S15), so
+# every prefix of a capture is a partial input. A sibling group is the parent
+# the record **states** (`SPEC.md` §4.3) -- `None` for a root, the stated id for
+# every other node, present or not -- so a prefix orders an orphan only against
+# nodes stating the same parent, and asserts no order the whole capture withdraws.
+
+Z2_REAL = next(c for c in CAPTURES if c.run == "z2/2026-10-14-real")
+
+
+def test_z2_s_first_body_alone_orders_only_the_two_that_state_one_parent():
+    first = [r.record for r in zoo_census.records(Z2_REAL) if r.body == "0001.json"]
+    assert len(first) == 3
+    graph = graph_from_records(first)
+    assert sum(d.code == "orphan_parent" for d in graph.diagnostics) == 3
+    stated = sorted(str(stated_parent(graph, node.id)) for node in graph.nodes())
+    assert stated == ["539a254a824d5e2a", "86a464c4b18af821", "86a464c4b18af821"]
+    (edge,) = graph.edges(kind="temporal")
+    assert edge.basis.startswith("sibling start_time ordering")
+    assert stated_parent(graph, edge.src) == "86a464c4b18af821"
+    assert stated_parent(graph, edge.dst) == "86a464c4b18af821"
+
+
+def stated_parent(graph, node_id):
+    """The parent a node's record states, read from its OTLP envelope."""
+    node = graph.node(node_id)
+    assert node is not None
+    return spanweave.envelope(node.raw.source).parent_id
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_no_prefix_orders_two_nodes_the_whole_capture_leaves_unordered(capture):
+    """Every `temporal` edge of every arrival-order prefix is an order the whole
+    capture's graph also states, through its own chain (`SPEC.md` §4.3, §10.1)."""
+    feed = [r.record for r in zoo_census.records(capture)]
+    whole = graph_from_records(feed)
+    after = {
+        node.id: set(whole.reachable(node.id, edge_kinds="temporal"))
+        for node in whole.nodes()
+    }
+    for k in range(1, len(feed)):
+        for edge in graph_from_records(feed[:k]).edges(kind="temporal"):
+            if edge.src in after and edge.dst in after:
+                assert edge.dst in after[edge.src], (k, edge.src, edge.dst)

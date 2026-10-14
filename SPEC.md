@@ -1313,10 +1313,29 @@ the first time someone meets it.
 Emitting a `temporal` edge for every ordered pair is O(n²) and useless. The rule
 is narrow and stated:
 
-> For each set of sibling nodes sharing the same `parent` (nodes with no parent
-> are siblings of each other at trace root), sort by `(started_at, node_id)` and
-> emit a `temporal` edge between **consecutive** siblings only.
-> `basis = "sibling start_time ordering"`.
+> For each set of sibling nodes sharing the same **stated** parent, sort by
+> `(started_at, node_id)` and emit a `temporal` edge between **consecutive**
+> siblings only. `basis = "sibling start_time ordering"`.
+
+**The sibling group is the parent the record states**, not the `parent` edge
+the input happens to resolve: nodes that state no parent (§4.0) are siblings of
+each other at trace root, and every other node is a sibling of the nodes that
+state the same parent id — whether or not that parent is in this input, and
+whether or not the id resolves to one node (§3.6). So an orphan (§3.7
+`orphan_parent`) is ordered only against nodes stating the parent it states,
+never against a root and never against an orphan of a different absent parent.
+
+That is the reading of "sharing the same `parent`" that survives a partial
+input. Grouping by the resolved edge put every orphan at trace root, so a
+partial graph — a sampled trace, an export cut mid-run, any prefix of a stream
+whose exporter sends a child before its parent — ordered nodes whose stated
+parents differ, and asserted an order the complete graph withdraws: an order
+between two nodes under different parents was never something the telemetry
+stated. Grouped by the stated id, an arriving parent changes no group (§10.2),
+and the chain a group has in a partial input is the chain it keeps. A
+`temporal` edge between orphans of one stated parent is an ordinary chain edge
+and carries the basis this section gives any other; its warrant is `derived`,
+as always.
 
 Nodes with no `started_at` are excluded from temporal edges and get a
 `missing_timestamp` diagnostic. Ties are broken by `node_id`, ascending, and the
@@ -2358,8 +2377,9 @@ Everything a batch build would say differently about `k` records than about
   later than the span that declared it earliest so far (§4.2.1) — which moves
   **that one span's** basis and no other's, because every other span declaring
   the same receipt was already not the earliest and still is;
-- the `temporal` chain of the sibling group it joins, and of the group it leaves
-  when it is given a parent;
+- the `temporal` chain of the sibling group it joins — and of no other: a
+  record's group is the parent it **states** (§4.3), so the arrival of that
+  parent gives it a `parent` edge and moves it out of no group;
 - the canonical position of every node, and — where it changes one of the three
   facts below — every derived **node id**.
 
@@ -2532,7 +2552,8 @@ restated **in full**, so what an arrival costs is usually the *size* of the keys
 it touched and not their number. **Two** keys are not, and they are exactly the
 two that grow with the stream rather than with the record — a sibling group's
 temporal chain and a call id's `data` edges — so each is stated below rather than
-left to be the worst of them, as is the arrival that moves a whole group at once.
+left to be the worst of them, as is the arrival that gives a whole group its
+parent at once.
 All three shapes occur in real telemetry, all three are measured by `make bench`
 (`tests/live_cost.py`), and its `--smoke` form — which `make check` runs — asserts
 that each of the three still builds one edge where it once built many.
@@ -2542,16 +2563,13 @@ because it would otherwise be the worst of them: one wide
 sibling group is the whole input. A group's members are kept in §4.3's order, so
 a joining record is placed by a search and only the chain edges adjacent to that
 place change — **at most one removed and two added**, whatever the group already
-holds — and a record given a parent (§10.2) leaves one group and joins another at
-the same price. One arrival can give a parent to *every* record waiting on it, a
-trace's root arriving after its children being the ordinary case, and then the
-move is made **once** rather than once per child: where the records moving are
-the whole of the group they leave and the group they join holds nothing yet, the
-chain they had is the chain they keep — a `temporal` edge names its two endpoints
-and not the group they sit in, and §4.3's key moved for none of them — so the
-group is re-keyed and **no edge moves at all**. A move that empties only part of
-a group is the per-record price above, once per record moved. The rule is §4.3's
-unchanged, and the chain is the one a batch build of the same prefix emits, which
+holds. One arrival can give a parent to *every* record waiting on it, a trace's
+root arriving after its children being the ordinary case, and that arrival moves
+**no edge of any chain**: a record's group is the parent it states (§4.3), so
+the children were in their parent's group before it arrived and stay there. (Until
+batch T5 an orphan sat at trace root and a late parent moved its children; the
+whole-group move was bounded here then, and is now not a move at all.) The rule
+is §4.3's unchanged, and the chain is the one a batch build of the same prefix emits, which
 is §10.1; what is bounded is only how much of it an arrival rebuilds.
 
 A call id's `data` edges are **not** restated either, for the mirror reason: a
@@ -2617,8 +2635,9 @@ root with 20,000 tool children (20,001 records, 20,001 nodes, 39,999 edges).
   this implementation's constants and **not** a consequence of §4.2.1. What
   §4.2.1 does settle is the one thing no constant can buy: none of the
   declarations may be dropped to get there.
-- **The arrival that regroups the whole input** — the wide shape's root fed last
-  — makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
+- **The arrival that resolves the whole input's parents** — the wide shape's root
+  fed last, measured before batch T5 made it move no child between groups —
+  makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
   root-first, 19.9 ms of it inside that single `feed`.
 - **A materialization's sort** is 18.0 ms of a 249.9 ms `graph()` on the loop
   shape and 86.9 ms of 298.7 ms on the wide one: a fourteenth of the call where
