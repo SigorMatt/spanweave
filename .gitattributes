@@ -1,0 +1,4 @@
+# The zoo's captures are a byte-for-byte copy, and `tests/test_zoo.py`
+# re-derives each file's sha256 against the zoo's sealed manifests. `-text`
+# turns off every line-ending conversion a checkout could apply to them.
+fixtures/zoo/** -text

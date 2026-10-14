@@ -15,6 +15,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The zoo's captures are a fixture, and the audit's census is a gate**
+  (stranger's-trace series, T0). No behaviour change. `fixtures/zoo/` copies
+  the twelve captures' `json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at
+  `7eb5b69` byte for byte — 29 bodies, six agents built by implementers who
+  knew nothing about this library, under stock instrumentation — with each
+  capture's sealed `MANIFEST.json` beside them; `tests/test_zoo.py` re-derives
+  every body's sha256 and every manifest's seal, and that the copy holds
+  exactly those files. `tests/zoo_census.py` holds the counts the zoo's audit
+  reported for each capture (nodes, `parent` and `temporal` edges,
+  `orphan_parent`, `unpaired_call`, `unknown`, `timestamp_unit_suspect`), each
+  citing its `audit/*.md` and `PROBES.md` "The captures"; the test holds this
+  library to them, batch and incremental byte for byte, the records fed in the
+  exporter's child-before-parent order (the zoo's S15, S21). Every count
+  agrees with its report. The audit's Z4 graph is the four records the
+  receiver routed; the fifth, the root span no adapter claims (S1, L2), is
+  held separately as the one `unknown` node §6.1 makes of it. `make
+  conformance` runs the census; a later change that moves a count updates it
+  in its own commit, with the reason. `.gitattributes` keeps a checkout from
+  rewriting the copied bytes.
 - **The package ships `py.typed` (PEP 561).** No behaviour change: one empty
   file under `spanweave/`, plus the checks that keep it shipping. The
   distribution has advertised `Typing :: Typed` and `mypy --strict` since Phase

@@ -30,8 +30,11 @@ gates:
 # The cross-dialect equivalence suite (FIXTURES.md). Every scenario, in every
 # dialect, must produce that scenario's ONE canonical graph. This is the
 # library's central claim in executable form.
+# The zoo's census (`tests/zoo_census.py`) runs here too: twelve captures of a
+# stranger's agents, copied byte for byte (`fixtures/zoo/README.md`), held to
+# the counts the zoo's audit reported, each citing its report.
 conformance:
-	uv run pytest tests/test_conformance.py -v
+	uv run pytest tests/test_conformance.py tests/test_zoo.py -v
 
 # Regenerate the committed serialized-shape artifact (TASKS.md 3.7, Option C).
 # `SCHEMA_VERSION` stays "0.1" for the whole of 0.x (Option B), so the version

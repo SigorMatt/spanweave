@@ -1,0 +1,201 @@
+{
+  "bodies": [
+    {
+      "bytes": 73874,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "8129f00bd9347d07750173561c102a4c681ab39a99076777977727a39eef756c"
+    },
+    {
+      "bytes": 98775,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "21cf517afd408881d7001f02589480337e957362d6585a81d0b5f72e7f821e2d"
+    },
+    {
+      "bytes": 200084,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0002.body",
+      "sha256": "d35dbe7160af8aae8011b794f3a331da587f5292e5d956b24f0df91089c30903"
+    },
+    {
+      "bytes": 266110,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0002.json",
+      "sha256": "362beb83e5b88fc1b66d5ac60aa80a6387548153445f5dd8b589549c009d885d"
+    },
+    {
+      "bytes": 202130,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0003.body",
+      "sha256": "16a74917ece47ef4c778bf591b48d0db488ebeca1686f03cc2f130cc0a723677"
+    },
+    {
+      "bytes": 281829,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0003.json",
+      "sha256": "cdf9301358f983949ab69aa771ebd5fd0e8bb1efde36d251866ca765b55894b6"
+    },
+    {
+      "bytes": 63644,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0004.body",
+      "sha256": "0715fc2320b4d488fc1949f3dd176ffec8ea56fc618f8c01c96f9efd194e8d5e"
+    },
+    {
+      "bytes": 92145,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0004.json",
+      "sha256": "91a6e97763f0397d824a64208be416f61b02ba55ca9305234543ef9d0af19ce8"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T22:19:39.055917+00:00",
+  "files": [
+    {
+      "bytes": 968,
+      "file": "bodies.jsonl",
+      "sha256": "f240a4f3bcff2f15aa0c53d8a7c4d429d2530c90a184e3723220f76d37dabc12"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "537d33e89a37869837028f901e4247335ee083460c8fbaca0db169eb876189f2"
+    },
+    {
+      "bytes": 164,
+      "file": "forwards.jsonl",
+      "sha256": "990b8d282f075653d35fba576e42b9293ae7e12d84ac8867bf2c9ffd128200fa"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0001.headers.json",
+      "sha256": "9e8825e4007ff6240cb8409e844aa4f2e414006a04a8488ad381fc7c4fcce5f5"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0001.headers.raw",
+      "sha256": "da8013cfe66caf92a43a927747faa9fe3a5f895267a0ccfe6ad80e37ac11f97e"
+    },
+    {
+      "bytes": 492,
+      "file": "json/0002.headers.json",
+      "sha256": "a348d9c600c91cae209327688b06808ac3f3d2ac544dc3e750214026ea20a43e"
+    },
+    {
+      "bytes": 196,
+      "file": "json/0002.headers.raw",
+      "sha256": "144acb403e93c01482c2e4ffe50d2d1ed51f6306f944e1a9f371ef63da1fcfe1"
+    },
+    {
+      "bytes": 492,
+      "file": "json/0003.headers.json",
+      "sha256": "006e526d0ea423fc2ccb3b130555191f8db5a9d723d53d9ddc549c9a00472a3e"
+    },
+    {
+      "bytes": 196,
+      "file": "json/0003.headers.raw",
+      "sha256": "83300ac3466b1f5ca6e630276651d1bbccf4d073c61a22802f76ab2a78d2e2c6"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0004.headers.json",
+      "sha256": "843cb95dd716bbef03a3f8a53154938e2d2996382a8a9710265d5551a695dcb3"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0004.headers.raw",
+      "sha256": "32164ff8e0be386a7e1801b510379c3350e2f51d8e3a4675977db5e28ae01712"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0001.headers.json",
+      "sha256": "3ca5e1743efa6aa78f3f149c9387cd081d706908cc4ed8d372de4fc0722ce961"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0001.headers.raw",
+      "sha256": "4c4a4fb4be729e790a494f088a379a95aeb0eb89df674e4f3ad323c460d87479"
+    },
+    {
+      "bytes": 579,
+      "file": "raw/0002.headers.json",
+      "sha256": "880d33469b3e655d1683d3bd59e2a87e7e2717c7b3e70b88790995dbba0ab600"
+    },
+    {
+      "bytes": 227,
+      "file": "raw/0002.headers.raw",
+      "sha256": "b563121258cc43f1e987d79b0e04ed2c63390f36c306115f8fcd5234e3d69a9f"
+    },
+    {
+      "bytes": 579,
+      "file": "raw/0003.headers.json",
+      "sha256": "a8cfc0a2c26ed30043e5252ab62bf2a270d093726a788c219b278382837558d4"
+    },
+    {
+      "bytes": 227,
+      "file": "raw/0003.headers.raw",
+      "sha256": "9a73f74a13cc1c419fa0154c8dba85fd4e51a4ba92817d3e26fe783f58ae851c"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0004.headers.json",
+      "sha256": "66c07b709de0620c69c6014b0453b55125ce8b1773377874d1a859c03e4c0338"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0004.headers.raw",
+      "sha256": "afb6e81353290ce14cd080529185887ee96fdf24624ca1ca69706ba973abf6e9"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0002.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0003.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0004.body",
+      "status": 200
+    }
+  ],
+  "kind": "real",
+  "project_manifest": {
+    "base_url": "https://api.tokenfactory.nebius.com/v1/",
+    "contract_version": "1.2",
+    "endpoint": "http://localhost:4318",
+    "framework": "openai-agents",
+    "framework_version": "0.23.1",
+    "instrumentation": [
+      "openinference-instrumentation-openai-agents==2.5.3",
+      "openinference-instrumentation-openai==0.1.65"
+    ],
+    "mode": "real",
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T22:19:22.912Z"
+  },
+  "seal": "14a8ba0bbf285bb4f893e83df4fc4d1593c4421ddb6f2065781376065058594b",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T22:19:20.041619+00:00"
+}

@@ -1,0 +1,120 @@
+{
+  "bodies": [
+    {
+      "bytes": 4864,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "b32d4feda04ee8ccbb5e20c54630a03814a61e8cb7b2468d467164c37448c3e9"
+    },
+    {
+      "bytes": 6651,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "95306de992fe39f7be1c29ceb7b9aa681624015a6b34185db691e5bfb9fbfb37"
+    },
+    {
+      "bytes": 2676,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0002.body",
+      "sha256": "bffe94b88427b55944b548c03434b989d23532066ec14429874f380ea462c738"
+    },
+    {
+      "bytes": 3694,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0002.json",
+      "sha256": "fc904efb2f2060f8588dae36e4674aecacb144a75950ed75bf2457300ae67fd8"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T13:26:44.927388+00:00",
+  "files": [
+    {
+      "bytes": 478,
+      "file": "bodies.jsonl",
+      "sha256": "2eef5d85803da292b2a21b791a11145493da608be26b95023812466a00fbe4dc"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "451d5b2d87f695664e4f3bb14e992f5bb61d958d7c08d2fccd0545ad89c5b13c"
+    },
+    {
+      "bytes": 82,
+      "file": "forwards.jsonl",
+      "sha256": "a7366d994fac0629c956e7b8ef05bea516609f0676f302f729210488cf668198"
+    },
+    {
+      "bytes": 442,
+      "file": "json/0001.headers.json",
+      "sha256": "23b9d675845788bce0cfbcd739ca7e2fcf0b619dfe0f3ee79fd03502f4ef6c0a"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0001.headers.raw",
+      "sha256": "f2f7f9a893a447ae227963dbe82dcfdf6d20251af4ca7632f5689673024bab73"
+    },
+    {
+      "bytes": 442,
+      "file": "json/0002.headers.json",
+      "sha256": "22708ea2887336c458e72d5f8ef75c514c8b70c2dde4bfb18ea8e99a6ef9ead1"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0002.headers.raw",
+      "sha256": "fb5bd569b45cf3b94e5b655eae464cabe055cfe9a0a09a1749792c5ee4cff545"
+    },
+    {
+      "bytes": 529,
+      "file": "raw/0001.headers.json",
+      "sha256": "8a18a707f2a98c50b41024401e464894733777f8755acfcb610883c483bb3b8c"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0001.headers.raw",
+      "sha256": "eea320d1c573b102a5335ae10aa0e5a1999e97efda5b66476bbd705469c2b68d"
+    },
+    {
+      "bytes": 529,
+      "file": "raw/0002.headers.json",
+      "sha256": "c646c8a419315a412e407d142be4bd064cbbfd35983ddf4a58f50ba0c074c11e"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0002.headers.raw",
+      "sha256": "945f3a81778946affbc4d91739fc084546f8e26d7e24d023d42d8c8a7a81d82c"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0002.body",
+      "status": 200
+    }
+  ],
+  "kind": "real",
+  "project_manifest": {
+    "endpoint": "http://localhost:4318",
+    "framework": "openai",
+    "framework_version": "2.54.0",
+    "instrumentation": [
+      "opentelemetry-instrumentation-openai-v2==2.4b0",
+      "opentelemetry-util-genai==0.4b0"
+    ],
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T13:26:35.397008+00:00"
+  },
+  "seal": "f1b6a1d12377f314d6a25bea4601d70744d42955b802a431785d82bfc8bf7353",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T13:26:30.008542+00:00"
+}

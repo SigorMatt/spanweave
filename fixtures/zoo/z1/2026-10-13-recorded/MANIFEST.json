@@ -1,0 +1,86 @@
+{
+  "bodies": [
+    {
+      "bytes": 74269,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "2b05f83604c347d6144ee05d7a942387b2031d72f385510e7032472bdc6b8ad0"
+    },
+    {
+      "bytes": 95122,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "aa7183719260186a9d7b4b565267568120c37fd4d4bdeda9e94d826a07b1ef81"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-13T18:27:04.361072+00:00",
+  "files": [
+    {
+      "bytes": 241,
+      "file": "bodies.jsonl",
+      "sha256": "4394c728087a35c1d493d6212968ae338bc153e0ae1282a9e5c93743520270cb"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "58d54c4e48849ec0b856df24a0c079487b9e20b4caa452a6c87ecbae0ff28bd3"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0001.headers.json",
+      "sha256": "39a5addb9014ac2ea95650489d03c5bb8f65b214322f3e8823e1095971637eed"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0001.headers.raw",
+      "sha256": "ee13aa5ae35f407decbe8d8183bd27a09e488fbc14c5dc1cb7b46f5a07b568df"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0001.headers.json",
+      "sha256": "a02e656f6794c7d31b434a66c0d5bcd0e7077c9222950975b72338faa86ce185"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0001.headers.raw",
+      "sha256": "46df5e6abbd9de216330cfc207a9bd0427f944af2a85e69dbfb909c0a713544a"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "recorded",
+  "project_manifest": {
+    "base_url": "http://127.0.0.1:18765/v1",
+    "contract_version": "1.3",
+    "endpoint": "http://localhost:4318",
+    "framework": "langchain",
+    "framework_version": "1.4.5",
+    "instrumentation": [
+      "openinference-instrumentation-langchain==0.1.79"
+    ],
+    "mode": "recorded",
+    "model": "ledger-clerk-stub",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-13T18:26:59.001734Z"
+  },
+  "seal": "609e9a97065a5c2dbb1f11a1ce0c30ddf7b6a3d5887804adbf3ac78cff4f48b9",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-13T18:26:56.208329+00:00"
+}

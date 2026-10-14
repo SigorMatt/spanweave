@@ -1,0 +1,82 @@
+{
+  "bodies": [
+    {
+      "bytes": 6884,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "0855e22d81d6304678ca37e281fd72cae2ac70ac1886976d7dc85b7e3310bc51"
+    },
+    {
+      "bytes": 9543,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "daaa2f21e7c04cf48a01c9076119c1e9cfff1d56d9a6b381630b4a9d977a5b5f"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T13:27:13.498090+00:00",
+  "files": [
+    {
+      "bytes": 239,
+      "file": "bodies.jsonl",
+      "sha256": "b1fe1c907567aa8b80a24f80341e3673126eef14ec4e5b6d7f406157568345bc"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "4513836f0032235419aa7b772edbd2093731ff783ef3cb86a1d6d7d57340fbdf"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 442,
+      "file": "json/0001.headers.json",
+      "sha256": "8e616fee060f1ffce977f22e896a4c2d34203ec235499e975ce9b80aec20d2b2"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0001.headers.raw",
+      "sha256": "bc869364da6c2a51b760e02f644f429153e3ea492662f81a9f55f955e6009bf1"
+    },
+    {
+      "bytes": 529,
+      "file": "raw/0001.headers.json",
+      "sha256": "9fd4e7c6da2e5eafb62c883c827c866160d63664f7b0e9b4ef5b4026aa359cdb"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0001.headers.raw",
+      "sha256": "0ba9fbd75391a3fff1b0edc5bdd94bcc06c817cbf15fd72e332bda798f73e20d"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "recorded",
+  "project_manifest": {
+    "endpoint": "http://localhost:4318",
+    "framework": "openai",
+    "framework_version": "2.54.0",
+    "instrumentation": [
+      "opentelemetry-instrumentation-openai-v2==2.4b0",
+      "opentelemetry-util-genai==0.4b0"
+    ],
+    "model": "stub-concierge-1",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T13:27:12.286102+00:00"
+  },
+  "seal": "808a480dc453ff1281c3354095b4cced48dba352e28ce05d2c580fd78c716446",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T13:27:05.803457+00:00"
+}

@@ -1,0 +1,162 @@
+{
+  "bodies": [
+    {
+      "bytes": 3684,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "56b70f6b29bab4724e12ab68e374f468fb642594a0bf04475a2fd8ece182622c"
+    },
+    {
+      "bytes": 5147,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "d514e0e369434e499af6461faceeecee84dcb9dc7e671a82cc76d1fc626d82e7"
+    },
+    {
+      "bytes": 24926,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0002.body",
+      "sha256": "d01c273870441f13dce25bc1508e06a5a0d1001867a36ab7fe3d13b03747f72e"
+    },
+    {
+      "bytes": 31804,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0002.json",
+      "sha256": "c4eb9add8209c2cd425b8b5e0c81007713a26346475566bb47cd1aa00b399799"
+    },
+    {
+      "bytes": 25516,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0003.body",
+      "sha256": "e577af5e49caeb3c41f7897660510cbdec6b918727d9b3cd2781724899ea0724"
+    },
+    {
+      "bytes": 29309,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0003.json",
+      "sha256": "ec67ac053591294b27951560bf99e676b755962f13713c3243ab131885251cc3"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-14T00:18:03.977214+00:00",
+  "files": [
+    {
+      "bytes": 721,
+      "file": "bodies.jsonl",
+      "sha256": "62b48f7b44158c9f3f59e20169a2343cd41f82849fc4c4ce78cf9262d8d18d90"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "d0924f93ee5983ca10e2edad0584db0bde1eeace9245bbec0d99ba997af0ae09"
+    },
+    {
+      "bytes": 123,
+      "file": "forwards.jsonl",
+      "sha256": "d29b723ae191a0bd1d0b9747a1bf4d97061286fafb67cade0595adfe40fd386a"
+    },
+    {
+      "bytes": 488,
+      "file": "json/0001.headers.json",
+      "sha256": "4132b952656c1e95019f5e8c8e56ff96da954942f172e0fb4b78f211f0b3de60"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0001.headers.raw",
+      "sha256": "6cf56a95b49434af5e6a2341f5e0474851291a2c6091562b48b6937351cad3fd"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0002.headers.json",
+      "sha256": "1a81752e3aa89fe46db38d96d4d9859a742c2a700ca3dfd68ab73d6de1ca49ad"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0002.headers.raw",
+      "sha256": "16a0b891d725cab0954f2ff32b76255e2fc543477d50354e2c1b4e971829fcca"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0003.headers.json",
+      "sha256": "e1eb80dd80671fce480762402e2faae98924fb660bb26302fbbad2334b5c0e28"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0003.headers.raw",
+      "sha256": "c06c489f17f01aa42c5b8cbfe29e981298be3913ffcc8d27ae0ae4c359893f64"
+    },
+    {
+      "bytes": 575,
+      "file": "raw/0001.headers.json",
+      "sha256": "438fc5909b57e9fe8d70304db9418733b1b20f15a86eae70e27bf8647186264d"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0001.headers.raw",
+      "sha256": "60606532c1cc9b86f857aff1de2cbdafcb9b1a3ea3a58ec2ec8dc2f9443750e5"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0002.headers.json",
+      "sha256": "7531c0db8bbacfcbf1a142f2da1aa1221d333828a60a8690a3ea4660756b9219"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0002.headers.raw",
+      "sha256": "f02e52186732ca33748ccb9c0d1a534b6863a574e7113c0221ca365d1b5e1ef3"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0003.headers.json",
+      "sha256": "76cfb651fde1983ea760142336097e50e4f367a134b01e3b3034a70303770b90"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0003.headers.raw",
+      "sha256": "d428bc4e11802631619c148ed9101efa205cf70c8e083e9ec45ff8eaa74b61dc"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0002.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0003.body",
+      "status": 200
+    }
+  ],
+  "kind": "real",
+  "project_manifest": {
+    "base_url": "https://api.tokenfactory.nebius.com/v1/",
+    "contract_version": "1.3",
+    "endpoint": "http://localhost:4318",
+    "framework": "llama-index-core",
+    "framework_version": "0.14.25",
+    "instrumentation": [
+      "openinference-instrumentation-llama-index==4.6.0"
+    ],
+    "mode": "real",
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-14T00:17:36.158Z"
+  },
+  "seal": "17c9833d2a27f898c2379a69efd6ff974c3d5bd6b7976601a29405c6e47b63a7",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-14T00:17:29.627947+00:00"
+}
