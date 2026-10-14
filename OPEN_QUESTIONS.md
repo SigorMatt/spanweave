@@ -3768,3 +3768,13 @@ it as "T1" would fail the row without saying so.
 **(d) Provisional stance.** None taken. The batch stopped at the halt. If (1)
 is chosen, (1a) and (1b) need answers before code; if (2) or (3), the row's
 acceptance must say 0 `parent` / 4 `orphan_parent` on Z4's full capture.
+
+**The decision (2026-10-14, maintainer).** Option 1. (1a) Records the reader
+unpacked from an OTLP export, marked as such; `envelope()` raises on any
+other. (1b) The whole envelope — id, parent, trace, name, times, status —
+because the reader owns those nine keys and reads none of the attributes,
+which is exactly what `unclaimed_record` then says. (1c) Accepted: the id
+change is recorded in the CHANGELOG and the census moves with reasons.
+Options 2 and 3 are declined: an `unknown` node without the identity the
+transport stated answers S12 by explanation where the graph could answer it
+by an edge the telemetry stated.
