@@ -328,6 +328,45 @@ def test_every_make_target_a_document_names_exists():
     assert not missing, f"documents name make targets that do not exist: {missing}"
 
 
+# What `make conformance` runs today, in the recipe's order. CI runs the target
+# on ubuntu and macOS (`.github/workflows/ci.yml`); the existence check above
+# says nothing of what it runs, so a file dropped from the recipe left every
+# test green (R-24). Changing the list is changing the gate: edit both.
+CONFORMANCE_RUNS = (
+    "tests/test_conformance.py",
+    "tests/test_zoo.py",
+    "tests/test_zoo_readings.py",
+)
+
+
+def makefile_recipe(target: str) -> list[str]:
+    """The tab-indented lines under `target:`, up to the first line that is not."""
+    lines = read("Makefile").splitlines()
+    head = re.compile(rf"{re.escape(target)}:")
+    starts = [i for i, line in enumerate(lines) if head.match(line)]
+    assert len(starts) == 1, f"Makefile defines {target!r} {len(starts)} times"
+    recipe: list[str] = []
+    for line in lines[starts[0] + 1 :]:
+        if not line.startswith("\t"):
+            break
+        recipe.append(line.strip())
+    return recipe
+
+
+def test_make_conformance_runs_exactly_the_files_it_names_today():
+    recipe = makefile_recipe("conformance")
+    assert len(recipe) == 1, f"conformance's recipe is not one command: {recipe}"
+    words = recipe[0].split()
+    assert words[:3] == ["uv", "run", "pytest"], (
+        f"conformance does not run pytest: {recipe}"
+    )
+    runs = tuple(word for word in words[3:] if not word.startswith("-"))
+    assert runs == CONFORMANCE_RUNS, (
+        f"make conformance runs {runs}, not {CONFORMANCE_RUNS}. CI's conformance "
+        f"job is this recipe; a file left out of it is a gate that stopped running."
+    )
+
+
 def test_every_cli_subcommand_a_document_invokes_exists():
     """Fenced lines only, unlike the make scan above, and for a stated reason.
 

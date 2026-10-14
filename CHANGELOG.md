@@ -15,6 +15,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`make conformance`'s recipe is pinned** (decisions 2026-10-14g, R-24).
+  No behaviour change. CI runs the target, but the only test on it checked
+  that it exists, so dropping `tests/test_zoo_readings.py` from the recipe
+  left every test green. `tests/test_doc_truth.py` now holds the recipe to
+  the files it runs: `tests/test_conformance.py`, `tests/test_zoo.py`,
+  `tests/test_zoo_readings.py`.
 - **The S13 mask keeps absence** (decisions 2026-10-14g, R-22). No
   behaviour change. S13's test masked every node's `started_at` and
   `ended_at` with `"<time>"` without looking, so a node with an end time in
