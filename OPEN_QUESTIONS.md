@@ -3667,3 +3667,104 @@ in the words it was recorded in:
 > emits nothing about it. (4) The showcase (L8) is agentgolden's rules
 > evaluated per delta, rules file unchanged, bringing its own trace since no
 > conformance fixture carries the scenario.
+
+---
+
+## 20. T1: Is an unclaimed record keyed by the span id its envelope states?
+
+*Written 2026-10-14 by batch T1 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`), as the halt that batch's brief names. Nothing in this
+commit changes behaviour.*
+
+**(a) The question.** T1's row asks for a public `spanweave.envelope(record)`
+and states an acceptance on Z4's real capture
+(`fixtures/zoo/z4/2026-10-12-real`, both bodies): `build` over the five
+records yields 5 nodes, **4 `parent` edges, 0 `orphan_parent`**, 1
+`unclaimed_record`, 1 `unknown`. The fifth record is the root span
+`concierge.conversation` (`span_id` `3013a003149d6951`, no `attributes`), which
+no adapter claims; the other four are `llm` spans stating
+`parent_id: "3013a003149d6951"`. Measured on the parent `1b44743`:
+
+```
+5 nodes   edges: {temporal: 3}   parent: 0
+diagnostics: {orphan_parent: 4, timestamp_unit_suspect: 4, unmapped_attributes: 4,
+              missing_timestamp: 1, unclaimed_record: 1, unpaired_call: 1}
+unclaimed node id: sw_db75e287d7632844
+orphan_parent.source (all four): "3013a003149d6951"
+```
+
+The four children name a span the input carries, and find no node with that
+id, because the unclaimed root's node id is derived (§3.6 rule 2) rather than
+its envelope span id. The row's target needs the unclaimed node to be keyed by
+`3013a003149d6951`. **Does any rule say it is?**
+
+**(b) Why the spec does not, and in places says the opposite.**
+
+- §3.6 rule 1 keys a node by its span id when **"the dialect supplies"** one.
+  An unclaimed record has no dialect: §6.1's whole definition of it is that no
+  adapter read it.
+- §3.6's `adapter_id` paragraph states the material of rules 2 and 3 for an
+  unclaimed record (`adapter_id` is the empty string) — i.e. the spec already
+  contemplates an unclaimed record's id as *derived*, and says nothing of a
+  span-id key for one.
+- §6.1's table gives an unclaimed record exactly two things: an `unknown` node
+  carrying the record verbatim, and `unclaimed_record`. It states no relation.
+- `spanweave/seam.py`'s `unclaimed_span` says in its contract that reading the
+  record's own fields there "would be this module deciding what a span
+  envelope looks like on behalf of an adapter that declined it", and keys by
+  the canonical digest.
+- The T1 decision (`WORKPLAN.md` §3) supports making the envelope *public*
+  ("trace id, span id and parent id are the transport's"), and also says
+  "`classify` is unchanged; an unclaimed record is still an `unknown` node with
+  `unclaimed_record` (§6.1)". It is silent on the unclaimed node's id and
+  relations.
+
+So the 4-parent/0-orphan target is a new rule, not a reading of one. The brief
+forbids inventing it. The `envelope()` half alone does not meet the row's
+acceptance either: on its own it changes no count in the Z4 build, so landing
+it as "T1" would fail the row without saying so.
+
+**(c) Options.**
+
+1. **The envelope keys an unclaimed node.** An unclaimed record whose record
+   shape carries a readable `span_id` (non-empty string, read by
+   `seam.span_ref`) gets that as its node id under rule 1, and its `parent_id`
+   and `trace_id` (via `parent_ref`, and the existing trace rule) become its
+   relations. Kind stays `unknown`, provenance names no adapter,
+   `unclaimed_record` stays. Z4 then gives 4 `parent` and 0 `orphan_parent`.
+   *Spec:* §3.6 rule 1 ("the record's envelope or its dialect"), §3.6's
+   `adapter_id` paragraph, §6.1's table row, §7 (the envelope as a stated
+   contract, which `envelope()` exposes); `seam.unclaimed_span`'s docstring
+   reversed. *Sub-questions the maintainer must settle with it:*
+   - **(1a) Which records.** Only records the reader unpacked from an OTLP
+     export (the reader knows the envelope), or any record whose shape carries
+     the renamed keys (`span_id`, `parent_id`, `trace_id`) — e.g. a flat JSONL
+     record from a dialect nobody registered? The second reads a key name as
+     an envelope in a file that never declared one.
+   - **(1b) How much of the envelope.** Id and parent only (the row's counts),
+     or also `name`, `start_time`/`end_time` and `status`, which `envelope()`
+     returns? The latter changes Z4's `temporal` edges and removes its
+     `missing_timestamp`, counts the row does not state; and it would put
+     §3.1's timestamp reading on a record no dialect read.
+   - **(1c) What moves elsewhere.** Every existing unclaimed node with a span
+     id changes id. No conformance scenario renders one
+     (`mixed_instrumentation/scenario.md`: "no scenario renders it"), but the
+     zoo census's Z4 counts move (`tests/zoo_census.py`) and any test pinning
+     an unclaimed `sw_` id would.
+2. **`envelope()` only; the row's acceptance restated.** Land the public,
+   typed `envelope(record) -> Envelope(...)` and `EnvelopeError` over the
+   record shape (§7), with which a receiver can route every record by trace
+   (L2). The unclaimed root stays `sw_…`; Z4 stays 0 `parent` / 4
+   `orphan_parent`, and S12 is answered by the reading that each orphan's
+   `source` already names `3013a003149d6951`, which `envelope()` of the
+   unclaimed node's `raw.source` returns as its `span_id` — the reader can tell
+   the absent parent is the unclaimed root. S2 is answered by a reading, not a
+   count. Requires the maintainer to rewrite T1's acceptance.
+3. **Defer the identity question past this series.** As (2) for this series,
+   with (1) recorded in `DEBT.md`/`TASKS.md` as the open thread, to be decided
+   when a second capture shows an unclaimed record in the middle of a tree
+   (Z4's is its root, which makes "orphan" and "root not read" the same fact).
+
+**(d) Provisional stance.** None taken. The batch stopped at the halt. If (1)
+is chosen, (1a) and (1b) need answers before code; if (2) or (3), the row's
+acceptance must say 0 `parent` / 4 `orphan_parent` on Z4's full capture.
