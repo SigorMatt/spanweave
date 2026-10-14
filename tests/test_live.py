@@ -250,21 +250,24 @@ def test_a_group_whose_parent_arrives_last_keeps_its_chain():
 def test_orphans_and_a_root_never_share_a_chain_whatever_arrives_last():
     """A root and the orphans of an absent parent are two groups at every
     prefix, before the parent arrives as after (`SPEC.md` §4.3, batch T5): an
-    order between them is one the complete input does not state."""
+    order between them is one the complete input does not state.
+
+    The chain is asserted at each prefix, not only at the end: `replay` holds
+    live equal to batch, and a rule both paths share wrongly (the root group
+    taking the orphans until their parent arrives, so `r1 -> c0` at prefix 6)
+    passes that comparison."""
     children = [oi(f"c{index}", parent="s0", t0=1001.0 + index) for index in range(5)]
     other = oi("r1", t0=999.0)
     records = [*children, other, oi("s0", kind="AGENT", name="agent", t0=1000.0)]
-    builder = replay(records)
-    chain = [
-        (edge.src, edge.dst) for edge in builder.graph().edges(kind=EdgeKind.TEMPORAL)
-    ]
-    assert chain == [
-        ("c0", "c1"),
-        ("c1", "c2"),
-        ("c2", "c3"),
-        ("c3", "c4"),
-        ("r1", "s0"),
-    ]
+    replay(records)
+    builder = spanweave.Builder()
+    for index, record in enumerate(records, start=1):
+        builder.feed(record)
+        present = [f"c{i}" for i in range(min(index, len(children)))]
+        expected = list(itertools.pairwise(present))
+        if index == len(records):
+            expected.append(("r1", "s0"))
+        assert chain_of(builder.graph()) == expected, f"prefix {index}"
 
 
 def test_the_majority_trace_id_can_change_with_an_arrival():

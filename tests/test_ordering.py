@@ -144,6 +144,38 @@ def test_orphans_stating_one_absent_parent_are_ordered_with_the_same_basis():
     ]
 
 
+def in_trace(span, trace_id):
+    return dataclasses.replace(span, trace_id=trace_id)
+
+
+def test_orphans_stating_one_absent_parent_under_two_trace_ids_are_one_group():
+    """The group is the stated parent id alone, not trace id and parent id
+    (§4.3: "the nodes that state the same parent id")."""
+    graph = build(
+        [
+            in_trace(a_span("b", "gone", started=2.0), "t2"),
+            a_span("a", "gone", started=1.0),
+        ]
+    )
+    assert temporal_of(graph) == [("a", "b")]
+    assert codes.MULTI_TRACE_INPUT in codes_of(graph)
+
+
+def test_children_of_a_present_parent_under_two_trace_ids_are_one_group():
+    """The same rule with the parent here, pathological as the input is: a
+    trace id never splits the nodes that name one parent."""
+    graph = build(
+        [
+            a_span("p", started=0.5),
+            in_trace(a_span("b", "p", started=2.0), "t2"),
+            in_trace(a_span("a", "p", started=1.0), "t3"),
+        ]
+    )
+    assert temporal_of(graph) == [("a", "b")]
+    assert ("p", "a") in edges_of_kind(graph, EdgeKind.PARENT)
+    assert ("p", "b") in edges_of_kind(graph, EdgeKind.PARENT)
+
+
 def test_an_arriving_parent_changes_no_group():
     """The chain an orphan's group had is the chain it has once its parent is
     here, so a partial input asserts no order the complete one withdraws."""

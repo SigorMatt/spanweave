@@ -15,6 +15,17 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The sibling group is the stated parent id alone, at every prefix**
+  (decisions 2026-10-14g, R-15, R-16). No behaviour change. SPEC §4.3 says a
+  node is a sibling of the nodes that state the same parent id; no test told
+  that key from the trace id and parent id together, which would cut two
+  orphans of one absent parent under different trace ids apart, and two
+  children of one present parent likewise. `tests/test_ordering.py` now
+  asserts both pairs keep their `temporal` edge. T5's
+  `test_orphans_and_a_root_never_share_a_chain_whatever_arrives_last` said
+  "two groups at every prefix" and checked the final chain only; it now
+  asserts the chain at each prefix, so a rule the batch and live paths share
+  wrongly cannot pass it by agreeing with itself.
 - **The seam's dropped-count and event paths are pinned** (decisions
   2026-10-14g, R-11, R-14). No behaviour change. T3's and T4's entries below
   say an unclaimed span reports its dropped count and its events with
