@@ -13811,20 +13811,28 @@ prose until a stranger reads it.
   archive**: every `REVIEW-*.md` in the untracked scratch drop at the close
   belongs to an earlier series, and each is byte-identical (sha256) to its
   archive under `reviews/`.
-- **`make conformance` does not run `tests/test_zoo_readings.py`.** Its target
-  names `tests/test_conformance.py` and `tests/test_zoo.py` only. T6 added the
-  module and left the Makefile alone. `make check` runs the module, so it is
-  gated, but not by the target that "runs the zoo". For the maintainer.
+- **The Phase 4 gate is not met.** The close recorded the zoo run as the
+  third dialect having been run. That was the plan's mistake, carried from the
+  series brief, and it is corrected after the close (decisions 2026-10-14e,
+  commit 3): the zoo run is a stranger corpus and a measured exercise of the
+  shape gate, not a third dialect. See *The zoo run* below and the decisions
+  log. The third dialect stays where `ROADMAP.md` has it.
 - **S13 is dispositioned after the close, and what it found is for the
   maintainer to read.** The close registered it as open. The post-close test
   (decisions 2026-10-14e, commit 1) found that Z5's two graphs differ in more
   than the ids and times the exporter generated, by two generated UUIDs that
   are not in the mask. See the probe table below: every probe, S1–S22, now
   has a disposition (22 of 22).
-- **Choices made beyond their rows are unconfirmed**: T4 (a)–(c),
-  T5 (a)–(d), and T6's two. They are listed below under *Choices beyond
-  the row*. T1's three and T3's four were confirmed during the series, as
-  were T2's (decisions log).
+- **Two choices beyond their rows are still unconfirmed**: T5 (d) and T6 (a).
+  No decision names either. T4 (a)–(c) and T5 (a)–(c) were confirmed after
+  the close (decisions log), and T6 (b) is answered by `b7b0088` (next item).
+  All are listed below under *Choices beyond the row*. T1's three and T3's
+  four were confirmed during the series, as were T2's (decisions log).
+- **Resolved after the close: `make conformance` runs
+  `tests/test_zoo_readings.py`.** The close registered that it did not: its
+  target named `tests/test_conformance.py` and `tests/test_zoo.py` only,
+  because T6 added the module and left the Makefile alone. `b7b0088`
+  (decisions 2026-10-14e, commit 2) added it to the target.
 
 The stranger's-trace series answered the twenty-two probes (`PROBES.md`
 S1–S22) that `SigorMatt/spanweave-zoo` left for this library at `7eb5b69`.
@@ -13862,7 +13870,7 @@ threads, which are unrelated.
 | T4 | A span's events are reported, and an exception is an error the graph can see | S11, S17 | **done (decided)**. Halted because `error` would change `DiagnosticLevel` (§22). Option 2 was decided: both codes at `info` | halt `7555739`, decided `ef1a483`, done `2ed0c92` |
 | T5 | Siblings are grouped by the parent the record states | S18, L3 | **done**. The row did not name Z5's `temporal` 2 → 1 | `dcfbb8d` |
 | T6 | The adapters say what they do not map, and the instrumentations are described | S5, S6, S9, S14, S16, S17, S19, S20, S22 | **done**. Three row corrections (S17, openai-agents, S5) | `2f4d83c` |
-| T7 | The series closes: this section, `WORKPLAN.md` deleted, the Phase 4 record | ROADMAP Phase 4, "the third dialect is a freeze precondition" | **done**, except the PR and its reviews, which the human runs after the push | the closing commit of the series |
+| T7 | The series closes: this section, `WORKPLAN.md` deleted, the Phase 4 record | ROADMAP Phase 4, "the third dialect is a freeze precondition" | **done**, except the PR and its reviews, which the human runs after the push. **Corrected after the close:** the row's "the zoo pin and the census recorded as the conformance corpus' third dialect having been **run**", and its "six agents, three instrumentations", were the plan's mistake, carried from the series brief. The zoo run is a stranger corpus, not the third dialect: its six agents are read by two dialects through six instrumentors, and the Phase 4 gate is not met (decisions 2026-10-14e, commit 3) | the closing commit of the series |
 
 The `plan:` commits between the batches are execution state. They are
 `1b44743`, `604954e`, `7db4cb3`, `207aca2`, `1b9b40d`, `6b48dd3`, `5f6fd13`,
@@ -13878,30 +13886,51 @@ shape artifact moved only in its vocabularies: three diagnostic codes
 shapes. That is §3.7's "extend deliberately". T1's new error code,
 `not_an_envelope` (SPEC §3.10), is raised and never serialized.
 
-### The zoo run, recorded for Phase 4's gate
+### The zoo run: a stranger corpus, not the third dialect
 
-T7's row asks that the zoo pin and the census be recorded as the conformance
-corpus' third dialect having been **run**, which is the freeze precondition
-in `ROADMAP.md` Phase 4 ("the gate is that dialect three has been run, not
-that it found nothing"). The T3/T4 decision says the same thing: "Phase 4's
-freeze precondition is a dialect *run*, which this series supplies". The
-record:
+**The Phase 4 gate is not met.** T7's row asked that the zoo pin and the
+census be recorded as the conformance corpus' third dialect having been
+**run**, and the T3/T4 decision said the same: "Phase 4's freeze
+precondition is a dialect *run*, which this series supplies". The close
+recorded it so, under the heading *The zoo run, recorded for Phase 4's gate*
+and in its commit subject (`100a9d2`, "the zoo run as the third dialect").
+That was the plan's mistake, carried from the series brief, and the
+maintainer corrected it after the close (decisions 2026-10-14e, commit 3;
+decisions log). `ROADMAP.md`'s gate is a third dialect "rendered across the
+conformance corpus and run against the cross-dialect equivalence test". The
+zoo run adds no adapter and no equivalence rendering. It exercised the two
+dialects the library already had, `openinference` and `otel_genai`: five
+OpenInference instrumentors and the OpenTelemetry GenAI handler are
+instrumentors of those two, not a third, and raw OTLP JSON was decided a
+container, not a dialect, at F1/F2 (`c943543`, `ff05b2d`;
+`OPEN_QUESTIONS.md` §16). It did so under six strangers' agents.
+
+What the run **is** is the other thing Phase 4 names and had not yet got: a
+corpus that makes a correct contribution obvious, built from captures nobody
+shaped for the library. It is also a measured exercise of the shape gate,
+which caught one field (T3: `meta` gaining `resource` and `scope`) and one
+enum member (T4: `error` on `DiagnosticLevel`) on their way in. The third
+dialect stays where `ROADMAP.md` has it: an adapter for a dialect the library
+does not read today (Langfuse, LangSmith, Logfire, Vercel AI SDK). When it
+comes, it is rendered across both the conformance scenarios and this corpus
+(`ROADMAP.md`, *The third dialect is a freeze precondition*). The record:
 
 - **What was run.** The twelve captures are at `SigorMatt/spanweave-zoo`
   `7eb5b6944ccef34861dbaf92e8f0acb0b7edaf99`. They are copied byte for byte
   into `fixtures/zoo/`, with every body's sha256 and every manifest's seal
   re-derived by `tests/test_zoo.py`. There are six agents (Z1–Z6), each with a
-  real and a recorded run. The row says "three instrumentations". By each
-  manifest's `project_manifest.instrumentation` (`fixtures/zoo/README.md`),
-  the captures hold five OpenInference instrumentors (LangChain, LlamaIndex,
-  openai-agents, OpenAI, CrewAI) and the OpenTelemetry GenAI handler.
+  real and a recorded run. The row said "three instrumentations", which is
+  corrected: **two dialects, six instrumentors**. By each manifest's
+  `project_manifest.instrumentation` (`fixtures/zoo/README.md`), the captures
+  hold five OpenInference instrumentors (LangChain, LlamaIndex, openai-agents,
+  OpenAI, CrewAI) and the OpenTelemetry GenAI handler.
 - **What it measured.** `tests/zoo_census.py` holds, per capture, the counts
   the zoo's audit reported, each citing its `audit/*.md`. Every batch that
   moved a count updated the census in its own commit, with the reason. Batch
   and incremental (child before parent, in exporter order) are held equal
   byte for byte. `make conformance` runs it. The census diff from `162f1b6`
   (T0) to the close is the series' effect on a stranger's trace.
-- **What it found** — which is the point of the gate. One missing identity
+- **What it found** — which is the point of a stranger corpus. One missing identity
   rule (T1), one unit rule (T2), an envelope that leaked into
   `unmapped_attributes` (T3), events with no rendering (T4), a sibling rule
   that ordered unrelated orphans (T5), and one false sentence in SPEC §3.1
@@ -13913,10 +13942,12 @@ record:
   conformance scenarios: they have no `expected/graph.json` and take no part
   in the cross-dialect equivalence test. ROADMAP's *What satisfies the gate*
   reads "a third dialect *rendered in the corpus* — its scenarios
-  participating in the equivalence test". Whether this run discharges that
-  sentence as written is for the maintainer to rule. This close records the
-  run and does not edit `ROADMAP.md`. The zoo also does not start Phase 4,
-  and the schema is not frozen.
+  participating in the equivalence test". The close left whether this run
+  discharges that sentence to the maintainer, and did not edit `ROADMAP.md`.
+  **It does not**, ruled after the close (decisions 2026-10-14e), and
+  `ROADMAP.md` now says so in one paragraph after *The third dialect is a
+  freeze precondition*. The zoo also does not start Phase 4, and the schema
+  is not frozen.
 
 ### Every probe, and what answered it
 
@@ -13951,14 +13982,34 @@ added after the close. *Change* means a batch moved behaviour.
 | S21 — records grouped by scope, not end order | **Reading.** Right as rendered: `parent` edges rebuilt and incremental equal to batch (T0). The scope is read per node from the envelope (T3, `ADAPTERS.md` §7.3) | T0, T3, T6 |
 | S22 — Z6's two shapes of one crew | **Reading.** Right: each graph is what its run exported, and the census holds both | T6 |
 
-### Choices beyond the row — **unconfirmed**, for the maintainer
+### Choices beyond the row — T4's and T5's confirmed after the close; T5 (d) and T6 (a) **unconfirmed**
 
 The batches reported these in the resume note as "for the maintainer to
-confirm". No decision row confirms them, so they are carried as
-**unconfirmed**, not as decided. T1's (a)–(c), T2's and T3's (a)–(d) were
-confirmed and are in the decisions log.
+confirm". The close found no decision row confirming them and carried them
+as **unconfirmed**. After the close the maintainer confirmed T4 (a)–(c) and
+T5 (a)–(c) (decisions 2026-10-14e; decisions log, both rows dated
+2026-10-14). Each is marked below with the decision's wording beside the
+batch's. T5 (d) and T6 (a) are named by no decision and stay
+**unconfirmed**, not decided. T6 (b) is answered by `b7b0088`. T1's (a)–(c),
+T2's and T3's (a)–(d) were confirmed during the series and are in the
+decisions log.
 
-- **T4** (`2ed0c92`). (a) An event entry the reader cannot use is named
+- **T4** (`2ed0c92`). **(a)–(c) confirmed by the maintainer** after the
+  close, in the decision's words: an event entry the seam cannot read (a
+  non-list `events`, a non-object entry) stays reported as `<record>.events`
+  in `unmapped_attributes`, so nothing is dropped silently; a missing
+  `exception.*` value reads `""` or `null` by T1 (b)'s convention; the
+  attributes of a non-`exception` event are not read into `source`, because
+  `span_event` carries name and time, the attributes stay verbatim in
+  `raw.source` with the event, and SPEC §7 says so (nothing is dropped: it
+  is in the record). One wording difference, recorded rather than resolved:
+  the decision names the unreadable entry `<record>.events`, while the batch,
+  SPEC §3.7 and `seam.py` name an unreadable *entry* `<record>.events[<i>]`
+  and keep `<record>.events` for a non-list `events`. The decision also
+  names two of (a)'s five cases; the other three (a non-string `name`, an
+  unreadable `timeUnixNano`, an `exception` event whose attributes do not
+  fold) are SPEC §3.7's and follow the same nothing-dropped rule. The
+  batch's own words follow. (a) An event entry the reader cannot use is named
   `<record>.events[<i>]` in `unmapped_attributes` with no diagnostic: not an
   object, a non-string `name`, an unreadable `timeUnixNano`, or an `exception`
   event whose attributes do not fold. A non-list `events` stays
@@ -13967,7 +14018,20 @@ confirmed and are in the decisions log.
   attribute `null`. (c) A `span_event`'s attributes are neither read nor
   copied. Also: `read.folded_attributes` is a new module-level wrapper,
   internal and not in `spanweave.__all__`.
-- **T5** (`dcfbb8d`). (a) The live builder's regroup machinery is deleted
+- **T5** (`dcfbb8d`). **(a)–(c) confirmed by the maintainer** after the
+  close, in the decision's words: (a) the live builder's regrouping code was
+  dead by T5's own rule (a group keyed by the stated parent never changes
+  when the parent arrives), and deleting it is the point of the batch;
+  (b) children that state the same parent id share one group even when that
+  id is ambiguous (two records stating it), because the group is the
+  *stated* id and the ambiguity is the parent's diagnostic, not the
+  children's; (c) the group key is the span id alone, the same key a node
+  has since T1, and if multi-trace handling ever changes the node key
+  (ROADMAP: an operational option), the group key changes with it in the
+  same commit. **(d) is not confirmed**: no decision names it. Nor does the
+  decision name (a)'s note that §10.6's root-last timing is labelled pre-T5
+  and was not re-measured. The batch's own words follow. (a) The live
+  builder's regroup machinery is deleted
   (`_regroup_many`, `_leave`, `_group_of`, `ROOT_GROUP`), and the builder
   groups through `build.sibling_group`. §10.6's whole-group paragraph is
   rewritten, and its root-last timing is labelled pre-T5 and was not
@@ -13977,9 +14041,11 @@ confirmed and are in the decisions log.
   (d) Three `test_live.py` tests were renamed.
 - **T6** (`2f4d83c`). (a) SPEC §3.1's "OpenInference states no
   agent-name attribute" was false (Z3 writes `agent.name`, which the adapter
-  already declined), and its wording was corrected. (b) The Makefile was left
-  alone, so `make conformance` does not run `tests/test_zoo_readings.py`
-  (above). T6's three row corrections are corrections, not choices, and are
+  already declined), and its wording was corrected. **Unconfirmed**: no
+  decision names it. (b) The Makefile was left alone, so `make conformance`
+  did not run `tests/test_zoo_readings.py`. **Answered after the close by
+  `b7b0088`** (decisions 2026-10-14e, commit 2), which adds the module to the
+  target. T6's three row corrections are corrections, not choices, and are
   in the probe table: S17 is one scope, openai-agents tool spans also carry
   no call id, and Z4's `unpaired_call` is not the no-call-id reading.
 
@@ -13987,7 +14053,9 @@ confirmed and are in the decisions log.
 
 All thirteen rows of the decisions log, verbatim. A decision reworded is a
 decision re-taken. Rows that cite `WORKPLAN.md` or its sections are quoted as
-written.
+written. The three rows after them were decided after the close (decisions
+2026-10-14e). They are new rows, not edits: the T3/T4 row's "which this
+series supplies" stands as written, and the first of them corrects it.
 
 | Date | Batch | Decision | By |
 |---|---|---|---|
@@ -14004,13 +14072,19 @@ written.
 | 2026-10-14 | T2 | Confirmed, all of it, and the decision above is corrected: "loses nothing" is true of the record (`raw.source` keeps the integer) and not of the field, whose resolution is a float's — about 238 ns at today's dates, so siblings closer than that tie on `started_at` and only `raw.source` orders them; §3.1 says so and a test pins it; it ties nothing in the zoo. The `otlp_container` fixture re-rendered in real nanoseconds (it declared a unit it did not use; the canonical graph is unchanged); a declared value no float holds is not read and the 1e11 check stays, so a value above 1e20 ns is still flagged — a seam flag to silence it would be a model change, and no capture needs it; seconds written into a `UnixNano` field are believed, because the field declared the unit and the value is the exporter's to get right; `int` → `float` on every unpacked node is in the CHANGELOG. | maintainer |
 | 2026-10-14 | T3 | Confirmed, the four choices beyond the row: (a) the four envelope keys are excluded only on records the reader unpacked — the same rule as T1's `envelope()`: a key named `scope_spans` in a flat file is an attribute until a reader says otherwise; (b) `droppedAttributesCount` read as proto3 `uint32` (a decimal string counts, `null` is zero, anything else stays an unmapped key) — that is proto3 JSON's own rule for the field, not a guess; (c) `attributes_dropped` on an unclaimed span with `adapter` null — the count is the transport's statement about the span and needs no dialect to read, exactly as the envelope needs none; (d) `Envelope.resource`/`scope` out of the hash because they are dicts — **confirmed as a hash-only exclusion**: equality must still compare them (two envelopes with different scopes are not equal). If the batch used `field(compare=False)` rather than `field(hash=False)`, the plan-only sub-agent does not fix it; the T4 batch brief carries one line and T4's commit stays one concern, so the correction is its own one-line commit `seam: Envelope compares resource and scope` before T4, and §4 records it. The `envelope(node.raw.source)` read works in process and does not survive a JSON round trip; neither is pinned. Decision: it is pinned at T6, where the reading that cites it lives — in process is the contract, the round trip is not (a serialized graph's reader has `raw.source` verbatim and reads the levels from it as the record carries them). | maintainer |
 | 2026-10-14 | T4 | **Option 2: both codes at `info`.** The halt was right, and the row was wrong in the way §3.7 exists to catch: a level grades how loudly the library reports a gap in its own mapping, never what the trace means, and `error` on an exception event would be the first level that graded the trace. An `exception` event is not a gap — the transport stated it and the diagnostic carries all of it — so it is `info`, like any other event; the graph already sees the failure where the telemetry put it, in the node's `status`. The test for the reading: a caught exception (`escaped` false, span status unset) is an event on a span that did not fail, and only `info` renders that without contradicting the status. Option 3 declined: `error` means "raises" in §3.10 and a third enum member moves `vocabularies.DiagnosticLevel`, which the T3 restatement forbids for a reason. Option 1 declined: `warning` is for something the library could not map, and it already stretches to cover `attributes_dropped`, which at least is a gap. Option 4 declined: nothing is left to carry. The row's title stays true: an exception is an error the graph can see — through `status` and a diagnostic that names it. **The further choices (§22(d)):** *where `exception.*` is read* — in the seam, where the envelope is read, as the OpenTelemetry API's own convention (`record_exception` writes the `exception` event and its `exception.type` / `.message` / `.escaped` / `.stacktrace` attributes; that is the SDK's rule, not an instrumentor's, and both dialects inherit it), stated in SPEC §7 so no adapter branches on it; *`escaped`* — carried verbatim as the attribute states it (Z5's `"False"` stays the string `"False"`; §7 interprets nothing); *`time`* — the event's `timeUnixNano` under T2's rule via `seam.stated_time`, float seconds, kept as reported even after the node's `ended_at` (Z2), the integer verbatim in `raw.source`; *exposure* — `exception.message` is copied into `source` because the message is the fact being reported (§3.7's keys-only rule guards `unmapped_attributes` from carrying content by accident, which this is not), and `exception.stacktrace` is not copied — it stays verbatim in `raw.source` with the whole event, and §7 says so (not dropped: in the record); *unclaimed spans* — reported too, `adapter` null, as T3 (c). | maintainer |
+| 2026-10-14 | T7 | **The Phase 4 gate is not met.** The T7 row's "recorded as the conformance corpus' third dialect having been run" was the plan's mistake, carried from the series brief, and so is the T3/T4 row's "a dialect *run*, which this series supplies". `ROADMAP.md`'s gate is a third dialect rendered across the conformance corpus and run against the cross-dialect equivalence test. The zoo run adds no adapter and no equivalence rendering: it exercised the two dialects the library already had (five OpenInference instrumentors and the OTel GenAI handler are instrumentors of those two, not a third; raw OTLP JSON was decided a container, not a dialect, at F1/F2), under six strangers' agents. What it is is the other thing Phase 4 names and had not yet got: a corpus that makes a correct contribution obvious, built from captures nobody shaped for the library, and a measured exercise of the shape gate, which caught one field (T3) and one enum member (T4) on their way in. The third dialect stays where `ROADMAP.md` has it: an adapter for a dialect the library does not read today (Langfuse, LangSmith, Logfire, Vercel AI SDK), rendered across both the conformance scenarios and the zoo corpus when it comes. "Three instrumentations" is corrected to two dialects, six instrumentors. | maintainer |
+| 2026-10-14 | T4 | Confirmed, the three choices beyond the row: (a) an event entry the seam cannot read (a non-list `events`, a non-object entry) stays reported as `<record>.events` in `unmapped_attributes` — nothing dropped silently; (b) a missing `exception.*` value reads `""` or `null` by T1 (b)'s convention; (c) the attributes of a non-`exception` event are not read into `source` — `span_event` carries name and time, the attributes stay verbatim in `raw.source` with the event, and SPEC §7 says so (nothing is dropped: it is in the record). | maintainer |
+| 2026-10-14 | T5 | Confirmed, three choices beyond the row: (a) the live builder's regrouping code was dead by T5's own rule (a group keyed by the stated parent never changes when the parent arrives) and deleting it is the point of the batch; (b) children that state the same parent id share one group even when that id is ambiguous (two records stating it) — the group is the *stated* id, and the ambiguity is the parent's diagnostic, not the children's; (c) the group key is the span id alone, which is the same key a node has since T1 — a graph that keys nodes by span id groups siblings by span id, and if multi-trace handling ever changes the node key (ROADMAP: an operational option), the group key changes with it in the same commit. T5 (d), three `test_live.py` tests renamed, is not named. | maintainer |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 
 Every dated entry, verbatim and in order. The batches recorded their row
 corrections, measurements and choices beyond the row here, and only here.
 In the plan file, all but the first entry sat after §5's table, which was a
-placement slip. The order is kept.
+placement slip. The order is kept. Entries are not edited after the close.
+What answered one later is stated above: T6's Makefile entry is answered by
+`b7b0088`, and T4's and T5's "for the maintainer to confirm" by the decisions
+log (T5 (d) and T6 (a) are still unconfirmed).
 
 - 2026-10-14: series opened on `stranger` from `main` `fec7da2`, from the
   zoo's `PROBES.md` at `7eb5b69`. The receiver's series (L1–L4) follows this
@@ -14160,9 +14234,11 @@ placement slip. The order is kept.
   written by one author against one dialect. The gate is that dialect three has
   been **run**, not that it found nothing. If a fifth adapter still forces a
   model change, the schema was not ready. *The zoo run of the stranger's-trace
-  series is recorded against this condition, with its scope, under that
-  series above. Whether it discharges the condition as written is the
-  maintainer's ruling.*
+  series does not meet this condition, ruled after that series closed
+  (decisions 2026-10-14e). It read the two dialects the library already has
+  and added no adapter. It is a stranger corpus (`fixtures/zoo/`), and a
+  third dialect's adapter is rendered across it as well as across the
+  conformance scenarios when it comes.*
 - **The permissively-typed serialized fields left unmeasured at 3.2**, with
   `Edge.basis` first — the resolution half of 2.14's freeze audit, held here
   because dialect three is its instrument.

@@ -291,6 +291,18 @@ condition rather than left to be inferred from the order of the bullets: the
 freeze does not happen until a third dialect has been rendered across the
 conformance corpus and run against the cross-dialect equivalence test.
 
+**The zoo corpus exists, and it is not the third dialect.** `fixtures/zoo/`
+holds twelve captures of six agents built by implementers who knew nothing
+about this library, copied byte for byte from the zoo at `7eb5b69`; the census
+and the readings are its gates (`tests/zoo_census.py`,
+`tests/test_zoo_readings.py`, both run by `make conformance`). It is the corpus
+the flywheel above wanted — captures nobody shaped for the library, which make
+a correct contribution obvious — and not the dialect this gate wants: every
+record in it is read by one of the two dialects the library already reads, it
+adds no adapter, and it takes no part in the equivalence test (`TASKS.md`, *The
+stranger's-trace series*). When a third dialect's adapter comes, it is rendered
+across *both* the conformance scenarios and the zoo corpus.
+
 **It comes from measured evidence, not from caution.** Phase 2 produced three
 defects in the project's own contract, and all three have the same shape
 (`TASKS.md` 2.14):
