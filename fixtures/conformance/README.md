@@ -19,7 +19,10 @@ One directory per scenario:
 
 **The rule this corpus exists to enforce:** every dialect rendering of a
 scenario must produce that scenario's single canonical graph. Run it with
-`make conformance`.
+`make conformance`, which runs this corpus's equivalence suite
+(`tests/test_conformance.py`) and, beside it, the zoo gates over
+`fixtures/zoo/`: the census (`tests/test_zoo.py`) and the readings
+(`tests/test_zoo_readings.py`).
 
 If your adapter fails, the adapter is wrong — or the model is. Finding out which
 is the point. **Do not edit an expected graph to make a test pass**

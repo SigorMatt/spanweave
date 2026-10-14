@@ -60,7 +60,9 @@ fix one deliberately, don't let them drift.
 - Gate:    `make check` (the acceptance harness, task 0.8 — must pass before a
   task counts as done; the Makefile target wraps the `uv run ...` calls above
   plus the phase done-whens)
-- Corpus:  `make conformance` (the cross-dialect equivalence suite)
+- Corpus:  `make conformance` (the cross-dialect equivalence suite, plus the
+  zoo gates: the census, `tests/test_zoo.py`, and the readings,
+  `tests/test_zoo_readings.py`)
 - Ships:   `make install-check` — builds the sdist and wheel, installs the
   wheel into a throwaway venv, and runs it from **outside** the repo
   (`TASKS.md` 3.6). `make check` runs everything under `uv run` with the

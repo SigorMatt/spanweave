@@ -15,6 +15,13 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The docs say what `make conformance` runs** (decisions 2026-10-14g,
+  R-25). No behaviour change. `ENVIRONMENT.md`, `README.md` and
+  `fixtures/conformance/README.md` described the target as the
+  cross-dialect equivalence suite alone, untrue since `tests/test_zoo.py`
+  joined the recipe; each now names the equivalence suite and the zoo
+  gates beside it, the census and the readings. The dated records in
+  `TASKS.md` and in this file keep what was true when they were written.
 - **`make conformance`'s recipe is pinned** (decisions 2026-10-14g, R-24).
   No behaviour change. CI runs the target, but the only test on it checked
   that it exists, so dropping `tests/test_zoo_readings.py` from the recipe

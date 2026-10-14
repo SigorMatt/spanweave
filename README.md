@@ -460,7 +460,8 @@ fails the build until the change is regenerated into the diff.
 ```
 uv sync --extra dev
 make check          # the gate: lint, types, tests, the invariant gates, the CLI
-make conformance    # the corpus: every scenario, against its canonical graph
+make conformance    # the corpus: every scenario, against its canonical graph;
+                    # and the zoo gates: its census and ADAPTERS.md §7's readings
 make install-check  # build the wheel, install it, run it from OUTSIDE this repo
 make shape          # regenerate tests/serialized_shape.json (see above)
 make stranger       # walk and time the install path above, from a clean venv
