@@ -455,7 +455,7 @@ def test_z2_states_four_first_token_events_over_its_two_captures():
 #
 # `PROBES.md` S18: the zoo's exporters send a child before its parent (S15), so
 # every prefix of a capture is a partial input. A sibling group is the parent
-# the record **states** (`SPEC.md` §4.3) -- `None` for a root, the stated id for
+# the record **states** (`SPEC.md` §4.3) -- `""` for a root, the stated id for
 # every other node, present or not -- so a prefix orders an orphan only against
 # nodes stating the same parent, and asserts no order the whole capture withdraws.
 

@@ -669,7 +669,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
-| `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Batch T3 |
+| `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Level **`warning`** (`Diagnostic`'s default): unlike an event, it says the record holds less than the span did. Batch T3 |
 | `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
 | `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
 
@@ -686,7 +686,10 @@ reader unpacked from an export (§7), `flags`, `kind`, `resource_spans` and
 `scope_spans` are the transport's, not the span's: they stay verbatim in
 `raw.source` and are not named here. Every span of every export carries them,
 so naming them reported the transport once per span — on the zoo's Z3 capture,
-27 of 102 `unmapped_attributes` named nothing else (`PROBES.md` S7). Its
+27 of 102 `unmapped_attributes` named nothing else (the zoo's Z3 audit node
+table, `audit/z3-2026-10-13-{real,recorded}.md` step 4 at the pin, as
+`tests/zoo_census.py`'s `_Z3` cites it; `PROBES.md` S7 does not state the
+count). Its
 `droppedAttributesCount`, read as a count, is reported as `attributes_dropped`
 instead; a value that is not a count stays reported here as
 `<record>.droppedAttributesCount`, like any key read and not usable. A **flat**
@@ -699,8 +702,9 @@ span's events, and each entry is reported as `exception_event` or
 object, a `name` that is not a string, a `timeUnixNano` §3.1 does not read, or
 an `exception` event whose attributes do not fold — is a key read and not
 usable, and is named `<record>.events[<i>]`, its place in *this span's* list,
-as a link entry is; an `events` value that is not a list (or `null`) is
-`<record>.events`. A flat record's `events` is a key like any other.
+as a link entry is. An `events` value reported as `null` states no events and
+is not reported, as a `null` `links` is not; any other value that is not a list
+is `<record>.events`. A flat record's `events` is a key like any other.
 
 The timestamps are not the only fields it holds for. A record's **identity
 fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain

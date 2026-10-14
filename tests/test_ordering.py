@@ -109,7 +109,7 @@ def test_siblings_under_different_parents_are_never_joined():
 
 
 # A sibling group is the parent the record **states** (`SPEC.md` §4.3, batch
-# T5): `None` for a root, the stated id for every other node, whether or not
+# T5): `""` for a root, the stated id for every other node, whether or not
 # that parent is in this input. An order between two nodes stating different
 # parents is not one the telemetry stated, and a complete input withdraws it.
 

@@ -722,7 +722,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   after this commit. `make conformance` still does not run
   `tests/test_zoo_readings.py`, which is registered as open.
 - **Siblings are grouped by the parent the record states** (T5; zoo S18, L3;
-  `SPEC.md` §4.3, §10.2, §10.6). A `temporal` chain's group is `None` for a
+  `SPEC.md` §4.3, §10.2, §10.6). A `temporal` chain's group is `""` for a
   root and the stated parent id for every other node, present or absent — so an
   orphan is ordered only against nodes stating the same parent, never against a
   root or an orphan of another absent parent. Before, every orphan sat at trace
