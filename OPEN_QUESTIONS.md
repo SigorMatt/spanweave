@@ -3997,3 +3997,19 @@ span's `endTimeUnixNano`. No other capture carries events. Five
 `unmapped_attributes` name `<record>.events` across Z2 and Z5, and none names
 it alone, so removing the key moves no `unmapped_attributes` count; the
 census moves only by the new codes.
+
+**The decision (2026-10-14, maintainer).** Option 2. A level grades the
+report, not the trace; an event is a fact the transport stated, fully
+carried in `source`, so it is `info` — and a caught exception on a span whose
+status is unset is exactly the case where any louder level would contradict
+the telemetry. The failure the graph can see is the node's `status`, where
+the telemetry put it. Option 3 is declined because `error` means "raises" and
+a third level moves a vocabulary the T3 restatement froze; option 1 because
+`warning` is for a mapping gap, which an event is not; option 4 because
+nothing remains to carry. (d): `exception.*` is read in the seam as the
+OpenTelemetry API's own `record_exception` convention, stated in SPEC §7, so
+no adapter branches on it; `escaped` and every value are carried as stated;
+`time` is T2's float seconds, kept past `ended_at` as reported;
+`exception.message` is copied into `source` because it is the fact reported,
+`exception.stacktrace` is not and stays verbatim in `raw.source`; unclaimed
+spans report their events with `adapter` null.
