@@ -57,13 +57,21 @@ corpus could not see it.
 ## Timestamps
 
 The spans carry `startTimeUnixNano` / `endTimeUnixNano` holding
-`llm_tool_llm`'s own values — `1000.0`, `1000.2` — as decimal strings, which
-is how proto3 JSON writes an `int64` and how a real exporter writes this field.
-They are seconds, and the field name says nanoseconds, and that is not a
-contradiction here: **`spanweave` reads no unit from a field name**
-(`SPEC.md` §3.1, and nothing is ever rescaled). Changing the numbers would
-change the scenario rather than the encoding, and this scenario's claim is
-about the encoding. `timestamp_units` is where the numbers are the claim.
+`llm_tool_llm`'s own times **in the nanoseconds the field declares** —
+`1000.0` is `"1000000000000"`, `1000.2` is `"1000200000000"` — as decimal
+strings, which is how proto3 JSON writes a `fixed64` and how a real exporter
+writes this field. The field's name declares its unit, and `spanweave` reads
+it (`SPEC.md` §3.1, *Declared nanoseconds*): each value is converted to unix
+seconds, the nearest float to the count divided by 10⁹ — exactly the float the
+JSONL literal parses to, since both are the correctly rounded value of one
+decimal — so the graph is still `llm_tool_llm`'s byte for byte, and
+`raw.source` keeps the string the export wrote.
+
+Until batch T2 the library read no unit from a name, and this file carried
+the JSONL seconds (`"1000.0"`) in the nanosecond fields so that the claim
+above could hold; under T2's rule those would read as a microsecond after the
+epoch, and the scenario was re-rendered rather than the claim weakened.
+`timestamp_units` is where a value whose unit nothing declares is the claim.
 
 ## Structure
 

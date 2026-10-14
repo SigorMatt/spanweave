@@ -30,9 +30,12 @@ Z4 = next(c for c in zoo_census.CAPTURES if c.run == "z4/2026-10-12-real")
 ROOT_SPAN = "3013a003149d6951"
 ROOT_NAME = "concierge.conversation"
 # The root's `startTimeUnixNano` / `endTimeUnixNano` in 0002.json, record 2,
-# read by SPEC.md §3.1's rule for a numeric string: kept exactly, as an `int`.
-ROOT_STARTED = 1791811595970001116
-ROOT_ENDED = 1791811600669457537
+# read by SPEC.md §3.1's rule for a numeric string and, because the field
+# declares nanoseconds, converted to unix seconds (batch T2). The strings the
+# export wrote stay verbatim in `raw.source`.
+ROOT_STATED = ("1791811595970001116", "1791811600669457537")
+ROOT_STARTED = 1791811595970001116 / 1_000_000_000
+ROOT_ENDED = 1791811600669457537 / 1_000_000_000
 
 
 def _z4() -> list[spanweave.model.JsonValue]:
@@ -76,6 +79,7 @@ def test_the_unclaimed_root_is_keyed_and_placed_by_its_envelope():
     assert root.name == ROOT_NAME
     assert graph.trace_id == Z4.trace_id
     assert (root.started_at, root.ended_at) == (ROOT_STARTED, ROOT_ENDED)
+    assert (root.raw.source["start_time"], root.raw.source["end_time"]) == ROOT_STATED
     assert root.provenance.adapter_id is None
     assert root.provenance.adapter_version is None
     assert {e.src for e in graph.edges() if e.kind is EdgeKind.PARENT} == {ROOT_SPAN}
@@ -180,8 +184,8 @@ def test_an_envelope_reads_status_and_an_empty_parent_as_the_record_states():
                 "spanId": "s9",
                 "parentSpanId": "",
                 "name": "n",
-                "startTimeUnixNano": "1700000000",
-                "endTimeUnixNano": "1700000001",
+                "startTimeUnixNano": "1700000000000000000",
+                "endTimeUnixNano": "1700000001000000000",
                 "status": {"code": 2, "message": "boom"},
             }
         )
@@ -191,7 +195,8 @@ def test_an_envelope_reads_status_and_an_empty_parent_as_the_record_states():
     assert envelope.parent_id is None
     assert envelope.status is Status.ERROR
     assert envelope.status_note == "boom"
-    assert (envelope.started_at, envelope.ended_at) == (1700000000, 1700000001)
+    # The field declares nanoseconds, so the envelope reads seconds (T2).
+    assert (envelope.started_at, envelope.ended_at) == (1700000000.0, 1700000001.0)
 
 
 def test_an_envelope_field_of_the_wrong_type_raises():

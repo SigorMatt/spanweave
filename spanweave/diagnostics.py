@@ -50,7 +50,9 @@ NONMONOTONIC_TIME = "nonmonotonic_time"
 # reach in any plausible wall-clock time (1e11 seconds after the epoch is the
 # year 5138) while milliseconds and nanoseconds do. It is a statement about
 # the *unit of the field*, not about the run: the value is kept exactly as
-# reported and every edge is still built from it (`SPEC.md` §3.1).
+# reported and every edge is still built from it (`SPEC.md` §3.1). A time
+# whose field declares nanoseconds is read in seconds first, so it is a
+# statement about a unit nothing declared.
 TIMESTAMP_UNIT_SUSPECT = "timestamp_unit_suspect"
 
 # Two records claimed the same source id, without their node ids colliding.

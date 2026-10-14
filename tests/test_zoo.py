@@ -111,3 +111,36 @@ def test_every_record_the_audit_left_out_is_one_no_adapter_claims(capture):
     assert (capture.whole is None) == (not capture.unrouted)
     assert zoo_census.count(graph) == whole, capture.run
     assert sum(d.code == "unclaimed_record" for d in graph.diagnostics) == len(left_out)
+
+
+# --- A declared unit is not a suspicion (batch T2, `PROBES.md` S3) -----------
+
+Z1 = next(c for c in CAPTURES if c.run == "z1/2026-10-13-recorded")
+
+
+def test_a_declared_nanosecond_time_is_read_in_seconds_and_kept_verbatim():
+    """Z1's capture: every span's unit is declared by `startTimeUnixNano`.
+
+    The audit counted 31 `timestamp_unit_suspect` on 31 nodes -- the format,
+    reported once per span. `SPEC.md` §3.1 (batch T2): a time whose field
+    declares nanoseconds is read in unix seconds, the integer the export wrote
+    stays verbatim in `raw.source`, and the suspicion is kept for a value whose
+    unit nothing declared.
+    """
+    graph = graph_from_records(zoo_census.audit_feed(Z1))
+    assert len(graph.nodes()) == 31
+    assert [d for d in graph.diagnostics if d.code == "timestamp_unit_suspect"] == []
+    for node in graph.nodes():
+        source = node.raw.source
+        assert isinstance(source, dict)
+        for field, value in (
+            ("start_time", node.started_at),
+            ("end_time", node.ended_at),
+        ):
+            stated = source[field]
+            # The nanosecond string, verbatim: nothing is lost.
+            assert isinstance(stated, str) and stated.isdigit(), (node.id, field)
+            # ... and the field holds unix seconds, the nearest float to it.
+            assert isinstance(value, float), (node.id, field)
+            assert value == int(stated) / 1_000_000_000, (node.id, field)
+            assert 1e9 < value < 1e11, (node.id, field)

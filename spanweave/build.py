@@ -569,6 +569,11 @@ def _report_timestamp_unit_suspect(
 ) -> None:
     """A reported time too large to be unix seconds (`SPEC.md` §3.1).
 
+    It reads the value the span carries, so it speaks of a unit nothing
+    declared: a time whose field declares nanoseconds arrives here already in
+    seconds (`seam.record_time`), and no `fixed64` count reaches the line once
+    converted.
+
     **One per node**, not one per value: both endpoints of a span share one
     field encoding, so two reports would say one thing twice, and the fields
     that are over the line are named in `source` instead. It is per node

@@ -568,6 +568,31 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A declared unit is not a suspicion: an OTLP time is read in seconds**
+  (stranger's-trace series, T2; the zoo's S3; `SPEC.md` §3.1, §3.7, §5, §7).
+  `startTimeUnixNano` / `endTimeUnixNano` declare nanoseconds in their name,
+  and the record the reader unpacked from an export carries that fact as its
+  mark, so §3.1's time reader (`seam.record_time`, which both adapters and the
+  envelope now call) converts such a time to unix seconds — the nearest
+  `float` to the count divided by 10⁹, correctly rounded and so the same on
+  every machine — while `raw.source` keeps the nanosecond string verbatim.
+  `timestamp_unit_suspect` now fires only on a value whose unit nothing
+  declared: a flat record's `start_time` of 1.7e18 still draws it, and a
+  conformant OTLP export draws none (it drew one per span, documented as
+  expected at R11, `OPEN_QUESTIONS.md` §17 — the warning reported the format
+  and was silent about the one span in seconds). **Every OTLP-unpacked node's
+  `started_at` / `ended_at` changes value and type** (an `int` of
+  nanoseconds becomes a `float` of seconds); flat inputs are unchanged. Costs,
+  stated in §3.1: the float's spacing (~238 ns today) can make two siblings
+  closer than that read as one time, with a *tied* `temporal` basis — on the
+  zoo's twelve captures no edge, basis or node position moves; a declared
+  count no float holds in seconds is not read (`unmapped_attributes` +
+  `missing_timestamp`); and a span that writes seconds into a nanosecond
+  field is believed. The zoo census's `timestamp_unit_suspect` goes to 0 on
+  every capture (31, 23, 102, 4, 4, 26, 16 in the reports; Z4's whole capture
+  5 → 0). `otlp_container` is re-rendered with its times in the nanoseconds
+  its fields declare, and is still `llm_tool_llm`'s graph byte for byte.
+
 - **Every unclaimed OTLP node with a span id changes id** (stranger's-trace
   series, T1; `OPEN_QUESTIONS.md` §20, option 1). A record the reader unpacked
   from an OTLP export and no adapter claims was an `unknown` node with a

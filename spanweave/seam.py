@@ -93,9 +93,10 @@ class NormalizedSpan:
     parent_id: str | None = None
     trace_id: str | None = None
     operation: str | None = None
-    #: Unix seconds, as reported. An integer literal stays an `int` and a
-    #: fractional one a `float` -- float64 cannot hold epoch nanoseconds
-    #: (`SPEC.md` §3.1). Never rescaled, never converted between the two.
+    #: Unix seconds. An integer literal stays an `int` and a fractional one a
+    #: `float` -- float64 cannot hold epoch nanoseconds (`SPEC.md` §3.1). A
+    #: field that declares no unit is never rescaled; one that declares
+    #: nanoseconds is carried as the `float` seconds it converts to.
     started_at: int | float | None = None
     ended_at: int | float | None = None
     status: Status = Status.UNSET
@@ -332,13 +333,13 @@ def _finite(value: int | float) -> int | float | None:
 
 
 def stated_time(value: JsonValue) -> int | float | None:
-    """Unix seconds, as reported. Never rescaled, never guessed at.
+    """A reported time, read by `SPEC.md` §3.1's rendering rule. Never guessed at.
 
     An integer literal is kept as an `int` (`SPEC.md` §3.1). float64's
     spacing at epoch-nanosecond magnitude is 256 ns, so `float()` here would
     spend digits the exporter wrote and merge spans a record kept apart.
-    Keeping them is not a unit conversion: nothing is scaled, and the adapter
-    still does not know what unit the field is in.
+    Nothing is scaled here: a unit is applied only where a field declares one,
+    by `record_time`, which every reader of a record's times goes through.
 
     Returns `None` both for a field the record omits and for one in a
     rendering §3.1 does not read; the caller is what tells the two apart,
@@ -375,6 +376,48 @@ def stated_time(value: JsonValue) -> int | float | None:
             return None
         return _finite(parsed)
     return None
+
+
+#: Nanoseconds in a second: the divisor for a time whose field declares
+#: nanoseconds (`record_time`).
+_NANOSECONDS_PER_SECOND = 1_000_000_000
+
+
+def declares_nanoseconds(record: Mapping[str, JsonValue]) -> bool:
+    """Whether the record's `start_time` / `end_time` declare nanoseconds.
+
+    They do exactly when the reader unpacked the record from an OTLP export
+    (`spanweave.read.Unpacked`, `SPEC.md` §7): those two keys are then the
+    reader's renaming of `startTimeUnixNano` / `endTimeUnixNano`, whose names
+    state the unit. Any other record's `start_time` declares nothing -- a
+    flat file names no unit, and none is inferred from a magnitude.
+    """
+    return isinstance(record, Unpacked)
+
+
+def record_time(record: Mapping[str, JsonValue], field: str) -> int | float | None:
+    """`started_at` / `ended_at` from a record's `start_time` / `end_time`.
+
+    Unix seconds (`SPEC.md` §3.1). The reported value is read by
+    `stated_time`; where its field declares nanoseconds (`declares_nanoseconds`)
+    it is then converted to seconds -- the nearest float to the reported
+    count divided by 1e9, which Python's true division of two integers rounds
+    correctly, so the result is the same on every machine. The reported
+    string stays verbatim in `raw.source`, so no digit is lost from the graph;
+    what the float cannot keep is an order between two times closer than its
+    spacing (~238 ns today), and §3.1 says so.
+
+    Returns `None` for a field the record omits and for one §3.1 does not
+    read -- including a declared count too large for a float once divided --
+    so the caller's "reported but not read" check is the same for both.
+    """
+    read = stated_time(record.get(field))
+    if read is None or not declares_nanoseconds(record):
+        return read
+    try:
+        return _finite(read / _NANOSECONDS_PER_SECOND)
+    except OverflowError:
+        return None
 
 
 #: The record fields every adapter reads as a plain string: the three ids and
@@ -445,8 +488,9 @@ class Envelope:
     #: The empty string where the span omits `name`, which is proto3's default
     #: for the field rather than an absence.
     name: str
-    #: §3.1's reading of the reported value -- kept exactly, never rescaled.
-    #: `None` where the span omits the field.
+    #: §3.1's reading of the reported value: unix seconds, converted from
+    #: the nanoseconds the field declares (`record_time`). `None` where the
+    #: span omits the field.
     started_at: int | float | None
     ended_at: int | float | None
     status: Status
@@ -498,7 +542,7 @@ def envelope(record: JsonValue) -> Envelope:
     times: list[int | float | None] = []
     for key in ("start_time", "end_time"):
         reported_time = record.get(key)
-        read = stated_time(reported_time)
+        read = record_time(record, key)
         if read is None and reported_time is not None:
             raise EnvelopeError(f"the envelope's {key} is not a time §3.1 reads")
         times.append(read)

@@ -13,6 +13,7 @@ import pytest
 
 import spanweave
 from spanweave import diagnostics as codes
+from spanweave.api import graph_from_records
 from spanweave.model import EdgeKind
 from spanweave.read import read_trace, record_digest
 from spanweave.serialize import canonical_bytes
@@ -1010,8 +1011,8 @@ def test_an_otlp_export_builds_the_spans_it_carries_end_to_end():
             "spanId": span_id,
             "parentSpanId": parent,
             "name": name,
-            "startTimeUnixNano": "1000",
-            "endTimeUnixNano": "2000",
+            "startTimeUnixNano": "1000000000000",
+            "endTimeUnixNano": "2000000000000",
             "status": {"code": 1},
             "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": operation}},
@@ -1039,8 +1040,10 @@ def test_an_otlp_export_builds_the_spans_it_carries_end_to_end():
     assert graph.trace_id == "t1"
     assert [node.kind.value for node in graph.nodes()] == ["agent", "llm"]
     llm = graph.nodes()[1]
-    # C3's decision, reached through the reader without the reader applying it.
-    assert llm.started_at == 1000 and isinstance(llm.started_at, int)
+    # T2's rule, reached through the reader without the reader applying it:
+    # the field declares nanoseconds, so §3.1's time reader gives seconds.
+    assert llm.started_at == 1000.0 and isinstance(llm.started_at, float)
+    assert llm.raw.source["start_time"] == "1000000000000"
     assert llm.usage is not None and llm.usage.input_tokens == 42
 
 
@@ -1276,20 +1279,16 @@ def test_a_quoted_integer_past_the_digit_limit_is_a_record_like_any_other():
     assert len(stream.diagnostics) == 0
 
 
-# --- What a real OTLP export's timestamps produce (batch R1, pinned) ---
+# --- What a real OTLP export's timestamps produce (batch R1; T2) -------------
 #
 # An OTLP JSON envelope states its unit in the field name -- `startTimeUnixNano`
-# -- and the reader carries the value verbatim because §7's rule is that a
-# format's *name* is not a type. §3.1's ceiling then fires on every span, and
-# on nothing else: a span that really is in seconds is the only one in the file
-# NOT warned about.
+# -- and since batch T2 that statement is read (`SPEC.md` §3.1, §7): the reader
+# marks the record it unpacked, and §3.1's time reader converts a time whose
+# field declares nanoseconds to unix seconds, while the reported string stays
+# verbatim in `raw.source`. `timestamp_unit_suspect` is for a value whose unit
+# nothing declared (`OPEN_QUESTIONS.md` §17's (c), superseded by T2's decision).
 #
-# This is DOCUMENTED behaviour, not merely current behaviour: `SPEC.md` §3.7's
-# `timestamp_unit_suspect` row and §7's OTLP container section both state that
-# a conformant export draws one warning per span, that it reports the model's
-# field contract rather than the telemetry, and that nothing is rescaled. The
-# alternatives were weighed and held (`OPEN_QUESTIONS.md` §17, decided (c)).
-# So these tests are a contract, not a snapshot: a change that moves them is
+# These tests are a contract, not a snapshot: a change that moves them is
 # changing what the spec promises, and the spec moves with it.
 
 NS_OTLP_SPAN = {
@@ -1309,22 +1308,62 @@ def _built(document, tmp_path, name="otlp.json"):
     return spanweave.build(path)
 
 
-def test_a_nanosecond_otlp_export_builds_and_warns_once_per_span(tmp_path):
+def _suspect(graph):
+    return [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
+
+
+def test_a_nanosecond_otlp_export_is_read_in_seconds_and_draws_no_suspicion(tmp_path):
     spans = [dict(NS_OTLP_SPAN, spanId=f"s{n}") for n in range(3)]
     graph = _built(envelope(*spans), tmp_path)
-    suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
-    assert [d.node_id for d in suspect] == ["s0", "s1", "s2"]
-    # Nothing is rescaled, and every digit the export wrote is still there --
-    # `SPEC.md` §7 states the refusal to rescale and why (float64's spacing at
-    # this magnitude would merge spans the record kept apart).
+    assert _suspect(graph) == []
+    node = graph.nodes()[0]
+    assert (node.started_at, node.ended_at) == (1700000000.0, 1700000000.5)
+    assert isinstance(node.started_at, float)
+    # Nothing is lost: the digits the export wrote are the record's.
+    assert node.raw.source["start_time"] == "1700000000000000000"
+    assert node.raw.source["end_time"] == "1700000000500000000"
+
+
+def test_a_bare_start_time_past_the_line_still_draws_the_diagnostic(tmp_path):
+    # A flat record's `start_time` declares no unit, so its value is kept as
+    # reported and the suspicion keeps its job (`SPEC.md` §3.1).
+    path = tmp_path / "flat.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "trace_id": "t1",
+                "span_id": "s0",
+                "name": "chat",
+                "start_time": 1.7e18,
+                "end_time": 1700000000,
+                "attributes": {"gen_ai.operation.name": "chat"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    graph = spanweave.build(path)
+    (suspect,) = _suspect(graph)
+    assert suspect.source == {"started_at": 1.7e18}
+    assert graph.nodes()[0].started_at == 1.7e18
+
+
+def test_the_unpacked_record_copied_flat_declares_nothing(tmp_path):
+    # The declaration is the reader's mark, not a key: the same items taken
+    # through `json` are a flat record, whose `start_time` declares no unit.
+    (record,) = spanweave.read_records(
+        json.dumps(envelope(NS_OTLP_SPAN)).encode()
+    ).records
+    flat = json.loads(json.dumps(record))
+    graph = graph_from_records([flat])
     assert graph.nodes()[0].started_at == 1700000000000000000
+    assert [d.node_id for d in _suspect(graph)] == ["s0"]
 
 
-def test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about(tmp_path):
-    # The signal inversion, stated as a test: on an all-nanosecond export the
-    # warning is on every span, so the one span it is silent about is the one
-    # whose unit differs from its neighbours'. `SPEC.md` §7 states this cost in
-    # those terms, so the silence is documented rather than merely observed.
+def test_a_declared_unit_is_believed_where_the_value_disagrees(tmp_path):
+    # A span that writes seconds into `startTimeUnixNano` is read as the
+    # nanoseconds its field declares. No converse check is made (`SPEC.md`
+    # §3.1; `OPEN_QUESTIONS.md` §17's converse check is not taken): the field said ns.
     seconds = dict(
         NS_OTLP_SPAN,
         spanId="s9",
@@ -1332,8 +1371,48 @@ def test_the_span_that_really_is_in_seconds_is_the_one_not_warned_about(tmp_path
         endTimeUnixNano="1700000001",
     )
     graph = _built(envelope(NS_OTLP_SPAN, seconds), tmp_path)
-    suspect = [d for d in graph.diagnostics if d.code == codes.TIMESTAMP_UNIT_SUSPECT]
-    assert [d.node_id for d in suspect] == ["s0"]
+    assert _suspect(graph) == []
+    starts = {node.id: node.started_at for node in graph.nodes()}
+    assert starts == {"s0": 1700000000.0, "s9": 1.7}
+
+
+def test_declared_nanoseconds_closer_than_the_float_spacing_tie_and_say_so(tmp_path):
+    # The cost T2's decision accepts, stated as a test (`SPEC.md` §3.1): unix
+    # seconds as a float are spaced ~238 ns apart today, so two siblings the
+    # export wrote 100 ns apart read as one time, and the `temporal` edge
+    # between them says it is tied. The digits that order them are in
+    # `raw.source`.
+    root = dict(NS_OTLP_SPAN, spanId="r0")
+    a = dict(NS_OTLP_SPAN, spanId="a1", parentSpanId="r0")
+    b = dict(
+        NS_OTLP_SPAN,
+        spanId="b2",
+        parentSpanId="r0",
+        startTimeUnixNano="1700000000000000100",
+    )
+    graph = _built(envelope(root, b, a), tmp_path)
+    starts = {node.id: node.started_at for node in graph.nodes()}
+    assert starts["a1"] == starts["b2"] == 1700000000.0
+    sources = {node.id: node.raw.source["start_time"] for node in graph.nodes()}
+    assert sources["b2"] == "1700000000000000100"
+    (temporal,) = [e for e in graph.edges() if e.kind is EdgeKind.TEMPORAL]
+    assert (temporal.src, temporal.dst) == ("a1", "b2")
+    assert "tied" in temporal.basis
+
+
+def test_a_declared_time_too_large_for_seconds_is_not_read(tmp_path):
+    # A quoted integer no float can hold once divided: not a time §3.1 reads,
+    # so the field is named in `unmapped_attributes` and the node says
+    # `missing_timestamp`, the pair any unread time draws.
+    big = dict(NS_OTLP_SPAN, startTimeUnixNano="1" + "0" * 400)
+    graph = _built(envelope(big), tmp_path)
+    node = graph.nodes()[0]
+    assert node.started_at is None
+    assert node.raw.source["start_time"] == "1" + "0" * 400
+    found = {d.code: d for d in graph.diagnostics}
+    assert "<record>.start_time" in found[codes.UNMAPPED_ATTRIBUTES].source
+    assert codes.MISSING_TIMESTAMP in found
+    assert codes.TIMESTAMP_UNIT_SUSPECT not in found
 
 
 # --- Records from bytes in memory (`SPEC.md` §7) -----------------------------

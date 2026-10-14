@@ -182,13 +182,17 @@ Field-by-field guidance. The type is defined in `SPEC.md` §6.
   name: no dialect read today states a retriever's, and the one that states
   an agent's is declined rather than normalized (`SPEC.md` §3.1).
 
-**Timestamps** — `started_at` / `ended_at`, unix seconds, **as reported**.
-- Never rescale and never infer a unit, whatever the dialect calls its field.
+**Timestamps** — `started_at` / `ended_at`, unix seconds.
+- Read them through `seam.record_time(record, field)`, never by hand. It
+  applies §3.1's rendering rule and, for a record the reader unpacked from an
+  OTLP export, the unit `startTimeUnixNano` declares: the value is converted
+  to unix seconds and the string stays verbatim in `raw.source` (`SPEC.md`
+  §3.1, *Declared nanoseconds*; batch T2). Never infer a unit, and never
+  rescale a field that declares none, whatever the dialect calls it.
   A value too large to be seconds is the builder's business: it emits
   `timestamp_unit_suspect` and the number is kept untouched (`SPEC.md` §3.1).
-  A conformant OTLP JSON export therefore draws that warning on **every** span,
-  which is documented expected output rather than a defect: it reports the
-  field contract, not the run (`SPEC.md` §7, `OPEN_QUESTIONS.md` §17).
+  A conformant OTLP JSON export draws none — its fields declare their unit
+  (`SPEC.md` §7; until T2 it drew one per span, `OPEN_QUESTIONS.md` §17).
 - Read a JSON number, and a **string that is exactly a JSON number literal** —
   OTLP JSON encodes 64-bit integers as decimal strings. Read nothing else: not
   a trimmed string, not a leading `+`, not a date. The rule is one sentence,
@@ -407,7 +411,8 @@ neither is a payload spelling.
       timestamp in a rendering §3.1 does not read, which is `<record>.<field>`
       and never a silent `None`.
 - [ ] Timestamps read from a JSON number or a JSON-number string, and from
-      nothing else; never rescaled.
+      nothing else, through `seam.record_time`; rescaled only where the
+      field declares its unit (§3.1).
 - [ ] Renderings derived from **observed instrumentor output**, not from a
       reading of the dialect's spec.
 - [ ] No `NodeKind` mapped from a convention value **no instrumentor can

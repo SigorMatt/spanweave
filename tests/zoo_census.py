@@ -117,6 +117,17 @@ def _capture(
 # diagnostics `orphan_parent`, `unpaired_call`, `timestamp_unit_suspect` and the
 # node kind `unknown` -- a count the block does not list is 0 there. Two
 # captures of one project whose reports give the same block share a line.
+#
+# **One count no longer is the report's: `timestamp_unit_suspect`.** Every
+# report counts one per node -- every span of every capture is an OTLP span
+# whose `startTimeUnixNano` / `endTimeUnixNano` were read as reported, past
+# §3.1's 1e11 line. Since batch T2 (`SPEC.md` §3.1, §7; `PROBES.md` S3) a time
+# whose field declares nanoseconds is read in unix seconds -- the string the
+# export wrote stays verbatim in `raw.source` -- and the suspicion is kept for
+# a value whose unit nothing declared, so every capture here draws 0. Each
+# line keeps the report's number beside it. Nothing else moved: on all twelve
+# captures, audit feed and whole, the edges (with their bases) and the node
+# order are the same as before T2, with no tied `temporal` edge.
 _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     nodes=31,
     parent=30,
@@ -124,7 +135,7 @@ _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     orphan_parent=0,
     unpaired_call=1,
     unknown=2,
-    timestamp_unit_suspect=31,
+    timestamp_unit_suspect=0,  # report: 31; 0 since T2 (above)
 )
 _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     nodes=23,
@@ -133,7 +144,7 @@ _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     orphan_parent=0,
     unpaired_call=3,
     unknown=0,
-    timestamp_unit_suspect=23,
+    timestamp_unit_suspect=0,  # report: 23; 0 since T2 (above)
 )
 _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     nodes=102,
@@ -142,7 +153,7 @@ _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     orphan_parent=0,
     unpaired_call=48,
     unknown=0,
-    timestamp_unit_suspect=102,
+    timestamp_unit_suspect=0,  # report: 102; 0 since T2 (above)
 )
 _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     nodes=4,
@@ -151,7 +162,7 @@ _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     orphan_parent=4,
     unpaired_call=1,
     unknown=0,
-    timestamp_unit_suspect=4,
+    timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
 )
 # Z4's whole capture: the audit's four records plus the root span
 # `concierge.conversation`, which no adapter claims. Moved at batch T1, when an
@@ -171,10 +182,11 @@ _Z4_WHOLE = Census(
     orphan_parent=0,
     unpaired_call=1,  # unchanged: an `llm` span's, not the root's
     unknown=1,  # the root
-    # 4 -> 5: the root now has the times its envelope states, nanosecond
-    # integers read by §3.1 as every other span's are, so it draws the same
-    # `timestamp_unit_suspect` (§7) -- and its `missing_timestamp` is gone.
-    timestamp_unit_suspect=5,
+    # 4 -> 5 at T1: the root gained the times its envelope states, read by
+    # §3.1 as every other span's are, so it drew the same
+    # `timestamp_unit_suspect` (§7) -- and its `missing_timestamp` was gone.
+    # 5 -> 0 at T2, with every other capture's (above).
+    timestamp_unit_suspect=0,
 )
 _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     nodes=4,
@@ -183,7 +195,7 @@ _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     orphan_parent=2,
     unpaired_call=0,
     unknown=0,
-    timestamp_unit_suspect=4,
+    timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
 )
 
 CAPTURES: tuple[Capture, ...] = (
@@ -228,7 +240,7 @@ CAPTURES: tuple[Capture, ...] = (
             orphan_parent=0,
             unpaired_call=8,
             unknown=0,
-            timestamp_unit_suspect=26,
+            timestamp_unit_suspect=0,  # report: 26; 0 since T2 (above)
         ),
     ),
     _capture(
@@ -242,7 +254,7 @@ CAPTURES: tuple[Capture, ...] = (
             orphan_parent=0,
             unpaired_call=4,
             unknown=0,
-            timestamp_unit_suspect=16,
+            timestamp_unit_suspect=0,  # report: 16; 0 since T2 (above)
         ),
     ),
 )

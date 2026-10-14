@@ -9,8 +9,8 @@
               "spanId": "s0",
               "parentSpanId": "",
               "name": "agent.run",
-              "startTimeUnixNano": "1000.0",
-              "endTimeUnixNano": "1004.0",
+              "startTimeUnixNano": "1000000000000",
+              "endTimeUnixNano": "1004000000000",
               "attributes": [
                 {
                   "key": "openinference.span.kind",
@@ -40,8 +40,8 @@
               "spanId": "s1",
               "parentSpanId": "s0",
               "name": "llm.plan",
-              "startTimeUnixNano": "1000.2",
-              "endTimeUnixNano": "1001.0",
+              "startTimeUnixNano": "1000200000000",
+              "endTimeUnixNano": "1001000000000",
               "attributes": [
                 {
                   "key": "openinference.span.kind",
@@ -143,8 +143,8 @@
               "spanId": "s2",
               "parentSpanId": "s0",
               "name": "tool.lookup",
-              "startTimeUnixNano": "1001.2",
-              "endTimeUnixNano": "1002.0",
+              "startTimeUnixNano": "1001200000000",
+              "endTimeUnixNano": "1002000000000",
               "attributes": [
                 {
                   "key": "openinference.span.kind",
@@ -198,8 +198,8 @@
               "spanId": "s3",
               "parentSpanId": "s0",
               "name": "llm.answer",
-              "startTimeUnixNano": "1002.2",
-              "endTimeUnixNano": "1003.0",
+              "startTimeUnixNano": "1002200000000",
+              "endTimeUnixNano": "1003000000000",
               "attributes": [
                 {
                   "key": "openinference.span.kind",

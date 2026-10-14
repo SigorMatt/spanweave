@@ -47,9 +47,9 @@ from spanweave.seam import (
     CallRole,
     NormalizedSpan,
     parent_ref,
+    record_time,
     span_links,
     span_ref,
-    stated_time,
     unreadable_fields,
 )
 
@@ -665,7 +665,7 @@ def _timestamps(
     refused: list[str] = []
     for field in ("start_time", "end_time"):
         reported = record.get(field)
-        parsed = stated_time(reported)
+        parsed = record_time(record, field)
         times.append(parsed)
         if parsed is None and reported is not None:
             refused.append(f"<record>.{field}")

@@ -491,9 +491,13 @@ timestamp values, **0** above 1e11, **0** whose shortest float repr differs
 from the literal in the file, **0** pairs of distinct literals collapsing onto
 one float. **13** sibling pairs, minimum gap **136 µs** — over 500x the ULP at
 that magnitude. Widen the scan to every trace file the repository carries and
-**10** of the tracked corpus's **316** timestamp literals sit above the line —
+**26** of the tracked corpus's **316** timestamp literals sit above the line —
 five per dialect in `timestamp_units`, which C1 wrote to exercise the ceiling,
-and they are exactly the ten whose float differs from the digits in the file.
+and eight per dialect in `otlp_container`, whose `…UnixNano` fields batch T2
+re-rendered in the nanoseconds they declare (there they are read in seconds,
+`SPEC.md` §3.1, and draw no diagnostic) — and they are exactly the twenty-six
+whose float differs from the digits in the file. Until T2 the figure was ten:
+`otlp_container` carried seconds in those fields (§17(b)).
 
 *Provenance of these figures. This paragraph asserted 154 timestamp values, 41
 sibling pairs and a minimum gap of 81 µs over "the 17 captured trace files",
@@ -565,9 +569,11 @@ but not to the input literal — `1.7000000001e+18` against `1700000000100000100
 is both a different spelling and a different number, and recovering the
 original means re-reading `raw.source`. Option 2: integer in, identical integer
 out; fractional seconds are unaffected, since Python's repr is
-shortest-round-trip and the **10** literals that differ from it, of **316** in
-the tracked corpus, are the integer nanosecond values in `timestamp_units` that
-option 2 keeps exactly. Option 3: nothing round-trips — every value is rescaled
+shortest-round-trip and the **26** literals that differ from it, of **316** in
+the tracked corpus, are the integer nanosecond values in `timestamp_units`, which
+option 2 keeps exactly, and — since batch T2 — in `otlp_container`, whose fields
+declare nanoseconds, so §3.1 reads them in seconds and the digits stay in
+`raw.source`. Option 3: nothing round-trips — every value is rescaled
 twice and comes back out as a float. Option 4: exact in both directions, at the price of a custom encoder.
 
 **C1's two handoffs, answered.**
@@ -3327,6 +3333,25 @@ that moves them is a change to what the spec promises. Nothing else moved: no
 model field, no schema, no stored expectation, no fixture. What **(a)**–**(h)**
 describe stays live as the memo for the reopening conditions in **(h)**, which
 are conditions to watch rather than work to schedule.
+
+**Superseded by batch T2 (2026-10-14), on the maintainer's decision in the
+stranger's-trace series (`WORKPLAN.md` §3, T2; the zoo's S3).** The reopening
+condition arrived as a stranger's trace: twelve zoo captures, every span an
+OTLP span, every one warned. The decision is neither (a) nor (c) but a form of
+(b), placed where (e)'s objection to it does not hold: a unit declared by the
+field name is *known*, so §3.1's time reader — not the reader, and not by a
+record key — converts a declared nanosecond count to `float` unix seconds,
+while `raw.source` keeps the integer string, so no digit leaves the graph and
+the normalized field and the record disagree only in the unit the record
+declared. `timestamp_unit_suspect` keeps its job for the undeclared case. (e)'s
+measured cost stands and is stated in `SPEC.md` §3.1 rather than avoided: the
+float's ~238 ns spacing can tie two siblings the export kept apart, and the
+`temporal` edge then says it is tied; on the zoo's captures nothing ties.
+(a′)'s converse check is still not made — a span that writes seconds into a
+nanosecond field is believed. `otlp_container` (the 16 values measured in (b) above) was
+re-rendered in real nanoseconds, and is still `llm_tool_llm`'s byte for byte,
+because the correctly rounded division gives the float the seconds literal
+parses to.
 
 ---
 

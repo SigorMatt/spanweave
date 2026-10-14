@@ -56,7 +56,7 @@ Node:
   kind:        NodeKind        # §3.2
   name:        str             # operation name as reported
   operation:   str | None      # tool or model name, when stated (below)
-  started_at:  int | float | None   # unix seconds as reported; None if the
+  started_at:  int | float | None   # unix seconds (below); None if the
   ended_at:    int | float | None   #   dialect omits it
   status:      Status          # ok | error | unset
   status_note: str | None      # error message as reported, verbatim
@@ -116,12 +116,15 @@ Two precisions, so the rule is not read wider than it is:
 
 #### Timestamps
 
-`started_at` and `ended_at` are **unix seconds, as reported**. The library
-never rescales, never converts, and never infers a unit: what the telemetry
-put in the field is what the node carries, and a consumer that needs another
-unit converts it itself. Only three things are decided here — which
-*renderings* of a value the library will read, what numeric type it is carried
-as, and when the library says the value looks like it is not in seconds.
+`started_at` and `ended_at` are **unix seconds**. The library **never infers
+a unit**: a field that does not declare one is carried as reported, and a
+consumer that needs another unit converts it itself. **A field that declares
+its unit is read in it** — today exactly one does, OTLP's
+`startTimeUnixNano` / `endTimeUnixNano`, which declare nanoseconds in their
+name (below, *Declared nanoseconds*; batch T2). Only four things are decided
+here — which *renderings* of a value the library will read, what numeric type
+it is carried as, how a declared unit is read, and when the library says the
+value looks like it is not in seconds.
 
 **Renderings.** A timestamp is read from a JSON number, and from a **string
 that is exactly a JSON number literal** — OTLP JSON encodes 64-bit integers as
@@ -156,7 +159,9 @@ integer literal is carried as an `int` and a literal with a fraction or an
 exponent as a `float` — that is the whole rule, and it reads the *literal*,
 not the value: `1e9` is a `float` and `"1e9"` is the same `float`, while
 `1700000000` and `"1700000000"` are one `int`. Neither type is ever converted
-into the other.
+into the other — with the one exception a declared unit makes: a time whose
+field declares nanoseconds is carried as the `float` seconds it converts to
+(*Declared nanoseconds*, below).
 
 The reason is that `float` cannot hold what an exporter writes. float64's
 spacing at 1.7e18 is **256 ns**, so a time reported in epoch nanoseconds —
@@ -165,14 +170,54 @@ moment it is passed through `float()`: two spans a hundred nanoseconds apart
 collapse onto one number, and the `temporal` edge between them is then emitted
 as tied (§4.3), asserting that neither started first when one demonstrably
 did. A seconds field carrying nanosecond digits sits on the same floor, so
-this is a property of the magnitude rather than of the unit.
+this is a property of the magnitude rather than of the unit. (Seconds at
+present epochs have the same floor, ~238 ns; that is the cost a declared unit
+accepts, below.)
 
-Keeping the reported integer is **not** a unit conversion and not an opinion
-about the unit: nothing is scaled, nothing is inferred, and the number a
+For a field that declares no unit, keeping the reported integer is **not** a
+unit conversion and not an opinion about the unit: nothing is scaled, nothing is inferred, and the number a
 consumer reads is the number the record wrote — which is also what makes it
 round-trip, since an integer in serializes as the identical integer out. A
 consumer that wants one numeric type coerces it, in the same way a consumer
 that wants one unit converts it.
+
+**Declared nanoseconds.** A record the reader unpacked from an OTLP export
+(§7) carries `start_time` / `end_time` as the reader's renaming of
+`startTimeUnixNano` / `endTimeUnixNano`, and those names declare the unit. So
+for such a record — and only for one: the declaration is the reader's mark
+(`spanweave.read.Unpacked`, §7), never a key, and a flat record's `start_time`
+declares nothing — the value is read by the rendering rule above and then
+**converted to unix seconds**: the nearest `float` to the reported count
+divided by 10⁹. That division is Python's true division of two integers (or of
+a `float` by an integer, for a declared value written with a fraction or an
+exponent), which is correctly rounded, so the result is the same on every
+machine and under every interpreter setting (§5). Every reader of a record's
+times — both adapters, and the envelope (§7) — goes through the one function
+that does this (`seam.record_time`), so the rule cannot drift between them.
+
+Nothing is lost, and the cost is stated rather than softened:
+
+- **The digits stay in the graph.** `raw.source` holds the nanosecond string
+  the export wrote, verbatim (§3.5), so a consumer that needs the exact count
+  reads it there, and a round trip writes it back byte for byte.
+- **The normalized field is a float, and a float has a spacing.** At present
+  epochs that spacing is ~238 ns (2⁻²² s), so two siblings the export wrote
+  closer together than it can read as **one** time, and the `temporal` edge
+  between them carries the *tied* basis (§4.3) — it says that the field
+  cannot order them, which is true of the field; the order the export stated
+  is in `raw.source`. This is the loss the "Numeric type" paragraph above
+  avoids for an undeclared integer, accepted here because the alternative is
+  a field that does not hold unix seconds. On the zoo's twelve captures it
+  ties nothing: every edge, basis and node position is what it was before T2.
+- **A declared count no float holds once divided** — possible only for a
+  quoted integer of hundreds of digits, far past any `fixed64` — is a time
+  this rule does not read, and takes the door every unread rendering takes
+  (next paragraph and below).
+- **A declared unit is believed.** A span that writes seconds into
+  `startTimeUnixNano` reads as a time a few seconds after the epoch, and no
+  diagnostic says so: the field said nanoseconds. A converse check (a
+  declared nanosecond count below the line cannot be wall-clock) is not made
+  (`OPEN_QUESTIONS.md` §17).
 
 **Finite, or not read.** A rendering the table accepts is read only when what
 it parses to is a **finite number**. Two things are not, and neither is a
@@ -211,6 +256,12 @@ record and writes back as the string it was.
 
 **Unit suspicion.** A `started_at` or `ended_at` strictly greater than
 **1e11** gets a `timestamp_unit_suspect` diagnostic (§3.7, level `warning`).
+The check reads the value the node carries, so it is a statement about a value
+whose unit **nothing declared**: a declared nanosecond count is in seconds by
+the time it is checked, and no `fixed64` count (at most ~1.8e19 ns, ~1.8e10 s)
+reaches the line once converted. A conformant OTLP export therefore draws
+none. (A declared count past 1e20 — not a `fixed64` — would still be over the
+line in seconds, and is reported like any other value there.)
 1e11 seconds after the epoch is the year 5138, so no wall-clock time in
 seconds reaches it, while *now* in milliseconds is ~1.8e12 and in nanoseconds
 ~1.8e18. The value above the line is therefore evidence about the **unit of
@@ -606,7 +657,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
-| `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported. On a conformant OTLP JSON export every span is over the line, so **one per span is the expected output** and reports the encoding, not the run (§7) |
+| `timestamp_unit_suspect` | a `started_at`/`ended_at` whose unit nothing declared exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported. A time whose field declares nanoseconds (OTLP's `startTimeUnixNano`) is read in seconds and does not draw it, so a conformant OTLP JSON export draws **none** (§7; until batch T2 it drew one per span) |
 | `duplicate_source_id` | two records claimed the same source id |
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
@@ -1347,6 +1398,9 @@ library by a constant of its own (§5.3).
     is exactly the shape of a determinism claim that is quietly false.
 - No clocks, no randomness, no `hash()`, no set iteration order, no
   dict-insertion-order dependence in any output-affecting path.
+- The one arithmetic a normalized value goes through — a declared nanosecond
+  count divided into seconds (§3.1) — is Python's correctly rounded true
+  division, so it is a function of the reported digits alone, on any machine.
 
 ### 5.3 The digit limit is the library's
 
@@ -1374,7 +1428,10 @@ converts it:
   unreadable JSON, reported as `malformed_record` (§7);
 - a **quoted** timestamp of more than 4300 digits is not read: `started_at`
   or `ended_at` is `null`, the field is named in `unmapped_attributes`, and
-  the node gets `missing_timestamp` (§3.1);
+  the node gets `missing_timestamp` (§3.1) — and so is one of 4300 digits or
+  fewer whose field declares nanoseconds and which no float holds once
+  converted to seconds (§3.1, *Declared nanoseconds*); the division that
+  decides it is integer arithmetic, so no interpreter setting moves it;
 - an OTLP `intValue` of more than 4300 digits is carried verbatim as the
   decimal string it arrived as (§7).
 
@@ -1866,31 +1923,26 @@ declares reaches `0.5`.
     as the string it arrived as rather than raised out of the reader:
     **where the format states a type, the reader honours it; where the format
     states only a name, the value goes to the layer that owns the field.**
-    `startTimeUnixNano` states only a name, so it is carried verbatim and read
-    by §3.1's rule for a numeric string — the rule written for this encoding.
+    `startTimeUnixNano` states a name and no type, so it is carried verbatim
+    and read by §3.1's rule for a numeric string — the rule written for this
+    encoding — and the unit its name declares is honoured there, by the time
+    reader, not here (§3.1, *Declared nanoseconds*).
     A repeated key keeps the last, and every entry the fold could not take —
     a non-object entry, a missing or non-string `key`, an unrecognized `value`
     tag, and **both** copies of a repeated key — is kept in a list under
     `attributes_unfolded`, which is omitted when there is nothing to put in it.
-  - **A conformant export draws one `timestamp_unit_suspect` per span** (§3.7),
-    and that is the expected output rather than a defect report.
-    `startTimeUnixNano` states a unit, but it states it in a *name*, so the
-    value is carried verbatim and §3.1's ceiling is over the line on every
-    span. The warning is a statement about the **model's field contract** —
-    `started_at` is unix seconds — and not about the telemetry, which is as
-    conformant as its field name says. **Nothing is rescaled**: the reported
-    number is kept exactly (§3.1), so no digit is lost and every edge is still
-    built from what the export wrote. A rescale here is refused outright, and
-    not on a technicality — `float()` at epoch-nanosecond magnitude has a
-    spacing of 256 ns (§3.1's figure), so it would merge spans the record kept
-    apart and make the normalized field disagree with `raw.source` with nothing
-    to report it.
-    The cost of leaving it is stated rather than softened: on such a file the
-    diagnostic is a function of a format the consumer already knows, and a span
-    genuinely encoded in seconds among nanosecond neighbours is the one span it
-    is *silent* about. A consumer that does not want it filters one code and
-    loses nothing it could have used. Stating a unit at the seam was weighed
-    against that and held (`OPEN_QUESTIONS.md` §17).
+  - **A conformant export draws no `timestamp_unit_suspect`** (§3.7).
+    `startTimeUnixNano` declares its unit in its *name*, and the record the
+    reader unpacked carries that fact as its mark (below), so §3.1's time
+    reader converts the value to unix seconds while `raw.source` keeps the
+    string the export wrote. Until batch T2 the value was carried as reported
+    and §3.1's ceiling was over the line on every span — one warning per span,
+    reporting the format rather than the run, and silent about the one span
+    genuinely encoded in seconds (`OPEN_QUESTIONS.md` §17; the zoo's S3). The
+    reader still converts nothing: renaming the key is all it does, and the
+    conversion belongs to the one function every reader of a record's times
+    calls. What the conversion costs — a float's spacing, ~238 ns today — is
+    stated in §3.1, not here, because it is a property of the field.
   - **`status.code`** becomes `"UNSET"`, `"OK"` or `"ERROR"`, read from the
     proto enum name (`STATUS_CODE_OK`) or its number (`0`, `1`, `2`), because
     proto3 JSON permits either. Any other value is carried verbatim, read as
@@ -1931,7 +1983,7 @@ declares reaches `0.5`.
       span_id:     str               # required
       parent_id:   str | None        # absent, null or "" -> None (§3.6)
       name:        str               # absent -> "" (proto3's default)
-      started_at:  int | float | None  # §3.1's reading; absent -> None
+      started_at:  int | float | None  # §3.1's reading, in seconds; absent -> None
       ended_at:    int | float | None
       status:      Status            # the reader's name, else UNSET (above)
       status_note: str | None        # status.message, absent -> None

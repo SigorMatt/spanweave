@@ -18,8 +18,9 @@ mechanically re-encoded as one `ExportTraceServiceRequest` by the rules
   until the September 2026 audit series (batch R10), and every root of every
   OTLP export drew an `orphan_parent` for it.
 - `start_time`/`end_time` → `startTimeUnixNano`/`endTimeUnixNano`, as decimal
-  strings carrying the same literal the JSONL line carried. See
-  `scenario.md`, "Timestamps".
+  strings carrying the JSONL line's seconds in the nanoseconds the field
+  declares (`1000.2` → `"1000200000000"`; batch T2). See `scenario.md`,
+  "Timestamps".
 - `status: "OK"` → `status: {"code": "STATUS_CODE_OK"}`.
 - the attribute object → an OTLP `KeyValue` list, each value tagged by its JSON
   type: `stringValue` and `intValue` (as the decimal string proto3 JSON
