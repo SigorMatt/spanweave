@@ -3895,3 +3895,17 @@ any option the row's acceptance should read: Z3 `unmapped_attributes` 102 →
 75 with none naming the four keys; 18 `attributes_dropped`; scope names
 `openinference.instrumentation.openai_agents` and
 `openinference.instrumentation.openai`.
+
+**The decision (2026-10-14, maintainer).** Option 3. The `meta` sentence of
+the T3/T4 decision is withdrawn; "no schema change this series" means no
+field on any serialized model, no `PASSTHROUGH` widening, no key-tree move —
+and a diagnostic code is a vocabulary word, allowed by §3.7 and regenerated
+into the artifact as `be16fa8` did. Resource and scope are per-node facts
+the transport stated (Z3 carries two scopes on one graph, and S6 asks which
+span each wrote), so they are read from `Envelope`, which gains `resource`
+and `scope` as the level objects the record carries, and they stay verbatim
+in `raw.source`. Option 1 is declined because widening the shape gate on the
+series that supplies the freeze's precondition is what `schema_shape.py`
+calls blinding the instrument, and a per-graph list answers the wrong
+question; option 2 because a scope is a fact, not a gap; option 4 because
+nothing is left to carry. The row's numbers are corrected as (d) says.
