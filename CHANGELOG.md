@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The cold review of 2026-10-14 is archived, and every finding has a
+  disposition** (decisions log: 2026-10-14, review). No behaviour change.
+  `reviews/REVIEW-2026-10-14.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-28: the commit that
+  answered it, or the reading it was read or declined with. Two parts are
+  open: R-12's census-field list and R-28's wording are edits to
+  `fixtures/zoo/README.md`, which this series never edits. Until now the
+  stranger's-trace series had no review archive.
 - **Decisions are cited by their registry row** (decisions log: 2026-10-14,
   review; R-26, R-27). No behaviour change. The records cited decisions by
   the name of a relay file, and those files live only in a git-ignored

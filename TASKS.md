@@ -13807,10 +13807,14 @@ prose until a stranger reads it.
   CI. Per the plan's §2, the remaining steps are: a scoped cold review of the
   close (aux), the PR itself, Qodo's review of that PR, and the merge as a
   merge commit. Each review is archived into `reviews/` and dispositioned here,
-  as the earlier series did. Until then, **this series has no review
-  archive**: every `REVIEW-*.md` in the untracked scratch drop at the close
-  belongs to an earlier series, and each is byte-identical (sha256) to its
-  archive under `reviews/`.
+  as the earlier series did. At the close **this series had no review
+  archive**: every `REVIEW-*.md` in the untracked scratch drop then belonged
+  to an earlier series, and each is byte-identical (sha256) to its archive
+  under `reviews/`. Since then, the cold review of 2026-10-14, a read of the
+  whole series range, is archived and every finding dispositioned (*Cold
+  review of the series* below); two parts of what it asked for are open
+  there, because they are edits to `fixtures/zoo/`. The PR, Qodo's review of
+  it and the merge remain.
 - **The Phase 4 gate is not met.** The close recorded the zoo run as the
   third dialect having been run. That was the plan's mistake, carried from the
   series brief, and it is corrected after the close (decisions log:
@@ -14099,6 +14103,58 @@ from it.
 | 2026-10-14 | S13 | The finding is the disposition. Z5's two graphs differ in exactly eight paths, all per-run identifiers the SDK and LangGraph generate (`service.instance.id`, the SDK's per-process resource UUID, and LangGraph's `checkpoint_ns` UUIDs in `metadata`), none the library's. The audit's "ids and timestamps the exporter generated" was too narrow, and `c8de748`'s subject, taken from the decision, is wrong in the same way; nothing is amended, the record says so. The mask stays as it is: widening it would hide the next such identifier. The eight paths, pinned by the test, are the citation. | maintainer |
 | 2026-10-14 | T6 | (b): `make conformance` runs `tests/test_zoo_readings.py`. `make conformance` is the corpus's run and the module is a reading over the corpus; `make check` running it is not the same promise. | maintainer |
 | 2026-10-14 | review | The cold review of 2026-10-14 (R-1…R-28), dispositioned. Accepted: R-2, R-3, R-4, R-5, R-6, R-9, R-10, R-11, R-12, R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-22, R-24, R-25, R-26, R-27, R-28. Read, no change: R-1, R-7, R-8, R-20, R-23. Declined with a reason: R-21. Each accepted finding is applied as its own commit. Nothing is amended or force-pushed: where a commit message was wrong, the record says so and the message stays. The S13 graph sizes and the "T3 and T4" attribution leave the S13 row above, the S13 probe row and the CHANGELOG's S13 line (R-26): the review measured T2 as most of the change and T4 as growth, and no test holds any of the three numbers; the eight paths, pinned by the test, are the citation. Decisions are cited by their row here, by date and batch, not by a relay file's name (R-27). | maintainer |
+
+### Cold review of the series — 2026-10-14
+
+`reviews/REVIEW-2026-10-14.md`, archived byte-for-byte from the untracked
+scratch drop, where the file has the same name directly under `patches/`:
+`cmp` silent, and `sha256`
+`d65647e1bb14638fb0999f47f9a23bd62ffc734fcb4bd6528ca1c8aad46cf01a` on both
+sides.
+
+A cold read of `fec7da2..7ea83aa`, thirty commits: one sub-agent per code
+commit (eleven), the nineteen others read directly, every parent derived as
+`<sha>^` and a mutation shown at each code commit. It found the zoo's
+fixtures byte-identical to the zoo at its pin, no clock, randomness or
+network added, and every behaviour commit's new tests red on the derived
+parent; it raised twenty-eight findings, R-1…R-28. The maintainer's
+dispositions are the decisions-log row of 2026-10-14, review, above. Each
+accepted finding was applied as its own commit on `stranger`, and this
+archive is the last of them. Where a commit did less than its finding asked,
+or its message says something it did not do, the line says so and the
+message stays.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `43e330a`, the plan's numbers | **read, no change.** The plan's wrong numbers were corrected batch by batch (the plan's §0.1 step 5) and the corrections are in this section; S13 was `c8de748`. History |
+| R-2 — `43e330a`, the `WORKPLAN.md` exemption | **accepted, resolved by `100a9d2`; no commit in this batch.** The filter had already left `durable_documents()` with the file at the series close. At `7ea83aa`, a planted `WORKPLAN.md` naming a make target that does not exist is red in three doc-truth tests. The decision's commit for it was not made |
+| R-3 — `162f1b6`, byte-for-byte tested only as self-consistency | **accepted**, `f590bff` |
+| R-4 — `162f1b6`, numbers cited, not re-derived | **accepted**, `6fe41f8` |
+| R-5 — `162f1b6`, the fixture contract | **accepted**, `dde244f` |
+| R-6 — `a1405be`, mutations no test catches | **accepted**, `65560a7` |
+| R-7 — `a1405be`, tests passing on the derived parent | **read, no change.** A test that passes on the parent pins behaviour that already held; the rule's purpose is served by the mutation shown. Recorded as a pin |
+| R-8 — `a1405be`, one concern per commit | **read, no change.** `_as_time`'s move and the duplicate rule rode along in `a1405be`; the duplicate rule is T1 (a), confirmed. Not rewritten |
+| R-9 — `23eb7ed`, spec behaviour no test pins | **accepted**, `f7e585c` |
+| R-10 — `23eb7ed`, numbers cited, not re-derived | **accepted**, `4bc9032`. The review's "24 graphs, 1,096 edges" for T2's "nothing moved" is 1,092 today: T5 removed Z5's four `temporal` edges |
+| R-11 — `d1f8ff4`, mutations no test catches | **accepted**, `10224a1` (with R-14) |
+| R-12 — `d1f8ff4`, record accuracy | **accepted**, `2195604`, **in part.** SPEC §3.7 states `attributes_dropped` at `warning`, "27 of 102" cites the zoo's Z3 audit node table, and the T3 row above records 72 failures, not 55. The census-field list in `fixtures/zoo/README.md` was **not made**, because `fixtures/zoo/` is never edited in this series; `2195604`'s subject names the zoo README anyway. **Open** |
+| R-13 — `2ed0c92`, spec contradicts code | **accepted**, `2195604` |
+| R-14 — `2ed0c92`, mutations no test catches | **accepted**, `10224a1` (with R-11) |
+| R-15 — `dcfbb8d`, a mutation no test catches | **accepted**, `7483241` |
+| R-16 — `dcfbb8d`, tests passing on the parent, an overclaiming test | **accepted**, `7483241` (with R-15): the prefix test checks every prefix, as its name claims. The first bullet, a test that passes on the parent, is **read, no change**, as R-7 |
+| R-17 — `dcfbb8d`, no degenerate conformance fixture | **accepted.** The scenario is `1ce0c43`; the wording (the root group is `""`, not `None`) is `2195604` |
+| R-18 — `2f4d83c`, the readings do not re-derive their numbers | **accepted**, `911a0e2` (with R-19) |
+| R-19 — `2f4d83c`, named facts no test asserts | **accepted**, `911a0e2` (with R-18) |
+| R-20 — `100a9d2`, overclaim | **read, no change.** Reversed by `78cfa77` |
+| R-21 — `100a9d2`, numbers cited, not re-derived | **declined.** The numbers in this section (29 bodies, Z4 4/0, 102→75, 18, twelve) are each asserted by the census or the readings; a guard that parsed the registry's prose for them would be a second instrument checking the first. The row counts (thirteen decision rows, the plan-commit list) are a description of the file by itself. The registry cites its tests by name where a number is a claim about the corpus; it is not itself a promise |
+| R-22 — `c8de748`, the mask too coarse | **accepted**, `16b3ce6` |
+| R-23 — `c8de748`, passes on the derived parent | **read, no change**, as R-7. Recorded as a pin |
+| R-24 — `b7b0088`, a gate change with no mutation | **accepted**, `8f4c1d9` |
+| R-25 — `b7b0088`, docs stale at the commit | **accepted**, `7557955` |
+| R-26 — `7ea83aa`, S13's numbers | **accepted**, `2196d38` (with R-27) |
+| R-27 — decisions cited only in an ignored directory | **accepted**, `2196d38` (with R-26). Its message counts 19 `TASKS.md` citations rewritten; the grep showed 20. The message stays |
+| R-28 — the census "in its own commit" | **accepted**, `2195604` named; **not made.** The sentence is in `fixtures/zoo/README.md`, which is never edited in this series; `2195604`'s subject names the zoo README anyway. **Open** |
+| `5f6fd13`'s title (non-code commits) | **read, no change.** "No serialized shape moves" overstated what its own text allowed (a code is a vocabulary word); the §21 decision is the rule |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 
