@@ -429,9 +429,14 @@ def _in_seconds(nanoseconds: int | float) -> int | float | None:
     `None` for a count no float holds once divided -- a time §3.1 does not
     read. Shared by `record_time` and a span event's `timeUnixNano`
     (`span_events`), so the two readings of a declared unit cannot drift.
+
+    Both pass what `stated_time` read, which is already finite, and the
+    quotient of a finite count is finite or an `OverflowError`: a float
+    divided by 1e9 only shrinks, and Python's true division of two integers
+    raises rather than round to `inf`.
     """
     try:
-        return _finite(nanoseconds / _NANOSECONDS_PER_SECOND)
+        return nanoseconds / _NANOSECONDS_PER_SECOND
     except OverflowError:
         return None
 

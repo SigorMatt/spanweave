@@ -15,6 +15,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A declared time's two edges are pinned, and a check that could not fire
+  is gone** (decisions 2026-10-14g, R-9). No behaviour change. SPEC §3.1 says
+  a declared nanosecond value written with a fraction or an exponent is
+  converted like any other, and that a declared count past 1e20 is still
+  over the suspicion line in seconds; no test held either.
+  `tests/test_read.py` now asserts that `startTimeUnixNano: "1.7e18"` reads
+  1700000000.0 with no `timestamp_unit_suspect`, and that
+  `"200000000000000000000"` reads 200000000000.0 and draws it. The
+  finiteness check on the converted value (`seam._in_seconds`, which
+  `record_time` calls) is removed: its input is already finite, and a
+  finite count divided by 1e9 is finite or raises `OverflowError`, which is
+  still caught.
 - **The unclaimed envelope node is pinned field by field** (decisions
   2026-10-14g, R-6). No behaviour change. T1's entry below says an unclaimed
   OTLP record's node takes its trace id and status from its envelope, and that

@@ -1411,6 +1411,33 @@ def test_a_declared_time_too_large_for_seconds_is_not_read(tmp_path):
     assert codes.TIMESTAMP_UNIT_SUSPECT not in found
 
 
+def test_a_declared_time_written_with_an_exponent_is_read_in_seconds(tmp_path):
+    # §3.1's "a `float` by an integer": a declared value written with an
+    # exponent (or a fraction) is read as the float its literal is, and then
+    # converted like any other declared count -- it is not left in
+    # nanoseconds for the suspicion to find.
+    span = dict(NS_OTLP_SPAN, startTimeUnixNano="1.7e18")
+    graph = _built(envelope(span), tmp_path)
+    node = graph.nodes()[0]
+    assert node.started_at == 1700000000.0
+    assert isinstance(node.started_at, float)
+    assert node.raw.source["start_time"] == "1.7e18"
+    assert _suspect(graph) == []
+
+
+def test_a_declared_count_past_1e20_is_converted_and_still_draws_the_diagnostic(
+    tmp_path,
+):
+    # Not a `fixed64`, so no conformant export writes it, but it is read by
+    # the same rule: converted to seconds, which are still past the line, and
+    # reported like any other value there (`SPEC.md` §3.1).
+    span = dict(NS_OTLP_SPAN, startTimeUnixNano="200000000000000000000")
+    graph = _built(envelope(span), tmp_path)
+    assert graph.nodes()[0].started_at == 200000000000.0
+    (suspect,) = _suspect(graph)
+    assert suspect.source == {"started_at": 200000000000.0}
+
+
 # --- Records from bytes in memory (`SPEC.md` §7) -----------------------------
 #
 # The reader's other door, and the one a receiver needs: `OPEN_QUESTIONS.md`
