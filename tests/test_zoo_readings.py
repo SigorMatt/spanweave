@@ -12,7 +12,8 @@ and every reading that states a number or a set is held to the corpus here:
   test parses those tables and holds them equal to what the adapters report
   over every record of every capture: a key added, dropped or moved to the
   wrong project fails here.
-* **The in-process envelope read** (`WORKPLAN.md` §3, T3: pinned at T6).
+* **The in-process envelope read** (`TASKS.md`, *The stranger's-trace
+  series*, decisions, T3: pinned at T6).
   `spanweave.envelope(node.raw.source)` reads every node of every capture,
   batch and `Builder` alike, because `raw.source` is the record the reader
   marked (`SPEC.md` §7). A JSON round trip is not that record and is out of
@@ -161,7 +162,7 @@ def test_adapters_md_lists_every_key_the_zoo_leaves_unmapped_and_no_other():
         assert not set(taken_out) & set(unmapped[adapter]), adapter
 
 
-# --- The in-process envelope read (WORKPLAN.md §3, T3; pinned here) ----------
+# --- The in-process envelope read (TASKS.md, stranger's-trace, T3) -----------
 
 
 def _builder_graph(feed: list[spanweave.model.JsonValue]) -> spanweave.Graph:

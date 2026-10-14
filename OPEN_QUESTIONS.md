@@ -34,6 +34,14 @@ dispositioned, and the threads left open — is in `TASKS.md` under *The
 live-graphs series*. These references are kept as written, for the reason the
 audit's are.
 
+**Entries §20–§22 were written as halts during the stranger's-trace series**
+(2026-10-14) and refer to that series' own `WORKPLAN.md`. Each carries the
+maintainer's decision beneath it. The file was deleted at the series' close on
+2026-10-14, and everything of it that outlives the series — the batch registry
+with final statuses, the decisions log in full, the resume note, and each
+probe's disposition — is in `TASKS.md` under *The stranger's-trace series*.
+These references are kept as written, for the reason the audit's are.
+
 ---
 
 ## 1. Should `unknown` nodes be promotable?

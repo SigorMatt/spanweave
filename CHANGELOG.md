@@ -590,6 +590,34 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The stranger's-trace series is closed, and `WORKPLAN.md` is gone with it**
+  (T7, this commit). No behaviour change: nothing under `spanweave/` moved,
+  `tests/serialized_shape.json` is untouched, and `SCHEMA_VERSION` is still
+  `"0.1"`, unfrozen. `TASKS.md` now holds everything of the plan file that
+  outlives the series, under *The stranger's-trace series*:
+  - a registry row per batch, T0–T7, with each final status and commit,
+    including the three halts and decisions (T1, T3, T4);
+  - the thirteen-row decisions log and the dated resume note, both verbatim;
+  - a disposition for every zoo probe, S1–S22. S13 is the exception: no
+    batch, decision or reading names it, so it is registered as open;
+  - the choices T4, T5 and T6 made beyond their rows, carried as
+    **unconfirmed**;
+  - the zoo run recorded against `ROADMAP.md` Phase 4's
+    third-dialect-was-run condition, as T7's row asks. The record states what
+    the run was, which is twelve captures from `SigorMatt/spanweave-zoo`
+    `7eb5b69` held by `tests/zoo_census.py`. It also states what the run was
+    not: it adds no adapter, and it takes no part in the cross-dialect
+    equivalence test. Whether it discharges ROADMAP's condition as written is
+    left to the maintainer, and `ROADMAP.md` is not edited.
+
+  The README's Documents row for `WORKPLAN.md` and the `WORKPLAN.md` exclusion
+  in `durable_documents()` are removed, the pair every series close removes.
+  `tests/test_zoo_readings.py`'s two citations of the plan file are
+  re-pointed at `TASKS.md`. `OPEN_QUESTIONS.md` gains a preamble for §20–§22,
+  as the earlier closes did for §10–§19. This series has no review archive
+  yet: its scoped close review, the PR to `main` and Qodo's review of it come
+  after this commit. `make conformance` still does not run
+  `tests/test_zoo_readings.py`, which is registered as open.
 - **Siblings are grouped by the parent the record states** (T5; zoo S18, L3;
   `SPEC.md` §4.3, §10.2, §10.6). A `temporal` chain's group is `None` for a
   root and the stated parent id for every other node, present or absent — so an
