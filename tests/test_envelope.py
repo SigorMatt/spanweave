@@ -23,7 +23,7 @@ import spanweave
 from spanweave.api import graph_from_records
 from spanweave.ids import derive
 from spanweave.model import EdgeKind, NodeKind, Status
-from spanweave.read import record_digest
+from spanweave.read import Unpacked, record_digest
 from tests import zoo_census
 
 Z4 = next(c for c in zoo_census.CAPTURES if c.run == "z4/2026-10-12-real")
@@ -172,8 +172,12 @@ def test_an_envelope_level_with_no_spans_has_no_envelope():
         json.dumps({"resourceSpans": [{"resource": {"attributes": []}}]}).encode()
     )
     (record,) = read.records
-    with pytest.raises(spanweave.EnvelopeError):
+    # Marked like a span, so refused for the ids it lacks, not for a missing
+    # mark (R-6: a levels-only record left unmarked raised all the same).
+    assert isinstance(record, Unpacked)
+    with pytest.raises(spanweave.EnvelopeError) as raised:
         spanweave.envelope(record)
+    assert "states no trace_id" in str(raised.value)
 
 
 def test_an_envelope_reads_status_and_an_empty_parent_as_the_record_states():
@@ -207,6 +211,74 @@ def test_an_envelope_field_of_the_wrong_type_raises():
     with pytest.raises(spanweave.EnvelopeError) as raised:
         spanweave.envelope(record)
     assert "name" in str(raised.value)
+
+
+# --- The unclaimed envelope node, pinned field by field (R-6) ----------------
+#
+# Z4's root is the only graph-level test of an unclaimed envelope node, and it
+# states status UNSET and a trace id every child states too: a node that lost
+# its status, its trace id or its `raw.source_id` built Z4 identically. This
+# probe is one record that says something in each of those fields, beside a
+# claimed record that states no trace id, so the graph's trace id is the
+# envelope's or nobody's.
+
+_PROBE_SPAN: dict[str, object] = {
+    "traceId": "t1",
+    "spanId": "a",
+    "name": "probe",
+    "startTimeUnixNano": "1700000000000000000",
+    "endTimeUnixNano": "1700000001000000000",
+    "status": {"code": 2, "message": "boom"},
+}
+_CLAIMED_NO_TRACE = {
+    "span_id": "s1",
+    "attributes": {"openinference.span.kind": "LLM"},
+}
+
+
+def test_the_unclaimed_envelope_node_carries_status_note_trace_and_source_id() -> None:
+    (record,) = spanweave.read_records(_export(_PROBE_SPAN)).records
+    graph = graph_from_records([_CLAIMED_NO_TRACE, record])
+    claimed = graph.node("s1")
+    assert claimed is not None
+    assert claimed.provenance.adapter_id is not None
+    (node,) = [n for n in graph.nodes() if n.kind is NodeKind.UNKNOWN]
+    assert node.id == "a"
+    assert node.provenance.adapter_id is None
+    assert node.status is Status.ERROR
+    assert node.status_note == "boom"
+    assert node.raw.source_id == "a"
+    assert graph.trace_id == "t1"
+    assert _codes(graph)["missing_trace_id"] == 0
+
+
+@pytest.mark.parametrize(
+    ("stated", "field"),
+    [
+        ({"startTimeUnixNano": "soon"}, "start_time"),
+        ({"endTimeUnixNano": True}, "end_time"),
+        ({"parentSpanId": 7}, "parent_id"),
+        ({"status": {"code": 2, "message": 7}}, "status_message"),
+        ({"spanId": 42}, "span_id"),
+        ({"traceId": 42}, "trace_id"),
+    ],
+    ids=["start", "end", "parent", "status_message", "span_id", "trace_id"],
+)
+def test_an_envelope_field_of_the_wrong_type_raises_and_the_node_falls_back(
+    stated: dict[str, object], field: str
+) -> None:
+    (record,) = spanweave.read_records(_export({**_PROBE_SPAN, **stated})).records
+    with pytest.raises(spanweave.EnvelopeError) as raised:
+        spanweave.envelope(record)
+    assert raised.value.code == "not_an_envelope"
+    assert field in str(raised.value)
+
+    claimed = {"trace_id": "t1", **_CLAIMED_NO_TRACE}
+    graph = graph_from_records([claimed, record])
+    (unknown,) = [n for n in graph.nodes() if n.kind is NodeKind.UNKNOWN]
+    assert unknown.id == derive(None, graph.trace_id, record_digest(record))
+    assert unknown.raw.source_id is None
+    assert unknown.status is Status.UNSET
 
 
 def test_an_unpacked_record_and_an_equal_flat_one_are_two_records_in_either_order():

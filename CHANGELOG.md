@@ -15,6 +15,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The unclaimed envelope node is pinned field by field** (decisions
+  2026-10-14g, R-6). No behaviour change. T1's entry below says an unclaimed
+  OTLP record's node takes its trace id and status from its envelope, and that
+  an envelope field of a type it cannot hold raises; the only graph-level test
+  was Z4's root, whose status is `UNSET` and whose trace id every child states,
+  and the type check was tested for `name` only. `tests/test_envelope.py` now
+  builds one unclaimed probe (status 2 with a message, a stated trace id)
+  beside a claimed record that states no trace id, and asserts the node's
+  `status`, `status_note`, `raw.source_id` and the graph's trace id, with no
+  `missing_trace_id`; asserts that an unreadable start or end time, a
+  non-string `parent_id`, `status_message`, span id or trace id each raise
+  `EnvelopeError` and the node falls back to the digest id; and that a record
+  of envelope levels with no span is marked as unpacked.
 - **`FIXTURES.md` names `fixtures/zoo/` and its contract** (decisions
   2026-10-14g, R-5). No behaviour change. T0 added a fixture location that
   §1 did not list and whose provenance §6's rule did not describe. §1 now
