@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Each zoo seal is held to the value `fixtures/zoo/README.md` pins**
+  (decisions 2026-10-14g, R-3). No behaviour change. T0's entry below says
+  `tests/test_zoo.py` re-derives every body's sha256 and every manifest's
+  seal; it did, but each only against the manifest beside it, so a body
+  rewritten with its manifest sha and seal recomputed to match still passed.
+  The test now reads the twelve seals from the README's table and asserts
+  each equals the seal recomputed from its manifest, which ties every copied
+  byte to a value written down at the pin.
 - **S13 is answered: Z5's real and recorded graphs differ in exactly eight
   paths, all per-run identifiers the SDK and LangGraph generate, none the
   library's** (after the stranger's-trace close; decisions 2026-10-14e and

@@ -4,8 +4,11 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 
 * `fixtures/zoo/` is the zoo's record, byte for byte: every body's sha256 is
   the one its capture's sealed manifest gives, every manifest's seal is the one
-  its own claims compute to, and the copy holds exactly the `json/` bodies the
-  manifests list -- none missing, none added (`fixtures/zoo/README.md`).
+  its own claims compute to and the one `fixtures/zoo/README.md` pins, and the
+  copy holds exactly the `json/` bodies the manifests list -- none missing,
+  none added. The README's seal is what makes the first two more than
+  self-consistency: a body rewritten with its manifest sha and its seal
+  recomputed to match agrees with itself, and not with the pinned value.
 * The counts the zoo's audit reported (`tests/zoo_census.py`, each citing its
   report) are what this library builds from those bytes, batch and incremental
   alike, with the records fed in the exporter's order: child before parent
@@ -13,6 +16,8 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -66,6 +71,40 @@ def test_every_body_is_the_zoo_s_byte_for_byte(capture):
 def test_every_manifest_carries_the_seal_its_claims_compute_to(capture):
     document = zoo_census.manifest(capture)
     assert document["seal"] == zoo_census.seal_of(document)
+
+
+#: A capture's row of the README's table: its run, first; its seal, last.
+_README_ROW = re.compile(r"^\| `(z\d/[^`]+)` \|.*\| `([0-9a-f]{64})` \|$")
+
+
+def _readme_seals() -> dict[str, str]:
+    """Capture run -> the seal `fixtures/zoo/README.md` pins for it."""
+    seals: dict[str, str] = {}
+    for line in (ZOO / "README.md").read_text(encoding="utf-8").splitlines():
+        match = _README_ROW.match(line)
+        if match is not None:
+            run, seal = match.groups()
+            assert run not in seals, run
+            seals[run] = seal
+    return seals
+
+
+def test_the_readme_pins_one_seal_for_each_of_the_twelve_captures():
+    assert sorted(_readme_seals()) == sorted(IDS)
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_seal_is_the_one_the_readme_pins(capture):
+    """The seal recomputed from the manifest beside the bodies is the README's.
+
+    With `test_every_body_is_the_zoo_s_byte_for_byte` (each body's sha256 is the
+    manifest's) this ties every byte of the copy to a value written down at the
+    pin, outside the files it checks.
+    """
+    pinned = _readme_seals()[capture.run]
+    document = zoo_census.manifest(capture)
+    assert zoo_census.seal_of(document) == pinned, capture.run
+    assert document["seal"] == pinned, capture.run
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
