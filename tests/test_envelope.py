@@ -430,3 +430,161 @@ def test_an_unclaimed_span_s_dropped_count_is_reported_with_no_adapter():
     assert dropped.source == {"count": 4}
     assert dropped.adapter is None
     assert dropped.node_id == node.id
+
+
+# --- A span's events (batch T4) ----------------------------------------------
+#
+# `OPEN_QUESTIONS.md` §22, option 2; `SPEC.md` §3.7, §7; `PROBES.md` S11, S17.
+# Each OTLP span event on an unpacked record is an `info` diagnostic: the
+# OpenTelemetry API's `exception` event (`record_exception`) is
+# `exception_event`, any other is `span_event`. A level grades the report, not
+# the trace, so an exception on a span that did not fail says only what the
+# telemetry said.
+
+_TRACE = "Traceback (most recent call last):\n  ...\nValueError: nope\n"
+
+
+def _attr(key: str, value: dict[str, object]) -> dict[str, object]:
+    return {"key": key, "value": value}
+
+
+def _exception(escaped: dict[str, object], time: str = "1700000000500000000"):
+    return {
+        "timeUnixNano": time,
+        "name": "exception",
+        "attributes": [
+            _attr("exception.type", {"stringValue": "ValueError"}),
+            _attr("exception.message", {"stringValue": "nope"}),
+            _attr("exception.stacktrace", {"stringValue": _TRACE}),
+            _attr("exception.escaped", escaped),
+        ],
+    }
+
+
+def _events_of(graph: spanweave.Graph, code: str) -> list[spanweave.Diagnostic]:
+    return [d for d in graph.diagnostics if d.code == code]
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize(
+    ("escaped", "stated"),
+    [
+        ({"boolValue": False}, False),
+        ({"boolValue": True}, True),
+        ({"stringValue": "False"}, "False"),
+    ],
+)
+def test_a_caught_exception_is_info_on_a_node_that_did_not_fail(
+    dialect, escaped, stated
+):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], events=[_exception(escaped)])
+    )
+    (node,) = graph.nodes()
+    assert node.status is not Status.ERROR
+    (raised,) = _events_of(graph, "exception_event")
+    assert raised.level == "info"
+    assert raised.node_id == node.id
+    assert raised.adapter == node.provenance.adapter_id
+    assert raised.source == {
+        "type": "ValueError",
+        "message": "nope",
+        "escaped": stated,
+        "time": 1700000000500000000 / 1_000_000_000,
+    }
+    # Not copied: the stacktrace is in the record, with the whole event.
+    assert _TRACE not in json.dumps(raised.source)
+    assert node.raw.source["events"] == [_exception(escaped)]
+    assert _unmapped(graph) == []
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_any_other_event_is_a_span_event_and_events_are_not_unmapped(dialect):
+    events = [
+        {"timeUnixNano": "1700000002000000000", "name": "First Token"},
+        {"name": "no time"},
+        {"timeUnixNano": "1700000002000000000", "name": "First Token"},
+    ]
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=events))
+    (node,) = graph.nodes()
+    reported = _events_of(graph, "span_event")
+    assert sorted((d.source["name"], d.source["time"] or 0.0) for d in reported) == [
+        ("First Token", 1700000002.0),
+        ("First Token", 1700000002.0),
+        ("no time", 0.0),
+    ]
+    assert all(d.level == "info" and d.node_id == node.id for d in reported)
+    # Kept as reported, past the node's end.
+    assert all(
+        d.source["time"] is None or d.source["time"] > node.ended_at for d in reported
+    )
+    # Two identical events are two diagnostics, told apart by their place.
+    assert len({d.message for d in reported}) == 3
+    assert _unmapped(graph) == []
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize(
+    ("events", "unread"),
+    [
+        ("not a list", ["<record>.events"]),
+        (["not an event"], ["<record>.events[0]"]),
+        ([{"name": 7}], ["<record>.events[0]"]),
+        ([{"name": "e", "timeUnixNano": "soon"}], ["<record>.events[0]"]),
+        (
+            [{"name": "e"}, {"name": "exception", "attributes": "x"}],
+            ["<record>.events[1]"],
+        ),
+    ],
+)
+def test_an_event_that_cannot_be_read_stays_an_unmapped_key(dialect, events, unread):
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=events))
+    assert _unmapped(graph) == unread
+    read = 1 if isinstance(events, list) and len(events) == 2 else 0
+    assert len(_events_of(graph, "span_event")) == read
+    assert _events_of(graph, "exception_event") == []
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_no_events_says_nothing(dialect):
+    for events in ([], None):
+        graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=events))
+        assert graph.diagnostics == ()
+
+
+def test_a_flat_record_s_events_are_still_an_unmapped_key():
+    """No envelope was declared, so `events` in a flat file is a key, not OTLP's."""
+    flat = {
+        "trace_id": "t1",
+        "span_id": "s1",
+        "events": [{"name": "exception", "attributes": []}],
+        "attributes": {"openinference.span.kind": "LLM"},
+    }
+    graph = graph_from_records([flat])
+    assert _unmapped(graph) == ["<record>.events"]
+    assert _events_of(graph, "exception_event") == []
+    assert _events_of(graph, "span_event") == []
+
+
+def test_an_unclaimed_span_s_events_are_reported_with_no_adapter():
+    (unclaimed,) = spanweave.read_records(
+        _full_export(
+            attributes=[{"key": "x", "value": {"stringValue": "y"}}],
+            events=[_exception({"boolValue": True}), {"name": "tick"}],
+        )
+    ).records
+    claimed = {
+        "trace_id": "t1",
+        "span_id": "s2",
+        "start_time": 1700000000.0,
+        "attributes": {"openinference.span.kind": "LLM"},
+    }
+    graph = graph_from_records([claimed, unclaimed])
+    (node,) = [n for n in graph.nodes() if n.kind is NodeKind.UNKNOWN]
+    codes = sorted(d.code for d in graph.diagnostics if d.node_id == node.id)
+    assert codes == ["exception_event", "span_event", "unclaimed_record"]
+    for code in ("exception_event", "span_event"):
+        (event,) = _events_of(graph, code)
+        assert event.adapter is None
+        assert event.node_id == node.id
+        assert event.level == "info"

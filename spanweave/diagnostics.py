@@ -92,6 +92,16 @@ UNDECODABLE_BYTES = "undecodable_bytes"
 # (`SPEC.md` §3.7, §7; batch T3).
 ATTRIBUTES_DROPPED = "attributes_dropped"
 
+# An OTLP span event, which the model has no field for: the OpenTelemetry
+# API's `exception` event (`record_exception`) as `exception_event`, `source`
+# `{type, message, escaped, time}` -- never the stacktrace, which stays in
+# `raw` -- and any other as `span_event`, `source` `{name, time}`. Level
+# `info`: the transport stated it and the diagnostic carries it; a level
+# grades the report, never the trace, and whether the span failed is its
+# `status` (`SPEC.md` §3.7, §7; batch T4).
+EXCEPTION_EVENT = "exception_event"
+SPAN_EVENT = "span_event"
+
 # No registered adapter claimed this record, so nothing read it: it is kept
 # as an `unknown` node carrying the record verbatim, with no adapter on its
 # provenance (`SPEC.md` §6.1). The honest report of "you are missing an
@@ -109,6 +119,7 @@ CODES = (
     ATTRIBUTES_DROPPED,
     DUPLICATE_RECORD,
     DUPLICATE_SOURCE_ID,
+    EXCEPTION_EVENT,
     MALFORMED_RECORD,
     MISSING_TIMESTAMP,
     MISSING_TRACE_ID,
@@ -117,6 +128,7 @@ CODES = (
     ORDERING_CYCLE,
     ORPHAN_PARENT,
     PAYLOAD_PARSE_FAILED,
+    SPAN_EVENT,
     TIMESTAMP_UNIT_SUSPECT,
     UNCLAIMED_RECORD,
     UNDECODABLE_BYTES,

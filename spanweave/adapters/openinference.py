@@ -50,6 +50,7 @@ from spanweave.seam import (
     envelope_keys,
     parent_ref,
     record_time,
+    span_events,
     span_links,
     span_ref,
     unreadable_fields,
@@ -121,7 +122,8 @@ TOKEN_FIELDS = {
 }
 
 # Record keys this adapter reads. Anything else at the top level is reported
-# in `unmapped` -- including `events`, which Phase 1 does not model.
+# in `unmapped` -- except the OTLP envelope's keys, `events` among them,
+# which the seam reads (`envelope_keys`, `span_events`; batch T4).
 KNOWN_RECORD_KEYS = frozenset(
     {
         "trace_id",
@@ -243,6 +245,10 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     # (`SPEC.md` §3.7, §7).
     stated_by_envelope = envelope_keys(record)
     diagnostics.extend(attributes_dropped(record, ADAPTER_ID))
+    # Its events, each an `info` diagnostic, read from the envelope as the
+    # OpenTelemetry API's own convention -- not this dialect's (batch T4).
+    events, unread_events = span_events(record, ADAPTER_ID)
+    diagnostics.extend(events)
     unmapped = sorted(
         [str(key) for key in attributes if str(key) not in consumed]
         + [
@@ -253,6 +259,7 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
         + unreadable_times
         + unreadable_fields(record)
         + unread_links
+        + unread_events
     )
     if unmapped:
         diagnostics.append(

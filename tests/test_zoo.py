@@ -222,3 +222,88 @@ def test_z3_states_two_scopes_on_one_graph():
         "openinference.instrumentation.openai_agents",
         "openinference.instrumentation.openai",
     }
+
+
+# --- A span's events are reported (batch T4, `PROBES.md` S11, S17) ----------
+#
+# `OPEN_QUESTIONS.md` §22, option 2; `SPEC.md` §3.7, §7. Each OTLP span event
+# is an `info` diagnostic on its node -- `exception_event` for the OpenTelemetry
+# API's `exception` event, `span_event` for any other -- and the events stay
+# verbatim in `raw.source`. The failure stays where the telemetry put it: the
+# node's `status`.
+
+Z5S = [c for c in CAPTURES if c.run.startswith("z5/")]
+Z2S = [c for c in CAPTURES if c.run.startswith("z2/")]
+NS = 1_000_000_000
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_no_unpacked_node_reports_its_events_as_unmapped(capture):
+    graph = graph_from_records([r.record for r in zoo_census.records(capture)])
+    for diagnostic in graph.diagnostics:
+        if diagnostic.code == "unmapped_attributes":
+            assert not any(
+                key.startswith("<record>.events") for key in diagnostic.source
+            ), diagnostic.node_id
+
+
+@pytest.mark.parametrize("capture", Z5S, ids=[c.run for c in Z5S])
+def test_z5_s_two_exceptions_are_info_diagnostics_on_the_two_failed_tool_nodes(
+    capture,
+):
+    graph = graph_from_records(zoo_census.audit_feed(capture))
+    nodes = {node.id: node for node in graph.nodes()}
+    raised = [d for d in graph.diagnostics if d.code == "exception_event"]
+    assert len(raised) == 2
+    failed = {
+        node.id
+        for node in graph.nodes()
+        if node.name == "http_get" and node.status == "error"
+    }
+    assert len(failed) == 2
+    assert {d.node_id for d in raised} == failed
+    messages = []
+    for diagnostic in raised:
+        assert diagnostic.level == "info"
+        assert diagnostic.adapter == nodes[diagnostic.node_id].provenance.adapter_id
+        source = diagnostic.source
+        assert isinstance(source, dict)
+        # Four keys: the stacktrace is not copied, it stays in `raw.source`.
+        assert set(source) == {"type", "message", "escaped", "time"}
+        assert source["type"] == "ConnectionError"
+        assert source["escaped"] == "False"  # as the attribute states it
+        (event,) = nodes[diagnostic.node_id].raw.source["events"]
+        assert source["time"] == int(event["timeUnixNano"]) / NS
+        assert isinstance(source["time"], float)
+        assert any(a["key"] == "exception.stacktrace" for a in event["attributes"])
+        messages.append(source["message"])
+    assert sorted(m[-len("(attempt 1)") :] for m in messages) == [
+        "(attempt 1)",
+        "(attempt 2)",
+    ]
+    assert not [d for d in graph.diagnostics if d.code == "span_event"]
+
+
+@pytest.mark.parametrize("capture", Z2S, ids=[c.run for c in Z2S])
+def test_z2_s_first_token_events_are_kept_as_reported_after_the_span_ended(capture):
+    graph = graph_from_records(zoo_census.audit_feed(capture))
+    nodes = {node.id: node for node in graph.nodes()}
+    events = [d for d in graph.diagnostics if d.code == "span_event"]
+    assert len(events) == 2
+    for diagnostic in events:
+        assert diagnostic.level == "info"
+        assert diagnostic.source["name"] == "First Token Stream Event"
+        assert set(diagnostic.source) == {"name", "time"}
+        node = nodes[diagnostic.node_id]
+        assert node.ended_at is not None
+        # After the node's end, as the export states it; nothing is repaired.
+        assert diagnostic.source["time"] > node.ended_at
+    assert not [d for d in graph.diagnostics if d.code == "exception_event"]
+
+
+def test_z2_states_four_first_token_events_over_its_two_captures():
+    total = 0
+    for capture in Z2S:
+        graph = graph_from_records(zoo_census.audit_feed(capture))
+        total += sum(d.code == "span_event" for d in graph.diagnostics)
+    assert total == 4

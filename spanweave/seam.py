@@ -21,10 +21,16 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from spanweave import jsoncodec
-from spanweave.diagnostics import ATTRIBUTES_DROPPED, UNCLAIMED_RECORD
+from spanweave.diagnostics import (
+    ATTRIBUTES_DROPPED,
+    EXCEPTION_EVENT,
+    SPAN_EVENT,
+    UNCLAIMED_RECORD,
+)
 from spanweave.errors import EnvelopeError
 from spanweave.model import (
     Diagnostic,
+    DiagnosticLevel,
     JsonValue,
     NodeKind,
     Payload,
@@ -32,7 +38,7 @@ from spanweave.model import (
     Status,
     Usage,
 )
-from spanweave.read import Unpacked, record_digest
+from spanweave.read import Unpacked, folded_attributes, record_digest
 
 
 class CallRole(StrEnum):
@@ -414,8 +420,18 @@ def record_time(record: Mapping[str, JsonValue], field: str) -> int | float | No
     read = stated_time(record.get(field))
     if read is None or not declares_nanoseconds(record):
         return read
+    return _in_seconds(read)
+
+
+def _in_seconds(nanoseconds: int | float) -> int | float | None:
+    """A declared nanosecond count as unix seconds, by §3.1's one division.
+
+    `None` for a count no float holds once divided -- a time §3.1 does not
+    read. Shared by `record_time` and a span event's `timeUnixNano`
+    (`span_events`), so the two readings of a declared unit cannot drift.
+    """
     try:
-        return _finite(read / _NANOSECONDS_PER_SECOND)
+        return _finite(nanoseconds / _NANOSECONDS_PER_SECOND)
     except OverflowError:
         return None
 
@@ -640,6 +656,14 @@ def envelope_keys(record: JsonValue) -> frozenset[str]:
         and _dropped_count(record[DROPPED_ATTRIBUTES_KEY]) is not None
     ):
         keys.add(DROPPED_ATTRIBUTES_KEY)
+    # The span's events, where they are a list (or proto3's `null` default):
+    # each is then read by `span_events`, which names any entry it cannot
+    # read as `<record>.events[<i>]`. Anything else is no list of events and
+    # stays the unmapped `<record>.events` (batch T4).
+    if EVENTS_KEY in record and (
+        record[EVENTS_KEY] is None or isinstance(record[EVENTS_KEY], list)
+    ):
+        keys.add(EVENTS_KEY)
     return frozenset(keys)
 
 
@@ -672,6 +696,127 @@ def attributes_dropped(
             adapter=adapter,
         ),
     )
+
+
+#: OTLP's list of a span's events (`SPEC.md` §7), carried by the reader under
+#: its own name and verbatim, entries and their attribute lists unfolded.
+EVENTS_KEY = "events"
+
+#: The event name the OpenTelemetry API's `record_exception` writes, and the
+#: attributes it writes on it (`SPEC.md` §7). The SDK's convention rather than
+#: an instrumentor's, so it is read here, below the seam, for every dialect
+#: alike -- no adapter branches on it. Each pair is (attribute, `source` key).
+EXCEPTION_EVENT_NAME = "exception"
+EXCEPTION_ATTRIBUTES = (
+    ("exception.type", "type"),
+    ("exception.message", "message"),
+    ("exception.escaped", "escaped"),
+)
+
+
+def _event_time(entry: Mapping[str, JsonValue]) -> tuple[bool, int | float | None]:
+    """An event's `timeUnixNano` in unix seconds: (readable, value).
+
+    The field declares nanoseconds in its name, as a span's times do, so it
+    is read by `stated_time` and converted by `_in_seconds` -- T2's rule, the
+    one `record_time` applies (`SPEC.md` §3.1). Omitted or `null` is no time
+    stated, `None`; a value §3.1 does not read is not readable.
+    """
+    reported = entry.get("timeUnixNano")
+    if reported is None:
+        return True, None
+    read = stated_time(reported)
+    seconds = None if read is None else _in_seconds(read)
+    return seconds is not None, seconds
+
+
+def _event_diagnostic(
+    entry: JsonValue, index: int, adapter: str | None
+) -> Diagnostic | None:
+    """One event entry as its diagnostic, or `None` where it cannot be read."""
+    if not isinstance(entry, dict):
+        return None
+    name = entry.get("name", "")
+    if name is None:
+        name = ""
+    if not isinstance(name, str):
+        return None
+    readable, time = _event_time(entry)
+    if not readable:
+        return None
+    if name != EXCEPTION_EVENT_NAME:
+        return Diagnostic(
+            code=SPAN_EVENT,
+            message=(
+                f"the span states event {index}, {name!r}; the graph has no "
+                "field for a span event, so it is reported here and kept "
+                "verbatim in raw"
+            ),
+            level=DiagnosticLevel.INFO,
+            source={"name": name, "time": time},
+            adapter=adapter,
+        )
+    reported = entry.get("attributes")
+    attributes, unfolded = folded_attributes([] if reported is None else reported)
+    if unfolded or not isinstance(attributes, dict):
+        return None
+    source: dict[str, JsonValue] = {
+        key: attributes.get(attribute) for attribute, key in EXCEPTION_ATTRIBUTES
+    }
+    source["time"] = time
+    return Diagnostic(
+        code=EXCEPTION_EVENT,
+        message=(
+            f"the span states event {index}, an exception recorded by the "
+            f"OpenTelemetry API ({source['type']!r}); the graph has no field "
+            "for it, so it is reported here, its stacktrace kept verbatim in "
+            "raw with the whole event. Whether the span failed is its status"
+        ),
+        level=DiagnosticLevel.INFO,
+        source=source,
+        adapter=adapter,
+    )
+
+
+def span_events(
+    record: JsonValue, adapter: str | None
+) -> tuple[tuple[Diagnostic, ...], list[str]]:
+    """A span's OTLP events as `info` diagnostics, and the entries not read (§3.7).
+
+    Only a record the reader unpacked has OTLP events: in a flat file a key
+    named `events` is a key, and stays reported. Each event entry is one
+    diagnostic, in the order the span lists them: `exception_event` for the
+    OpenTelemetry API's `exception` event, `source: {type, message, escaped,
+    time}` -- the three `exception.*` attributes as the event states them,
+    `null` where it states none, and never `exception.stacktrace`, which stays
+    in `raw.source` with the whole event -- and `span_event`, `source: {name,
+    time}`, for any other. `time` is in unix seconds and kept as reported,
+    after the span's end or not. Level `info`: an event is a fact the
+    transport stated and the model has no field for, not a gap in the
+    mapping, and the level grades the report, never the trace -- a failure is
+    the node's `status`, where the telemetry put it.
+
+    An entry that is not an object, or names itself or states its time in a
+    rendering the reading cannot hold -- or an `exception` event whose
+    attributes do not fold (`folded_attributes`) -- is not read and is named
+    as `<record>.events[<i>]`, the second value, for the adapter's
+    `unmapped_attributes`. Made from the envelope rather than a dialect, so a
+    span no adapter claimed reports its events too, `adapter` `None`.
+    """
+    if not isinstance(record, Unpacked):
+        return (), []
+    reported = record.get(EVENTS_KEY)
+    if not isinstance(reported, list):
+        return (), []
+    diagnostics: list[Diagnostic] = []
+    unread: list[str] = []
+    for index, entry in enumerate(reported):
+        diagnostic = _event_diagnostic(entry, index, adapter)
+        if diagnostic is None:
+            unread.append(f"<record>.{EVENTS_KEY}[{index}]")
+        else:
+            diagnostics.append(diagnostic)
+    return tuple(diagnostics), unread
 
 
 def unclaimed_span(record: JsonValue, line_number: int | None = None) -> NormalizedSpan:
@@ -723,6 +868,7 @@ def unclaimed_span(record: JsonValue, line_number: int | None = None) -> Normali
                     source=record,
                 ),
                 *attributes_dropped(record, None),
+                *span_events(record, None)[0],
             ),
         )
     return NormalizedSpan(
@@ -751,5 +897,6 @@ def unclaimed_span(record: JsonValue, line_number: int | None = None) -> Normali
                 source=record,
             ),
             *attributes_dropped(record, None),
+            *span_events(record, None)[0],
         ),
     )

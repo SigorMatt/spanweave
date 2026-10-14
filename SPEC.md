@@ -667,6 +667,8 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
 | `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Batch T3 |
+| `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
+| `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
 are already preserved verbatim in `RawRecord`, and duplicating payload content
@@ -687,6 +689,15 @@ instead; a value that is not a count stays reported here as
 `<record>.droppedAttributesCount`, like any key read and not usable. A **flat**
 record declared no envelope, so the same names there are keys like any other,
 and are reported (batch T3, `OPEN_QUESTIONS.md` §21).
+
+**Nor are its events.** On an unpacked record, `events` is OTLP's list of the
+span's events, and each entry is reported as `exception_event` or
+`span_event` instead (§7, batch T4). An entry the reading cannot hold — not an
+object, a `name` that is not a string, a `timeUnixNano` §3.1 does not read, or
+an `exception` event whose attributes do not fold — is a key read and not
+usable, and is named `<record>.events[<i>]`, its place in *this span's* list,
+as a link entry is; an `events` value that is not a list (or `null`) is
+`<record>.events`. A flat record's `events` is a key like any other.
 
 The timestamps are not the only fields it holds for. A record's **identity
 fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain
@@ -778,7 +789,7 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; four carry an object, four carry nothing, and one carries something
+arrived as; six carry an object, four carry nothing, and one carries something
 the library computed rather than something it was given. Those three counts are
 measured from the table below by `tests/test_codes.py`, beside the count
 `CONTRACTS.md` states, so the next row added fails the build instead of ageing
@@ -796,6 +807,8 @@ this sentence.
 | `undecodable_bytes` | `null` — the offending fragment is a byte sequence, and JSON has no way to write one, so there is nothing of it to carry. The text that stands in its place survives where the record does: on the record itself, or on the `malformed_record` for a line that would not parse |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
 | `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
+| `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
+| `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -1926,6 +1939,30 @@ declares reaches `0.5`.
     attributes are missing and names none, which is a fact about the span,
     not a key nobody read. Zero says nothing. Any other value is not a count
     and stays an unmapped key.
+  - **`events` is carried verbatim and each event is reported** (batch T4,
+    `OPEN_QUESTIONS.md` §22, option 2). The reader renames nothing in it and
+    folds nothing: the list stays under its OTLP name, each entry as the
+    export wrote it, so `raw.source` holds every event — attributes,
+    stacktrace and all. Below the seam (`seam.span_events`) each entry of an
+    unpacked record's `events` becomes one `info` diagnostic on its node, in
+    the order the span lists them (§3.7). The event's `timeUnixNano` declares
+    nanoseconds in its name as the span's times do, so it is read by §3.1's
+    rule and converted to unix seconds by the same function (T2's rule), and
+    it is **kept as reported** even after the node's `ended_at` — an event
+    the instrumentor stamped after the span closed is what the export says,
+    and nothing is repaired. An event named `exception` is read by **the
+    OpenTelemetry API's own convention**: `record_exception` writes that
+    event with the attributes `exception.type`, `exception.message`,
+    `exception.escaped` and `exception.stacktrace`. That is the SDK's rule,
+    not an instrumentor's, and every dialect built on the SDK inherits it, so
+    it is read here — the one place no dialect is named — and no adapter
+    branches on it. Its attributes are folded by this reader's `attributes`
+    rule (above) and the first three are reported **as stated** — no value is
+    interpreted, so an `escaped` written as the string `"False"` is reported
+    as that string; `exception.stacktrace` is not copied into the
+    diagnostic, and stays in the record. Any other event reports its name and
+    time. Nothing about an event becomes a node field: whether the span
+    failed is its `status`, which the export states separately.
   - **`parentSpanId` is renamed like the other eight, empty string and all.**
     A root span's `parentSpanId` is a proto3 `bytes` field holding its default,
     which a marshaler may omit or may write as `""` — both are conformant, and

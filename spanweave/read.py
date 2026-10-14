@@ -745,6 +745,17 @@ def _attach_attributes(
         record[f"{key}_unfolded"] = unfolded
 
 
+def folded_attributes(reported: JsonValue) -> tuple[JsonValue, list[JsonValue]]:
+    """OTLP's `[{"key", "value"}]` attribute list folded by the reader's own rule.
+
+    The fold `SPEC.md` §7 states for a span's and a link's `attributes`, for
+    a caller below the seam that reads an attribute list the reader carried
+    verbatim -- a span event's (`seam.span_events`, batch T4) -- so the rule
+    is applied once, here, and cannot drift into a second copy.
+    """
+    return _folded_attributes(reported)
+
+
 def _folded_attributes(reported: JsonValue) -> tuple[JsonValue, list[JsonValue]]:
     """OTLP's `[{"key", "value"}]` list as an object, plus what would not fold.
 

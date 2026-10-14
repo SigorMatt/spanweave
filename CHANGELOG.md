@@ -568,6 +568,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **A span's events are reported, and an exception is one the graph can see**
+  (stranger's-trace series, T4; the zoo's S11, S17; `OPEN_QUESTIONS.md` §22,
+  option 2; `SPEC.md` §3.7, §7). On a record the reader unpacked from an
+  export, each OTLP span event is now an **`info`** diagnostic on its node
+  instead of part of one unmapped `<record>.events` key: the OpenTelemetry
+  API's `exception` event (`record_exception`) is the new code
+  **`exception_event`**, `source: {type, message, escaped, time}` — the
+  `exception.*` attributes as stated (Z5's `escaped` stays the string
+  `"False"`), never `exception.stacktrace`, which stays in `raw.source` — and
+  any other event is the new code **`span_event`**, `source: {name, time}`.
+  `time` is the event's `timeUnixNano` in unix seconds, kept as reported even
+  after the node's `ended_at`. The level grades the report, not the trace:
+  whether a span failed is still its `status`, and a caught exception on a
+  span whose status is unset is `info` like any event. A span no adapter
+  claimed reports its events too (`adapter` `null`); an entry that cannot be
+  read is named `<record>.events[<i>]` in `unmapped_attributes`; a flat
+  record's `events` is still an unmapped key. **Nothing serialized changes
+  shape** and `DiagnosticLevel` is unchanged; `tests/serialized_shape.json`
+  moves by the two codes' four lines. On the zoo, Z5 gains two
+  `exception_event` (the two failed `http_get` calls, `ConnectionError`) and
+  Z2 two `span_event` per capture (`First Token Stream Event`, each after its
+  span's end); no `unmapped_attributes` count moves.
+
 - **The OTLP envelope is not an unmapped attribute, and a dropped count is a
   diagnostic** (stranger's-trace series, T3; the zoo's S4, S7, S8, S10, and
   S6, S21 by the envelope; `OPEN_QUESTIONS.md` §21, option 3; `SPEC.md` §3.7,

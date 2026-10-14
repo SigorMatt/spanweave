@@ -76,6 +76,12 @@ class Census:
     #: Since batch T3: one per span whose export states a dropped-attribute
     #: count above zero. No report counts it -- the code did not exist.
     attributes_dropped: int
+    #: Since batch T4: one per OTLP span event the export states, by its
+    #: name -- `exception_event` for an `exception` event, `span_event` for any
+    #: other. No report counts either: the codes did not exist, and the
+    #: events were one unmapped `<record>.events` key, never the only one.
+    exception_event: int
+    span_event: int
 
 
 @dataclass(frozen=True)
@@ -153,6 +159,16 @@ def _capture(
 # every node also left a span key unmapped, so the count holds while each
 # diagnostic names four keys fewer. `attributes_dropped` is new with the code,
 # and only Z3's export states a count above zero.
+#
+# **Two more joined at batch T4: `exception_event` and `span_event`.** An OTLP
+# span's `events` were one unmapped `<record>.events` key; since T4 (`SPEC.md`
+# §3.7, §7; `OPEN_QUESTIONS.md` §22, option 2; `PROBES.md` S11, S17) each
+# event is an `info` diagnostic on its node and the key is no longer named.
+# Only Z2 and Z5 state events, and on neither was `<record>.events` the only
+# key a node left unmapped, so `unmapped_attributes` holds on both. Z2's two
+# `First Token Stream Event`s per capture (`-real`: one each in 0002 and 0003;
+# `-recorded`: two in 0001) are `span_event`s; Z5's two `exception` events,
+# one on each failed `http_get`, are `exception_event`s.
 _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     nodes=31,
     parent=30,
@@ -163,6 +179,8 @@ _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     timestamp_unit_suspect=0,  # report: 31; 0 since T2 (above)
     unmapped_attributes=31,  # the report's; each names four keys fewer since T3
     attributes_dropped=0,
+    exception_event=0,
+    span_event=0,
 )
 _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     nodes=23,
@@ -175,6 +193,9 @@ _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     # report: 23; 9 since T3 (above) -- 14 nodes reported only the envelope.
     unmapped_attributes=9,
     attributes_dropped=0,
+    exception_event=0,
+    # 2 since T4 (above): the two `First Token Stream Event`s.
+    span_event=2,
 )
 _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     nodes=102,
@@ -189,6 +210,8 @@ _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     unmapped_attributes=75,
     # 18 since T3: the spans whose `droppedAttributesCount` is above zero.
     attributes_dropped=18,
+    exception_event=0,
+    span_event=0,
 )
 _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     nodes=4,
@@ -200,6 +223,8 @@ _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
     unmapped_attributes=4,  # the report's; each names four keys fewer since T3
     attributes_dropped=0,
+    exception_event=0,
+    span_event=0,
 )
 # Z4's whole capture: the audit's four records plus the root span
 # `concierge.conversation`, which no adapter claims. Moved at batch T1, when an
@@ -228,6 +253,8 @@ _Z4_WHOLE = Census(
     # `unclaimed_record`, never `unmapped_attributes` (§6.1).
     unmapped_attributes=4,
     attributes_dropped=0,
+    exception_event=0,
+    span_event=0,
 )
 _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     nodes=4,
@@ -239,6 +266,9 @@ _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
     unmapped_attributes=4,  # the report's; each names four keys fewer since T3
     attributes_dropped=0,
+    # 2 since T4 (above): the two `ConnectionError`s, one per failed `http_get`.
+    exception_event=2,
+    span_event=0,
 )
 
 #: The instrumentation scopes the captures state (`Capture.scopes`).
@@ -349,6 +379,8 @@ CAPTURES: tuple[Capture, ...] = (
             timestamp_unit_suspect=0,  # report: 26; 0 since T2 (above)
             unmapped_attributes=26,  # the report's; four keys fewer since T3
             attributes_dropped=0,
+            exception_event=0,
+            span_event=0,
         ),
         _Z6_SCOPES,
     ),
@@ -366,6 +398,8 @@ CAPTURES: tuple[Capture, ...] = (
             timestamp_unit_suspect=0,  # report: 16; 0 since T2 (above)
             unmapped_attributes=16,  # the report's; four keys fewer since T3
             attributes_dropped=0,
+            exception_event=0,
+            span_event=0,
         ),
         _Z6_SCOPES,
     ),
@@ -424,6 +458,8 @@ def count(graph: spanweave.Graph) -> Census:
         timestamp_unit_suspect=codes["timestamp_unit_suspect"],
         unmapped_attributes=codes["unmapped_attributes"],
         attributes_dropped=codes["attributes_dropped"],
+        exception_event=codes["exception_event"],
+        span_event=codes["span_event"],
     )
 
 
