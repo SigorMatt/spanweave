@@ -431,24 +431,28 @@ neither is a payload spelling.
 ## 7. What the zoo saw unmapped, and how it reads
 
 The zoo (`SigorMatt/spanweave-zoo` at `7eb5b69`, copied byte for byte into
-`fixtures/zoo/`) is twelve captures of six agents built by implementers who
-knew nothing about this library, under stock instrumentation. Its `PROBES.md`
-left nine questions *to establish* about what the adapters map — S5, S6, S9,
-S14, S16, S17, S19, S20, S22. This section answers them. Each answer is a
-reading: the rendering is right, and why. None changes a rule.
+`fixtures/zoo/`) is a real and a recorded capture of each of the agents Z1–Z6,
+built by implementers who knew nothing about this library, under stock
+instrumentation (§7.4 counts them). Its `PROBES.md` left questions *to
+establish* about what the adapters map — S5, S6, S9, S14, S16, S17, S19, S20,
+S22. This section answers them. Each answer is a reading: the rendering is
+right, and why. None changes a rule.
 
 **Every table and number below is re-derived.** `tests/test_zoo_readings.py`
-parses §7.1 and §7.2 and holds them equal to what the adapters report over
-every record of every capture. It also re-derives §7.3's numbers. The
-per-capture counts it cites (`unknown`, `unpaired_call`, `temporal`) are
-`tests/zoo_census.py`'s, which `make conformance` re-derives.
+parses §7.1, §7.2 and §7.4 and holds them equal to what the adapters report
+over every record of every capture, each disposition in full. Every number
+§7 states is a row of §7.4: the prose says "nested" and cites the row, and
+the test fails if the prose states a number of its own. The per-capture counts
+§7.4 shares with `tests/zoo_census.py` (`unknown`, `unpaired_call`,
+`temporal`) are the census's too, which `make conformance` re-derives.
 
 How to read the tables. A key's numeric indices are folded to `<n>`. *Projects*
 names the zoo projects (Z1–Z6) on which some node reports the key. *Reported,
 not mapped* means the key stays verbatim in `raw.source`, and the node's
 `unmapped_attributes` diagnostic names it (`SPEC.md` §3.7). *Mapped at T3/T4*
 means the audit saw the key unmapped, and since that batch no diagnostic names
-it. All six such keys are the OTLP envelope's, read in the seam.
+it. Every such key is the OTLP envelope's, read in the seam (§7.4 counts
+them).
 
 No field holds most of these keys, and that is the reason for most of the
 dispositions. A node normalizes a model or tool name (`operation`), token
@@ -510,7 +514,7 @@ and CrewAI OpenInference instrumentors (`PROBES.md` S7).
 
 ### 7.2 `otel_genai`
 
-Z4: the OpenTelemetry GenAI handler's four `llm` spans (`PROBES.md` S4). Z4's
+Z4: the OpenTelemetry GenAI handler's `llm` spans (`PROBES.md` S4; §7.4). Z4's
 root span is claimed by no adapter. It reports `unclaimed_record` and never
 `unmapped_attributes` (`SPEC.md` §6.1; S1), so it is in neither table.
 
@@ -530,11 +534,11 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
 
 - **A node's instrumentation scope is read from its envelope, never from
   `meta`** (S6, S21). `envelope(node.raw.source).scope.get("scope")` gives the
-  scope that wrote the span. Scope is per node, not per graph: Z3's one graph
-  holds `openinference.instrumentation.openai_agents` and
-  `openinference.instrumentation.openai`. Z4 and Z6 also hold two scopes each
-  (`tests/zoo_census.py`, `Capture.scopes`). `Meta` carries no scope (batch T3,
-  option 3).
+  scope that wrote the span. Scope is per node, not per graph: Z3's graph holds
+  `openinference.instrumentation.openai_agents` and
+  `openinference.instrumentation.openai`. Z4's and Z6's graphs each hold more
+  than one scope too (§7.4; `tests/zoo_census.py`, `Capture.scopes`). `Meta`
+  carries no scope (batch T3, option 3).
 
   **The read works in process only.** It works on a graph `build` or a
   `Builder` returns, because `raw.source` there is the record the reader
@@ -544,17 +548,17 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   `raw.source["scope_spans"]["scope"]` and `raw.source["resource_spans"]`.
   These are the objects `Envelope.scope` and `Envelope.resource` were. The
   round trip itself is not part of `envelope()`'s contract.
-- **Two instrumentors on one client** (S6). Z3 runs openai-agents and the
-  OpenAI client together. Each model call there gives two `llm` nodes, one
-  nested in the other: an `openai_agents` `generation` is the parent of an
-  `openai` `ChatCompletion`, 25 per capture. Z6 runs CrewAI and the OpenAI
-  client, and every `llm` node is the OpenAI client's: no `llm` node has an
-  `llm` parent. In neither case does spanweave state any relation between the
-  two nodes beyond the `parent` edge the records carry. It does not say "one
-  call", because no record says so.
-- **One instrumentor, two `llm` nodes, one nested in the other** (S17). Z2's
-  inner `astream_chat` is the only child of the outer one, 2 per capture, and
-  both ends come from one scope, `llama_index`. This is not S6's case of two
+- **Instrumentors stacked on one client** (S6). Z3 runs openai-agents and the
+  OpenAI client together. Each model call there gives an `llm` node nested in
+  another: an `openai_agents` `generation` is the parent of an `openai`
+  `ChatCompletion` (§7.4). Z6 runs CrewAI and the OpenAI client, and every
+  `llm` node is the OpenAI client's (§7.4 counts the nesting there). In neither
+  case does spanweave state any relation between the nested nodes beyond the
+  `parent` edge the records carry. It does not say "one call", because no
+  record says so.
+- **One instrumentor, an `llm` node nested in another** (S17). Z2's inner
+  `astream_chat` is the only child of an outer one (§7.4), and both ends come
+  from one scope, `llama_index`. This is not S6's case of stacked
   instrumentors. The reading is the same: the `parent` edge the records state,
   and nothing more.
 - **No tool span in the zoo records a call id** (S9, S5). The LangChain (Z1,
@@ -562,33 +566,61 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   tool spans with no call-id key. Pairing is by call id and never by name or
   proximity (`SPEC.md` §4.4), so no zoo graph has a `call_result` edge. Every
   call an `llm` node requests is an `unpaired_call`, which is the correct
-  rendering (Z1 1, Z2 3, Z3 48, Z6 8 real and 4 recorded; `tests/zoo_census.py`).
-  Pairing by name would hide this. On Z6 it would also need a spelling
-  `tool.name` does not share (`Delegate work to coworker` against
-  `delegate_work_to_coworker`, S9).
+  rendering (per capture in §7.4; `tests/zoo_census.py`). Pairing by name
+  would hide this. On Z6 it would also need a spelling `tool.name` does not
+  share (`Delegate work to coworker` against `delegate_work_to_coworker`, S9).
 - **Z4's `unpaired_call`** (S5). It does not follow from S1. The GenAI handler
   exports no tool span at all, so the `book_table` call the second `llm` node
   requests is fulfilled by no span in the input. With the root span built
-  (batch T1), the count is still 1 (`tests/zoo_census.py`, `_Z4_WHOLE`).
+  (batch T1), the count is unchanged (§7.4; `tests/zoo_census.py`,
+  `_Z4_WHOLE`).
 - **`PROMPT`, `RERANKER`, `GUARDRAIL` and `EVALUATOR` are `unknown` by design**
   (S14). `NodeKind` is closed (`SPEC.md` §3.2). Each of these becomes an
   `unknown` node with an `unknown_span_kind` diagnostic, and the dialect's
-  string is kept as `attributes.reported_kind`. Z1's two `ChatPromptTemplate`
-  nodes are the zoo's case (`unknown` 2; `tests/zoo_census.py`).
+  string is kept as `attributes.reported_kind`. Z1's `ChatPromptTemplate`
+  nodes, each reporting `PROMPT`, are the zoo's case (§7.4;
+  `tests/zoo_census.py`).
 - **`graph.node.id` and `graph.node.parent_id` state a sequence, not
   containment** (S19). They are reported, not mapped (§7.1).
 - **An `llm` node carries no agent identity** (S20). Its normalized attributes
-  are its model or nothing (Z3's nine model-less steps, S10;
-  `tests/test_zoo.py`). An agent's name
-  is never normalized (`SPEC.md` §3.1, `OPEN_QUESTIONS.md` §15). On Z6, a
-  coworker's `ChatCompletion` differs from the delegator's in two ways: its
-  `parent` edge to the delegation `tool` node, and its messages, which sit
-  verbatim in `raw.source`.
+  are its model or nothing (Z3's model-less steps, S10; §7.4,
+  `tests/test_zoo.py`). An agent's name is never normalized (`SPEC.md` §3.1,
+  `OPEN_QUESTIONS.md` §15). On Z6, a coworker's `ChatCompletion` differs from
+  the delegator's in its `parent` edge to the delegation `tool` node, and in
+  its messages, which sit verbatim in `raw.source`.
 - **Z2's fan-out is ordered by start** (S16). This is right. Each `acall` tool
   node is the only child of its own `call_tool` chain, and §4.3 orders the
   `call_tool` siblings by `started_at`. That is an order and not a precedence:
-  record order and end order are not used (`temporal` 14;
-  `tests/zoo_census.py`).
-- **Z6's real and recorded captures are two shapes of one crew** (S22). This is
+  record order and end order are not used (§7.4; `tests/zoo_census.py`).
+- **Z6's real and recorded captures are shapes of one crew** (S22). This is
   right. Each graph is what its run exported, and the census holds both
   (`tests/zoo_census.py`).
+
+### 7.4 The numbers
+
+Every number this section states, and where it holds. A project (Z3) means
+every capture of it; a capture (Z6 real) is named where a project's captures
+differ. Each row is re-derived from the zoo by `tests/test_zoo_readings.py`,
+and a row added, dropped or changed fails there.
+
+| Number | Where | Value |
+|---|---|---|
+| captures | the zoo | 12 |
+| agents | the zoo | 6 |
+| OTLP envelope keys mapped at T3/T4 | the zoo | 6 |
+| `llm` nodes | Z4 | 4 |
+| scopes | Z3 | 2 |
+| scopes | Z4 | 2 |
+| scopes | Z6 | 2 |
+| `llm` nodes with an `llm` parent | Z2 | 2 |
+| `llm` nodes with an `llm` parent | Z3 | 25 |
+| `llm` nodes with an `llm` parent | Z6 | 0 |
+| `unpaired_call` | Z1 | 1 |
+| `unpaired_call` | Z2 | 3 |
+| `unpaired_call` | Z3 | 48 |
+| `unpaired_call` | Z4 | 1 |
+| `unpaired_call` | Z6 real | 8 |
+| `unpaired_call` | Z6 recorded | 4 |
+| `unknown` nodes | Z1 | 2 |
+| model-less `llm` nodes | Z3 | 9 |
+| `temporal` edges | Z2 | 14 |

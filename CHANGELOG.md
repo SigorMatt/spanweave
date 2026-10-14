@@ -15,6 +15,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Every number `ADAPTERS.md` §7 states is parsed, every disposition is
+  compared in full, and the readings' named facts are pinned** (decisions
+  2026-10-14g, R-18, R-19). No behaviour change. §7 said every table and
+  number in it is re-derived, but the test parsed only the §7.1/§7.2 tables,
+  checked only the first words of each disposition, and kept §7.3's numbers
+  as its own constants: each of R-18's edits to §7.3's numbers, and a reason
+  or a batch rewritten in a disposition, left the suite green. §7.3's numbers now
+  sit in a new §7.4 table that `tests/test_zoo_readings.py` parses and
+  re-derives from the zoo row by row; §7's prose states none of its own
+  ("nested", not the count), and
+  `test_adapters_md_s_prose_states_no_number_of_its_own` fails if it does.
+  Each disposition is compared whole against `DISPOSITIONS`. The corpus
+  numbers this file cites — the zoo's captures, its agents, the OTLP envelope
+  keys T3/T4 took out — are the test's `CORPUS`, derived from the zoo, and
+  `test_the_changelog_states_the_corpus_numbers_the_test_holds` holds every
+  place this file spells them to it. R-19's facts, each true and asserted by
+  nothing, are each a test over the zoo graphs: Z1's `unknown` nodes are
+  `ChatPromptTemplate`s reporting `PROMPT`; Z3 nests a `generation` over a
+  `ChatCompletion`, Z2 an `astream_chat` in an `astream_chat`; every Z6 `llm`
+  node is the OpenAI client's, and a coworker's sits under the delegation
+  tool; Z6 spells the delegate tool two ways; Z4's second `llm` node is the
+  one that requests `book_table`; each Z2 `acall` is the only child of its
+  `call_tool`. §7.3's S14 heading is parsed for the kinds that stay `unknown`.
 - **An `orphan_siblings` conformance scenario** (decisions 2026-10-14g,
   R-17). No behaviour change. `orphan_parent` has one node, so no scenario
   held an orphan beside anything it could be ordered against, and SPEC §4.3's
