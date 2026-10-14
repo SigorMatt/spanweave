@@ -85,6 +85,13 @@ MALFORMED_RECORD = "malformed_record"
 # own input (`SPEC.md` §3.7, §7).
 UNDECODABLE_BYTES = "undecodable_bytes"
 
+# The OTLP export states that some of a span's attributes were dropped before
+# export -- `droppedAttributesCount` above zero -- and names none of them. A
+# fact about the span the transport stated, not a key an adapter left unread:
+# `source` is `{"count": n}`, and nothing missing is looked for elsewhere
+# (`SPEC.md` §3.7, §7; batch T3).
+ATTRIBUTES_DROPPED = "attributes_dropped"
+
 # No registered adapter claimed this record, so nothing read it: it is kept
 # as an `unknown` node carrying the record verbatim, with no adapter on its
 # provenance (`SPEC.md` §6.1). The honest report of "you are missing an
@@ -99,6 +106,7 @@ ORDERING_CYCLE = "ordering_cycle"
 
 #: Every code the library emits. A test asserts this matches `SPEC.md` §3.7.
 CODES = (
+    ATTRIBUTES_DROPPED,
     DUPLICATE_RECORD,
     DUPLICATE_SOURCE_ID,
     MALFORMED_RECORD,

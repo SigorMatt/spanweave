@@ -239,3 +239,194 @@ def test_an_unpacked_record_and_an_equal_flat_one_are_two_records_in_either_orde
     ids = sorted(n.id for n in graph.nodes() if n.kind is NodeKind.UNKNOWN)
     assert len(ids) == 2
     assert "s9" in ids
+
+
+# --- The envelope's levels, and what is not an unmapped attribute (batch T3) --
+#
+# `OPEN_QUESTIONS.md` §21, option 3; `SPEC.md` §3.7, §7; `PROBES.md` S4, S6,
+# S7, S8, S10, S21. `flags`, `kind`, `resource_spans` and `scope_spans` are the
+# envelope, not span attributes: they stay verbatim in `raw.source` and are not
+# reported. A dropped-attribute count above zero is `attributes_dropped`.
+
+_ATTRIBUTES = {
+    "openinference": [
+        {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}}
+    ],
+    "otel_genai": [{"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}],
+}
+_RESOURCE = {"attributes": [{"key": "service.name", "value": {"stringValue": "svc"}}]}
+_SCOPE = {"name": "an.instrumentation", "version": "1.2"}
+
+
+def _full_export(**span_keys: object) -> bytes:
+    """A span carrying all four envelope keys, under a resource and a scope."""
+    span = {
+        "traceId": "t1",
+        "spanId": "s1",
+        "name": "n",
+        "startTimeUnixNano": "1700000000000000000",
+        "endTimeUnixNano": "1700000001000000000",
+        "kind": 3,
+        "flags": 256,
+        **span_keys,
+    }
+    return json.dumps(
+        {
+            "resourceSpans": [
+                {
+                    "resource": _RESOURCE,
+                    "schemaUrl": "https://example.invalid/r",
+                    "scopeSpans": [{"scope": _SCOPE, "spans": [span]}],
+                }
+            ]
+        }
+    ).encode()
+
+
+def _built(data: bytes) -> spanweave.Graph:
+    return graph_from_records(list(spanweave.read_records(data).records))
+
+
+def _unmapped(graph: spanweave.Graph) -> list[str]:
+    return sorted(
+        key
+        for d in graph.diagnostics
+        if d.code == "unmapped_attributes"
+        for key in d.source
+    )
+
+
+def test_the_envelope_carries_the_resource_and_scope_levels_as_the_record_does():
+    (record,) = spanweave.read_records(_full_export()).records
+    stated = spanweave.envelope(record)
+    assert stated.resource == {
+        "resource": _RESOURCE,
+        "schemaUrl": "https://example.invalid/r",
+    }
+    assert stated.scope == {"scope": _SCOPE}
+    assert stated.resource == record["resource_spans"]
+    assert stated.scope == record["scope_spans"]
+
+
+def test_a_level_the_export_omits_is_an_empty_object():
+    (record,) = spanweave.read_records(
+        _export({"traceId": "t1", "spanId": "s1"})
+    ).records
+    assert "resource_spans" not in record
+    stated = spanweave.envelope(record)
+    assert (stated.resource, stated.scope) == ({}, {})
+
+
+def test_a_level_the_envelope_cannot_hold_raises():
+    (record,) = spanweave.read_records(
+        _export({"traceId": "t1", "spanId": "s1"})
+    ).records
+    record["scope_spans"] = ["not", "a", "level"]
+    with pytest.raises(spanweave.EnvelopeError) as raised:
+        spanweave.envelope(record)
+    assert "scope_spans" in str(raised.value)
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_the_four_envelope_keys_are_not_unmapped_attributes(dialect):
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect]))
+    (node,) = graph.nodes()
+    assert node.kind is not NodeKind.UNKNOWN
+    assert _unmapped(graph) == []
+    assert [d.code for d in graph.diagnostics] == []
+    for key in ("flags", "kind", "resource_spans", "scope_spans"):
+        assert key in node.raw.source, key
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_a_dropped_attribute_count_is_a_diagnostic_and_not_an_unmapped_key(dialect):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], droppedAttributesCount=7)
+    )
+    (node,) = graph.nodes()
+    assert _unmapped(graph) == []
+    (dropped,) = [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+    assert dropped.level == "warning"
+    assert dropped.source == {"count": 7}
+    assert dropped.node_id == node.id
+    assert dropped.adapter == node.provenance.adapter_id
+    assert node.raw.source["droppedAttributesCount"] == 7
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_a_count_written_as_a_decimal_string_is_read_as_proto3_json_allows(dialect):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], droppedAttributesCount="7")
+    )
+    assert _unmapped(graph) == []
+    (dropped,) = [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+    assert dropped.source == {"count": 7}
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize("count", [0, "0", None])
+def test_a_dropped_count_of_zero_is_read_and_says_nothing(dialect, count):
+    # `null` is proto3 JSON's default for any field, so it reads as zero.
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], droppedAttributesCount=count)
+    )
+    assert graph.diagnostics == ()
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize(
+    "count", ["seven", "-1", "", " 7", -1, 1.5, True, 2**32, str(2**32), [7]]
+)
+def test_a_dropped_count_that_is_not_a_count_stays_an_unmapped_key(dialect, count):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], droppedAttributesCount=count)
+    )
+    assert _unmapped(graph) == ["<record>.droppedAttributesCount"]
+    assert not [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+
+
+def test_a_flat_record_s_keys_of_the_same_names_are_still_unmapped():
+    """No envelope was declared, so `kind` in a flat file is a key, not OTLP's."""
+    flat = {
+        "trace_id": "t1",
+        "span_id": "s1",
+        "kind": 3,
+        "flags": 256,
+        "resource_spans": {},
+        "scope_spans": {},
+        "droppedAttributesCount": 7,
+        "attributes": {"openinference.span.kind": "LLM"},
+    }
+    graph = graph_from_records([flat])
+    assert _unmapped(graph) == [
+        "<record>.droppedAttributesCount",
+        "<record>.flags",
+        "<record>.kind",
+        "<record>.resource_spans",
+        "<record>.scope_spans",
+    ]
+    assert not [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+
+
+def test_an_unclaimed_span_s_dropped_count_is_reported_with_no_adapter():
+    (unclaimed,) = spanweave.read_records(
+        _full_export(
+            attributes=[{"key": "x", "value": {"stringValue": "y"}}],
+            droppedAttributesCount=4,
+        )
+    ).records
+    claimed = {
+        "trace_id": "t1",
+        "span_id": "s2",
+        "start_time": 1700000000.0,
+        "attributes": {"openinference.span.kind": "LLM"},
+    }
+    graph = graph_from_records([claimed, unclaimed])
+    (node,) = [n for n in graph.nodes() if n.kind is NodeKind.UNKNOWN]
+    assert node.id == "s1"
+    codes = sorted(d.code for d in graph.diagnostics if d.node_id == node.id)
+    assert codes == ["attributes_dropped", "unclaimed_record"]
+    (dropped,) = [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+    assert dropped.source == {"count": 4}
+    assert dropped.adapter is None
+    assert dropped.node_id == node.id

@@ -568,6 +568,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The OTLP envelope is not an unmapped attribute, and a dropped count is a
+  diagnostic** (stranger's-trace series, T3; the zoo's S4, S7, S8, S10, and
+  S6, S21 by the envelope; `OPEN_QUESTIONS.md` §21, option 3; `SPEC.md` §3.7,
+  §7). On a record the reader unpacked from an export, `flags`, `kind`,
+  `resource_spans` and `scope_spans` are the transport's: they stay verbatim
+  in `raw.source` and `unmapped_attributes` no longer names them (on a flat
+  record the same names are still keys, and still reported). A
+  `droppedAttributesCount` above zero is the new diagnostic code
+  **`attributes_dropped`** (warning, `source: {"count": n}`, record-scoped,
+  also on a span no adapter claimed) instead of an unmapped
+  `<record>.droppedAttributesCount`; zero or `null` says nothing, and a value
+  that is not a `uint32` stays an unmapped key. `spanweave.Envelope` gains
+  `resource` and `scope`: the level objects the record carries, `{}` where the
+  export omits one, so a consumer reads which instrumentation scope wrote a
+  span without knowing the record shape. **Nothing serialized changes shape**:
+  no field, no `PASSTHROUGH` path; `tests/serialized_shape.json` moves by the
+  new code's two lines, as `undecodable_bytes` did. On the zoo,
+  `unmapped_attributes` goes Z3 102 → 75 and Z2 23 → 9 (nodes that reported
+  only the envelope lose the diagnostic), every other capture's diagnostics
+  each name four keys fewer, and Z3 gains 18 `attributes_dropped`; the census
+  now holds both counts and each capture's scope names (Z3, Z4 and Z6 state
+  two). A consumer counting `unmapped_attributes` sees fewer.
+
 - **A declared unit is not a suspicion: an OTLP time is read in seconds**
   (stranger's-trace series, T2; the zoo's S3; `SPEC.md` §3.1, §3.7, §5, §7).
   `startTimeUnixNano` / `endTimeUnixNano` declare nanoseconds in their name,

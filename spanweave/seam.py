@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from spanweave import jsoncodec
-from spanweave.diagnostics import UNCLAIMED_RECORD
+from spanweave.diagnostics import ATTRIBUTES_DROPPED, UNCLAIMED_RECORD
 from spanweave.errors import EnvelopeError
 from spanweave.model import (
     Diagnostic,
@@ -495,6 +495,16 @@ class Envelope:
     ended_at: int | float | None
     status: Status
     status_note: str | None
+    #: The record's `ResourceSpans` level without its `scopeSpans`, and its
+    #: `ScopeSpans` level without its `spans` -- the objects the reader
+    #: attached as `resource_spans` and `scope_spans`, as the record carries
+    #: them (the same objects, not copies, as `RawRecord.source` is the
+    #: record), and `{}` where the export states nothing at that level, as
+    #: proto3 JSON omits a default. Per span, not per graph: one export can
+    #: carry two instrumentation scopes (batch T3, `OPEN_QUESTIONS.md` §21).
+    #: Excluded from the hash, as a JSON object cannot be hashed.
+    resource: dict[str, JsonValue] = field(hash=False)
+    scope: dict[str, JsonValue] = field(hash=False)
 
 
 def envelope(record: JsonValue) -> Envelope:
@@ -555,6 +565,12 @@ def envelope(record: JsonValue) -> Envelope:
         if isinstance(reported_status, str)
         else Status.UNSET
     )
+    levels: list[dict[str, JsonValue]] = []
+    for key in ("resource_spans", "scope_spans"):
+        level = record.get(key, {})
+        if not isinstance(level, dict):
+            raise EnvelopeError(f"the envelope's {key} is not an object")
+        levels.append(level)
     return Envelope(
         trace_id=ids["trace_id"],
         span_id=ids["span_id"],
@@ -564,6 +580,97 @@ def envelope(record: JsonValue) -> Envelope:
         ended_at=times[1],
         status=status,
         status_note=note,
+        resource=levels[0],
+        scope=levels[1],
+    )
+
+
+#: The keys of an unpacked record that are its OTLP envelope rather than the
+#: span's attributes (`SPEC.md` §7): the span's `flags` and `kind`, carried
+#: under their own OTLP names, and the two levels the reader attached. They
+#: stay verbatim in `raw.source`, and `unmapped_attributes` does not name them
+#: -- every span of every export carries them, so naming them reported the
+#: transport, once per span, rather than anything an adapter left unread.
+ENVELOPE_LEVEL_KEYS = ("flags", "kind", "resource_spans", "scope_spans")
+
+#: OTLP's count of the span's attributes dropped before export (`SPEC.md` §7).
+DROPPED_ATTRIBUTES_KEY = "droppedAttributesCount"
+
+#: A `uint32` in proto3 JSON's string rendering: decimal digits, no sign.
+_UINT32_STRING = re.compile(r"[0-9]{1,10}")
+_UINT32_MAX = 2**32 - 1
+
+
+def _dropped_count(reported: JsonValue) -> int | None:
+    """`droppedAttributesCount` as the `uint32` it is, else `None`.
+
+    proto3 JSON writes a `uint32` as a number and accepts it as a decimal
+    string; `null` is its default, zero. Anything else -- a sign, a fraction,
+    a boolean, a value no `uint32` holds -- is not a count, and is not read.
+    """
+    if reported is None:
+        return 0
+    if isinstance(reported, bool):
+        return None
+    if isinstance(reported, str):
+        if _UINT32_STRING.fullmatch(reported) is None:
+            return None
+        reported = int(reported)
+    if isinstance(reported, int) and 0 <= reported <= _UINT32_MAX:
+        return reported
+    return None
+
+
+def envelope_keys(record: JsonValue) -> frozenset[str]:
+    """The top-level keys of `record` that its OTLP envelope stated and were read.
+
+    Only a record the reader unpacked has an envelope (`envelope`): in a flat
+    file a key named `kind` is a key, and stays reported. On an unpacked
+    record these are the four `ENVELOPE_LEVEL_KEYS` it carries, and
+    `droppedAttributesCount` where it reads as a count -- which
+    `attributes_dropped` then reports, so the count is acted on rather than
+    left unread. A count that does not read stays an unmapped key (`SPEC.md`
+    §3.7: a key read and not usable is reported).
+    """
+    if not isinstance(record, Unpacked):
+        return frozenset()
+    keys = {key for key in ENVELOPE_LEVEL_KEYS if key in record}
+    if (
+        DROPPED_ATTRIBUTES_KEY in record
+        and _dropped_count(record[DROPPED_ATTRIBUTES_KEY]) is not None
+    ):
+        keys.add(DROPPED_ATTRIBUTES_KEY)
+    return frozenset(keys)
+
+
+def attributes_dropped(
+    record: JsonValue, adapter: str | None
+) -> tuple[Diagnostic, ...]:
+    """`attributes_dropped` where the export says attributes are missing (§3.7).
+
+    The export states how many of the span's attributes it dropped and names
+    none, so the report is the count, `source: {"count": n}`, and nothing is
+    reconstructed: no attribute absent from the record -- a model name, say --
+    is looked for anywhere else. Made from the envelope rather than from any
+    dialect, so a claimed span and an unclaimed one report it alike; `adapter`
+    is whoever read the record, `None` where nobody did (§6.1).
+    """
+    if not isinstance(record, Unpacked) or DROPPED_ATTRIBUTES_KEY not in record:
+        return ()
+    count = _dropped_count(record[DROPPED_ATTRIBUTES_KEY])
+    if count is None or count == 0:
+        return ()
+    return (
+        Diagnostic(
+            code=ATTRIBUTES_DROPPED,
+            message=(
+                f"the export states that {count} of this span's attributes "
+                "were dropped before export, and names none of them; what "
+                "the span carries is all there is to read"
+            ),
+            source={"count": count},
+            adapter=adapter,
+        ),
     )
 
 
@@ -615,6 +722,7 @@ def unclaimed_span(record: JsonValue, line_number: int | None = None) -> Normali
                     ),
                     source=record,
                 ),
+                *attributes_dropped(record, None),
             ),
         )
     return NormalizedSpan(
@@ -642,5 +750,6 @@ def unclaimed_span(record: JsonValue, line_number: int | None = None) -> Normali
                 ),
                 source=record,
             ),
+            *attributes_dropped(record, None),
         ),
     )

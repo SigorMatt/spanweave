@@ -46,6 +46,8 @@ from spanweave.read import record_digest
 from spanweave.seam import (
     CallRole,
     NormalizedSpan,
+    attributes_dropped,
+    envelope_keys,
     parent_ref,
     record_time,
     span_links,
@@ -236,9 +238,18 @@ def _parse_record(index: int, record: JsonValue) -> NormalizedSpan:
     # (`SPEC.md` §3.6). An entry that names none is no link, and is reported.
     links, unread_links = span_links(record)
 
+    # The OTLP envelope's own keys are the transport's, not unmapped span
+    # keys, and a dropped-attribute count is reported as what it is
+    # (`SPEC.md` §3.7, §7).
+    stated_by_envelope = envelope_keys(record)
+    diagnostics.extend(attributes_dropped(record, ADAPTER_ID))
     unmapped = sorted(
         [str(key) for key in attributes if str(key) not in consumed]
-        + [f"<record>.{key}" for key in record if key not in KNOWN_RECORD_KEYS]
+        + [
+            f"<record>.{key}"
+            for key in record
+            if key not in KNOWN_RECORD_KEYS and key not in stated_by_envelope
+        ]
         + unreadable_times
         + unreadable_fields(record)
         + unread_links

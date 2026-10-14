@@ -666,6 +666,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
+| `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Batch T3 |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
 are already preserved verbatim in `RawRecord`, and duplicating payload content
@@ -674,6 +675,18 @@ names, and also record fields, written `<record>.<field>`: a field the adapter
 recognizes but cannot read — a `start_time` in a rendering §3.1 does not
 accept — is *not* normalized, and saying so here is what keeps it from
 vanishing between the raw record and a `None`.
+
+**A record's OTLP envelope is not an unmapped attribute.** On a record the
+reader unpacked from an export (§7), `flags`, `kind`, `resource_spans` and
+`scope_spans` are the transport's, not the span's: they stay verbatim in
+`raw.source` and are not named here. Every span of every export carries them,
+so naming them reported the transport once per span — on the zoo's Z3 capture,
+27 of 102 `unmapped_attributes` named nothing else (`PROBES.md` S7). Its
+`droppedAttributesCount`, read as a count, is reported as `attributes_dropped`
+instead; a value that is not a count stays reported here as
+`<record>.droppedAttributesCount`, like any key read and not usable. A **flat**
+record declared no envelope, so the same names there are keys like any other,
+and are reported (batch T3, `OPEN_QUESTIONS.md` §21).
 
 The timestamps are not the only fields it holds for. A record's **identity
 fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain
@@ -765,7 +778,7 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; three carry an object, four carry nothing, and one carries something
+arrived as; four carry an object, four carry nothing, and one carries something
 the library computed rather than something it was given. Those three counts are
 measured from the table below by `tests/test_codes.py`, beside the count
 `CONTRACTS.md` states, so the next row added fails the build instead of ageing
@@ -782,6 +795,7 @@ this sentence.
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
 | `undecodable_bytes` | `null` — the offending fragment is a byte sequence, and JSON has no way to write one, so there is nothing of it to carry. The text that stands in its place survives where the record does: on the record itself, or on the `malformed_record` for a line that would not parse |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
+| `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -1900,10 +1914,18 @@ declares reaches `0.5`.
     `parentSpanId`, `name`, `startTimeUnixNano`, `endTimeUnixNano`,
     `status.code`, `status.message`, `attributes` — one of those is folded, and
     **every other key of the span is carried under its own OTLP name**, where
-    `unmapped_attributes` names it. `kind` is one of those: no dialect reads an
-    OTLP `SpanKind`, and mapping one onto a `NodeKind` would be an
-    interpretation made below the adapter seam, by the one layer forbidden to
-    have one.
+    `unmapped_attributes` names it — except the span's `flags` and `kind`,
+    which are the envelope and are not named there (§3.7, batch T3). `kind`
+    is carried and read by nothing: no dialect reads an OTLP `SpanKind`, and
+    mapping one onto a `NodeKind` would be an interpretation made below the
+    adapter seam, by the one layer forbidden to have one.
+  - **`droppedAttributesCount` is read as the count it is**: a `uint32`,
+    which proto3 JSON writes as a number and accepts as a decimal string, and
+    whose `null` is its default, zero. Above zero it is reported as
+    `attributes_dropped` (§3.7, `source: {"count": n}`) — the export says
+    attributes are missing and names none, which is a fact about the span,
+    not a key nobody read. Zero says nothing. Any other value is not a count
+    and stays an unmapped key.
   - **`parentSpanId` is renamed like the other eight, empty string and all.**
     A root span's `parentSpanId` is a proto3 `bytes` field holding its default,
     which a marshaler may omit or may write as `""` — both are conformant, and
@@ -1965,7 +1987,13 @@ declares reaches `0.5`.
     is omitted when that level carries nothing but its children. They are
     **not** merged into the span's `attributes`: that would fabricate
     attributes no instrumentor wrote, and a resource attribute could change
-    which adapter claims the span (§6.1).
+    which adapter claims the span (§6.1). Nor are they reported, per node or
+    per graph: they are the envelope (§3.7), and which instrumentation scope
+    wrote a span is read per span from `Envelope.scope` (below) — one export
+    can carry two scopes, as the zoo's Z3 does
+    (`openinference.instrumentation.openai_agents` and
+    `openinference.instrumentation.openai`), so it is not a fact about the
+    graph (`OPEN_QUESTIONS.md` §21, option 3).
   - **An envelope level with no spans is not a discard**: it is yielded as a
     record of its own and becomes an `unknown` node carrying it, exactly as any
     other record the library cannot read as a span does.
@@ -1987,14 +2015,24 @@ declares reaches `0.5`.
       ended_at:    int | float | None
       status:      Status            # the reader's name, else UNSET (above)
       status_note: str | None        # status.message, absent -> None
+      resource:    dict              # resource_spans as carried; absent -> {}
+      scope:       dict              # scope_spans as carried; absent -> {}
     ```
+
+    `resource` and `scope` are the level objects the record carries, the same
+    objects `raw.source` holds, and `{}` where the export states nothing at
+    that level, as proto3 JSON omits a default. A consumer reads a span's
+    scope as `envelope(record).scope.get("scope")` without knowing where the
+    reader put it. Nothing serialized carries them but `raw.source`
+    (batch T3).
 
     It raises `EnvelopeError` (`not_an_envelope`, §3.10) on a record the
     reader did not mark; on a marked record that states no `trace_id` or no
     `span_id` (absent, `null` or `""` — the two fields OTLP requires of every
     span, which an envelope level with no spans does not have); and on a field
     present in a type the envelope cannot hold — an id, `parent_id`, `name` or
-    `status_message` that is not a string, a time §3.1 does not read. It never
+    `status_message` that is not a string, a time §3.1 does not read, a
+    `resource_spans` or `scope_spans` that is not an object. It never
     returns a partial envelope, because a guessed field would be
     indistinguishable from one the export stated. It reads no attribute and
     consults no adapter: a receiver routes every record by its `trace_id`

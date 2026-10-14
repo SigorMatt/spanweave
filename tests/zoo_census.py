@@ -70,6 +70,12 @@ class Census:
     unpaired_call: int
     unknown: int
     timestamp_unit_suspect: int
+    #: Since batch T3, which moved it on Z2 and Z3 (`_Z2`, `_Z3`): the report's
+    #: count, less the nodes that reported nothing but the OTLP envelope.
+    unmapped_attributes: int
+    #: Since batch T3: one per span whose export states a dropped-attribute
+    #: count above zero. No report counts it -- the code did not exist.
+    attributes_dropped: int
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,11 @@ class Capture:
     records_per_body: tuple[int, ...]
     #: The report's step 4 `inspect` block, over the records its step 3 fed.
     census: Census
+    #: The instrumentation scope names the capture's records state, every
+    #: record of every body, each read from the record's OTLP envelope
+    #: (`spanweave.envelope(record).scope`, batch T3; `PROBES.md` S6, S21).
+    #: A set and not a value: Z3, Z4 and Z6 state two each.
+    scopes: frozenset[str]
     #: `(body, record)` (1-based, as the reports number them) of each record the
     #: audit's step 3 did not feed to the trace, with the probe that says why.
     unrouted: tuple[tuple[str, int], ...] = ()
@@ -104,11 +115,12 @@ def _capture(
     trace_id: str,
     records_per_body: tuple[int, ...],
     census: Census,
+    scopes: frozenset[str],
     unrouted: tuple[tuple[str, int], ...] = (),
     whole: Census | None = None,
 ) -> Capture:
     return Capture(
-        run, _report(run), trace_id, records_per_body, census, unrouted, whole
+        run, _report(run), trace_id, records_per_body, census, scopes, unrouted, whole
     )
 
 
@@ -128,6 +140,19 @@ def _capture(
 # line keeps the report's number beside it. Nothing else moved: on all twelve
 # captures, audit feed and whole, the edges (with their bases) and the node
 # order are the same as before T2, with no tied `temporal` edge.
+#
+# **Two counts joined at batch T3, and one of them moved: `unmapped_attributes`.**
+# The report's block lists it, and every unpacked node of every capture named
+# the four keys of its OTLP envelope there -- `<record>.flags`, `.kind`,
+# `.resource_spans`, `.scope_spans` -- with Z3's 18 spans that state a
+# `droppedAttributesCount` naming that too. Since T3 (`SPEC.md` §3.7, §7;
+# `PROBES.md` S4, S7, S8) the four are the envelope rather than unmapped span
+# keys, so they stay in `raw.source` and are named nowhere, and a dropped count
+# is the `attributes_dropped` warning instead. A node whose diagnostic named
+# nothing else loses it: Z2 23 -> 9, Z3 102 -> 75. On the other eight captures
+# every node also left a span key unmapped, so the count holds while each
+# diagnostic names four keys fewer. `attributes_dropped` is new with the code,
+# and only Z3's export states a count above zero.
 _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     nodes=31,
     parent=30,
@@ -136,6 +161,8 @@ _Z1 = Census(  # audit/z1-2026-10-13-{real,recorded}.md, step 4
     unpaired_call=1,
     unknown=2,
     timestamp_unit_suspect=0,  # report: 31; 0 since T2 (above)
+    unmapped_attributes=31,  # the report's; each names four keys fewer since T3
+    attributes_dropped=0,
 )
 _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     nodes=23,
@@ -145,6 +172,9 @@ _Z2 = Census(  # audit/z2-2026-10-14-{real,recorded}.md, step 4
     unpaired_call=3,
     unknown=0,
     timestamp_unit_suspect=0,  # report: 23; 0 since T2 (above)
+    # report: 23; 9 since T3 (above) -- 14 nodes reported only the envelope.
+    unmapped_attributes=9,
+    attributes_dropped=0,
 )
 _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     nodes=102,
@@ -154,6 +184,11 @@ _Z3 = Census(  # audit/z3-2026-10-13-{real,recorded}.md, step 4
     unpaired_call=48,
     unknown=0,
     timestamp_unit_suspect=0,  # report: 102; 0 since T2 (above)
+    # report: 102; 75 since T3 (above) -- 27 nodes reported only the envelope,
+    # none of them a span that states a dropped count.
+    unmapped_attributes=75,
+    # 18 since T3: the spans whose `droppedAttributesCount` is above zero.
+    attributes_dropped=18,
 )
 _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     nodes=4,
@@ -163,6 +198,8 @@ _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     unpaired_call=1,
     unknown=0,
     timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
+    unmapped_attributes=4,  # the report's; each names four keys fewer since T3
+    attributes_dropped=0,
 )
 # Z4's whole capture: the audit's four records plus the root span
 # `concierge.conversation`, which no adapter claims. Moved at batch T1, when an
@@ -187,6 +224,10 @@ _Z4_WHOLE = Census(
     # `timestamp_unit_suspect` (§7) -- and its `missing_timestamp` was gone.
     # 5 -> 0 at T2, with every other capture's (above).
     timestamp_unit_suspect=0,
+    # The audit's 4: the root is unclaimed, and an unclaimed node reports
+    # `unclaimed_record`, never `unmapped_attributes` (§6.1).
+    unmapped_attributes=4,
+    attributes_dropped=0,
 )
 _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     nodes=4,
@@ -196,17 +237,72 @@ _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     unpaired_call=0,
     unknown=0,
     timestamp_unit_suspect=0,  # report: 4; 0 since T2 (above)
+    unmapped_attributes=4,  # the report's; each names four keys fewer since T3
+    attributes_dropped=0,
 )
 
+#: The instrumentation scopes the captures state (`Capture.scopes`).
+_LANGCHAIN = "openinference.instrumentation.langchain"
+_LLAMA_INDEX = "openinference.instrumentation.llama_index"
+_OPENAI = "openinference.instrumentation.openai"
+_OPENAI_AGENTS = "openinference.instrumentation.openai_agents"
+_CREWAI = "openinference.instrumentation.crewai"
+_GENAI = "opentelemetry.util.genai.handler"
+_Z1_SCOPES = frozenset({_LANGCHAIN})
+_Z2_SCOPES = frozenset({_LLAMA_INDEX})
+# Two instrumentors on one client (`PROBES.md` S6): the agents SDK's spans and
+# the OpenAI client's beneath them, on one graph.
+_Z3_SCOPES = frozenset({_OPENAI_AGENTS, _OPENAI})
+# The GenAI handler's four `llm` spans, and the root span the application
+# opened itself under a tracer it named after itself -- the one no adapter
+# claims (S1), so the audit's feed carries only the first.
+_Z4_SCOPES = frozenset({_GENAI, "streaming-concierge"})
+_Z5_SCOPES = frozenset({_LANGCHAIN})
+_Z6_SCOPES = frozenset({_CREWAI, _OPENAI})
+
 CAPTURES: tuple[Capture, ...] = (
-    _capture("z1/2026-10-13-real", "40e8f3f6ace0600a1255ec9030397af7", (22, 9), _Z1),
-    _capture("z1/2026-10-13-recorded", "a97e57e66afeaad79303a015a945515c", (31,), _Z1),
-    _capture("z2/2026-10-14-real", "666cfbfe677c2822ddc8ee532d0903e6", (3, 15, 5), _Z2),
-    _capture("z2/2026-10-14-recorded", "4af82ff37ed7031332c5112ccdfcdf39", (23,), _Z2),
     _capture(
-        "z3/2026-10-13-real", "7a93d1ee6fc28e193585910fc2ce5906", (24, 32, 32, 14), _Z3
+        "z1/2026-10-13-real",
+        "40e8f3f6ace0600a1255ec9030397af7",
+        (22, 9),
+        _Z1,
+        _Z1_SCOPES,
     ),
-    _capture("z3/2026-10-13-recorded", "87d538e303fcbd1860df2b8c2fbb58f4", (102,), _Z3),
+    _capture(
+        "z1/2026-10-13-recorded",
+        "a97e57e66afeaad79303a015a945515c",
+        (31,),
+        _Z1,
+        _Z1_SCOPES,
+    ),
+    _capture(
+        "z2/2026-10-14-real",
+        "666cfbfe677c2822ddc8ee532d0903e6",
+        (3, 15, 5),
+        _Z2,
+        _Z2_SCOPES,
+    ),
+    _capture(
+        "z2/2026-10-14-recorded",
+        "4af82ff37ed7031332c5112ccdfcdf39",
+        (23,),
+        _Z2,
+        _Z2_SCOPES,
+    ),
+    _capture(
+        "z3/2026-10-13-real",
+        "7a93d1ee6fc28e193585910fc2ce5906",
+        (24, 32, 32, 14),
+        _Z3,
+        _Z3_SCOPES,
+    ),
+    _capture(
+        "z3/2026-10-13-recorded",
+        "87d538e303fcbd1860df2b8c2fbb58f4",
+        (102,),
+        _Z3,
+        _Z3_SCOPES,
+    ),
     # The root span, record 2 of the second body: claimed by no adapter and
     # routed to no trace (PROBES.md S1, L2; the report's step 3 lists it under
     # `(no trace id)`).
@@ -215,6 +311,7 @@ CAPTURES: tuple[Capture, ...] = (
         "612628c796e094bd26041bf735576133",
         (3, 2),
         _Z4,
+        _Z4_SCOPES,
         unrouted=(("0002.json", 2),),
         whole=_Z4_WHOLE,
     ),
@@ -224,11 +321,20 @@ CAPTURES: tuple[Capture, ...] = (
         "9264505bc6b829dd4330b31460bef36f",
         (5,),
         _Z4,
+        _Z4_SCOPES,
         unrouted=(("0001.json", 5),),
         whole=_Z4_WHOLE,
     ),
-    _capture("z5/2026-10-13-real", "3072629a56dca029bd8c19818bbebbc4", (4,), _Z5),
-    _capture("z5/2026-10-13-recorded", "88167a239e683f6a5db73ac739bce4fe", (4,), _Z5),
+    _capture(
+        "z5/2026-10-13-real", "3072629a56dca029bd8c19818bbebbc4", (4,), _Z5, _Z5_SCOPES
+    ),
+    _capture(
+        "z5/2026-10-13-recorded",
+        "88167a239e683f6a5db73ac739bce4fe",
+        (4,),
+        _Z5,
+        _Z5_SCOPES,
+    ),
     _capture(
         "z6/2026-10-14-real",
         "a5e74188438ca56d4f12f94d2651b49b",
@@ -241,7 +347,10 @@ CAPTURES: tuple[Capture, ...] = (
             unpaired_call=8,
             unknown=0,
             timestamp_unit_suspect=0,  # report: 26; 0 since T2 (above)
+            unmapped_attributes=26,  # the report's; four keys fewer since T3
+            attributes_dropped=0,
         ),
+        _Z6_SCOPES,
     ),
     _capture(
         "z6/2026-10-14-recorded",
@@ -255,7 +364,10 @@ CAPTURES: tuple[Capture, ...] = (
             unpaired_call=4,
             unknown=0,
             timestamp_unit_suspect=0,  # report: 16; 0 since T2 (above)
+            unmapped_attributes=16,  # the report's; four keys fewer since T3
+            attributes_dropped=0,
         ),
+        _Z6_SCOPES,
     ),
 )
 
@@ -310,7 +422,26 @@ def count(graph: spanweave.Graph) -> Census:
         unpaired_call=codes["unpaired_call"],
         unknown=sum(n.kind is spanweave.NodeKind.UNKNOWN for n in graph.nodes()),
         timestamp_unit_suspect=codes["timestamp_unit_suspect"],
+        unmapped_attributes=codes["unmapped_attributes"],
+        attributes_dropped=codes["attributes_dropped"],
     )
+
+
+def scope_names(capture: Capture) -> frozenset[str]:
+    """The scope name each record's OTLP envelope states, every record of the capture.
+
+    Read through `spanweave.envelope`, never through the record's keys: which
+    instrumentor wrote a span is a fact the transport stated, per span
+    (`SPEC.md` §7; `PROBES.md` S6, S21).
+    """
+    names: set[str] = set()
+    for record in records(capture):
+        scope = spanweave.envelope(record.record).scope.get("scope")
+        assert isinstance(scope, dict), (capture.run, record.body, record.index)
+        name = scope.get("name")
+        assert isinstance(name, str), (capture.run, record.body, record.index)
+        names.add(name)
+    return frozenset(names)
 
 
 def batch_and_incremental(feed: list[JsonValue]) -> tuple[bytes, bytes]:

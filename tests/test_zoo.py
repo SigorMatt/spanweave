@@ -144,3 +144,81 @@ def test_a_declared_nanosecond_time_is_read_in_seconds_and_kept_verbatim():
             assert isinstance(value, float), (node.id, field)
             assert value == int(stated) / 1_000_000_000, (node.id, field)
             assert 1e9 < value < 1e11, (node.id, field)
+
+
+# --- The envelope is not an unmapped attribute (batch T3, `PROBES.md` S4, S7,
+# S8, S10; S6 and S21 by the envelope) -------------------------------------
+
+Z3 = next(c for c in CAPTURES if c.run == "z3/2026-10-13-real")
+ENVELOPE_KEYS = {
+    "<record>.flags",
+    "<record>.kind",
+    "<record>.resource_spans",
+    "<record>.scope_spans",
+}
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_the_scopes_are_read_from_each_record_s_envelope(capture):
+    assert zoo_census.scope_names(capture) == capture.scopes
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_no_node_reports_its_envelope_as_unmapped(capture):
+    graph = graph_from_records([r.record for r in zoo_census.records(capture)])
+    for diagnostic in graph.diagnostics:
+        if diagnostic.code == "unmapped_attributes":
+            named = set(diagnostic.source)
+            assert not named & ENVELOPE_KEYS, diagnostic.node_id
+            assert "<record>.droppedAttributesCount" not in named, diagnostic.node_id
+    # ... and every key is still in the record, verbatim (SPEC.md §7).
+    for node in graph.nodes():
+        source = node.raw.source
+        assert isinstance(source, dict)
+        assert {"resource_spans", "scope_spans", "kind"} <= set(source), node.id
+
+
+def test_z3_reports_75_unmapped_and_18_dropped_counts_the_export_states():
+    """Z3's real capture: two instrumentors, 102 spans, 18 dropped counts.
+
+    The audit counted 102 `unmapped_attributes`, one per node, each naming the
+    four envelope keys; 27 named nothing else. Since T3 those 27 report
+    nothing, and the 18 spans whose export says attributes were dropped carry
+    an `attributes_dropped` warning stating the count, which names none.
+    """
+    feed = zoo_census.audit_feed(Z3)
+    graph = graph_from_records(feed)
+    unmapped = [d for d in graph.diagnostics if d.code == "unmapped_attributes"]
+    assert len(unmapped) == 75
+    dropped = [d for d in graph.diagnostics if d.code == "attributes_dropped"]
+    assert len(dropped) == 18
+    nodes = {node.id: node for node in graph.nodes()}
+    for diagnostic in dropped:
+        assert diagnostic.level == "warning"
+        assert diagnostic.node_id is not None
+        source = nodes[diagnostic.node_id].raw.source
+        assert isinstance(source, dict)
+        assert diagnostic.source == {"count": source["droppedAttributesCount"]}
+    carrying = {
+        node.id
+        for node in graph.nodes()
+        if isinstance(node.raw.source, dict)
+        and node.raw.source.get("droppedAttributesCount")
+    }
+    assert {d.node_id for d in dropped} == carrying
+    # S10: a model the span does not state stays absent; the dropped count is
+    # not a reason to look for one anywhere else.
+    without_a_model = [
+        nodes[node_id]
+        for node_id in carrying
+        if "llm.model_name" not in nodes[node_id].raw.source["attributes"]
+    ]
+    assert len(without_a_model) == 9
+    assert all("model" not in node.attributes for node in without_a_model)
+
+
+def test_z3_states_two_scopes_on_one_graph():
+    assert zoo_census.scope_names(Z3) == {
+        "openinference.instrumentation.openai_agents",
+        "openinference.instrumentation.openai",
+    }

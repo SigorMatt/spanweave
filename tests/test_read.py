@@ -1153,15 +1153,16 @@ def test_no_trace_in_the_tree_reaches_the_otlp_branches():
         assert not any(_is_an_export(record) for record in read_trace(data)), path
 
 
-def test_what_a_fuller_envelope_costs_is_diagnostics_and_nothing_else():
+def test_what_a_fuller_envelope_costs_is_the_raw_record_and_nothing_else():
     """The half `fixtures/conformance/otlp_container` deliberately leaves out.
 
     That scenario's envelope is minimal so its expected graph can be
-    `llm_tool_llm`'s byte for byte. This adds the three things a real export
+    `llm_tool_llm`'s byte for byte. This adds the four things a real export
     carries and it does not, and pins the whole of the difference: the same
-    nodes, the same edges, and one `unmapped_attributes` key per span for each
-    thing carried -- which is losslessness being *reported* rather than being
-    quiet about it.
+    nodes but for `raw`, the same edges, and the same diagnostics. Until batch
+    T3 each span reported each thing carried as an `unmapped_attributes` key;
+    they are the envelope rather than span attributes (`SPEC.md` §7), so they
+    are kept verbatim in `raw.source` -- losslessness -- and named nowhere.
     """
     import pathlib
 
@@ -1183,6 +1184,7 @@ def test_what_a_fuller_envelope_costs_is_diagnostics_and_nothing_else():
     }
     for span in resource_spans["scopeSpans"][0]["spans"]:
         span["kind"] = 1
+        span["flags"] = 256
     fuller = to_document(spanweave.build(json.dumps(document).encode("utf-8")))
 
     def without_raw(graph):
@@ -1194,19 +1196,13 @@ def test_what_a_fuller_envelope_costs_is_diagnostics_and_nothing_else():
     assert without_raw(fuller) == without_raw(minimal)
     assert fuller["edges"] == minimal["edges"]
 
-    def unmapped(graph):
-        return sorted(
-            key
-            for diagnostic in graph["diagnostics"]
-            if diagnostic["code"] == codes.UNMAPPED_ATTRIBUTES
-            for key in diagnostic["source"]
-        )
-
-    added = sorted(set(unmapped(fuller)) - set(unmapped(minimal)))
-    assert added == ["<record>.kind", "<record>.resource_spans", "<record>.scope_spans"]
-    # Every span reports all three, so the fuller export gains a diagnostic on
-    # each of the four spans that had none.
-    assert len(fuller["diagnostics"]) == len(minimal["diagnostics"]) + 2
+    assert fuller["diagnostics"] == minimal["diagnostics"]
+    for node in fuller["nodes"]:
+        source = node["raw"]["source"]
+        assert source["kind"] == 1
+        assert source["flags"] == 256
+        assert set(source["resource_spans"]) == {"resource"}
+        assert set(source["scope_spans"]) == {"scope"}
 
 
 def test_shuffling_the_spans_inside_an_export_changes_nothing():

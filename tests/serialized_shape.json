@@ -175,6 +175,7 @@
   "$.nodes_removed[].usage.extra"
  ],
  "diagnostic_source": {
+  "attributes_dropped": "{\"count\": int}",
   "everything else": "the offending fragment, as the type it arrived as",
   "malformed_record": "str",
   "missing_timestamp": "null",
@@ -382,6 +383,7 @@
    "derived"
   ],
   "diagnostic_codes": [
+   "attributes_dropped",
    "duplicate_record",
    "duplicate_source_id",
    "malformed_record",
