@@ -33,8 +33,12 @@ gates:
 # The zoo's census (`tests/zoo_census.py`) runs here too: twelve captures of a
 # stranger's agents, copied byte for byte (`fixtures/zoo/README.md`), held to
 # the counts the zoo's audit reported, each citing its report.
+# So do the zoo's readings (`tests/test_zoo_readings.py`): what `ADAPTERS.md`
+# section 7 and `TASKS.md` say about those captures, re-derived from them. They
+# are a reading over the corpus, so the corpus's run runs them; `check` running
+# them too is not the same promise.
 conformance:
-	uv run pytest tests/test_conformance.py tests/test_zoo.py -v
+	uv run pytest tests/test_conformance.py tests/test_zoo.py tests/test_zoo_readings.py -v
 
 # Regenerate the committed serialized-shape artifact (TASKS.md 3.7, Option C).
 # `SCHEMA_VERSION` stays "0.1" for the whole of 0.x (Option B), so the version

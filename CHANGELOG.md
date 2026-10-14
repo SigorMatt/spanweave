@@ -603,6 +603,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **`make conformance` runs the zoo readings** (after the stranger's-trace
+  close; decisions 2026-10-14e). No behaviour change. The target now runs
+  `tests/test_zoo_readings.py` beside `tests/test_conformance.py` and
+  `tests/test_zoo.py`. The module re-derives what `ADAPTERS.md` §7 and
+  `TASKS.md` say about the zoo's captures, so it is a reading over the corpus,
+  and the corpus's run now runs it: 983 passed / 2 skipped, up from 929.
+  `make check` already ran it and still does. The close's entry below said
+  `make conformance` did not, and that is no longer so.
 - **The stranger's-trace series is closed, and `WORKPLAN.md` is gone with it**
   (T7, this commit). No behaviour change: nothing under `spanweave/` moved,
   `tests/serialized_shape.json` is untouched, and `SCHEMA_VERSION` is still
