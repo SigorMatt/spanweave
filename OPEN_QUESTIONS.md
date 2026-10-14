@@ -3803,3 +3803,95 @@ change is recorded in the CHANGELOG and the census moves with reasons.
 Options 2 and 3 are declined: an `unknown` node without the identity the
 transport stated answers S12 by explanation where the graph could answer it
 by an edge the telemetry stated.
+
+## 21. T3: Is `meta.resource` / `meta.scope` a schema change?
+
+*Written 2026-10-14 by batch T3 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`, parent `1b9b40d`), as the halt its brief names: "if adding
+them to `meta` turns out to be a schema change under the repo's own
+schema/version gates, stop and report rather than bump anything." Nothing in
+this commit changes behaviour.*
+
+**(a) The question.** T3's row reports the OTLP resource and scope "once per
+graph in `meta` (`resource`, `scope` as the record carries them)", and the
+§3 decision for T3/T4 says both "No schema change this series (... a field
+added now would move the thing being measured)" and "`meta` gains `resource`
+and `scope`". Under this repository's own gates those two sentences cannot
+both hold.
+
+**(b) Why it is a schema change here.**
+
+- `Meta` is a model dataclass (`spanweave/model.py`) listed in
+  `tests/schema_shape.py`'s `SERIALIZED_MODELS`; a new field moves the
+  artifact's `model` section, and `serialize._meta` emitting it moves the
+  `document` key tree (`$.meta.resource…`, `$.meta.scope…`).
+  `tests/test_schema_shape.py`'s gate says of exactly this: "If this fails,
+  the serialized graph changed", and §3.9 makes that artifact "what
+  additive-only is measured against" after the freeze.
+- The values are verbatim record content (`{"resource": {"attributes": […]}}`,
+  `{"scope": {"name", "version"}}`), so pinning their container but not their
+  contents needs `$.meta.resource…` / `$.meta.scope…` added to `PASSTHROUGH` —
+  the widening that file names as "exactly how someone would blind this
+  instrument". That is a decision about the shape tripwire, not a patch.
+- No `schema_version` bump would be needed (§3.9: `0.x` never tracks), so
+  the *version* gate does not fire; the *shape* gate does, and `make shape`
+  would hide the move only by committing it.
+- By contrast the row's other new surface, the `attributes_dropped` code, is
+  an extension §3.7 already permits ("Seed codes (extend deliberately)") and
+  has precedent (`undecodable_bytes`, `be16fa8`, regenerated the artifact's
+  `vocabularies` and `diagnostic_source` sections). It too moves the
+  artifact, so the maintainer should say whether it is inside "no schema
+  change".
+
+**Measured on the parent** (`tests/zoo_census.py`'s feeds, all twelve captures):
+
+- Every unpacked node on all twelve captures names all four keys
+  (`<record>.flags`, `.kind`, `.resource_spans`, `.scope_spans`) in its
+  `unmapped_attributes` — not only Z3.
+- Z3 (`2026-10-13-real` and `-recorded`, 102 records each): 1 distinct
+  resource, **2 distinct scopes** — `openinference.instrumentation.openai`
+  `0.1.65` and **`openinference.instrumentation.openai_agents`** `2.5.3`
+  (underscore; the row writes `openai-agents`). Z4 and Z6 also carry 2
+  scopes. So a per-graph `scope` is a collection, not a value, and so is
+  `resource` for any input two services exported.
+- Z3: 18 records carry `droppedAttributesCount > 0` (the row's 18 holds);
+  today each is reported as `<record>.droppedAttributesCount`.
+- Z3's 102 `unmapped_attributes` become **75**, not 102 "that no longer name
+  the four keys": 27 nodes carry nothing unmapped but the four envelope keys
+  (and none of them a dropped count), so their diagnostic disappears. Z2
+  23 → 9 the same way.
+
+**(c) Options.**
+
+1. **Add the fields, and call it what the gate calls it.** `Meta` gains
+   `resource` and `scope` (each a sorted, distinct tuple of the levels as the
+   records carry them — plural in content, since Z3 has two scopes), `make
+   shape` regenerates the artifact with both paths added to `PASSTHROUGH`, no
+   version bump. The §3 decision is restated as "no change to `Node`, `Edge`
+   or `Diagnostic`; `Meta` gains two per-graph fields", and §3.9 says so.
+   Sub-questions: singular or plural names; the whole level object
+   (`{"resource": …, "schemaUrl": …}`) or only `resource` / `scope`; sort key
+   (canonical JSON); and whether a non-OTLP input gets `[]` or omits the key.
+2. **No `meta` field; report the levels through the diagnostic channel.** One
+   per-graph `info` diagnostic per distinct resource and per distinct scope
+   (e.g. `otlp_resource`, `otlp_scope`, `source` the level verbatim, no
+   `node_id`) — the channel the decision already chose for dropped counts and
+   span events. `Meta` and the key tree do not move; the code vocabulary does,
+   exactly as `attributes_dropped` does. Cost: §3.7 calls diagnostics "what
+   the library could not confidently map", and a scope is a fact, not a gap.
+3. **No per-graph report; the per-node record is the report.** The four keys
+   stop being reported per node, `attributes_dropped` lands, and resource and
+   scope stay where §7 already puts them, verbatim in each node's
+   `raw.source`; `Envelope` (a public in-process type, not serialized) could
+   gain `resource` and `scope` so a consumer reads a node's scope without
+   knowing the record shape. S6/S21 are answered by that reading. Nothing
+   serialized moves except the code vocabulary.
+4. **Split T3.** Land the four keys' removal from `unmapped_attributes` and
+   `attributes_dropped` now (no `Meta` change), and carry the per-graph
+   resource/scope question to T6/T7 with whichever of 1–3 is chosen.
+
+**(d) Provisional stance.** None taken; the batch stopped at the halt. Under
+any option the row's acceptance should read: Z3 `unmapped_attributes` 102 →
+75 with none naming the four keys; 18 `attributes_dropped`; scope names
+`openinference.instrumentation.openai_agents` and
+`openinference.instrumentation.openai`.
