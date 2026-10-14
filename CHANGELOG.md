@@ -15,6 +15,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **An `orphan_siblings` conformance scenario** (decisions 2026-10-14g,
+  R-17). No behaviour change. `orphan_parent` has one node, so no scenario
+  held an orphan beside anything it could be ordered against, and SPEC §4.3's
+  "an orphan is ordered only against its own" was compared across dialects by
+  nothing. The new scenario, in both dialects, is one root, one child of it,
+  and two orphans stating one absent parent: two `orphan_parent`, one
+  `parent` edge, and one `temporal` edge between the orphans, with none to
+  the root or its child. `orphan_parent` is unchanged. The corpus is now 30
+  scenarios, 25 compared across dialects (README's Conformance section), and
+  the tracked census moved with it: **58/167**, **153** records carrying a
+  span id, **149** trace-unique, **332** timestamp literals, **56** tracked
+  `*.jsonl`; S10's figures are retired as history in
+  `tests/test_doc_truth.py`, and every present-tense citation was recomputed.
 - **The sibling group is the stated parent id alone, at every prefix**
   (decisions 2026-10-14g, R-15, R-16). No behaviour change. SPEC §4.3 says a
   node is a sibling of the nodes that state the same parent id; no test told

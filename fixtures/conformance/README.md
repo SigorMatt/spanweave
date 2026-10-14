@@ -141,6 +141,14 @@ Added since, each for a reason recorded at its task:
   publishes was widened to read every rendering through the library, and the
   rest sample rather than claim.
 
+- **`orphan_siblings`** (decisions 2026-10-14g, R-17). `orphan_parent` has
+  one node, so no scenario held an orphan beside anything it could be ordered
+  against, and `SPEC.md` §4.3's rule -- a node's sibling group is the parent it
+  **states**, present or not -- was compared across dialects by nothing. One
+  root, one child of it, and two orphans stating one absent parent: the
+  orphans are chained to each other and to nothing else. `orphan_parent` is
+  unchanged.
+
 ## Three things this README used to get wrong, kept as a warning
 
 - **`declared_data_edge` "has no rendering."** It did not, on the stated

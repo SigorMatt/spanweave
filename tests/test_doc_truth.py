@@ -2545,12 +2545,17 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # `54/155` was the tracked corpus from batch S3 until batch S10 added the
     # two `empty_link_target` renderings, and S3's `CHANGELOG.md` entry
     # records it in this spelling; retired for the reason `52/151` was.
+    #
+    # `56/159` was the tracked corpus from batch S10 until decisions
+    # 2026-10-14g (R-17) added the two `orphan_siblings` renderings, and
+    # S10's `CHANGELOG.md` entry records it; retired the same way.
     "corpus files / records as N/M": {
         (57, 177),
         (43, 117),
         (14, 60),
         (52, 151),
         (54, 155),
+        (56, 159),
     },
     # R5's pair of span-id figures, superseded by S3's two records: an empty
     # `span_id` is no span id (`SPEC.md` §3.6), so the corpus went 139 -> 141
@@ -2560,12 +2565,17 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # S3's own pair, superseded the same way by S10's four records, all of
     # which state a usable span id: 141 -> 145 carrying one, 137 -> 141
     # trace-unique. S3's `CHANGELOG.md` entry records the pair it measured.
-    "records carrying a span id": {(139,), (141,)},
-    "trace-unique span ids": {(135,), (137,)},
+    #
+    # S10's pair, superseded by R-17's eight `orphan_siblings` records, all
+    # stating a usable span id: 145 -> 153 carrying one, 141 -> 149
+    # trace-unique. S10's `CHANGELOG.md` entry records the pair it measured.
+    "records carrying a span id": {(139,), (141,), (145,)},
+    "trace-unique span ids": {(135,), (137,), (141,)},
     # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
     "captured files": {(17,), (15,)},
     # S3 measured 308 over the tracked corpus; S10's four records add 8.
-    "timestamp literals": {(154,), (308,)},
+    # S10's 316 joins it: R-17's eight records add 16.
+    "timestamp literals": {(154,), (308,), (316,)},
     "sibling pairs": {(41,)},
     "minimum sibling gap": {(81,)},
     "`data` edges": {(24,)},
@@ -2574,8 +2584,9 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     "tracked `*.jsonl` head scan": {(64, 64), (50, 50)},
     "corpus `*.jsonl` files": {(64,)},
     # Both, in the `N tracked *.jsonl` spelling batch S9 gave a family.
-    # S3's `52` joins them: S10 added two renderings.
-    "tracked `*.jsonl` files": {(64,), (50,), (52,)},
+    # S3's `52` joins them: S10 added two renderings. S10's `54` joins them:
+    # R-17 added two.
+    "tracked `*.jsonl` files": {(64,), (50,), (52,), (54,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},
 }

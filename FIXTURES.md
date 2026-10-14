@@ -122,6 +122,7 @@ implementation gets wrong.
 | `redacted_payload` | source-signalled redaction | `Payload.redacted`, content untouched |
 | `unpaired_tool_call` | a requested call with no fulfilling span | `unpaired_call`, **no invented edge** |
 | `orphan_parent` | `parent_id` referencing an absent span | `orphan_parent`, node retained |
+| `orphan_siblings` | two orphans stating one absent parent, beside a root and its child | `orphan_parent` ×2, a `temporal` edge between the orphans and **none** to the root or its child |
 | `clock_skew` | `ended_at` before `started_at`; missing timestamps | `nonmonotonic_time`, `missing_timestamp` |
 | `unknown_kind` | a span kind we do not map | `unknown` node **plus** diagnostic |
 | `malformed_payload_json` | JSON mime, unparseable value | `payload_parse_failed`, `raw` preserved |
