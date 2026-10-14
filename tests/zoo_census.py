@@ -17,11 +17,13 @@ graph the audit wrote) in `audit/<project>-<run-id>.md` at the pin. Nothing in
 **What the audit fed is what is counted.** The audit built each trace from the
 records `spanweave_live.Endpoint` routed to it, in the order its step 3 lists
 ("Records of `<trace>`, in the order fed"): every record of every body, in body
-order, child before parent as the exporter wrote them (`PROBES.md` S15, S21) --
-except, on Z4, the root span `concierge.conversation`, which no adapter claims
-and which the receiver routed to no trace (`PROBES.md` S1, L2). That record is
-named in `Capture.unrouted`, and `Capture.whole` holds what the **whole**
-capture builds to beside it -- the `unknown` node `SPEC.md` §6.1 makes of a
+order, child before parent as the exporter wrote them and grouped by scope
+within each body (`PROBES.md` S15, S21; `exporter_order` and `scope_runs`
+count both, and `tests/test_zoo.py` holds them) -- except, on Z4, the root
+span `concierge.conversation`, which no adapter claims and which the receiver
+routed to no trace (`PROBES.md` S1, L2). That record is named in
+`Capture.unrouted`, and `Capture.whole` holds what the **whole** capture
+builds to beside it -- the `unknown` node `SPEC.md` §6.1 makes of a
 record no adapter claims, keyed and placed by its OTLP envelope since batch T1
 (§3.6 rule 1, `OPEN_QUESTIONS.md` §20). The whole capture is not a number any
 report gives; it is this library's own count, each move from the audit's
@@ -490,6 +492,43 @@ def scope_names(capture: Capture) -> frozenset[str]:
         assert isinstance(name, str), (capture.run, record.body, record.index)
         names.add(name)
     return frozenset(names)
+
+
+def exporter_order(capture: Capture) -> tuple[int, int]:
+    """`(child before parent, parent before child)` over the capture's records.
+
+    Each pair is a record and the record whose span id is the parent it states,
+    both in the capture, counted by where each sits in body order (every record
+    of every body, `records`). Ids are read from each record's OTLP envelope,
+    as the transport stated them (`spanweave.envelope`); no graph is built.
+    """
+    envelopes = [spanweave.envelope(r.record) for r in records(capture)]
+    at = {e.span_id: i for i, e in enumerate(envelopes)}
+    before = after = 0
+    for i, e in enumerate(envelopes):
+        if e.parent_id is not None and e.parent_id in at:
+            if at[e.parent_id] > i:
+                before += 1
+            else:
+                after += 1
+    return before, after
+
+
+def scope_runs(capture: Capture) -> dict[str, list[str]]:
+    """Body -> the scope names its records state, one entry per run of equal names.
+
+    A body whose records are contiguous by scope lists each name once.
+    """
+    runs: dict[str, list[str]] = {}
+    for record in records(capture):
+        scope = spanweave.envelope(record.record).scope.get("scope")
+        assert isinstance(scope, dict), (capture.run, record.body, record.index)
+        name = scope.get("name")
+        assert isinstance(name, str), (capture.run, record.body, record.index)
+        body = runs.setdefault(record.body, [])
+        if not body or body[-1] != name:
+            body.append(name)
+    return runs
 
 
 def batch_and_incremental(feed: list[JsonValue]) -> tuple[bytes, bytes]:

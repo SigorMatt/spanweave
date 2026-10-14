@@ -15,6 +15,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The census holds the exporter's order, scope grouping and the zoo
+  README's instrumentation column** (decisions 2026-10-14g, R-4). No
+  behaviour change. T0's entry below says the records are fed "in the
+  exporter's child-before-parent order (the zoo's S15, S21)"; that was true of
+  the bytes and asserted by no test. `tests/test_zoo.py` now asserts, per
+  capture, zero parent-before-child pairs in body order (every stated parent
+  the capture holds comes after its child, as many as the whole capture's
+  `parent` edges), each body's records contiguous by instrumentation scope
+  (non-vacuous on Z3, Z4 and Z6, whose bodies state two), and that
+  `fixtures/zoo/README.md`'s instrumentation column and "Collector 0.162.0"
+  equal each manifest's `project_manifest.instrumentation` and
+  `collector_version`.
 - **Each zoo seal is held to the value `fixtures/zoo/README.md` pins**
   (decisions 2026-10-14g, R-3). No behaviour change. T0's entry below says
   `tests/test_zoo.py` re-derives every body's sha256 and every manifest's

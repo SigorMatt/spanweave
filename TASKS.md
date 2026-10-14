@@ -13866,7 +13866,7 @@ threads, which are unrelated.
 | Batch | What it did | Origin (plan §5) | Final status | Commit |
 |---|---|---|---|---|
 | — | Series opened: the plan file, its README row and its `durable_documents()` exclusion | — | **done** | `43e330a` |
-| T0 | The zoo's captures are a fixture, and the audit's census is a gate | `PROBES.md` "The captures" and "Reproducing"; S15, S16, S21 | **done**. The row's 24 bodies were **29**, corrected at the batch | `162f1b6` |
+| T0 | The zoo's captures are a fixture, and the audit's census is a gate | `PROBES.md` "The captures" and "Reproducing"; S15, S16, S21 | **done**. The row's 24 bodies were **29**, corrected at the batch. `162f1b6`'s message claimed S16 and S21 for a census that counted only; S15 and S21 are held from decisions 2026-10-14g's commit 3 (`tests/test_zoo.py`: no parent-before-child pair, records contiguous by scope within each body), S16 by the Z2 `temporal` count the census already holds | `162f1b6` |
 | T1 | The OTLP envelope is public, and an unclaimed record is keyed and placed by it | S1, S2, S12; L2 | **done (decided)**. Halted because no rule keyed an unclaimed record (`OPEN_QUESTIONS.md` §20), and option 1 was decided | halt `aff117e`, decided `7db4cb3`, done `a1405be` |
 | T2 | A declared unit is not a suspicion | S3 | **done**. "Loses nothing" holds for the record, not the field: float seconds resolve to about 238 ns | `23eb7ed` |
 | T3 | The envelope's own keys are not unmapped attributes, a dropped count is a diagnostic, and the scope is read from the envelope | S4, S7, S8, S10; S6, S21 | **done (decided)**. Halted because `meta.resource`/`meta.scope` moved the serialized shape (§21), and option 3 was decided | halt `cc9ef0c`, decided `5f6fd13`, done `d1f8ff4` |

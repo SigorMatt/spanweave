@@ -12,7 +12,11 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 * The counts the zoo's audit reported (`tests/zoo_census.py`, each citing its
   report) are what this library builds from those bytes, batch and incremental
   alike, with the records fed in the exporter's order: child before parent
-  (`PROBES.md` S15), grouped by instrumentation scope (S21).
+  (`PROBES.md` S15), grouped by instrumentation scope (S21). Both orders are
+  asserted of the bytes, not assumed: no record of any capture follows the
+  record of its parent, and each body's records are contiguous by scope.
+* The README's instrumentation column and its Collector version are each
+  manifest's `project_manifest.instrumentation` and `collector_version`.
 """
 
 from __future__ import annotations
@@ -105,6 +109,87 @@ def test_every_seal_is_the_one_the_readme_pins(capture):
     document = zoo_census.manifest(capture)
     assert zoo_census.seal_of(document) == pinned, capture.run
     assert document["seal"] == pinned, capture.run
+
+
+#: A capture's row of the README's table, its instrumentation column.
+_README_INSTRUMENTATION = re.compile(r"^\| `(z\d/[^`]+)` \| [^|]+ \| ([^|]+) \|")
+
+
+def _readme_instrumentation() -> dict[str, list[str]]:
+    """Capture run -> the instrumentation the README's table names for it.
+
+    "as above" is the row before's, as the table writes it.
+    """
+    named: dict[str, list[str]] = {}
+    previous: list[str] | None = None
+    for line in (ZOO / "README.md").read_text(encoding="utf-8").splitlines():
+        match = _README_INSTRUMENTATION.match(line)
+        if match is None:
+            continue
+        run, cell = match.group(1), match.group(2).strip()
+        if cell == "as above":
+            assert previous is not None, run
+            packages = previous
+        else:
+            packages = [item.strip().strip("`") for item in cell.split(",")]
+        assert run not in named, run
+        named[run] = packages
+        previous = packages
+    return named
+
+
+def test_the_readme_names_instrumentation_for_each_of_the_twelve_captures():
+    assert sorted(_readme_instrumentation()) == sorted(IDS)
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_the_readme_s_instrumentation_is_the_manifest_s(capture):
+    project = zoo_census.manifest(capture)["project_manifest"]
+    assert isinstance(project, dict)
+    stated = project["instrumentation"]
+    assert _readme_instrumentation()[capture.run] == stated, capture.run
+
+
+def test_the_readme_s_collector_is_every_manifest_s():
+    readme = (ZOO / "README.md").read_text(encoding="utf-8")
+    named = re.findall(r"Collector (\d+\.\d+\.\d+)", readme)
+    assert named == ["0.162.0"]
+    for capture in CAPTURES:
+        stated = zoo_census.manifest(capture)["collector_version"]
+        assert stated == named[0], capture.run
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_child_s_record_comes_before_its_parent_s(capture):
+    """`PROBES.md` S15: the exporter writes a span when it ends, so a child's
+    record precedes its parent's. Not one pair in any capture runs the other
+    way, and every stated parent the capture holds is such a pair: as many as
+    the whole capture's `parent` edges."""
+    before, after = zoo_census.exporter_order(capture)
+    assert after == 0, capture.run
+    whole = capture.whole if capture.whole is not None else capture.census
+    assert before == whole.parent > 0, capture.run
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_each_body_s_records_are_contiguous_by_scope(capture):
+    """`PROBES.md` S21: within a body, records are grouped by instrumentation
+    scope, not interleaved in end order. Each scope is one run per body."""
+    runs = zoo_census.scope_runs(capture)
+    assert list(runs) == [path.name for path in zoo_census.bodies(capture)]
+    for body, names in runs.items():
+        assert len(names) == len(set(names)), (capture.run, body, names)
+    assert {name for names in runs.values() for name in names} == capture.scopes
+
+
+def test_scope_grouping_is_asserted_where_a_body_states_two_scopes():
+    """Not vacuous: Z3, Z4 and Z6 each have a body with two scopes in it."""
+    two = {
+        capture.run.split("/")[0]
+        for capture in CAPTURES
+        if any(len(names) > 1 for names in zoo_census.scope_runs(capture).values())
+    }
+    assert two == {"z3", "z4", "z6"}
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
