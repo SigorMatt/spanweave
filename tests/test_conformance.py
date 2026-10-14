@@ -124,10 +124,11 @@ DEGENERATE = (
     # target empty, so `SPEC.md` §3.6's "at either end of a relation" was
     # checked by nothing.
     "empty_link_target",
-    # Added at decisions 2026-10-14g (R-17), not seeded: `orphan_parent` has
-    # one node, so no scenario held an orphan beside anything it could be
-    # ordered against, and `SPEC.md` §4.3's "an orphan is ordered only
-    # against its own" was compared across dialects by nothing.
+    # Added at the review's R-17 (decisions log: 2026-10-14, review), not
+    # seeded: `orphan_parent` has one node, so no scenario held an orphan
+    # beside anything it could be ordered against, and `SPEC.md` §4.3's "an
+    # orphan is ordered only against its own" was compared across dialects by
+    # nothing.
     "orphan_siblings",
 )
 

@@ -2585,9 +2585,10 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # two `empty_link_target` renderings, and S3's `CHANGELOG.md` entry
     # records it in this spelling; retired for the reason `52/151` was.
     #
-    # `56/159` was the tracked corpus from batch S10 until decisions
-    # 2026-10-14g (R-17) added the two `orphan_siblings` renderings, and
-    # S10's `CHANGELOG.md` entry records it; retired the same way.
+    # `56/159` was the tracked corpus from batch S10 until the review's R-17
+    # (decisions log: 2026-10-14, review) added the two `orphan_siblings`
+    # renderings, and S10's `CHANGELOG.md` entry records it; retired the same
+    # way.
     "corpus files / records as N/M": {
         (57, 177),
         (43, 117),

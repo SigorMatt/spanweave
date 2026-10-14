@@ -123,7 +123,8 @@ class Structure:
     What `Census` counts, it does not place: a batch that kept every count could
     still move a node, an edge or a basis. This holds each, in the order
     `Graph.nodes()` and `Graph.edges()` give them (`SPEC.md` §5.2), so a change
-    that moves one has to say so here (decisions 2026-10-14g, R-10).
+    that moves one has to say so here (the review's R-10; decisions log:
+    2026-10-14, review).
     """
 
     nodes: tuple[str, ...]
@@ -175,8 +176,9 @@ def _capture(
 # line keeps the report's number beside it. Nothing else moved: on all twelve
 # captures, audit feed and whole, the edges (with their bases) and the node
 # order are the same as before T2, with no tied `temporal` edge. That was a
-# hand check at T2 (R-10 repeated it); since decisions 2026-10-14g commit 7
-# `STRUCTURES` and `WHOLE_STRUCTURES` (below) hold all three, every run.
+# hand check at T2 (R-10 repeated it); since the review's R-10 (decisions log:
+# 2026-10-14, review) `STRUCTURES` and `WHOLE_STRUCTURES` (below) hold all
+# three, every run.
 #
 # **Two counts joined at batch T3, and one of them moved: `unmapped_attributes`.**
 # The report's block lists it, and every unpacked node of every capture named
@@ -452,10 +454,11 @@ CAPTURES: tuple[Capture, ...] = (
 # the census above counts, this holds where each node sits and what each edge
 # joins and on what basis. Re-derived from the bodies on every run and held
 # batch and incremental alike (`tests/test_zoo.py`). Not a report's: no report
-# lists edges. Taken from this library's output at decisions 2026-10-14g
-# commit 7, where it equals the hand check R-10 records (node order, every edge
-# and basis, the same before and after batch T2), so from here "nothing moved"
-# is a gate, not a claim. A change that moves one moves it here, with the reason.
+# lists edges. Taken from this library's output at the review's R-10
+# (decisions log: 2026-10-14, review), where it equals the hand check R-10
+# records (node order, every edge and basis, the same before and after batch
+# T2), so from here "nothing moved" is a gate, not a claim. A change that moves
+# one moves it here, with the reason.
 STRUCTURES: dict[str, Structure] = {
     "z1/2026-10-13-real": _structure(
         """

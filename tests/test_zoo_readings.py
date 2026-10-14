@@ -19,8 +19,8 @@ and every reading that states a number or a set is held to the corpus here:
   marked (`SPEC.md` §7). A JSON round trip is not that record and is out of
   this contract; what it keeps is `raw.source` verbatim, and the test holds
   that the level objects it carries are the ones `envelope` read.
-* **Every disposition, in full** (decisions 2026-10-14g, commit 12). Each
-  row's disposition is compared whole against `DISPOSITIONS`, not by its
+* **Every disposition, in full** (decisions log: 2026-10-14, review; R-18).
+  Each row's disposition is compared whole against `DISPOSITIONS`, not by its
   first words: a reason rewritten, or a batch moved, fails here.
 * **The readings' numbers** (§7.4). Every number §7 states is a row of §7.4's
   table, which the test parses and re-derives from the zoo row by row; §7's
@@ -34,10 +34,10 @@ and every reading that states a number or a set is held to the corpus here:
   `llm` node's scope and the delegation tool a coworker's sits under, the two
   spellings of Z6's delegate tool, the `llm` node Z4's unpaired call is
   requested by, and each Z2 `acall` as the only child of its `call_tool`.
-* **S13, after the close** (decisions 2026-10-14e, commit 1). Z5's real and
-  recorded graphs, with the ids and times the exporter generated masked,
-  differ at exactly the paths `S13_DIFFERENCES` lists and nowhere else, byte
-  for byte.
+* **S13, after the close** (`c8de748`; decisions log: 2026-10-14, S13).
+  Z5's real and recorded graphs, with the ids and times the exporter generated
+  masked, differ at exactly the paths `S13_DIFFERENCES` lists and nowhere else,
+  byte for byte.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ INDEX = re.compile(r"\.\d+(?=\.|$)")
 #: Every row's disposition in `ADAPTERS.md` §7.1 and §7.2, in full: adapter ->
 #: key -> the text after the projects. Compared whole, so a reason rewritten or
 #: a key moved to another batch fails, not only a key moved between "reported"
-#: and "mapped" (decisions 2026-10-14g, commit 12; R-18).
+#: and "mapped" (decisions log: 2026-10-14, review; R-18).
 REPORTED = "reported, not mapped: "
 NO_FIELD = REPORTED + "no field"
 MESSAGE = REPORTED + "message content, as above"
@@ -743,16 +743,17 @@ def _masked_time(value: object) -> object:
 def _z5_masked(capture: Capture) -> dict[str, object]:
     """Z5's graph with what the exporter generated masked, and nothing else.
 
-    Masked, as the S13 decision names them (decisions 2026-10-14e, commit 1):
-    the trace id; every node id and every parent id, by the node's position
-    in `started_at` order -- an absent parent by the position of the node that
-    states it; and every time -- `started_at`, `ended_at`, each diagnostic's
-    `source.time`, and the `raw.source` fields that carry those values
-    (`start_time`, `end_time`, each event's `timeUnixNano`), each only where
-    it is present (`_masked_time`). An id is masked wherever the serialized
-    graph carries it, a diagnostic's message included.
-    `edges` and `diagnostics` are serialized in an order the ids decide, so
-    once the ids are masked each is put in the order of its masked entries.
+    Masked, as the S13 decision names them (`c8de748`; decisions log:
+    2026-10-14, S13): the trace id; every node id and every parent id, by
+    the node's position in `started_at` order -- an absent parent by the
+    position of the node that states it; and every time -- `started_at`,
+    `ended_at`, each diagnostic's `source.time`, and the `raw.source` fields
+    that carry those values (`start_time`, `end_time`, each event's
+    `timeUnixNano`), each only where it is present (`_masked_time`). An id is
+    masked wherever the serialized graph carries it, a diagnostic's message
+    included. `edges` and `diagnostics` are serialized in an order the ids
+    decide, so once the ids are masked each is put in the order of its masked
+    entries.
     """
     graph = graph_from_records([r.record for r in zoo_census.records(capture)])
     nodes = sorted(graph.nodes(), key=lambda node: node.started_at or 0.0)
