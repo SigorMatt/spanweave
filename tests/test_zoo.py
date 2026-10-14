@@ -29,7 +29,14 @@ import spanweave
 from spanweave.adapters import classify
 from spanweave.api import graph_from_records
 from tests import zoo_census
-from tests.zoo_census import CAPTURES, ZOO, ZOO_BODY_DIR, Capture
+from tests.zoo_census import (
+    CAPTURES,
+    STRUCTURES,
+    WHOLE_STRUCTURES,
+    ZOO,
+    ZOO_BODY_DIR,
+    Capture,
+)
 
 IDS = [capture.run for capture in CAPTURES]
 
@@ -202,6 +209,11 @@ def test_the_bodies_hold_the_records_and_the_trace_probes_md_names(capture):
     assert tuple(by_body.values()) == capture.records_per_body
 
 
+def test_the_census_places_every_capture_and_each_whole_it_counts_apart():
+    assert list(STRUCTURES) == IDS
+    assert list(WHOLE_STRUCTURES) == [c.run for c in CAPTURES if c.whole is not None]
+
+
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
 def test_the_audit_s_census_holds_batch_and_incremental(capture):
     feed = zoo_census.audit_feed(capture)
@@ -210,6 +222,9 @@ def test_the_audit_s_census_holds_batch_and_incremental(capture):
     graph = graph_from_records(feed)
     assert graph.trace_id == capture.trace_id
     assert zoo_census.count(graph) == capture.census, capture.report
+    # Where each node sits, and each edge with its basis (R-10): the bytes
+    # above make the `Builder`'s graph this one, so both are held.
+    assert zoo_census.structure(graph) == STRUCTURES[capture.run], capture.run
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
@@ -235,6 +250,8 @@ def test_every_record_the_audit_left_out_is_one_no_adapter_claims(capture):
     whole = capture.whole if capture.whole is not None else capture.census
     assert (capture.whole is None) == (not capture.unrouted)
     assert zoo_census.count(graph) == whole, capture.run
+    placed = WHOLE_STRUCTURES.get(capture.run, STRUCTURES[capture.run])
+    assert zoo_census.structure(graph) == placed, capture.run
     assert sum(d.code == "unclaimed_record" for d in graph.diagnostics) == len(left_out)
 
 

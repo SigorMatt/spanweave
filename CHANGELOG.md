@@ -15,6 +15,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The census holds each capture's node order and edge basis** (decisions
+  2026-10-14g, R-10). No behaviour change. T2's entry below says that on the
+  zoo's twelve captures no edge, basis or node position moves; the census
+  counted edges by kind only, so that was a hand check (R-10 repeated it).
+  `tests/zoo_census.py` now holds, per capture, the node id sequence and the
+  edge list `(kind, src, dst, basis)` in the graph's order (`STRUCTURES`, and
+  `WHOLE_STRUCTURES` for Z4's whole capture), and `tests/test_zoo.py`
+  re-derives both from the bodies every run, batch and incremental alike. A
+  change that moves a node, an edge or a basis now says so in the census.
 - **A declared time's two edges are pinned, and a check that could not fire
   is gone** (decisions 2026-10-14g, R-9). No behaviour change. SPEC §3.1 says
   a declared nanosecond value written with a fraction or an exponent is
