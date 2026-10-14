@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`FIXTURES.md` names `fixtures/zoo/` and its contract** (decisions
+  2026-10-14g, R-5). No behaviour change. T0 added a fixture location that
+  §1 did not list and whose provenance §6's rule did not describe. §1 now
+  lists `zoo/` as the third location: a byte-for-byte copy of the zoo's
+  sealed captures at a named pin, never edited here; its provenance is each
+  capture's `MANIFEST.json` and the brief the zoo README cites, so §6's
+  `<name>.provenance.md` does not apply; and it may be used to claim exactly
+  what the census and the readings assert.
 - **The census holds the exporter's order, scope grouping and the zoo
   README's instrumentation column** (decisions 2026-10-14g, R-4). No
   behaviour change. T0's entry below says the records are fed "in the
