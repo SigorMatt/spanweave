@@ -731,6 +731,15 @@ Z5 = tuple(capture for capture in CAPTURES if _project(capture) == "Z5")
 RAW_TIMES = ("start_time", "end_time")
 
 
+def _masked_time(value: object) -> object:
+    """A time masked where it is present; an absent one (`None`) stays absent.
+
+    The mask hides which time a value is, never whether there is one: a node
+    that ends in one capture and not the other is a difference S13 reports.
+    """
+    return None if value is None else "<time>"
+
+
 def _z5_masked(capture: Capture) -> dict[str, object]:
     """Z5's graph with what the exporter generated masked, and nothing else.
 
@@ -739,8 +748,9 @@ def _z5_masked(capture: Capture) -> dict[str, object]:
     in `started_at` order -- an absent parent by the position of the node that
     states it; and every time -- `started_at`, `ended_at`, each diagnostic's
     `source.time`, and the `raw.source` fields that carry those values
-    (`start_time`, `end_time`, each event's `timeUnixNano`). An id is masked
-    wherever the serialized graph carries it, a diagnostic's message included.
+    (`start_time`, `end_time`, each event's `timeUnixNano`), each only where
+    it is present (`_masked_time`). An id is masked wherever the serialized
+    graph carries it, a diagnostic's message included.
     `edges` and `diagnostics` are serialized in an order the ids decide, so
     once the ids are masked each is put in the order of its masked entries.
     """
@@ -759,16 +769,17 @@ def _z5_masked(capture: Capture) -> dict[str, object]:
         text = text.replace(value, mask)
     document = json.loads(text)
     for node in document["nodes"]:
-        node["started_at"] = node["ended_at"] = "<time>"
+        for key in ("started_at", "ended_at"):
+            node[key] = _masked_time(node[key])
         source = node["raw"]["source"]
         for key in RAW_TIMES:
             if key in source:
-                source[key] = "<time>"
+                source[key] = _masked_time(source[key])
         for event in source.get("events", []):
-            event["timeUnixNano"] = "<time>"
+            event["timeUnixNano"] = _masked_time(event["timeUnixNano"])
     for diagnostic in document["diagnostics"]:
         if isinstance(diagnostic["source"], dict) and "time" in diagnostic["source"]:
-            diagnostic["source"]["time"] = "<time>"
+            diagnostic["source"]["time"] = _masked_time(diagnostic["source"]["time"])
     for key in ("edges", "diagnostics"):
         document[key].sort(key=lambda entry: json.dumps(entry, sort_keys=True))
     return document

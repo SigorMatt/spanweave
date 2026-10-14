@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The S13 mask keeps absence** (decisions 2026-10-14g, R-22). No
+  behaviour change. S13's test masked every node's `started_at` and
+  `ended_at` with `"<time>"` without looking, so a node with an end time in
+  one Z5 capture and none in the other compared equal: an adapter edit that
+  dropped all four recorded `ended_at` left the suite green.
+  `tests/test_zoo_readings.py` now masks a time only where it is present;
+  `None` stays `None`, and the same holds for the `raw.source` times, each
+  event's `timeUnixNano` and a diagnostic's `source.time`.
 - **Every number `ADAPTERS.md` §7 states is parsed, every disposition is
   compared in full, and the readings' named facts are pinned** (decisions
   2026-10-14g, R-18, R-19). No behaviour change. §7 said every table and
