@@ -15,6 +15,28 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The adapters say what they do not map, and the zoo's three instrumentations
+  are described** (stranger's-trace series, T6). No behaviour change.
+  `ADAPTERS.md` §7 adds two tables, one for `openinference` and one for
+  `otel_genai`. Each lists every attribute key the zoo's twelve captures leave
+  unmapped, with indices folded to `<n>`, and gives each key's disposition:
+  *reported, not mapped* with the reason, or *mapped at T3/T4* for the six
+  OTLP envelope keys. §7 also gives the readings that answer the zoo's S5, S6,
+  S9, S14, S16, S17, S19, S20 and S22, each cited to its probe:
+  - a node's scope is read from its envelope, in process only;
+  - nested `llm` nodes get the `parent` edge and nothing more;
+  - no zoo tool span records a call id, so `unpaired_call` is the correct
+    rendering;
+  - the four OpenInference kinds stay `unknown`;
+  - `graph.node.*` states a sequence;
+  - an `llm` node carries no agent identity.
+
+  `tests/test_zoo_readings.py` parses the tables and holds them equal to what
+  the adapters report on the corpus. It pins the in-process
+  `envelope(node.raw.source)` read on every node of every capture, batch and
+  `Builder`, and re-derives the readings' numbers. `SPEC.md` §3.1 no longer
+  says OpenInference states no agent-name attribute: Z3's openai-agents
+  instrumentor writes `agent.name`, and the adapter already declined it.
 - **The OTLP envelope is public: `spanweave.envelope(record) -> Envelope`**
   (T1). The trace id, span id, parent, name, times and status the transport
   stated for a record the reader unpacked from an export — the routing key a

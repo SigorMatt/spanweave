@@ -80,8 +80,11 @@ else does, and `None` is an answer rather than a gap to be filled.
 
 **No dialect's agent, chain or retriever name is read into `operation`.** OTel
 GenAI states an agent's name normatively, in `gen_ai.agent.name`, and the
-adapter deliberately declines it. OpenInference states no name attribute for
-any of the three kinds, so its adapter has nothing to decline. The rule is
+adapter deliberately declines it. OpenInference's openai-agents instrumentor
+writes `agent.name` on its agent span (the zoo's Z3; `ADAPTERS.md` §7.1), and
+the `openinference` adapter declines it the same way: reported, not read. This
+sentence once said OpenInference stated no such attribute. That was true of
+every capture until the zoo's, and the rule never depended on it. The rule is
 stated here rather than left to each adapter because the alternative is
 asymmetry: a field exactly one dialect could fill would be that dialect's
 attribute wearing a normalized name, and a consumer reading it would get a

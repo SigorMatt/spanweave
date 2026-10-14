@@ -427,3 +427,168 @@ neither is a payload spelling.
       as its renderings — that line is what makes coverage un-rottable.
 - [ ] One captured fixture with provenance.
 - [ ] `make check` green — including the neutrality and layering gates.
+
+## 7. What the zoo saw unmapped, and how it reads
+
+The zoo (`SigorMatt/spanweave-zoo` at `7eb5b69`, copied byte for byte into
+`fixtures/zoo/`) is twelve captures of six agents built by implementers who
+knew nothing about this library, under stock instrumentation. Its `PROBES.md`
+left nine questions *to establish* about what the adapters map — S5, S6, S9,
+S14, S16, S17, S19, S20, S22. This section answers them. Each answer is a
+reading: the rendering is right, and why. None changes a rule.
+
+**Every table and number below is re-derived.** `tests/test_zoo_readings.py`
+parses §7.1 and §7.2 and holds them equal to what the adapters report over
+every record of every capture. It also re-derives §7.3's numbers. The
+per-capture counts it cites (`unknown`, `unpaired_call`, `temporal`) are
+`tests/zoo_census.py`'s, which `make conformance` re-derives.
+
+How to read the tables. A key's numeric indices are folded to `<n>`. *Projects*
+names the zoo projects (Z1–Z6) on which some node reports the key. *Reported,
+not mapped* means the key stays verbatim in `raw.source`, and the node's
+`unmapped_attributes` diagnostic names it (`SPEC.md` §3.7). *Mapped at T3/T4*
+means the audit saw the key unmapped, and since that batch no diagnostic names
+it. All six such keys are the OTLP envelope's, read in the seam.
+
+No field holds most of these keys, and that is the reason for most of the
+dispositions. A node normalizes a model or tool name (`operation`), token
+counts (`usage`), payloads and `reported_kind`, and nothing else. A further
+normalized attribute key would be a schema change (`SPEC.md` §3.2). Rows below
+that say *no field* mean exactly this.
+
+### 7.1 `openinference`
+
+Z1, Z2, Z3, Z5 and Z6: the LangChain, LlamaIndex, openai-agents, OpenAI-client
+and CrewAI OpenInference instrumentors (`PROBES.md` S7).
+
+| Key | Projects | Disposition |
+|---|---|---|
+| `<record>.flags` | Z1, Z2, Z3, Z5, Z6 | mapped at T3: the OTLP envelope, verbatim in `raw.source` (`SPEC.md` §7; S7) |
+| `<record>.kind` | Z1, Z2, Z3, Z5, Z6 | mapped at T3: the OTLP envelope, verbatim in `raw.source` (`SPEC.md` §7; S7) |
+| `<record>.resource_spans` | Z1, Z2, Z3, Z5, Z6 | mapped at T3: the envelope's resource level, read as `envelope(record).resource` (`SPEC.md` §7; S7) |
+| `<record>.scope_spans` | Z1, Z2, Z3, Z5, Z6 | mapped at T3: the envelope's scope level, read as `envelope(record).scope` (`SPEC.md` §7; S7) |
+| `<record>.droppedAttributesCount` | Z3 | mapped at T3: the `attributes_dropped` diagnostic (`SPEC.md` §3.7; S8) |
+| `<record>.events` | Z2, Z5 | mapped at T4: one `exception_event` or `span_event` diagnostic per event (`SPEC.md` §3.7, §7; S11, S17) |
+| `agent.name` | Z3 | reported, not mapped: an agent's name is declined from `operation` (`SPEC.md` §3.1). An `llm` node carries no agent identity (S20; §7.3) |
+| `crew_agents` | Z6 | reported, not mapped: no field |
+| `crew_id` | Z6 | reported, not mapped: no field |
+| `crew_inputs` | Z6 | reported, not mapped: no field |
+| `crew_key` | Z6 | reported, not mapped: no field |
+| `crew_tasks` | Z6 | reported, not mapped: no field |
+| `graph.node.id` | Z3, Z6 | reported, not mapped: it names the framework's node in a sequence, not a span. See `graph.node.parent_id` (S19) |
+| `graph.node.parent_id` | Z6 | reported, not mapped: it names the previous agent in the crew's sequence, while the span's stated parent is the kickoff. It states a sequence, not containment. A `parent` edge is the span's stated parent (`SPEC.md` §4.0), and no `EdgeKind` holds a second structure, so the sequence appears only as §4.3's `temporal` order of the siblings (S19) |
+| `llm.finish_reason` | Z1, Z2, Z3, Z6 | reported, not mapped: no field |
+| `llm.input_messages.<n>.message.content` | Z1, Z2, Z3, Z6 | reported, not mapped: a message is payload content, not a node (`OPEN_QUESTIONS.md` §2). Payloads come from `input.value` / `output.value` (`SPEC.md` §3.3) |
+| `llm.input_messages.<n>.message.contents.<n>.message_content.text` | Z2 | reported, not mapped: message content, as above |
+| `llm.input_messages.<n>.message.contents.<n>.message_content.type` | Z2 | reported, not mapped: message content, as above |
+| `llm.input_messages.<n>.message.name` | Z1, Z6 | reported, not mapped: message content, as above |
+| `llm.input_messages.<n>.message.role` | Z1, Z2, Z3, Z6 | reported, not mapped: a role is read only to decide whether a `tool_call_id` beside it is a tool result (`SPEC.md` §4.2.1). With no such id beside it, it decided nothing (§3, *Losslessness*) |
+| `llm.input_messages.<n>.message.tool_call_id` | Z3 | reported, not mapped: a tool-result id is read only when its message's `role` is `tool` (`SPEC.md` §4.2.1). The openai-agents instrumentor's message states no `role`, so nothing decided it |
+| `llm.input_messages.<n>.message.tool_calls.<n>.tool_call.function.arguments` | Z1, Z2, Z3, Z6 | reported, not mapped: an echo of an earlier request in the resent history (`SPEC.md` §4.4) |
+| `llm.input_messages.<n>.message.tool_calls.<n>.tool_call.function.name` | Z1, Z2, Z3, Z6 | reported, not mapped: an echo, as above |
+| `llm.input_messages.<n>.message.tool_calls.<n>.tool_call.id` | Z1, Z2, Z3, Z6 | reported, not mapped: an echo of a reference is not the reference (`SPEC.md` §4.4) |
+| `llm.invocation_parameters` | Z1, Z2, Z3, Z6 | reported, not mapped: no field |
+| `llm.output_messages.<n>.message.content` | Z1, Z2, Z3, Z6 | reported, not mapped: message content, as above. The span's output payload is `output.value` |
+| `llm.output_messages.<n>.message.contents.<n>.message_content.text` | Z2 | reported, not mapped: message content, as above |
+| `llm.output_messages.<n>.message.contents.<n>.message_content.type` | Z2 | reported, not mapped: message content, as above |
+| `llm.output_messages.<n>.message.role` | Z1, Z2, Z3, Z6 | reported, not mapped: message content, as above |
+| `llm.output_messages.<n>.message.tool_calls.<n>.tool_call.function.arguments` | Z1, Z2, Z3, Z6 | reported, not mapped: the call's id is mapped (`call_ids`, requester, `SPEC.md` §4.4), and its function name is read into `unpaired_call`'s `source`. No field holds the arguments |
+| `llm.prompt_template.template` | Z1 | reported, not mapped: no field. It is on Z1's `PROMPT` spans, which are `unknown` nodes (S14; §7.3) |
+| `llm.prompt_template.variables` | Z1 | reported, not mapped: as above |
+| `llm.provider` | Z1, Z2 | reported, not mapped: no field |
+| `llm.system` | Z1, Z2, Z3, Z6 | reported, not mapped: no field |
+| `llm.tools.<n>.tool.json_schema` | Z1, Z2, Z3, Z6 | reported, not mapped: no field |
+| `metadata` | Z1, Z5 | reported, not mapped: no field |
+| `task_id` | Z6 | reported, not mapped: no field |
+| `task_key` | Z6 | reported, not mapped: no field |
+| `tool.cache_function` | Z6 | reported, not mapped: no field |
+| `tool.current_usage_count` | Z6 | reported, not mapped: no field |
+| `tool.description` | Z1, Z2, Z3, Z5, Z6 | reported, not mapped: no field |
+| `tool.description_updated` | Z6 | reported, not mapped: no field |
+| `tool.parameters` | Z2, Z3, Z6 | reported, not mapped: no field |
+| `tool.result_as_answer` | Z6 | reported, not mapped: no field |
+
+### 7.2 `otel_genai`
+
+Z4: the OpenTelemetry GenAI handler's four `llm` spans (`PROBES.md` S4). Z4's
+root span is claimed by no adapter. It reports `unclaimed_record` and never
+`unmapped_attributes` (`SPEC.md` §6.1; S1), so it is in neither table.
+
+| Key | Projects | Disposition |
+|---|---|---|
+| `<record>.flags` | Z4 | mapped at T3: the OTLP envelope, verbatim in `raw.source` (`SPEC.md` §7; S4) |
+| `<record>.kind` | Z4 | mapped at T3: the OTLP envelope, verbatim in `raw.source` (`SPEC.md` §7; S4) |
+| `<record>.resource_spans` | Z4 | mapped at T3: the envelope's resource level, read as `envelope(record).resource` (`SPEC.md` §7; S4) |
+| `<record>.scope_spans` | Z4 | mapped at T3: the envelope's scope level, read as `envelope(record).scope` (`SPEC.md` §7; S4) |
+| `gen_ai.provider.name` | Z4 | reported, not mapped: no field |
+| `gen_ai.response.id` | Z4 | reported, not mapped: no field |
+| `gen_ai.response.model` | Z4 | reported, not mapped: `operation` takes the model from `gen_ai.request.model` (`SPEC.md` §3.1). The response's model is a second statement, and no field holds it |
+| `server.address` | Z4 | reported, not mapped: no field |
+| `server.port` | Z4 | reported, not mapped: no field |
+
+### 7.3 Readings
+
+- **A node's instrumentation scope is read from its envelope, never from
+  `meta`** (S6, S21). `envelope(node.raw.source).scope.get("scope")` gives the
+  scope that wrote the span. Scope is per node, not per graph: Z3's one graph
+  holds `openinference.instrumentation.openai_agents` and
+  `openinference.instrumentation.openai`. Z4 and Z6 also hold two scopes each
+  (`tests/zoo_census.py`, `Capture.scopes`). `Meta` carries no scope (batch T3,
+  option 3).
+
+  **The read works in process only.** It works on a graph `build` or a
+  `Builder` returns, because `raw.source` there is the record the reader
+  marked as unpacked (`SPEC.md` §7). After a JSON round trip, `raw.source` is a
+  plain object, and the mark does not survive. A reader of the serialized
+  graph instead takes the levels from `raw.source` verbatim:
+  `raw.source["scope_spans"]["scope"]` and `raw.source["resource_spans"]`.
+  These are the objects `Envelope.scope` and `Envelope.resource` were. The
+  round trip itself is not part of `envelope()`'s contract.
+- **Two instrumentors on one client** (S6). Z3 runs openai-agents and the
+  OpenAI client together. Each model call there gives two `llm` nodes, one
+  nested in the other: an `openai_agents` `generation` is the parent of an
+  `openai` `ChatCompletion`, 25 per capture. Z6 runs CrewAI and the OpenAI
+  client, and every `llm` node is the OpenAI client's: no `llm` node has an
+  `llm` parent. In neither case does spanweave state any relation between the
+  two nodes beyond the `parent` edge the records carry. It does not say "one
+  call", because no record says so.
+- **One instrumentor, two `llm` nodes, one nested in the other** (S17). Z2's
+  inner `astream_chat` is the only child of the outer one, 2 per capture, and
+  both ends come from one scope, `llama_index`. This is not S6's case of two
+  instrumentors. The reading is the same: the `parent` edge the records state,
+  and nothing more.
+- **No tool span in the zoo records a call id** (S9, S5). The LangChain (Z1,
+  Z5), LlamaIndex (Z2), openai-agents (Z3) and CrewAI (Z6) instrumentors write
+  tool spans with no call-id key. Pairing is by call id and never by name or
+  proximity (`SPEC.md` §4.4), so no zoo graph has a `call_result` edge. Every
+  call an `llm` node requests is an `unpaired_call`, which is the correct
+  rendering (Z1 1, Z2 3, Z3 48, Z6 8 real and 4 recorded; `tests/zoo_census.py`).
+  Pairing by name would hide this. On Z6 it would also need a spelling
+  `tool.name` does not share (`Delegate work to coworker` against
+  `delegate_work_to_coworker`, S9).
+- **Z4's `unpaired_call`** (S5). It does not follow from S1. The GenAI handler
+  exports no tool span at all, so the `book_table` call the second `llm` node
+  requests is fulfilled by no span in the input. With the root span built
+  (batch T1), the count is still 1 (`tests/zoo_census.py`, `_Z4_WHOLE`).
+- **`PROMPT`, `RERANKER`, `GUARDRAIL` and `EVALUATOR` are `unknown` by design**
+  (S14). `NodeKind` is closed (`SPEC.md` §3.2). Each of these becomes an
+  `unknown` node with an `unknown_span_kind` diagnostic, and the dialect's
+  string is kept as `attributes.reported_kind`. Z1's two `ChatPromptTemplate`
+  nodes are the zoo's case (`unknown` 2; `tests/zoo_census.py`).
+- **`graph.node.id` and `graph.node.parent_id` state a sequence, not
+  containment** (S19). They are reported, not mapped (§7.1).
+- **An `llm` node carries no agent identity** (S20). Its normalized attributes
+  are its model or nothing (Z3's nine model-less steps, S10;
+  `tests/test_zoo.py`). An agent's name
+  is never normalized (`SPEC.md` §3.1, `OPEN_QUESTIONS.md` §15). On Z6, a
+  coworker's `ChatCompletion` differs from the delegator's in two ways: its
+  `parent` edge to the delegation `tool` node, and its messages, which sit
+  verbatim in `raw.source`.
+- **Z2's fan-out is ordered by start** (S16). This is right. Each `acall` tool
+  node is the only child of its own `call_tool` chain, and §4.3 orders the
+  `call_tool` siblings by `started_at`. That is an order and not a precedence:
+  record order and end order are not used (`temporal` 14;
+  `tests/zoo_census.py`).
+- **Z6's real and recorded captures are two shapes of one crew** (S22). This is
+  right. Each graph is what its run exported, and the census holds both
+  (`tests/zoo_census.py`).
