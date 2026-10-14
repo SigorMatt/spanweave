@@ -20,11 +20,13 @@ records `spanweave_live.Endpoint` routed to it, in the order its step 3 lists
 order, child before parent as the exporter wrote them (`PROBES.md` S15, S21) --
 except, on Z4, the root span `concierge.conversation`, which no adapter claims
 and which the receiver routed to no trace (`PROBES.md` S1, L2). That record is
-named in `Capture.unrouted`, and `tests/test_zoo.py` holds what the **whole**
-capture builds to beside it: the audit's counts, plus that one record as the
-`unknown` node `SPEC.md` §6.1 makes of a record no adapter claims. The whole
-capture is not a number any report gives; it is the audit's number and §6.1's
-rule, and it is kept separate so neither is mistaken for the other.
+named in `Capture.unrouted`, and `Capture.whole` holds what the **whole**
+capture builds to beside it -- the `unknown` node `SPEC.md` §6.1 makes of a
+record no adapter claims, keyed and placed by its OTLP envelope since batch T1
+(§3.6 rule 1, `OPEN_QUESTIONS.md` §20). The whole capture is not a number any
+report gives; it is this library's own count, each move from the audit's
+explained where it is stated, and it is kept separate so neither is mistaken
+for the other.
 
 **The census is the instrument, not the verdict.** A later change that moves a
 count updates `CAPTURES` in its own commit and says why there. The diff of
@@ -87,6 +89,10 @@ class Capture:
     #: `(body, record)` (1-based, as the reports number them) of each record the
     #: audit's step 3 did not feed to the trace, with the probe that says why.
     unrouted: tuple[tuple[str, int], ...] = ()
+    #: What every record of every body builds to, where the audit fed fewer
+    #: (`unrouted`). Not a report's number: this library's, with each count
+    #: that differs from `census` explained beside it.
+    whole: Census | None = None
 
 
 def _report(run: str) -> str:
@@ -99,8 +105,11 @@ def _capture(
     records_per_body: tuple[int, ...],
     census: Census,
     unrouted: tuple[tuple[str, int], ...] = (),
+    whole: Census | None = None,
 ) -> Capture:
-    return Capture(run, _report(run), trace_id, records_per_body, census, unrouted)
+    return Capture(
+        run, _report(run), trace_id, records_per_body, census, unrouted, whole
+    )
 
 
 # Each `Census(...)` is the step 4 `inspect` block of the report its `Capture`
@@ -144,6 +153,29 @@ _Z4 = Census(  # audit/z4-2026-10-12-{real,recorded}.md, step 4
     unknown=0,
     timestamp_unit_suspect=4,
 )
+# Z4's whole capture: the audit's four records plus the root span
+# `concierge.conversation`, which no adapter claims. Moved at batch T1, when an
+# unclaimed OTLP record became keyed and placed by its envelope (SPEC.md §3.6
+# rule 1, §6.1; OPEN_QUESTIONS.md §20, option 1; PROBES.md S1, S2, S12):
+_Z4_WHOLE = Census(
+    nodes=5,  # the audit's 4 + the root, an `unknown` node (§6.1)
+    # 0 -> 4: the root's node id is its span id `3013a003149d6951` (was a
+    # derived `sw_` id), which is the parent each of the four `llm` spans
+    # states -- four `explicit` edges the telemetry stated.
+    parent=4,
+    # 3, unchanged in number: the four children are still the one sibling
+    # group, now under the root rather than at trace root; the root has no
+    # sibling, so it adds none.
+    temporal=3,
+    # 4 -> 0: the parent the four children name is the root, and it is here.
+    orphan_parent=0,
+    unpaired_call=1,  # unchanged: an `llm` span's, not the root's
+    unknown=1,  # the root
+    # 4 -> 5: the root now has the times its envelope states, nanosecond
+    # integers read by §3.1 as every other span's are, so it draws the same
+    # `timestamp_unit_suspect` (§7) -- and its `missing_timestamp` is gone.
+    timestamp_unit_suspect=5,
+)
 _Z5 = Census(  # audit/z5-2026-10-13-{real,recorded}.md, step 4
     nodes=4,
     parent=2,
@@ -172,6 +204,7 @@ CAPTURES: tuple[Capture, ...] = (
         (3, 2),
         _Z4,
         unrouted=(("0002.json", 2),),
+        whole=_Z4_WHOLE,
     ),
     # The same root span, record 5 of the one body (PROBES.md S1, L2).
     _capture(
@@ -180,6 +213,7 @@ CAPTURES: tuple[Capture, ...] = (
         (5,),
         _Z4,
         unrouted=(("0001.json", 5),),
+        whole=_Z4_WHOLE,
     ),
     _capture("z5/2026-10-13-real", "3072629a56dca029bd8c19818bbebbc4", (4,), _Z5),
     _capture("z5/2026-10-13-recorded", "88167a239e683f6a5db73ac739bce4fe", (4,), _Z5),

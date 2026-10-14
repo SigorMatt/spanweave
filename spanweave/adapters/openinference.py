@@ -23,8 +23,6 @@ Two things it deliberately does **not** do:
 from __future__ import annotations
 
 import json
-import math
-import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from spanweave import jsoncodec
@@ -51,6 +49,7 @@ from spanweave.seam import (
     parent_ref,
     span_links,
     span_ref,
+    stated_time,
     unreadable_fields,
 )
 
@@ -650,80 +649,6 @@ def _as_int(value: JsonValue) -> int | None:
     return None
 
 
-#: A JSON number literal, exactly as RFC 8259 writes one. The rule for a
-#: quoted timestamp is *the string, unquoted, would be a valid JSON number*
-#: (`SPEC.md` §3.1) rather than a list of tolerated spellings: OTLP JSON
-#: encodes 64-bit integers as decimal strings, so a quoted timestamp is a
-#: real exporter's output -- but every tolerated spelling beyond that is a
-#: small normalization, and a library that trims whitespace here has started
-#: deciding what the telemetry meant.
-_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
-
-#: The integer subset of the above: no fraction, no exponent. §3.1 reads an
-#: integer literal as an `int` and every other literal as a `float`, and the
-#: rule is about the *literal* rather than the value, so a quoted timestamp
-#: is typed by the same test as an unquoted one.
-_JSON_INTEGER = re.compile(r"-?(?:0|[1-9][0-9]*)")
-
-
-def _finite(value: int | float) -> int | float | None:
-    """`value`, unless it is `inf` or `nan` -- neither of which is a time.
-
-    Python's JSON parser produces those for the non-standard `NaN` /
-    `Infinity` tokens and for a literal no float64 can hold (`1e400`), and a
-    library that carried one would write it back out as a bare `Infinity`
-    that no strict JSON parser will read (`SPEC.md` §3.1, §7).
-
-    The `isinstance` is the guard rather than a style choice: an `int` is
-    always finite, and `math.isfinite` on one too large for a float raises
-    `OverflowError` instead of answering.
-    """
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    return value
-
-
-def _as_time(value: JsonValue) -> int | float | None:
-    """Unix seconds, as reported. Never rescaled, never guessed at.
-
-    An integer literal is kept as an `int` (`SPEC.md` §3.1). float64's
-    spacing at epoch-nanosecond magnitude is 256 ns, so `float()` here would
-    spend digits the exporter wrote and merge spans a record kept apart.
-    Keeping them is not a unit conversion: nothing is scaled, and the adapter
-    still does not know what unit the field is in.
-
-    Returns `None` both for a field the record omits and for one in a
-    rendering this adapter does not read; `_timestamps` is what tells the two
-    apart, because only the second is something to report.
-    """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        # `json.loads` already draws §3.1's line: an `int` for an integer
-        # literal, a `float` for one with a fraction or an exponent.
-        return _finite(value)
-    if isinstance(value, str) and _JSON_NUMBER.fullmatch(value):
-        # Read as the identical value the same literal would have produced
-        # unquoted: `"1700000000"` and `1700000000` are one timestamp, and
-        # `"1e9"` is the same float `1e9` is.
-        try:
-            parsed: int | float = (
-                jsoncodec.parse_integer(value)
-                if _JSON_INTEGER.fullmatch(value)
-                else float(value)
-            )
-        except ValueError:
-            # Longer than the library's digit limit (`SPEC.md` §5.3): a
-            # constant, and the digits are counted before anything converts
-            # them, so this answer does not depend on how the interpreter's
-            # own limit is set. An unquoted literal that long never gets
-            # here -- the reader refuses the line -- but a *quoted* one is an
-            # ordinary JSON string until this call (`SPEC.md` §3.1).
-            return None
-        return _finite(parsed)
-    return None
-
-
 def _timestamps(
     record: Mapping[str, JsonValue],
 ) -> tuple[int | float | None, int | float | None, list[str]]:
@@ -740,7 +665,7 @@ def _timestamps(
     refused: list[str] = []
     for field in ("start_time", "end_time"):
         reported = record.get(field)
-        parsed = _as_time(reported)
+        parsed = stated_time(reported)
         times.append(parsed)
         if parsed is None and reported is not None:
             refused.append(f"<record>.{field}")

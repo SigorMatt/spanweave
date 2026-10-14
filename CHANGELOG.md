@@ -15,6 +15,16 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The OTLP envelope is public: `spanweave.envelope(record) -> Envelope`**
+  (T1). The trace id, span id, parent, name, times and status the transport
+  stated for a record the reader unpacked from an export — the routing key a
+  receiver needs whether or not any adapter can read the span. The reader marks
+  each record it unpacked (by type, never by a key, so `raw.source` is
+  unchanged); any other record raises `EnvelopeError` with the new error code
+  `not_an_envelope` (`SPEC.md` §3.10), as does an unpacked record missing
+  either id or stating an envelope field in a type the envelope cannot hold.
+  §3.1's timestamp reading moved from the two adapters' identical copies to
+  `spanweave.seam.stated_time`, which the envelope reads by too.
 - **The zoo's captures are a fixture, and the audit's census is a gate**
   (stranger's-trace series, T0). No behaviour change. `fixtures/zoo/` copies
   the twelve captures' `json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at
@@ -557,6 +567,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **Every unclaimed OTLP node with a span id changes id** (stranger's-trace
+  series, T1; `OPEN_QUESTIONS.md` §20, option 1). A record the reader unpacked
+  from an OTLP export and no adapter claims was an `unknown` node with a
+  derived `sw_…` id and no relations; it is now **keyed and placed by its
+  envelope**: its node id is the span id the export states (§3.6 rule 1), its
+  `parent_id` and `trace_id` are its relations, and its `name`, times and
+  status are the node's (`SPEC.md` §6.1). Kind stays `unknown`, provenance
+  still names no adapter, and `unclaimed_record` now says no dialect read its
+  attributes. A flat record, and an unpacked one whose envelope states no id,
+  are rendered exactly as before. On the zoo's Z4 capture the root span
+  `concierge.conversation`, which no adapter claims, is now the parent its
+  four `llm` children state: 4 `parent` edges and 0 `orphan_parent` where
+  there were 0 and 4, its `missing_timestamp` gone, and one more
+  `timestamp_unit_suspect` for the nanosecond times it now carries
+  (`tests/zoo_census.py`, the zoo's S1, S2, S12). No conformance scenario
+  renders an unclaimed record, so no expected graph moves. A record unpacked
+  from an export and a flat record that parse equal are no longer collapsed
+  as duplicates (`SPEC.md` §7): only one of them carries an envelope.
 
 - **The live-graphs series is closed in this repository, and `WORKPLAN.md` is
   gone with it.** From the run-4 cold review's A2 and A3 (batch L28, this

@@ -93,7 +93,9 @@ def test_every_record_the_audit_left_out_is_one_no_adapter_claims(capture):
 
     Z4's root span is claimed by no adapter (`PROBES.md` S1) and was routed to
     no trace (L2), so the audit's graph lacks it. Fed with the rest, `SPEC.md`
-    §6.1 makes it one `unknown` node and changes no other census count.
+    §6.1 makes it one `unknown` node keyed and placed by its OTLP envelope
+    (§3.6 rule 1, batch T1), and `Capture.whole` holds the counts that gives,
+    each move from the audit's explained there.
     """
     every = zoo_census.records(capture)
     left_out = [r for r in every if (r.body, r.index) in set(capture.unrouted)]
@@ -105,21 +107,7 @@ def test_every_record_the_audit_left_out_is_one_no_adapter_claims(capture):
     batch, incremental = zoo_census.batch_and_incremental(feed)
     assert batch == incremental
     graph = graph_from_records(feed)
-    expected = capture.census
-    whole = zoo_census.count(graph)
-    assert whole.nodes == expected.nodes + len(left_out)
-    assert whole.unknown == expected.unknown + len(left_out)
+    whole = capture.whole if capture.whole is not None else capture.census
+    assert (capture.whole is None) == (not capture.unrouted)
+    assert zoo_census.count(graph) == whole, capture.run
     assert sum(d.code == "unclaimed_record" for d in graph.diagnostics) == len(left_out)
-    assert (
-        whole.parent,
-        whole.temporal,
-        whole.orphan_parent,
-        whole.unpaired_call,
-        whole.timestamp_unit_suspect,
-    ) == (
-        expected.parent,
-        expected.temporal,
-        expected.orphan_parent,
-        expected.unpaired_call,
-        expected.timestamp_unit_suspect,
-    )

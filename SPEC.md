@@ -359,8 +359,12 @@ it out would make a shuffled input produce a different graph, breaking §5.2.
 
 Node ids are deterministic and stable across runs, machines, and Python versions.
 
-1. If the dialect supplies a span id that is unique within the trace, the node id
-   is that string, unchanged.
+1. If the record's envelope or its dialect supplies a span id that is unique
+   within the trace, the node id is that string, unchanged. The **envelope** is
+   the OTLP envelope of a record the reader unpacked from an export (§7,
+   `spanweave.envelope`); it is what keys a record no adapter claimed (§6.1),
+   and for a claimed record it states the same `span_id` the dialect reads, so
+   the two sources never disagree.
 2. Otherwise, if the `source_key` is unique within the trace, the node id is
    `sw_` + the first 16 hex chars of
    `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key)`, where
@@ -495,7 +499,11 @@ input the material of rule 2 and rule 3 differs per record, and it is the
 **empty string** for a record no adapter claimed — the same way `trace_id` is
 where the input states none. Rule 1 never consults it, which is why an input
 whose dialect states span ids gets exactly the same ids however its records
-were dispatched.
+were dispatched. An unclaimed record reaches rules 2 and 3 only when it has no
+readable envelope — a flat record, or an unpacked one `spanweave.envelope`
+refuses — and is then keyed by its canonical digest. **Every unclaimed OTLP
+record whose envelope states a span id changed id at batch T1** (from a
+derived `sw_` id to that span id; `CHANGELOG.md`, `OPEN_QUESTIONS.md` §20).
 
 **`duplicate_source_id` reports a reused *span id*, not a shared `source_key`.**
 Rule 3 fires on the `source_key`, so the two are not the same event, and the
@@ -603,7 +611,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
-| `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter |
+| `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter. Where the node is keyed and placed by the record's OTLP envelope (§6.1), what nobody read is the span's attributes, and the message says so |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
@@ -999,6 +1007,7 @@ SpanweaveError:
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
+| `not_an_envelope` | `EnvelopeError` | `spanweave.envelope` was given a record with no readable OTLP envelope: one the reader did not unpack from an export, one that states no `trace_id` or no `span_id`, or one stating an envelope field in a type the envelope cannot hold (§7) |
 | `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
@@ -1498,7 +1507,7 @@ declares reaches `0.5`.
 | every record claimed by the same one adapter | that adapter parses the input, and `meta.adapters` carries its one entry — the single-dialect case, unchanged |
 | a record claimed by **two** adapters | a **hard error** (`adapter_ambiguous`), naming the record's position, its span id where it has one, and both claimants |
 | no record claimed by any adapter | a **hard error** (`adapter_unconfident`), listing every declared confidence |
-| a record claimed by **no** adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning). Its `provenance` names no adapter (§3.5), and it is never handed to a designated one |
+| a record claimed by **no** adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning). Its `provenance` names no adapter (§3.5), and it is never handed to a designated one. Where the reader unpacked the record from an OTLP export and its envelope is readable (§7, `spanweave.envelope`), the node is **keyed and placed by that envelope**: its id is the envelope's `span_id` (§3.6 rule 1), its `parent_id` and `trace_id` are its relations, and its `name`, `started_at`/`ended_at` (§3.1) and `status`/`status_note` are the node's; `unclaimed_record` then says that no dialect read its attributes. Otherwise — a flat record, or an envelope that cannot be read — every field a dialect would have supplied is absent and the id is derived (§3.6 rule 2) |
 | several adapters each claiming records, none claiming a record another claims | a **mixed** build: each adapter parses the records it claimed, the builder receives all of their spans together, `meta.adapters` lists every contributor (§3.9), and each node's `provenance` names the adapter that produced it |
 
 - `--adapter <id>` bypasses classification entirely: the named adapter parses
@@ -1522,6 +1531,22 @@ declares reaches `0.5`.
 - **Nothing is claimed by proximity.** A record's classification is a function
   of that record alone, so it cannot depend on input order, on registration
   order, or on how many neighbours matched (§5).
+- **An unclaimed record's envelope is read; its attributes are not.** The
+  nine keys the reader renamed out of an OTLP span (§7) are the transport's —
+  trace id, span id and parent id are how the export says which span this is
+  and where it sits — and reading them is not deciding what a span looks like
+  on behalf of an adapter that declined it: it is reading what the transport
+  stated before any adapter was asked. The one key the reader does not read,
+  `attributes`, is the dialect's, and it is exactly what `unclaimed_record`
+  reports nobody read. An `unknown` node is first-class (§3.2), and a
+  first-class node has a name and a time where the telemetry gave it one. Kind
+  stays `unknown`, provenance still names no adapter, and the record is still
+  never handed to a designated one. So a root span no adapter claims is the
+  parent its children state, by the `explicit` `parent` edge the telemetry
+  stated, rather than the absent parent of every child (`OPEN_QUESTIONS.md`
+  §20; the zoo's Z4, `tests/zoo_census.py`). A key named `span_id` in a flat
+  file is **not** an envelope: the file declared none, and only the reader
+  knows which records it unpacked.
 - **A mixed input is not an ambiguous one.** Each record has exactly one
   answer, so nothing is guessed; every join is made on what the telemetry
   stated and never on who parsed it, and an edge whose two ends came from
@@ -1667,7 +1692,9 @@ declares reaches `0.5`.
     are emitted in canonical-digest order, not in the order the copies
     appeared.
   - Two records that differ **anywhere**, including two that share a span id,
-    are both kept. That is §3.6 rule 3's case, not this one.
+    are both kept. That is §3.6 rule 3's case, not this one. So are a record
+    the reader unpacked from an OTLP export and a flat record equal to it: the
+    first carries an envelope and the second does not (*OTLP JSON*, below).
 - **No interpreter setting is load-bearing for what a graph says.** The
   library's digit limit (4300 digits, §5.3) decides whether an integer literal
   is read at all, whether a quoted one is read as a timestamp (§3.1), and
@@ -1890,6 +1917,42 @@ declares reaches `0.5`.
   - **An envelope level with no spans is not a discard**: it is yielded as a
     record of its own and becomes an `unknown` node carrying it, exactly as any
     other record the library cannot read as a span does.
+  - **The reader marks every record it unpacked, and the envelope is public.**
+    The mark is the record's type (`spanweave.read.Unpacked`, a `dict`), never
+    a key: the record compares, digests and serializes exactly as the plain
+    object with the same items, so nothing is invented in `raw.source`. A copy
+    taken through `json` is a flat record again, because the mark is a fact
+    about how the record was read and only the reader can state it.
+    `spanweave.envelope(record) -> Envelope` reads a marked record's envelope:
+
+    ```
+    Envelope:
+      trace_id:    str               # required
+      span_id:     str               # required
+      parent_id:   str | None        # absent, null or "" -> None (§3.6)
+      name:        str               # absent -> "" (proto3's default)
+      started_at:  int | float | None  # §3.1's reading; absent -> None
+      ended_at:    int | float | None
+      status:      Status            # the reader's name, else UNSET (above)
+      status_note: str | None        # status.message, absent -> None
+    ```
+
+    It raises `EnvelopeError` (`not_an_envelope`, §3.10) on a record the
+    reader did not mark; on a marked record that states no `trace_id` or no
+    `span_id` (absent, `null` or `""` — the two fields OTLP requires of every
+    span, which an envelope level with no spans does not have); and on a field
+    present in a type the envelope cannot hold — an id, `parent_id`, `name` or
+    `status_message` that is not a string, a time §3.1 does not read. It never
+    returns a partial envelope, because a guessed field would be
+    indistinguishable from one the export stated. It reads no attribute and
+    consults no adapter: a receiver routes every record by its `trace_id`
+    whether or not anything can read the span (§6.1 keys an unclaimed record
+    by the same envelope).
+  - **A marked record and a flat record that parse equal are two records**,
+    not two copies of one (the duplicate rule below compares the mark with the
+    digest). Only one of them carries an envelope, and an unclaimed record is
+    keyed by its envelope where it has one (§6.1), so collapsing them would
+    keep whichever came first and make a node id depend on line order (§5.2).
   - **Reading it needs the whole input**, as the JSON array form does and for
     the same reason: a document is not a record until its closing brace. The
     reader buffers only when the input's first member key is `resourceSpans`;

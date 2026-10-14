@@ -243,6 +243,16 @@ receiver reading bytes in flight splits them on `\n` and keeps the remainder
 for its next call, rather than handing over an arbitrary boundary
 (`SPEC.md` §7).
 
+**`envelope(record)` is what the transport stated about one span**, for a
+record the reader unpacked from an OTLP export: its trace id, span id, parent,
+name, times and status, as an `Envelope` — the routing key a receiver needs,
+whether or not any adapter can read the span. It reads no attribute and names
+no dialect. Any other record — a flat one with a key that happens to be called
+`span_id` included — raises `EnvelopeError` (`not_an_envelope`), as does an
+unpacked record missing either id (`SPEC.md` §7). A span no adapter claims is
+keyed and placed by the same envelope, so a root nobody recognizes is still the
+parent its children name (§6.1).
+
 **A delta serializes to its own top-level document** — `delta_to_document` for
 the mapping, `delta_dumps` for the bytes — with `kind` telling it from a
 graph's. Nodes, edges and diagnostics are written by the same functions that
@@ -322,13 +332,13 @@ test, not a request.
 | For | Names |
 |---|---|
 | Building a graph | `build`, `Builder` |
-| Reading records without building one | `read_records`, `Records` |
+| Reading records without building one | `read_records`, `Records`, `envelope`, `Envelope` |
 | The graph and what it holds | `Graph`, `Node`, `Edge`, `Diagnostic`, `Meta`, `Payload`, `Provenance`, `RawRecord`, `Status`, `Usage` |
 | The closed vocabularies | `NodeKind`, `EdgeKind`, `Warrant`, `PayloadState`, `DiagnosticLevel` |
 | What changed between two versions | `Delta`, `BasisRewrite` |
 | Your own facts, kept beside ours | `Annotation`, `AnnotationStore` |
 | Serializing and checking | `dumps`, `dump`, `to_document`, `delta_dumps`, `delta_to_document`, `validate` |
-| Refusals, matched on `.code` | `SpanweaveError`, `AdapterSelectionError`, `DeltaUnavailableError`, `DuplicateNodeIdError`, `GraphNotSerializableError`, `UnknownAdapterError` |
+| Refusals, matched on `.code` | `SpanweaveError`, `AdapterSelectionError`, `DeltaUnavailableError`, `DuplicateNodeIdError`, `EnvelopeError`, `GraphNotSerializableError`, `UnknownAdapterError` |
 | Versions | `__version__`, `SCHEMA_VERSION`, `SCHEMA_FROZEN` |
 
 The table is held to `spanweave.__all__` by a test, so an export that lands

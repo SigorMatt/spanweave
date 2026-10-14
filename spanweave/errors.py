@@ -58,6 +58,13 @@ GRAPH_NOT_SERIALIZABLE = "graph_not_serializable"
 # complete one, which makes it the worst of the available answers.
 DELTA_UNAVAILABLE = "delta_unavailable"
 
+# A caller asked for the OTLP envelope of a record that carries none: one the
+# reader did not unpack from an export, or one whose envelope omits an id or
+# states a field in a type the envelope cannot hold (`SPEC.md` §7). A key named
+# `span_id` in a flat file is not an envelope, and guessing that it is one
+# would put the transport's authority behind a statement nobody made.
+NOT_AN_ENVELOPE = "not_an_envelope"
+
 #: Every code the library raises. A test asserts this matches `SPEC.md` §3.10.
 ERROR_CODES = (
     ADAPTER_AMBIGUOUS,
@@ -68,6 +75,7 @@ ERROR_CODES = (
     DUPLICATE_NODE_ID,
     GRAPH_NOT_SERIALIZABLE,
     NO_ADAPTERS_REGISTERED,
+    NOT_AN_ENVELOPE,
     UNKNOWN_ADAPTER,
 )
 
@@ -172,3 +180,18 @@ class DeltaUnavailableError(SpanweaveError):
     """
 
     code = DELTA_UNAVAILABLE
+
+
+class EnvelopeError(SpanweaveError):
+    """This record carries no OTLP envelope that can be read (`SPEC.md` §7).
+
+    Raised by `spanweave.envelope` and by nothing else. A record has an
+    envelope only when the reader unpacked it from an OTLP export -- the reader
+    knows the nine keys it renamed, and a flat file that happens to use the
+    same names declared nothing -- and the envelope is readable only when it
+    states both ids and every field it states is of the type the envelope
+    holds. Never a partial answer: an envelope with a guessed field would be
+    indistinguishable from one the export stated.
+    """
+
+    code = NOT_AN_ENVELOPE

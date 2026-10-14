@@ -14,11 +14,15 @@ the versioning burden for no consumer benefit (``DESIGN.md`` §3.1).
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from spanweave import jsoncodec
 from spanweave.diagnostics import UNCLAIMED_RECORD
+from spanweave.errors import EnvelopeError
 from spanweave.model import (
     Diagnostic,
     JsonValue,
@@ -28,7 +32,7 @@ from spanweave.model import (
     Status,
     Usage,
 )
-from spanweave.read import record_digest
+from spanweave.read import Unpacked, record_digest
 
 
 class CallRole(StrEnum):
@@ -294,6 +298,85 @@ def span_links(
     return tuple(links), unread
 
 
+#: A JSON number literal, exactly as RFC 8259 writes one. The rule for a
+#: quoted timestamp is *the string, unquoted, would be a valid JSON number*
+#: (`SPEC.md` §3.1) rather than a list of tolerated spellings: OTLP JSON
+#: encodes 64-bit integers as decimal strings, so a quoted timestamp is a
+#: real exporter's output -- but every tolerated spelling beyond that is a
+#: small normalization, and a library that trims whitespace here has started
+#: deciding what the telemetry meant.
+_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
+
+#: The integer subset of the above: no fraction, no exponent. §3.1 reads an
+#: integer literal as an `int` and every other literal as a `float`, and the
+#: rule is about the *literal* rather than the value, so a quoted timestamp
+#: is typed by the same test as an unquoted one.
+_JSON_INTEGER = re.compile(r"-?(?:0|[1-9][0-9]*)")
+
+
+def _finite(value: int | float) -> int | float | None:
+    """`value`, unless it is `inf` or `nan` -- neither of which is a time.
+
+    Python's JSON parser produces those for the non-standard `NaN` /
+    `Infinity` tokens and for a literal no float64 can hold (`1e400`), and a
+    library that carried one would write it back out as a bare `Infinity`
+    that no strict JSON parser will read (`SPEC.md` §3.1, §7).
+
+    The `isinstance` is the guard rather than a style choice: an `int` is
+    always finite, and `math.isfinite` on one too large for a float raises
+    `OverflowError` instead of answering.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def stated_time(value: JsonValue) -> int | float | None:
+    """Unix seconds, as reported. Never rescaled, never guessed at.
+
+    An integer literal is kept as an `int` (`SPEC.md` §3.1). float64's
+    spacing at epoch-nanosecond magnitude is 256 ns, so `float()` here would
+    spend digits the exporter wrote and merge spans a record kept apart.
+    Keeping them is not a unit conversion: nothing is scaled, and the adapter
+    still does not know what unit the field is in.
+
+    Returns `None` both for a field the record omits and for one in a
+    rendering §3.1 does not read; the caller is what tells the two apart,
+    because only the second is something to report.
+
+    It lives at the seam for `parent_ref`'s reason: both adapters held a
+    byte-identical copy of it, and the envelope (`envelope`, below) reads the
+    same two fields by the same rule -- a third copy is how a rule drifts in
+    one of them.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        # `json.loads` already draws §3.1's line: an `int` for an integer
+        # literal, a `float` for one with a fraction or an exponent.
+        return _finite(value)
+    if isinstance(value, str) and _JSON_NUMBER.fullmatch(value):
+        # Read as the identical value the same literal would have produced
+        # unquoted: `"1700000000"` and `1700000000` are one timestamp, and
+        # `"1e9"` is the same float `1e9` is.
+        try:
+            parsed: int | float = (
+                jsoncodec.parse_integer(value)
+                if _JSON_INTEGER.fullmatch(value)
+                else float(value)
+            )
+        except ValueError:
+            # Longer than the library's digit limit (`SPEC.md` §5.3): a
+            # constant, and the digits are counted before anything converts
+            # them, so this answer does not depend on how the interpreter's
+            # own limit is set. An unquoted literal that long never gets
+            # here -- the reader refuses the line -- but a *quoted* one is an
+            # ordinary JSON string until this call (`SPEC.md` §3.1).
+            return None
+        return _finite(parsed)
+    return None
+
+
 #: The record fields every adapter reads as a plain string: the three ids and
 #: the span's name. The timestamps are read by `SPEC.md` §3.1's own rule and
 #: report themselves; `status`, `links` and `attributes` are read through
@@ -332,38 +415,186 @@ def unreadable_fields(record: Mapping[str, JsonValue]) -> list[str]:
     ]
 
 
+#: The status names the reader writes for an OTLP `Status.code` (`SPEC.md` §7).
+#: Any other value is carried verbatim by the reader and read as `UNSET` here,
+#: exactly as §7 states it.
+_ENVELOPE_STATUSES: Mapping[JsonValue, Status] = {
+    "UNSET": Status.UNSET,
+    "OK": Status.OK,
+    "ERROR": Status.ERROR,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class Envelope:
+    """What the OTLP transport stated about one span (`SPEC.md` §7).
+
+    The nine keys the reader renamed out of an export, read as the transport
+    states them: two ids it requires, the parent it names, the span's name,
+    its two times and its status. Nothing here is a dialect's: no attribute is
+    read, and no field is interpreted beyond §3.6's empty-id rule, §3.1's
+    timestamp rule and §7's status rule -- the same three readings every
+    adapter applies to the same fields.
+    """
+
+    trace_id: str
+    span_id: str
+    #: `None` where the span states no parent: the key omitted, `null`, or the
+    #: empty string a proto3 marshaler writes for an unset `bytes` (§3.6).
+    parent_id: str | None
+    #: The empty string where the span omits `name`, which is proto3's default
+    #: for the field rather than an absence.
+    name: str
+    #: §3.1's reading of the reported value -- kept exactly, never rescaled.
+    #: `None` where the span omits the field.
+    started_at: int | float | None
+    ended_at: int | float | None
+    status: Status
+    status_note: str | None
+
+
+def envelope(record: JsonValue) -> Envelope:
+    """The OTLP envelope of a record the reader unpacked (`SPEC.md` §7).
+
+    **Only a record the reader unpacked from an export has one.** The reader
+    marks such a record (`spanweave.read.Unpacked`), and this function reads
+    nothing else: a key named `span_id` in a flat file is a key, not the
+    transport's statement, and treating it as one would put the transport's
+    authority behind a statement nobody made.
+
+    Raises `EnvelopeError` (`not_an_envelope`) on any other record; on an
+    unpacked record that states no `trace_id` or no `span_id` -- the two
+    fields OTLP requires of every span, which an envelope level with no spans
+    does not have -- and on a field present in a type the envelope cannot hold
+    (an id or `name` that is not a string, a time §3.1 does not read, a status
+    message that is not a string). Never a partial answer: an `Envelope` with
+    a guessed field would be indistinguishable from one the export stated.
+
+    Pure and total over its input: it reads the record and returns a value,
+    and calling it twice gives the same value twice. It is the routing key a
+    receiver needs -- every record of one trace has one `trace_id` here,
+    whether or not any adapter can read it.
+    """
+    if not isinstance(record, Unpacked):
+        raise EnvelopeError(
+            "this record was not unpacked from an OTLP export, so it carries "
+            "no envelope; a key named span_id in a flat record is not one"
+        )
+    ids: dict[str, str] = {}
+    for key in ("trace_id", "span_id"):
+        reported = record.get(key)
+        if reported is not None and not isinstance(reported, str):
+            raise EnvelopeError(f"the envelope's {key} is not a string")
+        stated = span_ref(reported)
+        if stated is None:
+            raise EnvelopeError(f"the envelope states no {key}")
+        ids[key] = stated
+    reported_parent = record.get("parent_id")
+    if reported_parent is not None and not isinstance(reported_parent, str):
+        raise EnvelopeError("the envelope's parent_id is not a string")
+    name = record.get("name", "")
+    if not isinstance(name, str):
+        raise EnvelopeError("the envelope's name is not a string")
+    times: list[int | float | None] = []
+    for key in ("start_time", "end_time"):
+        reported_time = record.get(key)
+        read = stated_time(reported_time)
+        if read is None and reported_time is not None:
+            raise EnvelopeError(f"the envelope's {key} is not a time §3.1 reads")
+        times.append(read)
+    note = record.get("status_message")
+    if note is not None and not isinstance(note, str):
+        raise EnvelopeError("the envelope's status_message is not a string")
+    reported_status = record.get("status")
+    status = (
+        _ENVELOPE_STATUSES.get(reported_status, Status.UNSET)
+        if isinstance(reported_status, str)
+        else Status.UNSET
+    )
+    return Envelope(
+        trace_id=ids["trace_id"],
+        span_id=ids["span_id"],
+        parent_id=parent_ref(reported_parent),
+        name=name,
+        started_at=times[0],
+        ended_at=times[1],
+        status=status,
+        status_note=note,
+    )
+
+
 def unclaimed_span(record: JsonValue, line_number: int | None = None) -> NormalizedSpan:
     """The seam value for a record **no adapter claimed** (`SPEC.md` §6.1).
 
     Not a dialect's translation of the record, because no dialect offered
     one: an `unknown` node carrying the record verbatim, and an
-    `unclaimed_record` warning saying nobody recognized it. Everything a
-    dialect would have supplied is left as it is left whenever the library
-    was not told -- absent, `None`, empty -- and that is the honest shape.
-    Reading the record's own fields here would be this module deciding what a
-    span envelope looks like on behalf of an adapter that declined it.
+    `unclaimed_record` warning saying nobody recognized it.
+
+    **Where the reader unpacked the record from an OTLP export, its envelope
+    keys and places it** -- id, parent, trace, name, times and status, the
+    nine keys the reader renamed (`envelope`, §7). Reading them here is not
+    deciding what a span looks like on behalf of an adapter that declined it:
+    it is reading what the transport stated before any adapter was asked. What
+    no dialect read is the span's `attributes`, and that is what
+    `unclaimed_record` then says. So a root span no adapter claims is the
+    parent its children name, by the `explicit` edge the telemetry stated,
+    rather than the absent parent of four orphans (`OPEN_QUESTIONS.md` §20).
+
+    Everywhere else -- a flat record, or an unpacked one whose envelope cannot
+    be read (`EnvelopeError`) -- everything a dialect would have supplied is
+    left as it is left whenever the library was not told: absent, `None`,
+    empty. `source_key` is then the record's canonical digest -- content,
+    never position, the key `SPEC.md` §3.6 rule 2 uses for a record whose
+    dialect states no span id.
 
     It lives at the seam rather than above or below it because it belongs to
     neither side: no adapter produced it, and the builder must not learn that
     such a thing exists as a category. The dispatcher hands it over the seam
     like any other span (`DESIGN.md` §3).
-
-    `source_key` is the record's canonical digest -- content, never position,
-    the same key `SPEC.md` §3.6 rule 2 uses for a record whose dialect states
-    no span id.
     """
+    try:
+        stated = envelope(record)
+    except EnvelopeError:
+        return NormalizedSpan(
+            source_key=record_digest(record),
+            kind=NodeKind.UNKNOWN,
+            name="",
+            raw=RawRecord(source=record, line_number=line_number),
+            diagnostics=(
+                Diagnostic(
+                    code=UNCLAIMED_RECORD,
+                    message=(
+                        "no registered adapter recognized this record, so "
+                        "nothing read it; it is kept as an unknown node "
+                        "carrying the record verbatim, with no adapter on its "
+                        "provenance"
+                    ),
+                    source=record,
+                ),
+            ),
+        )
     return NormalizedSpan(
-        source_key=record_digest(record),
+        source_key=stated.span_id,
+        span_id=stated.span_id,
+        parent_id=stated.parent_id,
+        trace_id=stated.trace_id,
         kind=NodeKind.UNKNOWN,
-        name="",
-        raw=RawRecord(source=record, line_number=line_number),
+        name=stated.name,
+        started_at=stated.started_at,
+        ended_at=stated.ended_at,
+        status=stated.status,
+        status_note=stated.status_note,
+        raw=RawRecord(source=record, source_id=stated.span_id, line_number=line_number),
         diagnostics=(
             Diagnostic(
                 code=UNCLAIMED_RECORD,
                 message=(
-                    "no registered adapter recognized this record, so nothing "
-                    "read it; it is kept as an unknown node carrying the "
-                    "record verbatim, with no adapter on its provenance"
+                    "no registered adapter recognized this record, so no "
+                    "dialect read its attributes; it is kept as an unknown "
+                    "node carrying the record verbatim, keyed and placed by "
+                    "the OTLP envelope it was unpacked from (span id, parent, "
+                    "trace, name, times, status), with no adapter on its "
+                    "provenance"
                 ),
                 source=record,
             ),

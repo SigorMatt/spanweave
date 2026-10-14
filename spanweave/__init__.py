@@ -23,6 +23,7 @@ from spanweave.errors import (
     AdapterSelectionError,
     DeltaUnavailableError,
     DuplicateNodeIdError,
+    EnvelopeError,
     GraphNotSerializableError,
     SpanweaveError,
     UnknownAdapterError,
@@ -45,6 +46,7 @@ from spanweave.model import (
     Warrant,
 )
 from spanweave.read import Records, read_records
+from spanweave.seam import Envelope, envelope
 from spanweave.serialize import (
     delta_dumps,
     delta_to_document,
@@ -70,6 +72,8 @@ __all__ = [
     "DuplicateNodeIdError",
     "Edge",
     "EdgeKind",
+    "Envelope",
+    "EnvelopeError",
     "Graph",
     "GraphNotSerializableError",
     "Meta",
@@ -91,6 +95,7 @@ __all__ = [
     "delta_to_document",
     "dump",
     "dumps",
+    "envelope",
     "read_records",
     "to_document",
     "validate",

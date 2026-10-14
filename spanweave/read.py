@@ -176,22 +176,29 @@ class RecordStream:
         only for the ones that turned out to be duplicated. Streaming is not
         given up: nothing here waits for a later record to yield an earlier
         one.
+
+        **A record unpacked from an export and a flat record that parse equal
+        are two records**, not two copies of one: the first carries an
+        envelope (`Unpacked`) and the second does not, and a record no adapter
+        claims is keyed by its envelope where it has one (§6.1). Collapsing
+        them would keep whichever came first, so swapping two lines would
+        change a node id -- the one thing input order must never do (§5.2).
         """
-        seen: set[str] = set()
-        repeated: dict[str, list[JsonValue]] = {}
+        seen: set[tuple[str, bool]] = set()
+        repeated: dict[tuple[str, bool], list[JsonValue]] = {}
         for record in records:
-            digest = record_digest(record)
-            if digest in seen:
-                entry = repeated.setdefault(digest, [record, 1])
+            key = (record_digest(record), isinstance(record, Unpacked))
+            if key in seen:
+                entry = repeated.setdefault(key, [record, 1])
                 entry[1] += 1
                 continue
-            seen.add(digest)
+            seen.add(key)
             yield record
         # Reported in digest order rather than in the order the repeats
         # arrived: the collector's sort is stable, so insertion order decides
         # ties, and insertion order would otherwise be input order.
-        for digest in sorted(repeated):
-            record, copies = repeated[digest]
+        for key in sorted(repeated):
+            record, copies = repeated[key]
             self._collector.add(
                 codes.DUPLICATE_RECORD,
                 f"this record appears {copies} times in the input; one copy "
@@ -605,7 +612,10 @@ def _without(entry: dict[str, JsonValue], child: str) -> dict[str, JsonValue]:
 def _levels_only(
     resource_level: dict[str, JsonValue], scope_level: dict[str, JsonValue]
 ) -> JsonValue:
-    record: dict[str, JsonValue] = {}
+    # Unpacked like a span, and marked like one: the record came out of an
+    # export. It states no span, so `spanweave.envelope` refuses it for the
+    # missing ids rather than for a missing mark.
+    record: dict[str, JsonValue] = Unpacked()
     _attach_levels(record, resource_level, scope_level)
     return record
 
@@ -630,13 +640,33 @@ def _attach_levels(
         record["scope_spans"] = scope_level
 
 
+class Unpacked(dict[str, JsonValue]):
+    """A record this reader unpacked from an OTLP export (`SPEC.md` §7).
+
+    **The mark is the type, not a key.** A record is a plain JSON object in
+    every other respect -- it compares equal to the dict with the same items,
+    it digests and serializes identically, and `raw.source` round-trips it
+    byte for byte (§3.5) -- because adding a key to say where it came from
+    would invent one, and losslessness forbids that in both directions.
+
+    What the mark carries is one fact: the nine keys `_RENAMED_SPAN_KEYS`, the
+    status fold and the attribute fold put there are the **envelope** the
+    transport stated, not keys a dialect happens to share a name with. A flat
+    file that writes `span_id` declared no envelope, and a copy of this record
+    taken through `json` is a flat record again: the fact is about how the
+    record was read, and only the reader can state it (`spanweave.envelope`).
+    """
+
+    __slots__ = ()
+
+
 def _flattened(
     span: dict[str, JsonValue],
     resource_level: dict[str, JsonValue],
     scope_level: dict[str, JsonValue],
 ) -> JsonValue:
     """One OTLP span as one flat record. Never drops a key, never invents one."""
-    record: dict[str, JsonValue] = {}
+    record: dict[str, JsonValue] = Unpacked()
     for key, value in span.items():
         renamed = _RENAMED_SPAN_KEYS.get(key)
         if renamed is not None:
