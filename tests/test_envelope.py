@@ -376,8 +376,9 @@ def test_the_envelope_carries_the_resource_and_scope_levels_as_the_record_does()
         "schemaUrl": "https://example.invalid/r",
     }
     assert stated.scope == {"scope": _SCOPE}
-    assert stated.resource == record["resource_spans"]
-    assert stated.scope == record["scope_spans"]
+    # The same objects, not copies (`SPEC.md` §7), as `raw.source` is the record.
+    assert stated.resource is record["resource_spans"]
+    assert stated.scope is record["scope_spans"]
 
 
 def test_a_level_the_export_omits_is_an_empty_object():
@@ -660,3 +661,132 @@ def test_an_unclaimed_span_s_events_are_reported_with_no_adapter():
         assert event.adapter is None
         assert event.node_id == node.id
         assert event.level == "info"
+
+
+# --- The seam's dropped-count and event paths (decisions 2026-10-14g) --------
+#
+# R-11 and R-14: an unpacked span whose envelope cannot be read (no `spanId`)
+# still reports its dropped count and its events, `adapter` null (§3.7); an
+# event's `null` name and an exception event's `null` attributes read as
+# proto3's defaults; an exception event is read only where every attribute
+# folds; a claimed span's `span_event` names its adapter; and the convention's
+# event name is exact.
+
+_CLAIMED = {
+    "trace_id": "t1",
+    "span_id": "s2",
+    "start_time": 1700000000.0,
+    "attributes": {"openinference.span.kind": "LLM"},
+}
+
+
+def _no_span_id(**span_keys: object) -> spanweave.model.JsonValue:
+    """An unpacked, unclaimed span that states no `spanId`: no envelope."""
+    (record,) = spanweave.read_records(
+        _export(
+            {
+                "traceId": "t1",
+                "name": "no id",
+                "attributes": [{"key": "x", "value": {"stringValue": "y"}}],
+                **span_keys,
+            }
+        )
+    ).records
+    assert isinstance(record, Unpacked)
+    with pytest.raises(spanweave.EnvelopeError):
+        spanweave.envelope(record)
+    return record
+
+
+def _fallback_node(
+    graph: spanweave.Graph, record: spanweave.model.JsonValue
+) -> spanweave.Node:
+    (node,) = [n for n in graph.nodes() if n.kind is NodeKind.UNKNOWN]
+    assert node.id == derive(None, graph.trace_id, record_digest(record))
+    return node
+
+
+def test_a_span_with_no_envelope_reports_its_dropped_count_with_no_adapter():
+    record = _no_span_id(droppedAttributesCount=3)
+    graph = graph_from_records([_CLAIMED, record])
+    node = _fallback_node(graph, record)
+    (dropped,) = _events_of(graph, "attributes_dropped")
+    assert dropped.source == {"count": 3}
+    assert dropped.adapter is None
+    assert dropped.node_id == node.id
+
+
+def test_a_span_with_no_envelope_reports_its_events_with_no_adapter():
+    record = _no_span_id(events=[_exception({"boolValue": True}), {"name": "tick"}])
+    graph = graph_from_records([_CLAIMED, record])
+    node = _fallback_node(graph, record)
+    codes = sorted(d.code for d in graph.diagnostics if d.node_id == node.id)
+    assert codes == [
+        "exception_event",
+        "missing_timestamp",
+        "span_event",
+        "unclaimed_record",
+    ]
+    for code in ("exception_event", "span_event"):
+        (event,) = _events_of(graph, code)
+        assert event.adapter is None
+        assert event.node_id == node.id
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_an_event_named_null_is_a_span_event_named_empty(dialect):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], events=[{"name": None}])
+    )
+    (event,) = _events_of(graph, "span_event")
+    assert event.source == {"name": "", "time": None}
+    assert _unmapped(graph) == []
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_an_exception_event_with_null_attributes_reads_as_stating_none(dialect):
+    events = [{"name": "exception", "attributes": None}]
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=events))
+    (raised,) = _events_of(graph, "exception_event")
+    assert raised.source == {
+        "type": None,
+        "message": None,
+        "escaped": None,
+        "time": None,
+    }
+    assert _unmapped(graph) == []
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_an_exception_event_is_read_only_where_every_attribute_folds(dialect):
+    folded = _exception({"boolValue": False})
+    unfoldable = _exception({"boolValue": False})
+    unfoldable["attributes"] = [*unfoldable["attributes"], {"key": 7}]
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], events=[folded, unfoldable])
+    )
+    (raised,) = _events_of(graph, "exception_event")
+    assert raised.source["type"] == "ValueError"
+    assert "event 0" in raised.message
+    assert _unmapped(graph) == ["<record>.events[1]"]
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+def test_a_claimed_span_s_span_event_names_its_adapter(dialect):
+    graph = _built(
+        _full_export(attributes=_ATTRIBUTES[dialect], events=[{"name": "tick"}])
+    )
+    (node,) = graph.nodes()
+    assert node.provenance.adapter_id is not None
+    (event,) = _events_of(graph, "span_event")
+    assert event.adapter == node.provenance.adapter_id
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize("name", ["Exception", "EXCEPTION", " exception"])
+def test_the_exception_event_s_name_is_exact(dialect, name):
+    event = {**_exception({"boolValue": True}), "name": name}
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=[event]))
+    assert _events_of(graph, "exception_event") == []
+    (other,) = _events_of(graph, "span_event")
+    assert other.source["name"] == name

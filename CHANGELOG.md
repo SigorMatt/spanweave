@@ -15,6 +15,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The seam's dropped-count and event paths are pinned** (decisions
+  2026-10-14g, R-11, R-14). No behaviour change. T3's and T4's entries below
+  say an unclaimed span reports its dropped count and its events with
+  `adapter` null, and SPEC §3.7 and §7 state how an event's `null` name, an
+  exception event's `null` attributes and its name are read; the tests held
+  only the envelope-keyed unclaimed span, an absent name, and an exception
+  event's adapter. `tests/test_envelope.py` now asserts that an unpacked span
+  with no `spanId` (no envelope) reports `attributes_dropped`,
+  `exception_event` and `span_event` with `adapter` null; that `name: null`
+  reads `""`; that `attributes: null` on an exception event reads as stating
+  none; that an exception event is read only where every attribute folds;
+  that a claimed span's `span_event` names its adapter; that an event named
+  `"Exception"` is a `span_event`; and that `Envelope.resource` and `scope`
+  are the record's level objects, not copies.
 - **The census holds each capture's node order and edge basis** (decisions
   2026-10-14g, R-10). No behaviour change. T2's entry below says that on the
   zoo's twelve captures no edge, basis or node position moves; the census
