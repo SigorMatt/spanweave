@@ -15,6 +15,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A citation of `ADAPTERS.md` §7.4 names its row, and Z2's only child is
+  pinned** (cold review of 2026-10-15, R-12). No behaviour change. §7's prose
+  cited §7.4 bare, so a reader could not tell which row held a fact, and
+  "Z2's inner `astream_chat` is the only child of an outer one (§7.4)" cited
+  a row that counts nested `llm` nodes, not children. Each citation now reads
+  `(§7.4 <metric>/<where>)`, such as `(§7.4 nested/Z2)`, and
+  `tests/test_zoo_readings.py` resolves every one to a row of the table and
+  of `ROWS`; a parenthetical that mentions §7.4 and names no row fails. S16's
+  reading cites `temporal/Z2`. The S17 reading says the inner node is nested
+  (the row) and is the outer's only child (the test), and
+  `test_z2_s_nesting_is_astream_chat_in_astream_chat` now asserts that child
+  count in each Z2 capture.
 - **The prose and CHANGELOG number guards read digits, tens and the common
   count words** (cold review of 2026-10-15, R-11, R-13). No behaviour change.
   `tests/test_zoo_readings.py`'s guard on `ADAPTERS.md` §7's prose read digits

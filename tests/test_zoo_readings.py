@@ -24,7 +24,9 @@ and every reading that states a number or a set is held to the corpus here:
   first words: a reason rewritten, or a batch moved, fails here.
 * **The readings' numbers** (§7.4). Every number §7 states is a row of §7.4's
   table, which the test parses and re-derives from the zoo row by row; §7's
-  prose states none of its own, and the test fails if it does. The corpus
+  prose states none of its own, and the test fails if it does. Each citation
+  of §7.4 in the prose names its row, `(§7.4 <metric>/<where>)`, and the row
+  is in the table and in `ROWS` (cold review of 2026-10-15, R-12). The corpus
   numbers the CHANGELOG cites (captures, agents, envelope keys, dialects and
   instrumentors, bodies, the OpenInference kinds `unknown` by design, Z4's
   records) are `CORPUS`, held to the zoo and to every place the CHANGELOG
@@ -34,7 +36,8 @@ and every reading that states a number or a set is held to the corpus here:
   CHANGELOG guard reads digits, number words, tens and ordinals. The readings
   pin the facts.
 * **The readings' facts** (§7.3): the `llm`-in-`llm` nesting and the scopes
-  and names at each end (S6, S17), the absence of any call id on a tool span
+  and names at each end (S6, S17), Z2's inner `astream_chat` as the outer's
+  only child (S17), the absence of any call id on a tool span
   (S9, S5), the `llm` node's normalized attributes (S20), the OpenInference
   kinds that stay `unknown` (S14) and Z1's nodes that are its case, every Z6
   `llm` node's scope and the delegation tool a coworker's sits under, the two
@@ -580,14 +583,18 @@ def _numbers_in_prose(prose: str) -> list[str]:
     return stated + ROMAN.findall(unnamed) + SPELLED.findall(unnamed.lower())
 
 
-def test_adapters_md_s_prose_states_no_number_of_its_own():
-    """§7's numbers live in its tables, where the tests read them (R-18)."""
-    prose = " ".join(
+def _prose() -> str:
+    """§7 without its tables and its headings' numbers, on one line."""
+    return " ".join(
         HEADING.sub("", re.sub(r"^#+ [\d.]+", "", line))
         for line in _section().splitlines()
         if not line.startswith("|")
     )
-    stated = _numbers_in_prose(prose)
+
+
+def test_adapters_md_s_prose_states_no_number_of_its_own():
+    """§7's numbers live in its tables, where the tests read them (R-18)."""
+    stated = _numbers_in_prose(_prose())
     assert stated == [], f"a number in ADAPTERS.md §7's prose, not in §7.4: {stated}"
 
 
@@ -712,6 +719,97 @@ def test_the_changelog_guard_reads_digits_and_words_alike(old, new):
     assert _changelog_faults(_changelog_with(old, new)) == [], new
 
 
+# --- The prose's citations of §7.4 --------------------------------------------
+
+#: The *metric* a citation of §7.4 names -> the row's *Number*. Each row is
+#: cited as `(§7.4 <metric>/<where>)`, several to a citation, comma-separated
+#: (cold review of 2026-10-15, R-12: "§7.4" alone named no row).
+CITED = {
+    "captures": "captures",
+    "agents": "agents",
+    "envelope-keys": "OTLP envelope keys mapped at T3/T4",
+    "llm": "`llm` nodes",
+    "scopes": "scopes",
+    "nested": "`llm` nodes with an `llm` parent",
+    "unpaired_call": "`unpaired_call`",
+    "unknown": "`unknown` nodes",
+    "model-less": "model-less `llm` nodes",
+    "temporal": "`temporal` edges",
+}
+#: A parenthetical, and a mention of §7.4 in one.
+PARENTHETICAL = re.compile(r"\(([^()]*)\)")
+MENTION = re.compile(r"§7\.4\b")
+#: `<metric>/<where>`, and a citation: §7.4, its rows, then `;` or `)`.
+CITED_ROW = r"[\w-]+/(?:the zoo|Z\d(?: real| recorded)?)"
+CITATION = re.compile(rf"§7\.4 ({CITED_ROW}(?:, {CITED_ROW})*)(?=[;)])")
+
+
+def _citations(prose: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """The rows `prose`'s parentheticals cite, `(metric, where)`; and each
+    parenthetical that mentions §7.4 without citing a row. A citation may
+    wrap: whitespace is read as one space."""
+    prose = " ".join(prose.split())
+    cited, bare = [], []
+    for group in PARENTHETICAL.finditer(prose):
+        for mention in MENTION.finditer(prose, group.start(), group.end()):
+            match = CITATION.match(prose, mention.start(), group.end())
+            if match is None:
+                bare.append(group.group())
+                continue
+            for row in match.group(1).split(", "):
+                metric, _, where = row.partition("/")
+                cited.append((metric, where))
+    return cited, bare
+
+
+def test_adapters_md_s_citations_of_the_numbers_name_their_rows():
+    """Each §7.4 the prose cites is a row the table and `ROWS` hold (R-12)."""
+    assert set(CITED.values()) == {number for number, _ in ROWS}
+    documented = _numbers()
+    cited, bare = _citations(_prose())
+    assert bare == [], f"ADAPTERS.md §7 cites §7.4 without its row: {bare}"
+    assert cited
+    for metric, where in cited:
+        assert metric in CITED, f"no §7.4 metric {metric!r}"
+        row = (CITED[metric], where)
+        assert row in documented, f"§7.4 has no row {metric}/{where}"
+        assert row in ROWS, f"ROWS has no row {metric}/{where}"
+
+
+#: A citation, and the rows it names.
+CITATIONS_READ = [
+    ("(§7.4 temporal/Z2)", [("temporal", "Z2")]),
+    ("(S10; §7.4 model-less/Z3; `tests/test_zoo.py`)", [("model-less", "Z3")]),
+    (
+        "(§7.4 captures/the zoo, agents/the zoo)",
+        [("captures", "the zoo"), ("agents", "the zoo")],
+    ),
+    (
+        "(§7.4 unpaired_call/Z6 real, unpaired_call/Z6 recorded; `x.py`)",
+        [("unpaired_call", "Z6 real"), ("unpaired_call", "Z6 recorded")],
+    ),
+]
+#: §7.4 mentioned in a parenthetical and no row named: R-12's "(§7.4)".
+CITATIONS_BARE = [
+    "(§7.4)",
+    "(§7.4; `tests/zoo_census.py`)",
+    "(§7.4 counts them)",
+    "(per capture in §7.4)",
+    "(§7.4 temporal/Z2, counts)",
+    "(§7.4 temporal Z2)",
+]
+
+
+@pytest.mark.parametrize(("prose", "rows"), CITATIONS_READ)
+def test_the_citation_parser_reads_each_row(prose, rows):
+    assert _citations(f"as stated {prose} here") == (rows, [])
+
+
+@pytest.mark.parametrize("prose", CITATIONS_BARE)
+def test_the_citation_parser_reads_a_bare_mention(prose):
+    assert _citations(f"as stated {prose} here") == ([], [prose])
+
+
 # --- The readings' facts (ADAPTERS.md §7.3) ----------------------------------
 
 #: S6, S17: the scopes at the two ends of each `llm`-in-`llm` `parent` edge
@@ -760,10 +858,18 @@ def test_z3_s_nesting_is_a_generation_over_a_chat_completion():
 
 
 def test_z2_s_nesting_is_astream_chat_in_astream_chat():
-    """S17: every nested pair on Z2 is an `astream_chat` in an `astream_chat`."""
+    """S17: every nested pair on Z2 is an `astream_chat` in an `astream_chat`,
+    and the inner one is the outer's only child (cold review of 2026-10-15,
+    R-12: §7.4 counts the nesting, not the children)."""
     for capture, graph in _project_graphs("Z2"):
-        pairs = {(parent.name, child.name) for parent, child in _nested(graph)}
+        nested = _nested(graph)
+        pairs = {(parent.name, child.name) for parent, child in nested}
         assert pairs == {("OpenAILike.astream_chat", "OpenAILike.astream_chat")}, (
+            capture.run
+        )
+        children = collections.Counter(p.id for p in _parent_of(graph).values())
+        assert nested, capture.run
+        assert [children[parent.id] for parent, _ in nested] == [1] * len(nested), (
             capture.run
         )
 
