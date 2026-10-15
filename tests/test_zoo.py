@@ -16,13 +16,16 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
   asserted of the bytes, not assumed: no record of any capture follows the
   record of its parent, and each body's records are contiguous by scope.
 * The README's instrumentation column and its Collector version are each
-  manifest's `project_manifest.instrumentation` and `collector_version`.
+  manifest's `project_manifest.instrumentation` and `collector_version`, and
+  its census paragraph names `Census`'s fields, their number and what Z4's
+  whole capture adds as the census holds them.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import fields
 
 import pytest
 
@@ -38,6 +41,7 @@ from tests.zoo_census import (
     ZOO,
     ZOO_BODY_DIR,
     Capture,
+    Census,
 )
 
 IDS = [capture.run for capture in CAPTURES]
@@ -193,6 +197,110 @@ def test_the_readme_s_collector_is_every_manifest_s():
     for capture in CAPTURES:
         stated = zoo_census.manifest(capture)["collector_version"]
         assert stated == named[0], capture.run
+
+
+#: The counts the README's census paragraph spells, as words.
+_SPELLED = {
+    word: value
+    for value, word in enumerate(
+        [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+            "twenty",
+        ]
+    )
+}
+
+
+def _census_paragraph(readme: str) -> str:
+    """The README's paragraph that opens `**The census.**`, its lines joined.
+
+    It runs to the next blank line or the end of the file; exactly one."""
+    paragraphs = [" ".join(block.split()) for block in readme.split("\n\n")]
+    found = [p for p in paragraphs if p.startswith("**The census.**")]
+    assert len(found) == 1, found
+    return found[0]
+
+
+def _census_fields(paragraph: str) -> list[str]:
+    """The counts the paragraph lists between its two dashes, in its order.
+
+    Each item is a count's name, backticked or (`nodes`) bare, and maybe a noun
+    after it ("`parent` and `temporal` edges"): the name is its first word."""
+    listed = re.search(r"for each capture — (.+?) — and", paragraph)
+    assert listed, paragraph
+    items = re.split(r", | and ", listed.group(1))
+    return [item.split()[0].strip("`") for item in items]
+
+
+def _spelled_before(paragraph: str, pattern: str) -> list[int]:
+    """Each count the paragraph spells as the word `pattern`'s group 1 matches."""
+    return [_SPELLED[word] for word in re.findall(pattern, paragraph)]
+
+
+def test_the_census_paragraph_parser_reads_a_bare_name_and_a_trailing_noun():
+    """A hand-made paragraph: the bare first name and the nouns after a name
+    are read as the README writes them, and a name the list drops is gone."""
+    paragraph = (
+        "**The census.** It holds two counts for each capture — nodes and"
+        " `parent` edges — and, beside them, more."
+    )
+    assert _census_fields(paragraph) == ["nodes", "parent"]
+    assert _spelled_before(paragraph, r"\bholds (\w+) counts\b") == [2]
+    assert _census_fields(paragraph.replace(" and `parent` edges", "")) == ["nodes"]
+
+
+def test_the_readme_s_census_paragraph_lists_census_s_fields_exactly():
+    """R-20 (decisions log D24): the paragraph says it lists `Census`'s counts,
+    and how many. Both are held to the dataclass, so a field added, dropped or
+    renamed there, or a name or the number changed here, is red."""
+    paragraph = _census_paragraph((ZOO / "README.md").read_text(encoding="utf-8"))
+    names = [field.name for field in fields(Census)]
+    assert _census_fields(paragraph) == names
+    assert _spelled_before(paragraph, r"\bholds (\w+) counts\b") == [len(names)]
+
+
+def test_the_readme_s_census_paragraph_says_what_the_whole_capture_adds():
+    """R-20 (decisions log D24): "Z4's whole capture, one record more than the
+    audit fed". The captures with a whole census are the project it names, and
+    each holds that many records more than its audit feed."""
+    paragraph = _census_paragraph((ZOO / "README.md").read_text(encoding="utf-8"))
+    named = re.findall(r"\bZ(\d)'s whole capture\b", paragraph)
+    whole = [capture for capture in CAPTURES if capture.whole is not None]
+    assert {f"z{n}" for n in named} == {c.run.split("/")[0] for c in whole}
+    more = _spelled_before(paragraph, r"\b(\w+) records? more than the audit fed\b")
+    assert len(more) == 1, paragraph
+    for capture in whole:
+        extra = len(zoo_census.records(capture)) - len(zoo_census.audit_feed(capture))
+        assert extra == more[0], capture.run
+
+
+def test_the_readme_s_census_paragraph_states_when_the_census_moves():
+    """R-20 (decisions log D24): the rule a change that moves a count follows
+    is a sentence, not a count, so it is held as written."""
+    paragraph = _census_paragraph((ZOO / "README.md").read_text(encoding="utf-8"))
+    assert (
+        "A change that moves a count updates the census in the commit that moves"
+        " it, with the reason."
+    ) in paragraph
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)

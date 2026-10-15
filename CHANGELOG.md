@@ -15,6 +15,24 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The zoo README's census paragraph is held, and it says what is never
+  edited** (decisions log D24; R-20, R-21, R-1's limit; decisions log D26).
+  No behaviour change. `fixtures/zoo/README.md`'s census paragraph said
+  `tests/zoo_census.py` holds eleven counts and listed them, said Z4's whole
+  capture is one record more than the audit fed, and stated when the census
+  moves; nothing read it, so a count renamed, a field added to `Census`, or
+  either number changed left the suite green. `tests/test_zoo.py` now
+  reads the paragraph: its list equals `Census`'s fields in order, its
+  spelled count is their number, the project it names is the one with a
+  whole census, and its "one record more" is that capture's records less
+  its audit feed; the rule sentence is held as written. The README's line
+  that said the whole directory is never edited now says the bodies and
+  manifests are, and that the README is ours and held by the test;
+  `FIXTURES.md`'s `zoo/` paragraph says the same. The README's seal table
+  states its limit: the seals are copied from the zoo's manifests at the
+  pin and are the pin; the test holds the copy to the README, and holding
+  the README to the zoo is a reviewer's comparison against the zoo at
+  `7eb5b69`.
 - **Decision rows carry ids, every citation resolves to one, and the relay
   files map to rows** (decisions log D24; R-17, R-18, R-19, R-22). No
   behaviour change. Decisions were cited by date and batch, and on

@@ -52,11 +52,15 @@ fixtures/
 
 `zoo/` is the third location, and its contract is neither of the other two.
 It is a byte-for-byte copy of the sealed captures of `SigorMatt/spanweave-zoo`
-at the pin `fixtures/zoo/README.md` names, and it is **never edited here**: a
-body or a manifest changed in this repository is a broken copy, not a
-correction, and `tests/test_zoo.py` fails on it (every body's sha256
-against its manifest, every seal against its manifest and against the value
-the README pins, and no file the manifests do not name). Its provenance is the
+at the pin `fixtures/zoo/README.md` names, and its bodies and manifests are
+the record and are **never edited here**: a body or a manifest changed in
+this repository is a broken copy, not a correction, and `tests/test_zoo.py`
+fails on it (every body's sha256 against its manifest, every seal against its
+manifest and against the value the README pins, and no file the manifests do
+not name). The README is not the record: it is ours, edited like any other
+document this repository writes (decisions log D26), and held by
+`tests/test_zoo.py` (its seals, instrumentation, Collector and census
+paragraph). Its provenance is the
 zoo's `MANIFEST.json` beside each capture and the brief the README cites —
 the zoo's own briefs and export contract, under which an implementer who knew
 nothing about this library built each agent. So §6's `<name>.provenance.md`
