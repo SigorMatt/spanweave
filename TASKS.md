@@ -13870,7 +13870,7 @@ threads, which are unrelated.
 | Batch | What it did | Origin (plan §5) | Final status | Commit |
 |---|---|---|---|---|
 | — | Series opened: the plan file, its README row and its `durable_documents()` exclusion | — | **done** | `43e330a` |
-| T0 | The zoo's captures are a fixture, and the audit's census is a gate | `PROBES.md` "The captures" and "Reproducing"; S15, S16, S21 | **done**. The row's 24 bodies were **29**, corrected at the batch. `162f1b6`'s message claimed S16 and S21 for a census that counted only; S15 and S21 are held from `6fe41f8`, the review's R-4 (decisions log D23), in `tests/test_zoo.py`: no parent-before-child pair, records contiguous by scope within each body; S16 by the Z2 `temporal` count the census already holds | `162f1b6` |
+| T0 | The zoo's captures are a fixture, and the audit's census is a gate | `PROBES.md` "The captures" and "Reproducing"; S15, S16, S21 | **done**. The row's 24 bodies were **29**, corrected at the batch. `162f1b6`'s message claimed S16 and S21 for a census that counted only; S15 and S21 are held from `6fe41f8`, the review's R-4 (decisions log D23), in `tests/test_zoo.py`: no parent-before-child pair, records contiguous by scope within each body; S16 is held by `4bc9032`'s node-and-edge structures (`tests/zoo_census.py`, `STRUCTURES`), not by the Z2 `temporal` count this row named until the cold review of 2026-10-15 (decisions log D24; R-2): a count of chain edges is the same under either sort key, and `tie_break` keyed on `ended_at` leaves the count green and turns `tests/test_zoo.py`'s two structure tests red on both Z2 captures | `162f1b6` |
 | T1 | The OTLP envelope is public, and an unclaimed record is keyed and placed by it | S1, S2, S12; L2 | **done (decided)**. Halted because no rule keyed an unclaimed record (`OPEN_QUESTIONS.md` §20), and option 1 was decided | halt `aff117e`, decided `7db4cb3`, done `a1405be` |
 | T2 | A declared unit is not a suspicion | S3 | **done**. "Loses nothing" holds for the record, not the field: float seconds resolve to about 238 ns | `23eb7ed` |
 | T3 | The envelope's own keys are not unmapped attributes, a dropped count is a diagnostic, and the scope is read from the envelope | S4, S7, S8, S10; S6, S21 | **done (decided)**. Halted because `meta.resource`/`meta.scope` moved the serialized shape (§21), and option 3 was decided. `d1f8ff4`'s message says its tests were red on the parent with 55 failures; they were 72 (36 `test_envelope`, 34 `test_zoo`, 1 `test_read`, 1 `test_schema_shape`, its `tests/` on `5f6fd13`, recounted by the cold review of 2026-10-14, R-12). The message stays | halt `cc9ef0c`, decided `5f6fd13`, done `d1f8ff4` |
@@ -14159,9 +14159,11 @@ commit (eleven), the nineteen others read directly, every parent derived as
 fixtures byte-identical to the zoo at its pin, no clock, randomness or
 network added, and every behaviour commit's new tests red on the derived
 parent; it raised twenty-eight findings, R-1…R-28. The maintainer's
-dispositions are decisions log D23, above. Each
-accepted finding was applied as its own commit on `stranger`, and this
-archive was the last of them but one: R-12's and R-28's zoo README edits
+dispositions are decisions log D23, above. The
+accepted findings were applied on `stranger`, grouped as the decisions file
+paired them; the pairing is recorded per commit, in the lines below
+(decisions log D24; R-23). This
+archive was the last of those commits but one: R-12's and R-28's zoo README edits
 came after it (their rows). Where a commit did less than its finding asked,
 or its message says something it did not do, the line says so and the
 message stays.
@@ -14171,7 +14173,7 @@ message stays.
 | R-1 — `43e330a`, the plan's numbers | **read, no change.** The plan's wrong numbers were corrected batch by batch (the plan's §0.1 step 5) and the corrections are in this section; S13 was `c8de748`. History |
 | R-2 — `43e330a`, the `WORKPLAN.md` exemption | **accepted, resolved by `100a9d2`; no commit in this batch.** The filter had already left `durable_documents()` with the file at the series close. At `7ea83aa`, a planted `WORKPLAN.md` naming a make target that does not exist is red in three doc-truth tests. The decision's commit for it was not made |
 | R-3 — `162f1b6`, byte-for-byte tested only as self-consistency | **accepted**, `f590bff` |
-| R-4 — `162f1b6`, numbers cited, not re-derived | **accepted**, `6fe41f8` |
+| R-4 — `162f1b6`, numbers cited, not re-derived | **accepted**, `6fe41f8`. Its message counts 1 failed for each of its two body mutations; measured on the full suite without re-sealing the edited body, they are 2 and 3 (decisions log D24; R-4). Z5's `fetch` moved before its children adds `test_every_body_is_the_zoo_s_byte_for_byte[z5 real]`; the Z3 scope split adds the byte-for-byte test and the S15 order test. The message names neither a re-seal step nor a test subset. The tests it names do go red, and the message stays |
 | R-5 — `162f1b6`, the fixture contract | **accepted**, `dde244f` |
 | R-6 — `a1405be`, mutations no test catches | **accepted**, `65560a7` |
 | R-7 — `a1405be`, tests passing on the derived parent | **read, no change.** A test that passes on the parent pins behaviour that already held; the rule's purpose is served by the mutation shown. Recorded as a pin |
@@ -14179,7 +14181,7 @@ message stays.
 | R-9 — `23eb7ed`, spec behaviour no test pins | **accepted**, `f7e585c` |
 | R-10 — `23eb7ed`, numbers cited, not re-derived | **accepted**, `4bc9032`. The review's "24 graphs, 1,096 edges" for T2's "nothing moved" is 1,092 today: T5 removed Z5's four `temporal` edges |
 | R-11 — `d1f8ff4`, mutations no test catches | **accepted**, `10224a1` (with R-14) |
-| R-12 — `d1f8ff4`, record accuracy | **accepted**, `2195604`, **in part.** SPEC §3.7 states `attributes_dropped` at `warning`, "27 of 102" cites the zoo's Z3 audit node table, and the T3 row above records 72 failures, not 55. The census-field list in `fixtures/zoo/README.md` was **not made**, because `fixtures/zoo/` is never edited in this series; `2195604`'s subject names the zoo README anyway. **Done** by the commit after this archive, *fixtures: the zoo README lists the census fields and says which commit moves a count* (a commit cannot name its own sha; its subject finds it in `git log`): the README lists the census's eleven counts as `tests/zoo_census.py`'s `Census` holds them, with the scopes and structures beside them. The maintainer decided that the series' never-edit rule covers the zoo's bodies and manifests, not its README (decisions log D26); nothing else under `fixtures/zoo/` is touched, and `2195604` is not amended |
+| R-12 — `d1f8ff4`, record accuracy | **accepted**, `2195604`, **in part.** SPEC §3.7 states `attributes_dropped` at `warning`, "27 of 102" cites the zoo's Z3 audit node table, and the T3 row above records 72 failures, not 55. The census-field list in `fixtures/zoo/README.md` was **not made**, because `fixtures/zoo/` is never edited in this series; `2195604`'s subject names the zoo README anyway. **Done** by the commit after this archive, *fixtures: the zoo README lists the census fields and says which commit moves a count* (a commit cannot name its own sha; its subject finds it in `git log`): the README lists the census's eleven counts as `tests/zoo_census.py`'s `Census` holds them, with the scopes and structures beside them. The maintainer decided that the series' never-edit rule covers the zoo's bodies and manifests, not its README (decisions log D26); nothing else under `fixtures/zoo/` is touched, and `2195604` is not amended. Its subject, *docs: SPEC §3.7 and the zoo README say what the code does*, names an edit the commit did not make, and `git log --oneline` shows that half without the body that says so; the edit is `0df6d00`'s, and the message stays (decisions log D24; R-8) |
 | R-13 — `2ed0c92`, spec contradicts code | **accepted**, `2195604` |
 | R-14 — `2ed0c92`, mutations no test catches | **accepted**, `10224a1` (with R-11) |
 | R-15 — `dcfbb8d`, a mutation no test catches | **accepted**, `7483241` |

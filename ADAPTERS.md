@@ -539,7 +539,9 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   `openinference.instrumentation.openai_agents` and
   `openinference.instrumentation.openai`. Z4's and Z6's graphs each hold more
   than one scope too (§7.4 scopes/Z4, scopes/Z6; `tests/zoo_census.py`,
-  `Capture.scopes`). `Meta`
+  `Capture.scopes`). Z4's are not stacked instrumentors: beside the GenAI
+  handler's scope, the other is the unclaimed root's own tracer,
+  `streaming-concierge`, which the application named after itself. `Meta`
   carries no scope (batch T3, option 3).
 
   **The read works in process only.** It works on a graph `build` or a

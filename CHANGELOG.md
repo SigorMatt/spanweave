@@ -15,6 +15,25 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The record says what holds S16, what the structures match, and how
+  the last series was grouped** (decisions log D24; R-2, R-4, R-6, R-8,
+  R-23 and the review's two notes outside its range). No behaviour change.
+  `TASKS.md`'s T0 row said S16 is held by the Z2 `temporal` count, which is
+  the same under either sort key; it now names the node-and-edge structures,
+  which go red when siblings are ordered by end. The comment above
+  `tests/zoo_census.py`'s `STRUCTURES` said the data equals R-10's hand
+  check; it now says R-10 counted 1,096 edges and the data holds 1,092, T5
+  having removed Z5's four `temporal` edges. The 2026-10-14 disposition
+  lines record two mutation counts a commit message gave as 1 failed each
+  as measured, 2 and 3, with no re-seal step stated, and that `2195604`'s
+  subject names a zoo README edit the commit did not make, done at
+  `0df6d00`. The line that said each accepted finding was its own commit
+  says they were grouped as the decisions file paired them, and the entry
+  below on the §7 subsection parse is added. `ADAPTERS.md` §7.3 says
+  Z4's scopes are the GenAI handler's and the unclaimed root's own tracer,
+  not stacked instrumentors. Four comments in `tests/test_read.py` cited
+  review files under the git-ignored `patches/`; they cite the archives
+  under `reviews/`.
 - **The zoo README's census paragraph is held, and it says what is never
   edited** (decisions log D24; R-20, R-21, R-1's limit; decisions log D26).
   No behaviour change. `fixtures/zoo/README.md`'s census paragraph said
@@ -238,6 +257,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   tool; Z6 spells the delegate tool two ways; Z4's second `llm` node is the
   one that requests `book_table`; each Z2 `acall` is the only child of its
   `call_tool`. §7.3's S14 heading is parsed for the kinds that stay `unknown`.
+- **The readings' §7 subsection parse ends at the next heading** (decisions
+  log D24; R-23; written after the entry above, in whose commit the change
+  landed and whose headline did not name it). A gate change, not a
+  behaviour change of the library. `tests/test_zoo_readings.py` read each
+  adapter subsection of `ADAPTERS.md` §7 from its heading to the next adapter
+  subsection, and the last one, `otel_genai`, to the end of the file, so it
+  ran on through §7.3 and §7.4, and §7.4's backticked rows would have been
+  read as `otel_genai` keys. Each subsection now ends at the next heading.
 - **An `orphan_siblings` conformance scenario** (decisions log
   D23; R-17). No behaviour change. `orphan_parent` has one node, so no
   scenario held an orphan beside anything it could be ordered against, and SPEC

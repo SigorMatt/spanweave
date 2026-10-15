@@ -1593,7 +1593,7 @@ def test_a_write_after_the_call_cannot_change_what_the_call_returned():
 # apart: each is in the message whichever shape was passed. What does tell them
 # apart is the shape the message interpolates, and each test asserts its own and
 # denies the other's, so swapping which condition reports which fails a test
-# rather than nothing (`patches/REVIEW-2026-10-01.md` finding 7).
+# rather than nothing (`reviews/2026-10-01-live-run3.md` finding 7).
 
 
 def test_read_records_refuses_a_memoryview_whose_items_are_wider_than_a_byte():
@@ -1644,7 +1644,7 @@ def test_read_records_reports_no_digest_because_build_is_what_fingerprints_bytes
 # which is exactly what a test written inside one call cannot see. Each of the
 # two below carries its own bytes, asserts the whole property itself, and bites
 # when it is the only test that runs -- verified by running each one alone
-# under a mutation that breaks it (`patches/REVIEW-2026-09-30.md` B2 and N1).
+# under a mutation that breaks it (`reviews/2026-09-30-live-run2.md` B2 and N1).
 
 
 def test_an_unterminated_tail_is_diagnosed_in_its_own_call_and_never_the_next():
@@ -1714,7 +1714,7 @@ def test_the_same_record_in_two_calls_is_read_twice_and_diagnosed_in_neither():
 # the JSON array and the OTLP export document -- are the ones a reader has to
 # buffer whole, so they are where a carry buffer would be easiest to introduce
 # and hardest to see. The two below carry the same structure one container over
-# (`patches/REVIEW-2026-10-01.md` finding 2): a trailing fragment is one
+# (`reviews/2026-10-01-live-run3.md` finding 2): a trailing fragment is one
 # `malformed_record` with `skipped_records=1` in the call that received it, and
 # the bytes that would complete it produce no record in the next call. Each one
 # brings its own bytes and bites alone.
@@ -1806,7 +1806,7 @@ def test_an_unterminated_export_document_is_diagnosed_in_its_own_call_too():
 # outcome -- what did decode is still there, and discarding the record would
 # lose it -- and until this batch it was a *silent* one: the record arrived
 # carrying a character nothing in the input wrote, and no diagnostic said so
-# (`patches/REVIEW-2026-09-30.md` T12). A receiver is where it matters most,
+# (`reviews/2026-09-30-live-run2.md` T12). A receiver is where it matters most,
 # because a chunk tailed off an exporter can split a multi-byte sequence in
 # half and the reader does not rejoin across calls (§7).
 

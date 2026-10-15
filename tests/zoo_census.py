@@ -455,10 +455,13 @@ CAPTURES: tuple[Capture, ...] = (
 # joins and on what basis. Re-derived from the bodies on every run and held
 # batch and incremental alike (`tests/test_zoo.py`). Not a report's: no report
 # lists edges. Taken from this library's output at the review's R-10
-# (decisions log D23), where it equals the hand check R-10
+# (decisions log D23), where it matches the hand check R-10
 # records (node order, every edge and basis, the same before and after batch
-# T2), so from here "nothing moved" is a gate, not a claim. A change that moves
-# one moves it here, with the reason.
+# T2) less what moved since: R-10 counted 1,096 edges over the audit-feed and
+# whole graphs of the twelve captures, and these hold 1,092 over the same, T5
+# having removed Z5's four `temporal` edges (decisions log D24; R-6). So from
+# here "nothing moved" is a gate, not a claim. A change that moves one moves it
+# here, with the reason.
 STRUCTURES: dict[str, Structure] = {
     "z1/2026-10-13-real": _structure(
         """
