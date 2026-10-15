@@ -165,7 +165,7 @@ def test_the_readme_s_instrumentation_is_the_manifest_s(capture):
 
 
 def test_as_above_is_the_row_before_s_even_when_that_row_says_as_above():
-    """R-3 (cold review of 2026-10-15): the README never has two "as above"
+    """R-3 (decisions log D24): the README never has two "as above"
     rows in a row, so the helper is held here by a hand-made table that does,
     with a stated row after them to show a new value takes over."""
     table = "\n".join(
@@ -250,7 +250,7 @@ def _hand_made_body(*scopes: str) -> list[JsonValue]:
 
 
 def test_scope_runs_splits_a_scope_that_comes_back_within_a_body():
-    """R-3 (cold review of 2026-10-15): `scope_runs` had no test of its own,
+    """R-3 (decisions log D24): `scope_runs` had no test of its own,
     so the contiguity test above was only as good as it. A body stating
     scopes A, B, A is three runs, not two; the next body starts afresh."""
     read = [

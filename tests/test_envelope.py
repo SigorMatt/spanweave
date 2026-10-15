@@ -709,7 +709,7 @@ def test_an_unclaimed_span_s_events_are_reported_with_no_adapter():
 
 # --- The seam's dropped-count and event paths (R-11, R-14) -------------------
 #
-# R-11 and R-14 (decisions log: 2026-10-14, review): an unpacked span whose
+# R-11 and R-14 (decisions log D23): an unpacked span whose
 # envelope cannot be read (no `spanId`) still reports its dropped count and its
 # events, `adapter` null (§3.7); an event's `null` name and an exception
 # event's `null` attributes read as proto3's defaults; an exception event is

@@ -257,7 +257,7 @@ def test_a_present_payload_that_did_not_parse_is_not_printed_as_content():
 #: nothing else moved: a scenario about a link target says nothing about
 #: payloads either.
 #:
-#: The review's R-17 (decisions log: 2026-10-14, review) added
+#: The review's R-17 (decisions log D23) added
 #: `orphan_siblings`: two renderings of four spans, no payload attribute on
 #: any, so `absent` moved 155 -> 171 and nothing else moved -- a scenario about
 #: which nodes an orphan is ordered against.

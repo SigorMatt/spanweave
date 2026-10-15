@@ -15,8 +15,32 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
-- **The conformance docs name the gates the recipe runs** (cold review of
-  2026-10-15, R-16). No behaviour change. `README.md`, `ENVIRONMENT.md` and
+- **Decision rows carry ids, every citation resolves to one, and the relay
+  files map to rows** (decisions log D24; R-17, R-18, R-19, R-22). No
+  behaviour change. Decisions were cited by date and batch, and on
+  2026-10-14 most such pairs name more than one row, while
+  "2026-10-14, T6 (b)" named none; the map from a relay file's name to its
+  rows was in a commit message only; and nothing held a citation to a row,
+  so a bare relay file name or a row that does not exist passed. Each row of
+  `TASKS.md`'s stranger's-trace decisions log now carries an id, `D1`…`D26`,
+  in a `#` column added without rewording a row, and every citation in this
+  file, `TASKS.md`, `fixtures/conformance/README.md` and the tests reads
+  `decisions log D<n>`. The entries below, back to the unclaimed node's
+  status mapping, cited the cold review of 2026-10-15 by finding, there
+  being no row for its dispositions; they cite D24. The log's intro maps
+  each relay file to its rows.
+  `tests/test_doc_truth.py` resolves every `decisions log D<n>` in the
+  durable documents and `tests/` to a row, and fails on a citation by date
+  and batch and on a relay file named outside the map. Three rows are added:
+  D24, the review's dispositions; D25, which corrects the S13 row, D21,
+  restored to its text as first written because `2196d38` struck its graph
+  sizes in place where the log's rule asks for a later row: the sizes are
+  not tested and are withdrawn, and the eight paths are the citation; and
+  D26, the decision `0df6d00` carried and cited to a row that does not hold
+  it: the never-edit rule covers the zoo's bodies and manifests, and
+  `fixtures/zoo/README.md` is ours.
+- **The conformance docs name the gates the recipe runs** (decisions log
+  D24; R-16). No behaviour change. `README.md`, `ENVIRONMENT.md` and
   `fixtures/conformance/README.md` said what `make conformance` runs and
   nothing held them to it: reverting them to the stale text, trimming the
   readings from `README.md`, or saying the target runs only
@@ -27,7 +51,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `tests/test_doc_truth.py` asserts that a paragraph naming
   `make conformance` and a file the recipe runs names exactly those files.
 - **A citation of `ADAPTERS.md` §7.4 names its row, and Z2's only child is
-  pinned** (cold review of 2026-10-15, R-12). No behaviour change. §7's prose
+  pinned** (decisions log D24; R-12). No behaviour change. §7's prose
   cited §7.4 bare, so a reader could not tell which row held a fact, and
   "Z2's inner `astream_chat` is the only child of an outer one (§7.4)" cited
   a row that counts nested `llm` nodes, not children. Each citation now reads
@@ -39,7 +63,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `test_z2_s_nesting_is_astream_chat_in_astream_chat` now asserts that child
   count in each Z2 capture.
 - **The prose and CHANGELOG number guards read digits, tens and the common
-  count words** (cold review of 2026-10-15, R-11, R-13). No behaviour change.
+  count words** (decisions log D24; R-11, R-13). No behaviour change.
   `tests/test_zoo_readings.py`'s guard on `ADAPTERS.md` §7's prose read digits
   and the number words up to twenty, so a dozen, a pair, both, single, once,
   twice, half, tens above twenty, ordinals, roman numerals, a backticked
@@ -58,8 +82,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   reports only `PROMPT`). Both
   guards are tripwires for counts, not parsers of English; the readings pin
   the facts.
-- **`orphan_parent`'s scenario text agrees with `SPEC.md` §4.3** (cold
-  review of 2026-10-15, R-10). No behaviour change; the canonical graph is
+- **`orphan_parent`'s scenario text agrees with `SPEC.md` §4.3** (decisions log
+  D24; R-10). No behaviour change; the canonical graph is
   unchanged. `fixtures/conformance/orphan_parent/scenario.md` said the orphan
   is a root and so a root sibling for the temporal rule, and that the choice
   is visible in `clock_skew`. §4.3 groups a node by the parent it states,
@@ -68,7 +92,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   sibling and is ordered against nothing, and points at `orphan_siblings` for
   the case with company.
 - **An exception event's `null` attributes fold to none, in `SPEC.md`**
-  (cold review of 2026-10-15, R-7). No behaviour change. `SPEC.md` §7's
+  (decisions log D24; R-7). No behaviour change. `SPEC.md` §7's
   fold rule for an `exception` event now says that `attributes: null` is an
   event stating no attributes, folded to the empty mapping, so its type,
   message and escaped are reported `null` and nothing is unmapped — what
@@ -76,8 +100,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `test_an_exception_event_with_null_attributes_reads_as_stating_none`
   already pinned. The seam paths entry below said SPEC stated it; it did not,
   and that entry now says so.
-- **`make conformance` is pinned on its effective command** (cold review of
-  2026-10-15, R-14, R-15). No behaviour change. The pin read the Makefile's
+- **`make conformance` is pinned on its effective command** (decisions log
+  D24; R-14, R-15). No behaviour change. The pin read the Makefile's
   text and dropped every word starting with `-`, so `--deselect=…` or
   `--collect-only` appended to the recipe emptied the run with the pin
   green, and a later `gates conformance:` rule replaced the recipe unseen.
@@ -87,28 +111,28 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   listed by name in `CONFORMANCE_OPTIONS` (today `-v` alone); an
   "overriding" warning from make is red. Each fault is planted in a test of
   its own.
-- **`scope_runs` and the README's "as above" are tested on their own** (cold
-  review of 2026-10-15, R-3). No behaviour change. The scope-contiguity test
+- **`scope_runs` and the README's "as above" are tested on their own** (decisions log
+  D24; R-3). No behaviour change. The scope-contiguity test
   was only as good as `tests/zoo_census.py`'s `scope_runs`, which no test
   held: a helper that merged non-adjacent runs left it green. `scope_runs_of`
   now takes records already read, and a hand-made body stating scopes A, B, A
   is three runs, with the next body starting afresh. `tests/test_zoo.py`'s
   README reader is held by a hand-made table with two "as above" rows in a
   row, which the zoo's README never has.
-- **A non-list `events` value is unmapped whatever its type** (cold review
-  of 2026-10-15, R-9). No behaviour change. `SPEC.md` §3.7 says any `events`
+- **A non-list `events` value is unmapped whatever its type** (decisions log
+  D24; R-9). No behaviour change. `SPEC.md` §3.7 says any `events`
   value that is neither a list nor `null` is `<record>.events`; only a
   string was tested. An object and a number on an unpacked record now each
   report `<record>.events` in `unmapped_attributes` under both adapters, in
   `tests/test_envelope.py`, so a check widened to accept a mapping is red.
-- **The unclaimed node's status mapping is pinned at every code** (cold
-  review of 2026-10-15, R-5). No behaviour change. The unclaimed envelope
+- **The unclaimed node's status mapping is pinned at every code** (decisions log
+  D24; R-5). No behaviour change. The unclaimed envelope
   node's entry below says its status is pinned; only code 2 was. An
   unclaimed span stating code 1 now serializes `ok`, code 0 `unset`, and
   code 2 `error` with its message, as `SPEC.md` §7 maps them, in
   `tests/test_envelope.py`.
 - **The cold review of 2026-10-14 takes the dated name the earlier archives
-  carry** (decisions log: 2026-10-14, review). No behaviour change.
+  carry** (decisions log D23). No behaviour change.
   The archive was named after its scratch file; it is now
   `reviews/2026-10-14-stranger.md`, renamed with its bytes unchanged
   (`sha256`
@@ -116,7 +140,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   the path is updated here and in `TASKS.md`. The scratch drop keeps its
   name, which `TASKS.md` records as provenance.
 - **The zoo README lists the census as it is and says which commit moves a
-  count** (decisions log: 2026-10-14, review; R-12, R-28). No behaviour
+  count** (decisions log D23; R-12, R-28). No behaviour
   change. `fixtures/zoo/README.md` named the census's original seven counts;
   it now names the eleven `tests/zoo_census.py` holds, adding
   `unmapped_attributes`, `attributes_dropped`, `exception_event` and
@@ -124,17 +148,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   says which counts are the audit's and which this library's. "Updates the
   census in its own commit" becomes "in the commit that moves it", which is
   what every batch did. The series' never-edit rule covers the zoo's bodies
-  and manifests, not this README; nothing else under `fixtures/zoo/` changes.
+  and manifests, not this README (decisions log D26, written after this
+  entry, which cited D23 for it; D23 does not hold it); nothing else under
+  `fixtures/zoo/` changes.
 - **The cold review of 2026-10-14 is archived, and every finding has a
-  disposition** (decisions log: 2026-10-14, review). No behaviour change.
+  disposition** (decisions log D23). No behaviour change.
   `reviews/2026-10-14-stranger.md` is the review byte for byte, its `sha256`
   in `TASKS.md`, which gains a line per finding, R-1…R-28: the commit that
   answered it, or the reading it was read or declined with. Two parts were
   left open: R-12's census-field list and R-28's wording are edits to
   `fixtures/zoo/README.md`, made by the entry above. Until now the
   stranger's-trace series had no review archive.
-- **Decisions are cited by their registry row** (decisions log: 2026-10-14,
-  review; R-26, R-27). No behaviour change. The records cited decisions by
+- **Decisions are cited by their registry row** (decisions log
+  D23; R-26, R-27). No behaviour change. The records cited decisions by
   the name of a relay file, and those files live only in a git-ignored
   directory, so a reader of the repo could not resolve the citation. Every
   such citation in `CHANGELOG.md`, `TASKS.md`, `fixtures/conformance/README.md`
@@ -147,21 +173,23 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   row, the S13 decision row and the S13 line below: the review measured T2 as
   most of the change and T4 as growth, and no test holds any of the three
   numbers. The eight paths, pinned by the test, are the citation. Commit
-  messages are not rewritten.
-- **The docs say what `make conformance` runs** (decisions log: 2026-10-14,
-  review; R-25). No behaviour change. `ENVIRONMENT.md`, `README.md` and
+  messages are not rewritten. The S13 decision row's strike was an edit in
+  place, which the log's rule does not allow: the row is restored, and
+  decisions log D25 withdraws the sizes (the entry on decision ids, above).
+- **The docs say what `make conformance` runs** (decisions log
+  D23; R-25). No behaviour change. `ENVIRONMENT.md`, `README.md` and
   `fixtures/conformance/README.md` described the target as the
   cross-dialect equivalence suite alone, untrue since `tests/test_zoo.py`
   joined the recipe; each now names the equivalence suite and the zoo
   gates beside it, the census and the readings. The dated records in
   `TASKS.md` and in this file keep what was true when they were written.
-- **`make conformance`'s recipe is pinned** (decisions log: 2026-10-14, review;
+- **`make conformance`'s recipe is pinned** (decisions log D23;
   R-24). No behaviour change. CI runs the target, but the only test on it
   checked that it exists, so dropping `tests/test_zoo_readings.py` from the
   recipe left every test green. `tests/test_doc_truth.py` now holds the recipe
   to the files it runs: `tests/test_conformance.py`, `tests/test_zoo.py`,
   `tests/test_zoo_readings.py`.
-- **The S13 mask keeps absence** (decisions log: 2026-10-14, review; R-22). No
+- **The S13 mask keeps absence** (decisions log D23; R-22). No
   behaviour change. S13's test masked every node's `started_at` and
   `ended_at` with `"<time>"` without looking, so a node with an end time in
   one Z5 capture and none in the other compared equal: an adapter edit that
@@ -170,8 +198,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `None` stays `None`, and the same holds for the `raw.source` times, each
   event's `timeUnixNano` and a diagnostic's `source.time`.
 - **Every number `ADAPTERS.md` §7 states is parsed, every disposition is
-  compared in full, and the readings' named facts are pinned** (decisions log:
-  2026-10-14, review; R-18, R-19). No behaviour change. §7 said every table and
+  compared in full, and the readings' named facts are pinned** (decisions log
+  D23; R-18, R-19). No behaviour change. §7 said every table and
   number in it is re-derived, but the test parsed only the §7.1/§7.2 tables,
   checked only the first words of each disposition, and kept §7.3's numbers
   as its own constants: each of R-18's edits to §7.3's numbers, and a reason
@@ -192,8 +220,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   tool; Z6 spells the delegate tool two ways; Z4's second `llm` node is the
   one that requests `book_table`; each Z2 `acall` is the only child of its
   `call_tool`. §7.3's S14 heading is parsed for the kinds that stay `unknown`.
-- **An `orphan_siblings` conformance scenario** (decisions log: 2026-10-14,
-  review; R-17). No behaviour change. `orphan_parent` has one node, so no
+- **An `orphan_siblings` conformance scenario** (decisions log
+  D23; R-17). No behaviour change. `orphan_parent` has one node, so no
   scenario held an orphan beside anything it could be ordered against, and SPEC
   §4.3's "an orphan is ordered only against its own" was compared across
   dialects by nothing. The new scenario, in both dialects, is one root, one
@@ -206,7 +234,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `*.jsonl`; S10's figures are retired as history in
   `tests/test_doc_truth.py`, and every present-tense citation was recomputed.
 - **The sibling group is the stated parent id alone, at every prefix**
-  (decisions log: 2026-10-14, review; R-15, R-16). No behaviour change. SPEC
+  (decisions log D23; R-15, R-16). No behaviour change. SPEC
   §4.3 says a node is a sibling of the nodes that state the same parent id; no
   test told that key from the trace id and parent id together, which would cut
   two orphans of one absent parent under different trace ids apart, and two
@@ -216,8 +244,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   "two groups at every prefix" and checked the final chain only; it now
   asserts the chain at each prefix, so a rule the batch and live paths share
   wrongly cannot pass it by agreeing with itself.
-- **The seam's dropped-count and event paths are pinned** (decisions log:
-  2026-10-14, review; R-11, R-14). No behaviour change. T3's and T4's entries
+- **The seam's dropped-count and event paths are pinned** (decisions log
+  D23; R-11, R-14). No behaviour change. T3's and T4's entries
   below say an unclaimed span reports its dropped count and its events with
   `adapter` null, and SPEC §3.7 and §7 state how an event's `null` name and
   an exception event's name are read (an exception event's `null`
@@ -232,8 +260,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   that a claimed span's `span_event` names its adapter; that an event named
   `"Exception"` is a `span_event`; and that `Envelope.resource` and `scope`
   are the record's level objects, not copies.
-- **The census holds each capture's node order and edge basis** (decisions log:
-  2026-10-14, review; R-10). No behaviour change. T2's entry below says that on
+- **The census holds each capture's node order and edge basis** (decisions log
+  D23; R-10). No behaviour change. T2's entry below says that on
   the zoo's twelve captures no edge, basis or node position moves; the census
   counted edges by kind only, so that was a hand check (R-10 repeated it).
   `tests/zoo_census.py` now holds, per capture, the node id sequence and the
@@ -242,7 +270,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   re-derives both from the bodies every run, batch and incremental alike. A
   change that moves a node, an edge or a basis now says so in the census.
 - **A declared time's two edges are pinned, and a check that could not fire
-  is gone** (decisions log: 2026-10-14, review; R-9). No behaviour change. SPEC
+  is gone** (decisions log D23; R-9). No behaviour change. SPEC
   §3.1 says a declared nanosecond value written with a fraction or an exponent
   is converted like any other, and that a declared count past 1e20 is still
   over the suspicion line in seconds; no test held either.
@@ -253,8 +281,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `record_time` calls) is removed: its input is already finite, and a
   finite count divided by 1e9 is finite or raises `OverflowError`, which is
   still caught.
-- **The unclaimed envelope node is pinned field by field** (decisions log:
-  2026-10-14, review; R-6). No behaviour change. T1's entry below says an
+- **The unclaimed envelope node is pinned field by field** (decisions log
+  D23; R-6). No behaviour change. T1's entry below says an
   unclaimed OTLP record's node takes its trace id and status from its envelope,
   and that an envelope field of a type it cannot hold raises; the only
   graph-level test was Z4's root, whose status is `UNSET` and whose trace id
@@ -266,8 +294,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   start or end time, a non-string `parent_id`, `status_message`, span id or
   trace id each raise `EnvelopeError` and the node falls back to the digest id;
   and that a record of envelope levels with no span is marked as unpacked.
-- **`FIXTURES.md` names `fixtures/zoo/` and its contract** (decisions log:
-  2026-10-14, review; R-5). No behaviour change. T0 added a fixture location
+- **`FIXTURES.md` names `fixtures/zoo/` and its contract** (decisions log
+  D23; R-5). No behaviour change. T0 added a fixture location
   that §1 did not list and whose provenance §6's rule did not describe. §1 now
   lists `zoo/` as the third location: a byte-for-byte copy of the zoo's
   sealed captures at a named pin, never edited here; its provenance is each
@@ -275,7 +303,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   `<name>.provenance.md` does not apply; and it may be used to claim exactly
   what the census and the readings assert.
 - **The census holds the exporter's order, scope grouping and the zoo
-  README's instrumentation column** (decisions log: 2026-10-14, review; R-4).
+  README's instrumentation column** (decisions log D23; R-4).
   No behaviour change. T0's entry below says the records are fed "in the
   exporter's child-before-parent order (the zoo's S15, S21)"; that was true of
   the bytes and asserted by no test. `tests/test_zoo.py` now asserts, per
@@ -287,7 +315,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   equal each manifest's `project_manifest.instrumentation` and
   `collector_version`.
 - **Each zoo seal is held to the value `fixtures/zoo/README.md` pins**
-  (decisions log: 2026-10-14, review; R-3). No behaviour change. T0's entry
+  (decisions log D23; R-3). No behaviour change. T0's entry
   below says `tests/test_zoo.py` re-derives every body's sha256 and every
   manifest's seal; it did, but each only against the manifest beside it, so a
   body rewritten with its manifest sha and seal recomputed to match still
@@ -296,8 +324,8 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   copied byte to a value written down at the pin.
 - **S13 is answered: Z5's real and recorded graphs differ in exactly eight
   paths, all per-run identifiers the SDK and LangGraph generate, none the
-  library's** (after the stranger's-trace close; decisions log: 2026-10-14,
-  S13). No behaviour change. The close registered S13 as open.
+  library's** (after the stranger's-trace close; decisions log
+  D21 and D25). No behaviour change. The close registered S13 as open.
   `tests/test_zoo_readings.py` now builds both Z5 graphs and masks what the
   exporter generated: the trace id, every node and parent id by position in
   `started_at` order, and every time with the `raw.source` fields that carry
@@ -887,7 +915,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 ### Changed
 
 - **`make conformance` runs the zoo readings** (after the stranger's-trace
-  close; decisions log: 2026-10-14, T6 (b)). No behaviour change. The target
+  close; decisions log D22). No behaviour change. The target
   now runs `tests/test_zoo_readings.py` beside `tests/test_conformance.py` and
   `tests/test_zoo.py`. The module re-derives what `ADAPTERS.md` §7 and
   `TASKS.md` say about the zoo's captures, so it is a reading over the corpus,
@@ -911,7 +939,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
     `tests/zoo_census.py`, read by the two dialects the library already has.
     It adds no adapter and takes no part in the cross-dialect equivalence
     test, so `ROADMAP.md` Phase 4's gate is not met, as `ROADMAP.md` now says
-    (decisions log: 2026-10-14, T7). T7's row had asked for the run to be
+    (decisions log D14). T7's row had asked for the run to be
     recorded as the third dialect having been run; that was the plan's
     mistake.
 

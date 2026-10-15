@@ -19,14 +19,14 @@ and every reading that states a number or a set is held to the corpus here:
   marked (`SPEC.md` §7). A JSON round trip is not that record and is out of
   this contract; what it keeps is `raw.source` verbatim, and the test holds
   that the level objects it carries are the ones `envelope` read.
-* **Every disposition, in full** (decisions log: 2026-10-14, review; R-18).
+* **Every disposition, in full** (decisions log D23; R-18).
   Each row's disposition is compared whole against `DISPOSITIONS`, not by its
   first words: a reason rewritten, or a batch moved, fails here.
 * **The readings' numbers** (§7.4). Every number §7 states is a row of §7.4's
   table, which the test parses and re-derives from the zoo row by row; §7's
   prose states none of its own, and the test fails if it does. Each citation
   of §7.4 in the prose names its row, `(§7.4 <metric>/<where>)`, and the row
-  is in the table and in `ROWS` (cold review of 2026-10-15, R-12). The corpus
+  is in the table and in `ROWS` (decisions log D24; R-12). The corpus
   numbers the CHANGELOG cites (captures, agents, envelope keys, dialects and
   instrumentors, bodies, the OpenInference kinds `unknown` by design, Z4's
   records) are `CORPUS`, held to the zoo and to every place the CHANGELOG
@@ -43,7 +43,7 @@ and every reading that states a number or a set is held to the corpus here:
   `llm` node's scope and the delegation tool a coworker's sits under, the two
   spellings of Z6's delegate tool, the `llm` node Z4's unpaired call is
   requested by, and each Z2 `acall` as the only child of its `call_tool`.
-* **S13, after the close** (`c8de748`; decisions log: 2026-10-14, S13).
+* **S13, after the close** (`c8de748`; decisions log D21 and D25).
   Z5's real and recorded graphs, with the ids and times the exporter generated
   masked, differ at exactly the paths `S13_DIFFERENCES` lists and nowhere else,
   byte for byte.
@@ -94,7 +94,7 @@ INDEX = re.compile(r"\.\d+(?=\.|$)")
 #: Every row's disposition in `ADAPTERS.md` §7.1 and §7.2, in full: adapter ->
 #: key -> the text after the projects. Compared whole, so a reason rewritten or
 #: a key moved to another batch fails, not only a key moved between "reported"
-#: and "mapped" (decisions log: 2026-10-14, review; R-18).
+#: and "mapped" (decisions log D23; R-18).
 REPORTED = "reported, not mapped: "
 NO_FIELD = REPORTED + "no field"
 MESSAGE = REPORTED + "message content, as above"
@@ -598,8 +598,8 @@ def test_adapters_md_s_prose_states_no_number_of_its_own():
     assert stated == [], f"a number in ADAPTERS.md §7's prose, not in §7.4: {stated}"
 
 
-#: R-11's edits, each a count the prose guard let through (cold review of
-#: 2026-10-15, R-11). "the count is still one" is not here: "one" is excluded
+#: R-11's edits, each a count the prose guard let through (decisions log
+#: D24; R-11). "the count is still one" is not here: "one" is excluded
 #: by design (`SPELLED`).
 COUNTS_IN_PROSE = [
     "a dozen captures",
@@ -675,8 +675,8 @@ def _changelog_faults(changelog: str) -> list[str]:
 
 def test_the_changelog_states_the_corpus_numbers_the_test_holds():
     """CHANGELOG cites the corpus numbers `CORPUS` holds: each place it does,
-    in digits or in words, the number is `CORPUS`'s (R-18; cold review of
-    2026-10-15, R-13)."""
+    in digits or in words, the number is `CORPUS`'s (decisions log D23;
+    R-18; decisions log D24; R-13)."""
     assert _changelog_faults(CHANGELOG_MD.read_text(encoding="utf-8")) == []
 
 
@@ -723,7 +723,7 @@ def test_the_changelog_guard_reads_digits_and_words_alike(old, new):
 
 #: The *metric* a citation of §7.4 names -> the row's *Number*. Each row is
 #: cited as `(§7.4 <metric>/<where>)`, several to a citation, comma-separated
-#: (cold review of 2026-10-15, R-12: "§7.4" alone named no row).
+#: (decisions log D24; R-12: "§7.4" alone named no row).
 CITED = {
     "captures": "captures",
     "agents": "agents",
@@ -859,7 +859,7 @@ def test_z3_s_nesting_is_a_generation_over_a_chat_completion():
 
 def test_z2_s_nesting_is_astream_chat_in_astream_chat():
     """S17: every nested pair on Z2 is an `astream_chat` in an `astream_chat`,
-    and the inner one is the outer's only child (cold review of 2026-10-15,
+    and the inner one is the outer's only child (decisions log D24;
     R-12: §7.4 counts the nesting, not the children)."""
     for capture, graph in _project_graphs("Z2"):
         nested = _nested(graph)
@@ -1041,8 +1041,8 @@ def _masked_time(value: object) -> object:
 def _z5_masked(capture: Capture) -> dict[str, object]:
     """Z5's graph with what the exporter generated masked, and nothing else.
 
-    Masked, as the S13 decision names them (`c8de748`; decisions log:
-    2026-10-14, S13): the trace id; every node id and every parent id, by
+    Masked, as the S13 decision names them (`c8de748`; decisions log
+    D21): the trace id; every node id and every parent id, by
     the node's position in `started_at` order -- an absent parent by the
     position of the node that states it; and every time -- `started_at`,
     `ended_at`, each diagnostic's `source.time`, and the `raw.source` fields

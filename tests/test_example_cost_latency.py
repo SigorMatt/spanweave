@@ -141,7 +141,7 @@ def test_the_sweep_reads_every_committed_trace_and_refuses_none_of_them():
     # read by both adapters at once (`SPEC.md` §6.1).
     # 50 -> 52 at batch S3: `empty_ids`, two renderings.
     # 52 -> 54 at batch S10: `empty_link_target`, two renderings.
-    # 54 -> 56 at the review's R-17 (decisions log: 2026-10-14, review):
+    # 54 -> 56 at the review's R-17 (decisions log D23):
     # `orphan_siblings`, two.
     assert len(traces) == 56, "the corpus changed size; re-read what this bounds"
 

@@ -341,7 +341,7 @@ CONFORMANCE_RUNS = (
 # Every option the recipe passes to pytest today, by name. An option not on
 # this list is red whatever it does: `--deselect=…`, `--collect-only`, `-k`,
 # `--ignore`, `-p no:…` all change what the run executes while leaving the
-# files it names alone (cold review of 2026-10-15, R-14). Adding one is
+# files it names alone (decisions log D24; R-14). Adding one is
 # changing the gate: say why in the same change.
 CONFORMANCE_OPTIONS = frozenset({"-v"})
 
@@ -352,7 +352,7 @@ def make_dry_run(target: str) -> tuple[list[str], str]:
     `make -n` prints the recipe make resolved -- a later rule overriding this
     one included -- and executes nothing. Reading the Makefile's text instead
     missed `gates conformance:` appended below the recipe, which make ran in
-    its place (cold review of 2026-10-15, R-15). `--no-print-directory`
+    its place (decisions log D24; R-15). `--no-print-directory`
     because under `make check` this make is a sub-make, which would otherwise
     print the directory it enters as if it were a command.
     """
@@ -452,7 +452,7 @@ def test_the_conformance_pin_reads_the_recipe_as_the_shell_would():
 # The documents that say what `make conformance` runs. Each carries one
 # sentence naming every file in CONFORMANCE_RUNS, and the pin above holds the
 # recipe to that tuple; so editing the recipe and the tuple together, as the
-# comment there instructs, now reddens these too (cold review of 2026-10-15,
+# comment there instructs, now reddens these too (decisions log D24;
 # R-16).
 CONFORMANCE_DOCS = (
     "README.md",
@@ -672,6 +672,165 @@ def test_every_review_a_document_cites_is_in_the_repository():
         if not (ROOT / review).is_file()
     }
     assert not missing, f"documents cite reviews that are not in the tree: {missing}"
+
+
+# -- Decisions, cited by their row's id ------------------------------------
+#
+# The stranger's-trace decisions log was cited by date and batch, and on
+# 2026-10-14 most such pairs name several rows, one cited pair named none, and
+# nothing held a citation to the log at all: a relay file's bare name, or a row
+# that does not exist, passed every test (cold review of 2026-10-15, R-17,
+# R-18). Each row now has an id, and a citation names it.
+
+DECISIONS_SERIES = "\n## The stranger's-trace series"
+DECISIONS_HEADING = "### Decisions taken  *(the plan file's §3, folded in full)*"
+
+#: A row of the log, by its id and its date.
+DECISION_ROW = re.compile(r"^\| (D\d+) \| (\d{4}-\d{2}-\d{2}) \|", re.M)
+#: A row of the intro's map: a relay file's name and the ids of its rows.
+RELAY_MAP_ROW = re.compile(
+    r"^\| `(decisions-spanweave-\d{4}-\d{2}-\d{2}[a-z]?)` \| (D\d+(?:, D\d+)*) \|$",
+    re.M,
+)
+#: A citation: the log's name, then one id or a list of them.
+DECISION_CITATION = re.compile(r"\bdecisions log (D\d+(?:(?:,| and|, and) D\d+)*)")
+#: The forms the ids replaced: a date or a batch where the id goes, and the
+#: log cited with no row at all. A date is this log's only if a row holds it:
+#: the live-graphs series' log has rows of its own dates and no ids.
+UNNUMBERED_CITATION = re.compile(
+    r"\bdecisions[- ]log(?: rows? of)?[:,]? "
+    r"(?:(\d{4}-\d{2}-\d{2})\b|[TS]\d|review\b)"
+    r"|\(decisions log\)"
+)
+#: A relay file's name, which only the map may carry.
+RELAY_NAME = re.compile(
+    r"\bdecisions[- ](?:spanweave-|live-)?\d{4}-\d{2}-\d{2}[a-z]?\b"
+)
+
+
+def decisions_log() -> str:
+    """The stranger's-trace series' decisions log: its intro, map and table."""
+    tasks = read("TASKS.md")
+    series = tasks[tasks.index(DECISIONS_SERIES) :]
+    start = series.index(DECISIONS_HEADING)
+    return series[start : series.index("\n### ", start + len(DECISIONS_HEADING))]
+
+
+def decision_rows() -> dict[str, str]:
+    """Each row's id and its date, in the table's order."""
+    return dict(DECISION_ROW.findall(decisions_log()))
+
+
+def relay_map() -> dict[str, list[str]]:
+    return {
+        name: ids.split(", ") for name, ids in RELAY_MAP_ROW.findall(decisions_log())
+    }
+
+
+def flowed(text: str) -> str:
+    """The text with each line break read as a space, and a comment's `#` or
+    `#:` after one read as nothing, so a citation wrapped across lines reads
+    as one."""
+    return re.sub(r"\s*\n\s*(?:#:?(?=\s))?\s*", " ", text)
+
+
+def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
+    """Each citation of a decision that names no row by its id."""
+    text = flowed(text)
+    faults = [
+        f"{match.group(0)!r} cites {cited}, which is no row of the log"
+        for match in DECISION_CITATION.finditer(text)
+        for cited in re.findall(r"D\d+", match.group(1))
+        if cited not in rows
+    ]
+    faults += [
+        f"{match.group(0)!r} cites the log by date or batch, not by a row's id"
+        for match in UNNUMBERED_CITATION.finditer(text)
+        if match.group(1) is None or match.group(1) in rows.values()
+    ]
+    faults += [
+        f"{match.group(0)!r} names a relay file, which only the log's map may"
+        for match in RELAY_NAME.finditer(text)
+    ]
+    return faults
+
+
+def citing_files() -> list[pathlib.Path]:
+    """The durable documents and the tests: where a decision is cited."""
+    return durable_documents() + sorted((ROOT / "tests").rglob("*.py"))
+
+
+def test_the_decisions_log_numbers_its_rows_in_order():
+    ids = list(decision_rows())
+    assert ids, "the decisions log's table was not found, or has no `#` column"
+    assert ids == [f"D{n}" for n in range(1, len(ids) + 1)], ids
+
+
+def test_the_relay_map_points_each_file_at_rows_that_exist():
+    ids = set(decision_rows())
+    mapped = relay_map()
+    assert mapped, "the decisions log's intro carries no relay-file map"
+    missing = {name: rows for name, rows in mapped.items() if not set(rows) <= ids}
+    assert not missing, f"the relay map names rows the log does not have: {missing}"
+
+
+def test_every_decision_citation_names_a_row_by_its_id():
+    rows = decision_rows()
+    cited = 0
+    faults: dict[str, list[str]] = {}
+    for path in citing_files():
+        text = path.read_text(encoding="utf-8")
+        if path == ROOT / "TASKS.md":
+            text = RELAY_MAP_ROW.sub("", text)
+        cited += len(DECISION_CITATION.findall(flowed(text)))
+        if found := citation_faults(text, rows):
+            faults[str(path.relative_to(ROOT))] = found
+    assert cited, "no document or test cites a decision; the scan read nothing"
+    assert not faults, (
+        "a decision is cited by something other than its row's id in "
+        "`TASKS.md`'s decisions log (`decisions log D<n>`); a relay file's "
+        f"name reaches its rows through the log's map:\n  {faults}"
+    )
+
+
+#: Citations the resolver refuses. Each is split so that this file, which the
+#: resolver reads, does not carry it whole.
+CITATIONS_REFUSED = [
+    "(decisions log " + "D99)",
+    "(decisions log D3 and " + "D99)",
+    "(decisions log D17, D18 and " + "D99)",
+    "(decisions log D17, D18, and " + "D99)",
+    "(decisions log\n#: " + "D99)",
+    "(decisions log\n    " + "D99)",
+    "(decisions log: " + "2026-10-14, T9; R-1)",
+    "(decisions-log row of " + "2026-10-14, review)",
+    "(decisions log " + "2026-10-15, review)",
+    "(decisions log, " + "T4)",
+    "as were T2's (decisions " + "log).",
+    "(decisions " + "2026-10-14g, commit 3)",
+    "applies decisions-spanweave-" + "2026-10-14e",
+    "decisions-" + "live-2026-10-02",
+]
+#: Citations and mentions it lets through.
+CITATIONS_KEPT = [
+    "(decisions log D1)",
+    "(decisions log D15 and D16)",
+    "(decisions log D17, D18 and D19; R-3)",
+    "(decisions log\n# D23)",
+    "the decisions log in full, verbatim",
+    "the decisions-log rows of **2026-09-30**",
+    "the `WORKPLAN.md` §3 decisions-log rows of 2026-09-30",
+]
+
+
+@pytest.mark.parametrize("text", CITATIONS_REFUSED)
+def test_the_citation_resolver_refuses(text):
+    assert citation_faults(text, decision_rows()), text
+
+
+@pytest.mark.parametrize("text", CITATIONS_KEPT)
+def test_the_citation_resolver_keeps(text):
+    assert citation_faults(text, decision_rows()) == [], text
 
 
 # -- `CONTRACTS.md` against `SPEC.md` --------------------------------------
@@ -2773,7 +2932,7 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # records it in this spelling; retired for the reason `52/151` was.
     #
     # `56/159` was the tracked corpus from batch S10 until the review's R-17
-    # (decisions log: 2026-10-14, review) added the two `orphan_siblings`
+    # (decisions log D23) added the two `orphan_siblings`
     # renderings, and S10's `CHANGELOG.md` entry records it; retired the same
     # way.
     "corpus files / records as N/M": {

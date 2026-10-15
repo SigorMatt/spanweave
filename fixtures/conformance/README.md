@@ -144,7 +144,7 @@ Added since, each for a reason recorded at its task:
   publishes was widened to read every rendering through the library, and the
   rest sample rather than claim.
 
-- **`orphan_siblings`** (decisions log: 2026-10-14, review; R-17).
+- **`orphan_siblings`** (decisions log D23; R-17).
   `orphan_parent` has one node, so no scenario held an orphan beside anything
   it could be ordered against, and `SPEC.md` §4.3's rule -- a node's sibling
   group is the parent it **states**, present or not -- was compared across
