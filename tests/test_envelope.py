@@ -253,6 +253,33 @@ def test_the_unclaimed_envelope_node_carries_status_note_trace_and_source_id() -
 
 
 @pytest.mark.parametrize(
+    ("status", "serialized", "note"),
+    [
+        ({"code": 1}, "ok", None),
+        ({"code": 0}, "unset", None),
+        ({"code": 2, "message": "boom"}, "error", "boom"),
+    ],
+    ids=["ok", "unset", "error"],
+)
+def test_the_unclaimed_node_serializes_each_status_code_as_spec_7_maps_it(
+    status: dict[str, object], serialized: str, note: str | None
+) -> None:
+    """SPEC.md §7: `status.code` 0, 1, 2 read as UNSET, OK, ERROR (R-5).
+
+    The probe above reaches only ERROR; an `OK -> UNSET` slip in the envelope's
+    mapping built every other test identically.
+    """
+    span = {**_PROBE_SPAN, "status": status}
+    (record,) = spanweave.read_records(_export(span)).records
+    graph = graph_from_records([_CLAIMED_NO_TRACE, record])
+    (node,) = [
+        n for n in spanweave.serialize.to_document(graph)["nodes"] if n["id"] == "a"
+    ]
+    assert node["kind"] == "unknown"
+    assert (node["status"], node["status_note"]) == (serialized, note)
+
+
+@pytest.mark.parametrize(
     ("stated", "field"),
     [
         ({"startTimeUnixNano": "soon"}, "start_time"),

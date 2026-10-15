@@ -15,6 +15,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The unclaimed node's status mapping is pinned at every code** (cold
+  review of 2026-10-15, R-5). No behaviour change. The unclaimed envelope
+  node's entry below says its status is pinned; only code 2 was. An
+  unclaimed span stating code 1 now serializes `ok`, code 0 `unset`, and
+  code 2 `error` with its message, as `SPEC.md` §7 maps them, in
+  `tests/test_envelope.py`.
 - **The cold review of 2026-10-14 takes the dated name the earlier archives
   carry** (decisions log: 2026-10-14, review). No behaviour change.
   The archive was named after its scratch file; it is now
