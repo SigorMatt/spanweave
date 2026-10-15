@@ -15,13 +15,23 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The zoo README lists the census as it is and says which commit moves a
+  count** (decisions log: 2026-10-14, review; R-12, R-28). No behaviour
+  change. `fixtures/zoo/README.md` named the census's original seven counts;
+  it now names the eleven `tests/zoo_census.py` holds, adding
+  `unmapped_attributes`, `attributes_dropped`, `exception_event` and
+  `span_event`, with the scopes and node-and-edge structures beside them, and
+  says which counts are the audit's and which this library's. "Updates the
+  census in its own commit" becomes "in the commit that moves it", which is
+  what every batch did. The series' never-edit rule covers the zoo's bodies
+  and manifests, not this README; nothing else under `fixtures/zoo/` changes.
 - **The cold review of 2026-10-14 is archived, and every finding has a
   disposition** (decisions log: 2026-10-14, review). No behaviour change.
   `reviews/REVIEW-2026-10-14.md` is the review byte for byte, its `sha256`
   in `TASKS.md`, which gains a line per finding, R-1…R-28: the commit that
-  answered it, or the reading it was read or declined with. Two parts are
-  open: R-12's census-field list and R-28's wording are edits to
-  `fixtures/zoo/README.md`, which this series never edits. Until now the
+  answered it, or the reading it was read or declined with. Two parts were
+  left open: R-12's census-field list and R-28's wording are edits to
+  `fixtures/zoo/README.md`, made by the entry above. Until now the
   stranger's-trace series had no review archive.
 - **Decisions are cited by their registry row** (decisions log: 2026-10-14,
   review; R-26, R-27). No behaviour change. The records cited decisions by

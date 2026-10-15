@@ -40,10 +40,17 @@ seal"), and that this directory holds exactly those files.
 Instrumentation is each manifest's `project_manifest.instrumentation`; bodies
 and records are the zoo's `PROBES.md` "The captures", which the test re-counts.
 
-**The census.** `tests/zoo_census.py` holds the counts the zoo's audit reported
-for each capture — nodes, `parent` and `temporal` edges, `orphan_parent`,
-`unpaired_call`, `unknown` nodes and `timestamp_unit_suspect` — each citing its
-report, and `tests/test_zoo.py` holds this library to them, batch and
-incremental alike, with the records fed in the exporter's order (child before
-parent; the zoo's `PROBES.md` S15). A change that moves a count updates the
-census in its own commit, with the reason. `make conformance` runs it.
+**The census.** `tests/zoo_census.py` holds eleven counts for each capture —
+nodes, `parent` and `temporal` edges, `orphan_parent`, `unpaired_call`,
+`unknown` nodes, `timestamp_unit_suspect`, `unmapped_attributes`,
+`attributes_dropped`, `exception_event` and `span_event` — and, beside them,
+the instrumentation scopes each capture's records state and each graph's node
+order and edges with their basis. The first eight counts are the zoo's audit's,
+each citing its report, with the report's number kept beside any a batch has
+moved; no report counts the last three, whose codes did not exist then. Z4's
+whole capture, one record more than the audit fed, is held beside its audit
+graph, and its counts are this library's own.
+`tests/test_zoo.py` holds this library to them, batch and incremental alike,
+with the records fed in the exporter's order (child before parent; the zoo's
+`PROBES.md` S15). A change that moves a count updates the census in the commit
+that moves it, with the reason. `make conformance` runs it.

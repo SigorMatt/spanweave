@@ -14120,7 +14120,8 @@ network added, and every behaviour commit's new tests red on the derived
 parent; it raised twenty-eight findings, R-1…R-28. The maintainer's
 dispositions are the decisions-log row of 2026-10-14, review, above. Each
 accepted finding was applied as its own commit on `stranger`, and this
-archive is the last of them. Where a commit did less than its finding asked,
+archive was the last of them but one: R-12's and R-28's zoo README edits
+came after it (their rows). Where a commit did less than its finding asked,
 or its message says something it did not do, the line says so and the
 message stays.
 
@@ -14137,7 +14138,7 @@ message stays.
 | R-9 — `23eb7ed`, spec behaviour no test pins | **accepted**, `f7e585c` |
 | R-10 — `23eb7ed`, numbers cited, not re-derived | **accepted**, `4bc9032`. The review's "24 graphs, 1,096 edges" for T2's "nothing moved" is 1,092 today: T5 removed Z5's four `temporal` edges |
 | R-11 — `d1f8ff4`, mutations no test catches | **accepted**, `10224a1` (with R-14) |
-| R-12 — `d1f8ff4`, record accuracy | **accepted**, `2195604`, **in part.** SPEC §3.7 states `attributes_dropped` at `warning`, "27 of 102" cites the zoo's Z3 audit node table, and the T3 row above records 72 failures, not 55. The census-field list in `fixtures/zoo/README.md` was **not made**, because `fixtures/zoo/` is never edited in this series; `2195604`'s subject names the zoo README anyway. **Open** |
+| R-12 — `d1f8ff4`, record accuracy | **accepted**, `2195604`, **in part.** SPEC §3.7 states `attributes_dropped` at `warning`, "27 of 102" cites the zoo's Z3 audit node table, and the T3 row above records 72 failures, not 55. The census-field list in `fixtures/zoo/README.md` was **not made**, because `fixtures/zoo/` is never edited in this series; `2195604`'s subject names the zoo README anyway. **Done** by the commit after this archive, *fixtures: the zoo README lists the census fields and says which commit moves a count* (a commit cannot name its own sha; its subject finds it in `git log`): the README lists the census's eleven counts as `tests/zoo_census.py`'s `Census` holds them, with the scopes and structures beside them. The maintainer decided that the series' never-edit rule covers the zoo's bodies and manifests, not its README; nothing else under `fixtures/zoo/` is touched, and `2195604` is not amended |
 | R-13 — `2ed0c92`, spec contradicts code | **accepted**, `2195604` |
 | R-14 — `2ed0c92`, mutations no test catches | **accepted**, `10224a1` (with R-11) |
 | R-15 — `dcfbb8d`, a mutation no test catches | **accepted**, `7483241` |
@@ -14153,7 +14154,7 @@ message stays.
 | R-25 — `b7b0088`, docs stale at the commit | **accepted**, `7557955` |
 | R-26 — `7ea83aa`, S13's numbers | **accepted**, `2196d38` (with R-27) |
 | R-27 — decisions cited only in an ignored directory | **accepted**, `2196d38` (with R-26). Its message counts 19 `TASKS.md` citations rewritten; the grep showed 20. The message stays |
-| R-28 — the census "in its own commit" | **accepted**, `2195604` named; **not made.** The sentence is in `fixtures/zoo/README.md`, which is never edited in this series; `2195604`'s subject names the zoo README anyway. **Open** |
+| R-28 — the census "in its own commit" | **accepted**, `2195604` named; **not made.** The sentence is in `fixtures/zoo/README.md`, which is never edited in this series; `2195604`'s subject names the zoo README anyway. **Done** by the commit after this archive, *fixtures: the zoo README lists the census fields and says which commit moves a count*, as R-12's: the README says the census is updated "in the commit that moves it, with the reason" |
 | `5f6fd13`'s title (non-code commits) | **read, no change.** "No serialized shape moves" overstated what its own text allowed (a code is a vocabulary word); the §21 decision is the rule |
 
 ### The resume note  *(the plan file's §4, folded in full)*
