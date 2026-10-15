@@ -21,6 +21,7 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -28,6 +29,7 @@ import pytest
 import spanweave
 from spanweave.adapters import classify
 from spanweave.api import graph_from_records
+from spanweave.model import JsonValue
 from tests import zoo_census
 from tests.zoo_census import (
     CAPTURES,
@@ -123,13 +125,18 @@ _README_INSTRUMENTATION = re.compile(r"^\| `(z\d/[^`]+)` \| [^|]+ \| ([^|]+) \|"
 
 
 def _readme_instrumentation() -> dict[str, list[str]]:
-    """Capture run -> the instrumentation the README's table names for it.
+    """Capture run -> the instrumentation the README's table names for it."""
+    return _instrumentation_of((ZOO / "README.md").read_text(encoding="utf-8"))
+
+
+def _instrumentation_of(readme: str) -> dict[str, list[str]]:
+    """Capture run -> the instrumentation a README table names for it.
 
     "as above" is the row before's, as the table writes it.
     """
     named: dict[str, list[str]] = {}
     previous: list[str] | None = None
-    for line in (ZOO / "README.md").read_text(encoding="utf-8").splitlines():
+    for line in readme.splitlines():
         match = _README_INSTRUMENTATION.match(line)
         if match is None:
             continue
@@ -155,6 +162,28 @@ def test_the_readme_s_instrumentation_is_the_manifest_s(capture):
     assert isinstance(project, dict)
     stated = project["instrumentation"]
     assert _readme_instrumentation()[capture.run] == stated, capture.run
+
+
+def test_as_above_is_the_row_before_s_even_when_that_row_says_as_above():
+    """R-3 (cold review of 2026-10-15): the README never has two "as above"
+    rows in a row, so the helper is held here by a hand-made table that does,
+    with a stated row after them to show a new value takes over."""
+    table = "\n".join(
+        [
+            "| `z9/a` | Z9 | `pkg-one`, `pkg-two` | 1 (1) | `x` |",
+            "| `z9/b` | Z9 | as above | 1 (1) | `x` |",
+            "| `z9/c` | Z9 | as above | 1 (1) | `x` |",
+            "| `z9/d` | Z9 | `pkg-three` | 1 (1) | `x` |",
+            "| `z9/e` | Z9 | as above | 1 (1) | `x` |",
+        ]
+    )
+    assert _instrumentation_of(table) == {
+        "z9/a": ["pkg-one", "pkg-two"],
+        "z9/b": ["pkg-one", "pkg-two"],
+        "z9/c": ["pkg-one", "pkg-two"],
+        "z9/d": ["pkg-three"],
+        "z9/e": ["pkg-three"],
+    }
 
 
 def test_the_readme_s_collector_is_every_manifest_s():
@@ -197,6 +226,42 @@ def test_scope_grouping_is_asserted_where_a_body_states_two_scopes():
         if any(len(names) > 1 for names in zoo_census.scope_runs(capture).values())
     }
     assert two == {"z3", "z4", "z6"}
+
+
+def _hand_made_body(*scopes: str) -> list[JsonValue]:
+    """One OTLP body, a `scopeSpans` entry of one span per scope name given."""
+    entries = [
+        {
+            "scope": {"name": name},
+            "spans": [
+                {
+                    "traceId": "0" * 31 + "1",
+                    "spanId": f"{index:016x}",
+                    "name": f"span-{index}",
+                }
+            ],
+        }
+        for index, name in enumerate(scopes, start=1)
+    ]
+    body = json.dumps({"resourceSpans": [{"scopeSpans": entries}]}).encode()
+    read = spanweave.read_records(body)
+    assert not read.diagnostics and not read.skipped_records
+    return list(read.records)
+
+
+def test_scope_runs_splits_a_scope_that_comes_back_within_a_body():
+    """R-3 (cold review of 2026-10-15): `scope_runs` had no test of its own,
+    so the contiguity test above was only as good as it. A body stating
+    scopes A, B, A is three runs, not two; the next body starts afresh."""
+    read = [
+        zoo_census.Record(body, index, record)
+        for body, scopes in (("0001.json", "ABA"), ("0002.json", "A"))
+        for index, record in enumerate(_hand_made_body(*scopes), start=1)
+    ]
+    assert zoo_census.scope_runs_of(read) == {
+        "0001.json": ["A", "B", "A"],
+        "0002.json": ["A"],
+    }
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)

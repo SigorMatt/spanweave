@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`scope_runs` and the README's "as above" are tested on their own** (cold
+  review of 2026-10-15, R-3). No behaviour change. The scope-contiguity test
+  was only as good as `tests/zoo_census.py`'s `scope_runs`, which no test
+  held: a helper that merged non-adjacent runs left it green. `scope_runs_of`
+  now takes records already read, and a hand-made body stating scopes A, B, A
+  is three runs, with the next body starting afresh. `tests/test_zoo.py`'s
+  README reader is held by a hand-made table with two "as above" rows in a
+  row, which the zoo's README never has.
 - **A non-list `events` value is unmapped whatever its type** (cold review
   of 2026-10-15, R-9). No behaviour change. `SPEC.md` §3.7 says any `events`
   value that is neither a list nor `null` is `<record>.events`; only a

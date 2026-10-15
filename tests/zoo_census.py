@@ -1317,12 +1317,21 @@ def scope_runs(capture: Capture) -> dict[str, list[str]]:
 
     A body whose records are contiguous by scope lists each name once.
     """
+    return scope_runs_of(records(capture))
+
+
+def scope_runs_of(read: list[Record]) -> dict[str, list[str]]:
+    """`scope_runs` over records already read, so a hand-made body can test it.
+
+    A run ends where the scope name changes within a body; a name that comes
+    back later in the same body starts a new run, and each body starts afresh.
+    """
     runs: dict[str, list[str]] = {}
-    for record in records(capture):
+    for record in read:
         scope = spanweave.envelope(record.record).scope.get("scope")
-        assert isinstance(scope, dict), (capture.run, record.body, record.index)
+        assert isinstance(scope, dict), (record.body, record.index)
         name = scope.get("name")
-        assert isinstance(name, str), (capture.run, record.body, record.index)
+        assert isinstance(name, str), (record.body, record.index)
         body = runs.setdefault(record.body, [])
         if not body or body[-1] != name:
             body.append(name)
