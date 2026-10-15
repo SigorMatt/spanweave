@@ -1983,7 +1983,10 @@ declares reaches `0.5`.
     not an instrumentor's, and every dialect built on the SDK inherits it, so
     it is read here — the one place no dialect is named — and no adapter
     branches on it. Its attributes are folded by this reader's `attributes`
-    rule (above) and the first three are reported **as stated** — no value is
+    rule (above); an `attributes` reported as `null` is an event stating no
+    attributes, and folds to the empty mapping, so each of the first three
+    is reported `null` (§3.8) and nothing is unmapped. The first three are
+    reported **as stated** — no value is
     interpreted, so an `escaped` written as the string `"False"` is reported
     as that string; `exception.stacktrace` is not copied into the
     diagnostic, and stays in the record. Any other event reports its name and

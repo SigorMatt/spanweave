@@ -15,6 +15,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **An exception event's `null` attributes fold to none, in `SPEC.md`**
+  (cold review of 2026-10-15, R-7). No behaviour change. `SPEC.md` §7's
+  fold rule for an `exception` event now says that `attributes: null` is an
+  event stating no attributes, folded to the empty mapping, so its type,
+  message and escaped are reported `null` and nothing is unmapped — what
+  `tests/test_envelope.py`'s
+  `test_an_exception_event_with_null_attributes_reads_as_stating_none`
+  already pinned. The seam paths entry below said SPEC stated it; it did not,
+  and that entry now says so.
 - **`make conformance` is pinned on its effective command** (cold review of
   2026-10-15, R-14, R-15). No behaviour change. The pin read the Makefile's
   text and dropped every word starting with `-`, so `--deselect=…` or
@@ -158,8 +167,10 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 - **The seam's dropped-count and event paths are pinned** (decisions log:
   2026-10-14, review; R-11, R-14). No behaviour change. T3's and T4's entries
   below say an unclaimed span reports its dropped count and its events with
-  `adapter` null, and SPEC §3.7 and §7 state how an event's `null` name, an
-  exception event's `null` attributes and its name are read; the tests held
+  `adapter` null, and SPEC §3.7 and §7 state how an event's `null` name and
+  an exception event's name are read (an exception event's `null`
+  attributes was not stated there; SPEC §7 states it from the entry *An
+  exception event's `null` attributes fold to none*, above); the tests held
   only the envelope-keyed unclaimed span, an absent name, and an exception
   event's adapter. `tests/test_envelope.py` now asserts that an unpacked span
   with no `spanId` (no envelope) reports `attributes_dropped`,
