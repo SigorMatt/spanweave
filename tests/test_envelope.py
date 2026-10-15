@@ -816,6 +816,41 @@ def test_an_exception_event_is_read_only_where_every_attribute_folds(dialect):
 
 
 @pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize(
+    "attributes",
+    [
+        {"exception.type": "ValueError", "exception.message": "nope"},
+        {},
+        "exception.type=ValueError",
+        7,
+        True,
+    ],
+    ids=["object", "empty-object", "string", "number", "bool"],
+)
+def test_an_exception_event_s_attributes_are_a_list_or_nothing(dialect, attributes):
+    """An exception event whose `attributes` is neither a list nor `null` is unread.
+
+    Qodo's review of PR #5, finding 2: an object there was accepted as though
+    the fold had produced it, so the event read as an `exception_event` and
+    its values as stated or as `null`. It is not OTLP's attribute list, so it
+    does not fold, and the entry is `<record>.events[<i>]` (SPEC §3.7, §7);
+    the list beside it in the same span still folds.
+    """
+    malformed = {"name": "exception", "attributes": attributes}
+    graph = _built(
+        _full_export(
+            attributes=_ATTRIBUTES[dialect],
+            events=[malformed, _exception({"boolValue": True})],
+        )
+    )
+    (raised,) = _events_of(graph, "exception_event")
+    assert "event 1" in raised.message
+    assert raised.source["type"] == "ValueError"
+    assert raised.source["escaped"] is True
+    assert _unmapped(graph) == ["<record>.events[0]"]
+
+
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
 def test_a_claimed_span_s_span_event_names_its_adapter(dialect):
     graph = _built(
         _full_export(attributes=_ATTRIBUTES[dialect], events=[{"name": "tick"}])

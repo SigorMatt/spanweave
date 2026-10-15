@@ -762,7 +762,11 @@ def _event_diagnostic(
             adapter=adapter,
         )
     reported = entry.get("attributes")
-    attributes, unfolded = folded_attributes([] if reported is None else reported)
+    if reported is None:
+        reported = []
+    elif not isinstance(reported, list):
+        return None
+    attributes, unfolded = folded_attributes(reported)
     if unfolded or not isinstance(attributes, dict):
         return None
     source: dict[str, JsonValue] = {
@@ -803,7 +807,8 @@ def span_events(
 
     An entry that is not an object, or names itself or states its time in a
     rendering the reading cannot hold -- or an `exception` event whose
-    attributes do not fold (`folded_attributes`) -- is not read and is named
+    attributes are neither a list nor `null`, or do not fold
+    (`folded_attributes`) -- is not read and is named
     as `<record>.events[<i>]`, the second value, for the adapter's
     `unmapped_attributes`. Made from the envelope rather than a dialect, so a
     span no adapter claimed reports its events too, `adapter` `None`.

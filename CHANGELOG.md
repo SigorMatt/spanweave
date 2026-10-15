@@ -15,6 +15,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **An exception event's attributes are a list or nothing** (Qodo's review
+  of PR #5, finding 2). A behaviour change in `spanweave/seam.py`: an
+  `exception` event whose `attributes` is an object was taken as though the
+  fold had produced it, so it was reported as an `exception_event`, its
+  values read from the object or reported `null`. The reader carries an
+  event verbatim, and an object, a string or a number there is not OTLP's
+  attribute list; such an event is now not read and is named
+  `<record>.events[<i>]` in `unmapped_attributes`, as `SPEC.md` §3.7 says
+  of an entry that does not fold (a string or a number already was). A list
+  folds as before and `null` still states no attributes. `SPEC.md` §7's fold
+  rule states it beside the `null` sentence; `tests/test_envelope.py`'s
+  `test_an_exception_event_s_attributes_are_a_list_or_nothing` holds it.
 - **The cold review of 2026-10-15 is archived, and every finding has a
   disposition** (decisions log D24). No behaviour change.
   `reviews/2026-10-15-stranger.md` is the review byte for byte, its `sha256`

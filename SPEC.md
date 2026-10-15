@@ -1985,7 +1985,10 @@ declares reaches `0.5`.
     branches on it. Its attributes are folded by this reader's `attributes`
     rule (above); an `attributes` reported as `null` is an event stating no
     attributes, and folds to the empty mapping, so each of the first three
-    is reported `null` (§3.8) and nothing is unmapped. The first three are
+    is reported `null` (§3.8) and nothing is unmapped. An `attributes` that is
+    neither a list nor `null` — an object, a string, a number — is not OTLP's
+    attribute list and does not fold, so the event is not read and is named
+    `<record>.events[<i>]` (§3.7). The first three are
     reported **as stated** — no value is
     interpreted, so an `escaped` written as the string `"False"` is reported
     as that string; `exception.stacktrace` is not copied into the
