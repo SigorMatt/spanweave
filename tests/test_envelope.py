@@ -652,6 +652,23 @@ def test_no_events_says_nothing(dialect):
         assert graph.diagnostics == ()
 
 
+@pytest.mark.parametrize("dialect", sorted(_ATTRIBUTES))
+@pytest.mark.parametrize("events", [{}, 1], ids=["object", "number"])
+def test_a_non_list_events_value_is_unmapped_whatever_its_type(dialect, events):
+    """Any `events` value but a list or `null` is `<record>.events` (§3.7).
+
+    Losslessness (`CLAUDE.md` invariant 2): a value the reading cannot hold
+    is reported, never dropped. The string case is pinned above; an object
+    and a number are here, so that widening the list check to accept a
+    mapping, or any other type, cannot make the value vanish. `null` states
+    no events and reports nothing (`test_no_events_says_nothing`).
+    """
+    graph = _built(_full_export(attributes=_ATTRIBUTES[dialect], events=events))
+    assert _unmapped(graph) == ["<record>.events"]
+    assert _events_of(graph, "span_event") == []
+    assert _events_of(graph, "exception_event") == []
+
+
 def test_a_flat_record_s_events_are_still_an_unmapped_key():
     """No envelope was declared, so `events` in a flat file is a key, not OTLP's."""
     flat = {

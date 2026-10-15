@@ -15,6 +15,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **A non-list `events` value is unmapped whatever its type** (cold review
+  of 2026-10-15, R-9). No behaviour change. `SPEC.md` §3.7 says any `events`
+  value that is neither a list nor `null` is `<record>.events`; only a
+  string was tested. An object and a number on an unpacked record now each
+  report `<record>.events` in `unmapped_attributes` under both adapters, in
+  `tests/test_envelope.py`, so a check widened to accept a mapping is red.
 - **The unclaimed node's status mapping is pinned at every code** (cold
   review of 2026-10-15, R-5). No behaviour change. The unclaimed envelope
   node's entry below says its status is pinned; only code 2 was. An
