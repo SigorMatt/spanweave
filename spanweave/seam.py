@@ -802,8 +802,8 @@ def span_events(
     time}`, for any other. `time` is in unix seconds and kept as reported,
     after the span's end or not. Level `info`: an event is a fact the
     transport stated and the model has no field for, not a gap in the
-    mapping, and the level grades the report, never the trace -- a failure is
-    the node's `status`, where the telemetry put it.
+    mapping, and the level is a property of the report, never of the trace --
+    a failure is the node's `status`, where the telemetry put it.
 
     An entry that is not an object, or names itself or states its time in a
     rendering the reading cannot hold -- or an `exception` event whose

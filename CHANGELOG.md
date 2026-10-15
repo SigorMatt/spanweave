@@ -15,6 +15,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **No evaluative wording in core comments** (Qodo's review of PR #5,
+  finding 1). The `exception_event` comment in `spanweave/diagnostics.py`
+  and the `span_events` docstring in `spanweave/seam.py` said "a level
+  grades the report, never the trace"; both now say a level "is a property
+  of the report, never of the trace". The distinction is kept and the
+  evaluative stem is gone from those lines, as `CLAUDE.md` invariant 1 asks
+  of code under `spanweave/`. The phrase stays where it is the maintainer's
+  record, in `TASKS.md` and `SPEC.md` §3.7, which are not core code. No
+  behaviour changed.
 - **An exception event's attributes are a list or nothing** (Qodo's review
   of PR #5, finding 2). A behaviour change in `spanweave/seam.py`: an
   `exception` event whose `attributes` is an object was taken as though the

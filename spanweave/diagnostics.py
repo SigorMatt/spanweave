@@ -97,8 +97,8 @@ ATTRIBUTES_DROPPED = "attributes_dropped"
 # `{type, message, escaped, time}` -- never the stacktrace, which stays in
 # `raw` -- and any other as `span_event`, `source` `{name, time}`. Level
 # `info`: the transport stated it and the diagnostic carries it; a level
-# grades the report, never the trace, and whether the span failed is its
-# `status` (`SPEC.md` §3.7, §7; batch T4).
+# is a property of the report, never of the trace, and whether the span
+# failed is its `status` (`SPEC.md` §3.7, §7; batch T4).
 EXCEPTION_EVENT = "exception_event"
 SPAN_EVENT = "span_event"
 
