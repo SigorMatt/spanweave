@@ -230,18 +230,14 @@ def test_a_scrambled_sibling_group_is_the_batch_chain_at_every_prefix():
     assert chain == [(f"t{i:02d}", f"t{i + 1:02d}") for i in range(11)]
 
 
-def test_a_whole_root_group_moves_when_its_parent_arrives_last():
-    """The arrival that moves every record at trace root at once (§10.1, §10.6).
+def test_a_group_whose_parent_arrives_last_keeps_its_chain():
+    """Children fed before their parent are already their parent's group
+    (§4.3, §10.1): the group is the parent each states, so the arrival moves
+    none of them. `replay` is the whole assertion -- the graph at every version
+    is the batch build of that prefix, including the one before the parent
+    arrives.
 
-    The companion of the test below, which keeps one record at trace root so the
-    group is only *partly* emptied: here nothing else is there, so the arrival
-    re-keys the group instead of moving child by child, and the two tests are the
-    two halves of `_regroup_many`. `replay` is the whole assertion -- the graph
-    at every version is the batch build of that prefix, which includes the
-    version before the parent arrives, where all six are still at root.
-
-    The children arrive scrambled, so the order the group is re-keyed *in* is
-    not the order it was built in: the evens append and then every odd lands
+    The children arrive scrambled: the evens append and then every odd lands
     strictly inside, which is the insertion `_join` has an edge to remove for.
     """
     order = [index for index in range(0, 6, 2)] + [index for index in range(1, 6, 2)]
@@ -251,24 +247,27 @@ def test_a_whole_root_group_moves_when_its_parent_arrives_last():
     assert chain_of(builder.graph()) == [(f"c{i}", f"c{i + 1}") for i in range(5)]
 
 
-def test_several_children_regroup_when_their_parent_arrives_last():
-    """A record given a parent leaves the root group for its parent's, and both
-    chains have to be right afterwards -- the one it left as much as the one it
-    joined (`SPEC.md` §4.3, §10.2)."""
+def test_orphans_and_a_root_never_share_a_chain_whatever_arrives_last():
+    """A root and the orphans of an absent parent are two groups at every
+    prefix, before the parent arrives as after (`SPEC.md` §4.3, batch T5): an
+    order between them is one the complete input does not state.
+
+    The chain is asserted at each prefix, not only at the end: `replay` holds
+    live equal to batch, and a rule both paths share wrongly (the root group
+    taking the orphans until their parent arrives, so `r1 -> c0` at prefix 6)
+    passes that comparison."""
     children = [oi(f"c{index}", parent="s0", t0=1001.0 + index) for index in range(5)]
     other = oi("r1", t0=999.0)
     records = [*children, other, oi("s0", kind="AGENT", name="agent", t0=1000.0)]
-    builder = replay(records)
-    chain = [
-        (edge.src, edge.dst) for edge in builder.graph().edges(kind=EdgeKind.TEMPORAL)
-    ]
-    assert chain == [
-        ("c0", "c1"),
-        ("c1", "c2"),
-        ("c2", "c3"),
-        ("c3", "c4"),
-        ("r1", "s0"),
-    ]
+    replay(records)
+    builder = spanweave.Builder()
+    for index, record in enumerate(records, start=1):
+        builder.feed(record)
+        present = [f"c{i}" for i in range(min(index, len(children)))]
+        expected = list(itertools.pairwise(present))
+        if index == len(records):
+            expected.append(("r1", "s0"))
+        assert chain_of(builder.graph()) == expected, f"prefix {index}"
 
 
 def test_the_majority_trace_id_can_change_with_an_arrival():
@@ -486,7 +485,7 @@ TWO_SPAN_MARKER = "twospan.ids"
 
 #: The parent every span of one `twospan` record states, where it states one.
 #: Enough to put a `twospan` record in a sibling group other than trace root,
-#: which is what a test about a *regrouping* refusal needs (`SPEC.md` §10.5).
+#: which is what a test about a refused parent arrival needs (`SPEC.md` §10.5).
 TWO_SPAN_PARENT = "twospan.parent"
 
 #: The call id every span of one `twospan` record fulfils, the call id they
@@ -689,24 +688,17 @@ def test_a_half_refused_record_puts_back_the_chain_edge_it_removed(two_span):
     assert chain_of(builder.graph()) == [("a", "b"), ("b", "c")]
 
 
-def test_a_half_refused_record_that_regrouped_a_whole_group_puts_its_key_back(
+def test_a_half_refused_parent_puts_back_the_orphans_it_resolved(
     two_span,
 ):
-    """The one regroup that hands the ledger nothing, undone (`SPEC.md` §10.5).
+    """A parent arrival undone (`SPEC.md` §10.5).
 
-    Where the records a parent un-orphans are the whole of the group they leave,
-    the absorber moves them by **re-keying** the group rather than by moving
-    edges, so that arrival changes a chain's owner without a single
-    `Ledger.add` or `drop` (§10.6). There is therefore nothing for a per-site
-    inverse to take back, and the only thing that can put it right is
-    `rollback_to` re-deriving from the survivors (`f04cbc8`) -- which is why this
-    is the path worth a test of its own rather than a case of the one above.
-
-    The record that trips it is the parent: its first span `p` un-orphans `a`
-    and `b` and re-keys their group, and its second span is refused. The journal
-    is checked as well as the graph, because the two are assembled from
-    different state -- a `_group_of` left naming a group nobody holds would show
-    up in a `delta` and nowhere else.
+    The record that trips it is the parent: its first span `p` resolves the
+    `parent` edges of `a` and `b` -- moving no group, since theirs was always
+    the `p` they state (§4.3) -- and its second span is refused. The journal is
+    checked as well as the graph, because the two are assembled from different
+    state, and a chain or an `orphan_parent` left behind would show up in a
+    `delta` and nowhere else.
     """
     kept = [ts("a", parent="p"), ts("b", parent="p")]
     builder = spanweave.Builder()
@@ -1722,17 +1714,15 @@ def test_no_arrival_rebuilds_the_sibling_chain_it_lands_inside(edges_built):
         )
 
 
-def test_a_late_parent_moves_every_waiting_child_without_building_a_chain_edge(
+def test_a_late_parent_builds_no_chain_edge_for_the_children_it_resolves(
     edges_built,
 ):
-    """One arrival, one move, however many records it un-orphaned (§10.6).
+    """One arrival, however many records it un-orphaned (§10.6).
 
-    Fed children-first, every child sits at trace root waiting for a parent that
-    has not arrived, so the root group holds the whole input -- and then the
-    parent arrives and all of them change group inside a **single** `feed`. Moved
-    one at a time, that arrival pays a search and up to three chain edges per
-    child; moved together, the chain they had is the chain they keep, so the
-    group is re-keyed and no `temporal` edge is built at all.
+    Fed children-first, every child is already in the group of the parent it
+    states (§4.3), so the parent's arrival gives all of them a `parent` edge
+    inside a **single** `feed` and moves none of them: the chain they had is the
+    chain they keep, and no `temporal` edge is built at all.
 
     `parent` edges are excluded by `kind` rather than absorbed into a bound,
     because every child genuinely gains one: a bound loose enough to admit

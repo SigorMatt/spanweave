@@ -6,6 +6,8 @@ tie-broken by a stated rule, because a topological order is not unique and an
 unstated choice is a determinism bug waiting for a second machine.
 """
 
+import dataclasses
+
 import spanweave
 from spanweave import diagnostics as codes
 from spanweave.build import Contribution, build_contributed_graph, build_graph
@@ -47,6 +49,10 @@ def mixed_build(pairs, **kwargs):
 
 def temporal_of(graph):
     return [(e.src, e.dst) for e in graph.edges() if e.kind is EdgeKind.TEMPORAL]
+
+
+def edges_of_kind(graph, kind):
+    return [(e.src, e.dst) for e in graph.edges() if e.kind is kind]
 
 
 def order_of(graph):
@@ -102,10 +108,103 @@ def test_siblings_under_different_parents_are_never_joined():
     assert ("p1", "p2") in temporal_of(graph)
 
 
-def test_an_orphan_is_a_root_sibling_because_here_it_has_no_parent():
+# A sibling group is the parent the record **states** (`SPEC.md` §4.3, batch
+# T5): `""` for a root, the stated id for every other node, whether or not
+# that parent is in this input. An order between two nodes stating different
+# parents is not one the telemetry stated, and a complete input withdraws it.
+
+
+def test_an_orphan_is_not_a_root_sibling():
     graph = build([a_span("a", started=1.0), a_span("b", "gone", started=2.0)])
-    assert temporal_of(graph) == [("a", "b")]
+    assert temporal_of(graph) == []
     assert codes.ORPHAN_PARENT in codes_of(graph)
+
+
+def test_orphans_stating_different_absent_parents_are_never_joined():
+    graph = build(
+        [a_span("b", "gone1", started=1.0), a_span("c", "gone2", started=2.0)]
+    )
+    assert temporal_of(graph) == []
+
+
+def test_orphans_stating_one_absent_parent_are_ordered_with_the_same_basis():
+    graph = build(
+        [
+            a_span("c", "gone", started=2.0),
+            a_span("b", "gone", started=1.0),
+            a_span("d", "gone", started=2.0),
+        ]
+    )
+    bases = [
+        (e.src, e.dst, e.basis) for e in graph.edges() if e.kind is EdgeKind.TEMPORAL
+    ]
+    assert bases == [
+        ("b", "c", "sibling start_time ordering"),
+        ("c", "d", "sibling start_time ordering (tied, broken by node_id)"),
+    ]
+
+
+def in_trace(span, trace_id):
+    return dataclasses.replace(span, trace_id=trace_id)
+
+
+def test_orphans_stating_one_absent_parent_under_two_trace_ids_are_one_group():
+    """The group is the stated parent id alone, not trace id and parent id
+    (§4.3: "the nodes that state the same parent id")."""
+    graph = build(
+        [
+            in_trace(a_span("b", "gone", started=2.0), "t2"),
+            a_span("a", "gone", started=1.0),
+        ]
+    )
+    assert temporal_of(graph) == [("a", "b")]
+    assert codes.MULTI_TRACE_INPUT in codes_of(graph)
+
+
+def test_children_of_a_present_parent_under_two_trace_ids_are_one_group():
+    """The same rule with the parent here, pathological as the input is: a
+    trace id never splits the nodes that name one parent."""
+    graph = build(
+        [
+            a_span("p", started=0.5),
+            in_trace(a_span("b", "p", started=2.0), "t2"),
+            in_trace(a_span("a", "p", started=1.0), "t3"),
+        ]
+    )
+    assert temporal_of(graph) == [("a", "b")]
+    assert ("p", "a") in edges_of_kind(graph, EdgeKind.PARENT)
+    assert ("p", "b") in edges_of_kind(graph, EdgeKind.PARENT)
+
+
+def test_an_arriving_parent_changes_no_group():
+    """The chain an orphan's group had is the chain it has once its parent is
+    here, so a partial input asserts no order the complete one withdraws."""
+    children = [
+        a_span("c2", "p", started=3.0),
+        a_span("c1", "p", started=2.0),
+        a_span("r", started=0.5),
+    ]
+    partial = build(children)
+    complete = build([*children, a_span("p", started=1.0)])
+    assert temporal_of(partial) == [("c1", "c2")]
+    assert temporal_of(complete) == [("c1", "c2"), ("r", "p")]
+
+
+def test_children_of_an_ambiguous_parent_id_share_the_id_they_state():
+    """Two records claim `p`, so the reference resolves to neither and each
+    child is an orphan (§3.6) -- stating the same parent, so one group."""
+    graph = build(
+        [
+            a_span("p", started=0.1),
+            dataclasses.replace(a_span("p", started=0.2), source_key="p-again"),
+            a_span("c1", "p", started=1.0),
+            a_span("r", started=1.5),
+            a_span("c2", "p", started=2.0),
+        ]
+    )
+    assert not edges_of_kind(graph, EdgeKind.PARENT)
+    assert ("c1", "c2") in temporal_of(graph)
+    assert not [pair for pair in temporal_of(graph) if "r" in pair and "c1" in pair]
 
 
 def test_equal_start_times_are_broken_by_node_id():

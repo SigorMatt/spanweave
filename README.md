@@ -243,6 +243,16 @@ receiver reading bytes in flight splits them on `\n` and keeps the remainder
 for its next call, rather than handing over an arbitrary boundary
 (`SPEC.md` §7).
 
+**`envelope(record)` is what the transport stated about one span**, for a
+record the reader unpacked from an OTLP export: its trace id, span id, parent,
+name, times and status, as an `Envelope` — the routing key a receiver needs,
+whether or not any adapter can read the span. It reads no attribute and names
+no dialect. Any other record — a flat one with a key that happens to be called
+`span_id` included — raises `EnvelopeError` (`not_an_envelope`), as does an
+unpacked record missing either id (`SPEC.md` §7). A span no adapter claims is
+keyed and placed by the same envelope, so a root nobody recognizes is still the
+parent its children name (§6.1).
+
 **A delta serializes to its own top-level document** — `delta_to_document` for
 the mapping, `delta_dumps` for the bytes — with `kind` telling it from a
 graph's. Nodes, edges and diagnostics are written by the same functions that
@@ -322,13 +332,13 @@ test, not a request.
 | For | Names |
 |---|---|
 | Building a graph | `build`, `Builder` |
-| Reading records without building one | `read_records`, `Records` |
+| Reading records without building one | `read_records`, `Records`, `envelope`, `Envelope` |
 | The graph and what it holds | `Graph`, `Node`, `Edge`, `Diagnostic`, `Meta`, `Payload`, `Provenance`, `RawRecord`, `Status`, `Usage` |
 | The closed vocabularies | `NodeKind`, `EdgeKind`, `Warrant`, `PayloadState`, `DiagnosticLevel` |
 | What changed between two versions | `Delta`, `BasisRewrite` |
 | Your own facts, kept beside ours | `Annotation`, `AnnotationStore` |
 | Serializing and checking | `dumps`, `dump`, `to_document`, `delta_dumps`, `delta_to_document`, `validate` |
-| Refusals, matched on `.code` | `SpanweaveError`, `AdapterSelectionError`, `DeltaUnavailableError`, `DuplicateNodeIdError`, `GraphNotSerializableError`, `UnknownAdapterError` |
+| Refusals, matched on `.code` | `SpanweaveError`, `AdapterSelectionError`, `DeltaUnavailableError`, `DuplicateNodeIdError`, `EnvelopeError`, `GraphNotSerializableError`, `UnknownAdapterError` |
 | Versions | `__version__`, `SCHEMA_VERSION`, `SCHEMA_FROZEN` |
 
 The table is held to `spanweave.__all__` by a test, so an export that lands
@@ -375,7 +385,7 @@ canonical graph**. That equivalence is the library's entire reason to exist, and
 it is a test, not a claim: `make conformance`.
 
 **What it covers today, in numbers rather than adjectives.** The corpus holds
-**29** scenarios. **24** are rendered in both dialects and compared across them.
+**30** scenarios. **25** are rendered in both dialects and compared across them.
 The other **4** are rendered in one, because the second dialect genuinely cannot
 express them — and each says so in a `coverage.json` file carrying the reason,
 because silence would be indistinguishable from an adapter nobody got round to
@@ -390,7 +400,7 @@ equality is the assertion.
 declare a field *dialect-varying* — a reviewable file in the corpus, never a
 branch in the comparison code (`FIXTURES.md` §4.4). One field is declared almost
 everywhere: `name`, the span name, which two instrumentors are least likely to
-spell the same way. **24 of those 24 cross-dialect scenarios declare it**, so
+spell the same way. **25 of those 25 cross-dialect scenarios declare it**, so
 the equivalence claim above is a statement about everything else — ids, kinds,
 operations, timestamps, statuses, payload states and values, usage, and every
 edge with its warrant and basis. **If you are matching nodes by `name` across
@@ -451,6 +461,9 @@ fails the build until the change is regenerated into the diff.
 uv sync --extra dev
 make check          # the gate: lint, types, tests, the invariant gates, the CLI
 make conformance    # the corpus: every scenario, against its canonical graph
+                    # (tests/test_conformance.py); and the zoo gates: its census
+                    # (tests/test_zoo.py) and ADAPTERS.md §7's readings
+                    # (tests/test_zoo_readings.py)
 make install-check  # build the wheel, install it, run it from OUTSIDE this repo
 make shape          # regenerate tests/serialized_shape.json (see above)
 make stranger       # walk and time the install path above, from a clean venv

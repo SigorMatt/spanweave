@@ -43,7 +43,33 @@ fixtures/
   captured/
     <name>.jsonl
     <name>.provenance.md          # §6 — mandatory
+  zoo/
+    README.md                     # the pin, the briefs, each capture's seal
+    <project>/<run-id>/
+      NNNN.json                   # one exporter body, byte for byte
+      MANIFEST.json               # that capture's sealed manifest, unchanged
 ```
+
+`zoo/` is the third location, and its contract is neither of the other two.
+It is a byte-for-byte copy of the sealed captures of `SigorMatt/spanweave-zoo`
+at the pin `fixtures/zoo/README.md` names, and its bodies and manifests are
+the record and are **never edited here**: a body or a manifest changed in
+this repository is a broken copy, not a correction, and `tests/test_zoo.py`
+fails on it (every body's sha256 against its manifest, every seal against its
+manifest and against the value the README pins, and no file the manifests do
+not name). The README is not the record: it is ours, edited like any other
+document this repository writes (decisions log D26), and held by
+`tests/test_zoo.py` (its seals, instrumentation, Collector and census
+paragraph). Its provenance is the
+zoo's `MANIFEST.json` beside each capture and the brief the README cites —
+the zoo's own briefs and export contract, under which an implementer who knew
+nothing about this library built each agent. So §6's `<name>.provenance.md`
+does not apply here: the manifest is the provenance, and the README says who
+built the agent and under what contract. What `zoo/` may be used to claim is
+exactly what the census (`tests/zoo_census.py`, held by `tests/test_zoo.py`)
+and the readings (`ADAPTERS.md` §7, held by `tests/test_zoo_readings.py`)
+assert, and nothing beyond them. It is not a conformance scenario: it has no
+`expected/graph.json`, and no claim of §4 is made over it.
 
 One canonical graph per scenario. Not one per dialect. That asymmetry is the
 whole point — and `payloads/` does not undo it. A dialect override does not
@@ -100,6 +126,7 @@ implementation gets wrong.
 | `redacted_payload` | source-signalled redaction | `Payload.redacted`, content untouched |
 | `unpaired_tool_call` | a requested call with no fulfilling span | `unpaired_call`, **no invented edge** |
 | `orphan_parent` | `parent_id` referencing an absent span | `orphan_parent`, node retained |
+| `orphan_siblings` | two orphans stating one absent parent, beside a root and its child | `orphan_parent` ×2, a `temporal` edge between the orphans and **none** to the root or its child |
 | `clock_skew` | `ended_at` before `started_at`; missing timestamps | `nonmonotonic_time`, `missing_timestamp` |
 | `unknown_kind` | a span kind we do not map | `unknown` node **plus** diagnostic |
 | `malformed_payload_json` | JSON mime, unparseable value | `payload_parse_failed`, `raw` preserved |

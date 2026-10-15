@@ -254,9 +254,11 @@ def test_reordering_the_nodes_changes_both_consumers_output_and_neither_result()
     # 40 -> 41 at batch E3: `mixed_instrumentation`, one rendering.
     # 41 -> 43 at batch S3, which added `empty_ids` in both dialects.
     # 43 -> 45 at batch S10, which added `empty_link_target` in both.
-    assert len(traces) == 45
-    assert bytes_moved == 45, "both consumers' serialized output is order-dependent"
-    assert substance_held == 45, "no per-node value or total depends on the order"
+    # 45 -> 47 at the review's R-17 (decisions log D23):
+    # `orphan_siblings` in both.
+    assert len(traces) == 47
+    assert bytes_moved == 47, "both consumers' serialized output is order-dependent"
+    assert substance_held == 47, "no per-node value or total depends on the order"
 
 
 def test_the_emitted_order_is_a_choice_on_most_traces():
@@ -300,8 +302,11 @@ def test_the_emitted_order_is_a_choice_on_most_traces():
     # 22 -> 24 at batch A3, 24 -> 26 at batch C1, 26 -> 30 at batch A5,
     # 30 -> 32 at batch D2, 32 -> 33 at batch E3, and 33 -> 35 at batch S3, for
     # the same reason as the count above -- `empty_ids`' two spans are both
-    # roots, so both are ready at once in each of its two renderings.
-    assert a_choice_was_made == 35, "traces where two nodes were ready at once"
+    # roots, so both are ready at once in each of its two renderings. 35 -> 37
+    # at the review's R-17 (decisions log D23):
+    # `orphan_siblings`' root and first orphan both have nothing ordering them,
+    # in each of its two renderings.
+    assert a_choice_was_made == 37, "traces where two nodes were ready at once"
     assert a_start_time_tie == 2, "traces where equal start times forced the id rule"
     assert all("parallel_tools/" in source for source in tied_traces)
 

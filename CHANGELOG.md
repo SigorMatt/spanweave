@@ -15,6 +15,475 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The last "grades" leaves core, and the neutrality gate learns the
+  stem.** The `DiagnosticLevel` docstring in `spanweave/model.py` said
+  "This grades the report, not the trace"; it now says a level "is a
+  property of the report, never of the trace", as the core-comments entry
+  below did for `diagnostics.py` and `seam.py`. The neutrality gate
+  (`tests/gates.py`) now bans `grade` too, so the word cannot return
+  unnoticed: grade, grades, graded, grader, grading and `max_grade` fail,
+  in identifiers and string literals, docstrings included. It matches at a
+  word start only, the one stem with a boundary, because "degrade" is the
+  project's own word (`CLAUDE.md`, "degrade honestly") and must stay
+  sayable in core; degrade, upgrade and downgrade pass. Known limits, in
+  the gate's comment: camel case (`maxGrade`) passes, and `#` comments are
+  not read, which `TASKS.md` carries as an open thread. No behaviour
+  changed.
+- **Qodo's review of PR #5 is archived, and both findings have a
+  disposition** (decisions log D27). No behaviour change.
+  `reviews/2026-10-15-qodo-pr5.md` holds the "Code Review by Qodo" comment
+  and its two inline comments, each body as fetched, unchanged, their
+  `sha256`s in `TASKS.md`, which gains a line per finding: finding 2
+  accepted and fixed by the exception-attributes entry below, finding 1
+  accepted and fixed by the core-comments entry below. The PR summary
+  comment carries no findings and is not archived.
+- **No evaluative wording in core comments** (Qodo's review of PR #5,
+  finding 1). The `exception_event` comment in `spanweave/diagnostics.py`
+  and the `span_events` docstring in `spanweave/seam.py` said "a level
+  grades the report, never the trace"; both now say a level "is a property
+  of the report, never of the trace". The distinction is kept and the
+  evaluative stem is gone from those lines, as `CLAUDE.md` invariant 1 asks
+  of code under `spanweave/`. The phrase stays where it is the maintainer's
+  record, in `TASKS.md` and `SPEC.md` §3.7, which are not core code. No
+  behaviour changed.
+- **An exception event's attributes are a list or nothing** (Qodo's review
+  of PR #5, finding 2). A behaviour change in `spanweave/seam.py`: an
+  `exception` event whose `attributes` is an object was taken as though the
+  fold had produced it, so it was reported as an `exception_event`, its
+  values read from the object or reported `null`. The reader carries an
+  event verbatim, and an object, a string or a number there is not OTLP's
+  attribute list; such an event is now not read and is named
+  `<record>.events[<i>]` in `unmapped_attributes`, as `SPEC.md` §3.7 says
+  of an entry that does not fold (a string or a number already was). A list
+  folds as before and `null` still states no attributes. `SPEC.md` §7's fold
+  rule states it beside the `null` sentence; `tests/test_envelope.py`'s
+  `test_an_exception_event_s_attributes_are_a_list_or_nothing` holds it.
+- **The cold review of 2026-10-15 is archived, and every finding has a
+  disposition** (decisions log D24). No behaviour change.
+  `reviews/2026-10-15-stranger.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-23, and per note
+  outside its range: the commit that answered it, or the reading it was
+  read, recorded or declined with.
+- **The record says what holds S16, what the structures match, and how
+  the last series was grouped** (decisions log D24; R-2, R-4, R-6, R-8,
+  R-23 and the review's two notes outside its range). No behaviour change.
+  `TASKS.md`'s T0 row said S16 is held by the Z2 `temporal` count, which is
+  the same under either sort key; it now names the node-and-edge structures,
+  which go red when siblings are ordered by end. The comment above
+  `tests/zoo_census.py`'s `STRUCTURES` said the data equals R-10's hand
+  check; it now says R-10 counted 1,096 edges and the data holds 1,092, T5
+  having removed Z5's four `temporal` edges. The 2026-10-14 disposition
+  lines record two mutation counts a commit message gave as 1 failed each
+  as measured, 2 and 3, with no re-seal step stated, and that `2195604`'s
+  subject names a zoo README edit the commit did not make, done at
+  `0df6d00`. The line that said each accepted finding was its own commit
+  says they were grouped as the decisions file paired them, and the entry
+  below on the §7 subsection parse is added. `ADAPTERS.md` §7.3 says
+  Z4's scopes are the GenAI handler's and the unclaimed root's own tracer,
+  not stacked instrumentors. Four comments in `tests/test_read.py` cited
+  review files under the git-ignored `patches/`; they cite the archives
+  under `reviews/`.
+- **The zoo README's census paragraph is held, and it says what is never
+  edited** (decisions log D24; R-20, R-21, R-1's limit; decisions log D26).
+  No behaviour change. `fixtures/zoo/README.md`'s census paragraph said
+  `tests/zoo_census.py` holds eleven counts and listed them, said Z4's whole
+  capture is one record more than the audit fed, and stated when the census
+  moves; nothing read it, so a count renamed, a field added to `Census`, or
+  either number changed left the suite green. `tests/test_zoo.py` now
+  reads the paragraph: its list equals `Census`'s fields in order, its
+  spelled count is their number, the project it names is the one with a
+  whole census, and its "one record more" is that capture's records less
+  its audit feed; the rule sentence is held as written. The README's line
+  that said the whole directory is never edited now says the bodies and
+  manifests are, and that the README is ours and held by the test;
+  `FIXTURES.md`'s `zoo/` paragraph says the same. The README's seal table
+  states its limit: the seals are copied from the zoo's manifests at the
+  pin and are the pin; the test holds the copy to the README, and holding
+  the README to the zoo is a reviewer's comparison against the zoo at
+  `7eb5b69`.
+- **Decision rows carry ids, every citation resolves to one, and the relay
+  files map to rows** (decisions log D24; R-17, R-18, R-19, R-22). No
+  behaviour change. Decisions were cited by date and batch, and on
+  2026-10-14 most such pairs name more than one row, while
+  "2026-10-14, T6 (b)" named none; the map from a relay file's name to its
+  rows was in a commit message only; and nothing held a citation to a row,
+  so a bare relay file name or a row that does not exist passed. Each row of
+  `TASKS.md`'s stranger's-trace decisions log now carries an id, `D1`…`D26`,
+  in a `#` column added without rewording a row, and every citation in this
+  file, `TASKS.md`, `fixtures/conformance/README.md` and the tests reads
+  `decisions log D<n>`. The entries below, back to the unclaimed node's
+  status mapping, cited the cold review of 2026-10-15 by finding, there
+  being no row for its dispositions; they cite D24. The log's intro maps
+  each relay file to its rows.
+  `tests/test_doc_truth.py` resolves every `decisions log D<n>` in the
+  durable documents and `tests/` to a row, and fails on a citation by date
+  and batch and on a relay file named outside the map. Three rows are added:
+  D24, the review's dispositions; D25, which corrects the S13 row, D21,
+  restored to its text as first written because `2196d38` struck its graph
+  sizes in place where the log's rule asks for a later row: the sizes are
+  not tested and are withdrawn, and the eight paths are the citation; and
+  D26, the decision `0df6d00` carried and cited to a row that does not hold
+  it: the never-edit rule covers the zoo's bodies and manifests, and
+  `fixtures/zoo/README.md` is ours.
+- **The conformance docs name the gates the recipe runs** (decisions log
+  D24; R-16). No behaviour change. `README.md`, `ENVIRONMENT.md` and
+  `fixtures/conformance/README.md` said what `make conformance` runs and
+  nothing held them to it: reverting them to the stale text, trimming the
+  readings from `README.md`, or saying the target runs only
+  `tests/test_conformance.py` left every test green, as would editing the
+  recipe and `CONFORMANCE_RUNS` together. Each now names every file in
+  `CONFORMANCE_RUNS` in one sentence (`README.md`'s Development block and
+  `ENVIRONMENT.md`'s Corpus line gain `tests/test_conformance.py`), and
+  `tests/test_doc_truth.py` asserts that a paragraph naming
+  `make conformance` and a file the recipe runs names exactly those files.
+- **A citation of `ADAPTERS.md` §7.4 names its row, and Z2's only child is
+  pinned** (decisions log D24; R-12). No behaviour change. §7's prose
+  cited §7.4 bare, so a reader could not tell which row held a fact, and
+  "Z2's inner `astream_chat` is the only child of an outer one (§7.4)" cited
+  a row that counts nested `llm` nodes, not children. Each citation now reads
+  `(§7.4 <metric>/<where>)`, such as `(§7.4 nested/Z2)`, and
+  `tests/test_zoo_readings.py` resolves every one to a row of the table and
+  of `ROWS`; a parenthetical that mentions §7.4 and names no row fails. S16's
+  reading cites `temporal/Z2`. The S17 reading says the inner node is nested
+  (the row) and is the outer's only child (the test), and
+  `test_z2_s_nesting_is_astream_chat_in_astream_chat` now asserts that child
+  count in each Z2 capture.
+- **The prose and CHANGELOG number guards read digits, tens and the common
+  count words** (decisions log D24; R-11, R-13). No behaviour change.
+  `tests/test_zoo_readings.py`'s guard on `ADAPTERS.md` §7's prose read digits
+  and the number words up to twenty, so a dozen, a pair, both, single, once,
+  twice, half, tens above twenty, ordinals, roman numerals, a backticked
+  number and "option" followed by any number all passed. It now reads each;
+  an option is a name only with its batch ("batch T3, option 3"). "one" stays
+  unread, by design: §7 uses it as a pronoun and an article. Three phrases in
+  §7 tripped the stronger guard and are reworded, with no fact lost: the ends
+  of Z2's nested edge are "parent and child", the census "holds each" of Z6's
+  graphs, and Z4's `book_table` call is requested by "an `llm` node", which
+  `test_z4_s_second_llm_node_requests_book_table` pins. The guard on this
+  file read spelled numbers only; it now reads digits too, and holds more of
+  the corpus numbers it cites: the zoo's two dialects, six instrumentors, its
+  29 bodies, the four OpenInference kinds `unknown` by design, and Z4's four
+  audited records and the fifth. Each is a `CORPUS` entry, derived from the
+  zoo, except the kinds, which are held to §7.3 and the adapter (the zoo
+  reports only `PROMPT`). Both
+  guards are tripwires for counts, not parsers of English; the readings pin
+  the facts.
+- **`orphan_parent`'s scenario text agrees with `SPEC.md` §4.3** (decisions log
+  D24; R-10). No behaviour change; the canonical graph is
+  unchanged. `fixtures/conformance/orphan_parent/scenario.md` said the orphan
+  is a root and so a root sibling for the temporal rule, and that the choice
+  is visible in `clock_skew`. §4.3 groups a node by the parent it states,
+  never against a root, and `clock_skew` has no orphan. The text now says the
+  orphan states an absent parent, so it is neither a root nor a root's
+  sibling and is ordered against nothing, and points at `orphan_siblings` for
+  the case with company.
+- **An exception event's `null` attributes fold to none, in `SPEC.md`**
+  (decisions log D24; R-7). No behaviour change. `SPEC.md` §7's
+  fold rule for an `exception` event now says that `attributes: null` is an
+  event stating no attributes, folded to the empty mapping, so its type,
+  message and escaped are reported `null` and nothing is unmapped — what
+  `tests/test_envelope.py`'s
+  `test_an_exception_event_with_null_attributes_reads_as_stating_none`
+  already pinned. The seam paths entry below said SPEC stated it; it did not,
+  and that entry now says so.
+- **`make conformance` is pinned on its effective command** (decisions log
+  D24; R-14, R-15). No behaviour change. The pin read the Makefile's
+  text and dropped every word starting with `-`, so `--deselect=…` or
+  `--collect-only` appended to the recipe emptied the run with the pin
+  green, and a later `gates conformance:` rule replaced the recipe unseen.
+  `tests/test_doc_truth.py` now reads `make -n conformance` (what make would
+  run, overrides included, nothing executed), splits it as the shell would,
+  and holds it to pytest, to `CONFORMANCE_RUNS` exactly, and to options
+  listed by name in `CONFORMANCE_OPTIONS` (today `-v` alone); an
+  "overriding" warning from make is red. Each fault is planted in a test of
+  its own.
+- **`scope_runs` and the README's "as above" are tested on their own** (decisions log
+  D24; R-3). No behaviour change. The scope-contiguity test
+  was only as good as `tests/zoo_census.py`'s `scope_runs`, which no test
+  held: a helper that merged non-adjacent runs left it green. `scope_runs_of`
+  now takes records already read, and a hand-made body stating scopes A, B, A
+  is three runs, with the next body starting afresh. `tests/test_zoo.py`'s
+  README reader is held by a hand-made table with two "as above" rows in a
+  row, which the zoo's README never has.
+- **A non-list `events` value is unmapped whatever its type** (decisions log
+  D24; R-9). No behaviour change. `SPEC.md` §3.7 says any `events`
+  value that is neither a list nor `null` is `<record>.events`; only a
+  string was tested. An object and a number on an unpacked record now each
+  report `<record>.events` in `unmapped_attributes` under both adapters, in
+  `tests/test_envelope.py`, so a check widened to accept a mapping is red.
+- **The unclaimed node's status mapping is pinned at every code** (decisions log
+  D24; R-5). No behaviour change. The unclaimed envelope
+  node's entry below says its status is pinned; only code 2 was. An
+  unclaimed span stating code 1 now serializes `ok`, code 0 `unset`, and
+  code 2 `error` with its message, as `SPEC.md` §7 maps them, in
+  `tests/test_envelope.py`.
+- **The cold review of 2026-10-14 takes the dated name the earlier archives
+  carry** (decisions log D23). No behaviour change.
+  The archive was named after its scratch file; it is now
+  `reviews/2026-10-14-stranger.md`, renamed with its bytes unchanged
+  (`sha256`
+  `d65647e1bb14638fb0999f47f9a23bd62ffc734fcb4bd6528ca1c8aad46cf01a`), and
+  the path is updated here and in `TASKS.md`. The scratch drop keeps its
+  name, which `TASKS.md` records as provenance.
+- **The zoo README lists the census as it is and says which commit moves a
+  count** (decisions log D23; R-12, R-28). No behaviour
+  change. `fixtures/zoo/README.md` named the census's original seven counts;
+  it now names the eleven `tests/zoo_census.py` holds, adding
+  `unmapped_attributes`, `attributes_dropped`, `exception_event` and
+  `span_event`, with the scopes and node-and-edge structures beside them, and
+  says which counts are the audit's and which this library's. "Updates the
+  census in its own commit" becomes "in the commit that moves it", which is
+  what every batch did. The series' never-edit rule covers the zoo's bodies
+  and manifests, not this README (decisions log D26, written after this
+  entry, which cited D23 for it; D23 does not hold it); nothing else under
+  `fixtures/zoo/` changes.
+- **The cold review of 2026-10-14 is archived, and every finding has a
+  disposition** (decisions log D23). No behaviour change.
+  `reviews/2026-10-14-stranger.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-28: the commit that
+  answered it, or the reading it was read or declined with. Two parts were
+  left open: R-12's census-field list and R-28's wording are edits to
+  `fixtures/zoo/README.md`, made by the entry above. Until now the
+  stranger's-trace series had no review archive.
+- **Decisions are cited by their registry row** (decisions log
+  D23; R-26, R-27). No behaviour change. The records cited decisions by
+  the name of a relay file, and those files live only in a git-ignored
+  directory, so a reader of the repo could not resolve the citation. Every
+  such citation in `CHANGELOG.md`, `TASKS.md`, `fixtures/conformance/README.md`
+  and the tests now names the `TASKS.md` decisions-log row it means, by date
+  and batch; the log's intro says that decisions arrive as relay files and
+  live in that table, and that a file name in a commit message points at the
+  row of that date and batch. Two rows are added: the post-close decision
+  `b7b0088` carried (T6 (b)), which had none, and the review's dispositions.
+  S13's graph sizes and their attribution to T3 and T4 leave the S13 probe
+  row, the S13 decision row and the S13 line below: the review measured T2 as
+  most of the change and T4 as growth, and no test holds any of the three
+  numbers. The eight paths, pinned by the test, are the citation. Commit
+  messages are not rewritten. The S13 decision row's strike was an edit in
+  place, which the log's rule does not allow: the row is restored, and
+  decisions log D25 withdraws the sizes (the entry on decision ids, above).
+- **The docs say what `make conformance` runs** (decisions log
+  D23; R-25). No behaviour change. `ENVIRONMENT.md`, `README.md` and
+  `fixtures/conformance/README.md` described the target as the
+  cross-dialect equivalence suite alone, untrue since `tests/test_zoo.py`
+  joined the recipe; each now names the equivalence suite and the zoo
+  gates beside it, the census and the readings. The dated records in
+  `TASKS.md` and in this file keep what was true when they were written.
+- **`make conformance`'s recipe is pinned** (decisions log D23;
+  R-24). No behaviour change. CI runs the target, but the only test on it
+  checked that it exists, so dropping `tests/test_zoo_readings.py` from the
+  recipe left every test green. `tests/test_doc_truth.py` now holds the recipe
+  to the files it runs: `tests/test_conformance.py`, `tests/test_zoo.py`,
+  `tests/test_zoo_readings.py`.
+- **The S13 mask keeps absence** (decisions log D23; R-22). No
+  behaviour change. S13's test masked every node's `started_at` and
+  `ended_at` with `"<time>"` without looking, so a node with an end time in
+  one Z5 capture and none in the other compared equal: an adapter edit that
+  dropped all four recorded `ended_at` left the suite green.
+  `tests/test_zoo_readings.py` now masks a time only where it is present;
+  `None` stays `None`, and the same holds for the `raw.source` times, each
+  event's `timeUnixNano` and a diagnostic's `source.time`.
+- **Every number `ADAPTERS.md` §7 states is parsed, every disposition is
+  compared in full, and the readings' named facts are pinned** (decisions log
+  D23; R-18, R-19). No behaviour change. §7 said every table and
+  number in it is re-derived, but the test parsed only the §7.1/§7.2 tables,
+  checked only the first words of each disposition, and kept §7.3's numbers
+  as its own constants: each of R-18's edits to §7.3's numbers, and a reason
+  or a batch rewritten in a disposition, left the suite green. §7.3's numbers now
+  sit in a new §7.4 table that `tests/test_zoo_readings.py` parses and
+  re-derives from the zoo row by row; §7's prose states none of its own
+  ("nested", not the count), and
+  `test_adapters_md_s_prose_states_no_number_of_its_own` fails if it does.
+  Each disposition is compared whole against `DISPOSITIONS`. The corpus
+  numbers this file cites — the zoo's captures, its agents, the OTLP envelope
+  keys T3/T4 took out — are the test's `CORPUS`, derived from the zoo, and
+  `test_the_changelog_states_the_corpus_numbers_the_test_holds` holds every
+  place this file spells them to it. R-19's facts, each true and asserted by
+  nothing, are each a test over the zoo graphs: Z1's `unknown` nodes are
+  `ChatPromptTemplate`s reporting `PROMPT`; Z3 nests a `generation` over a
+  `ChatCompletion`, Z2 an `astream_chat` in an `astream_chat`; every Z6 `llm`
+  node is the OpenAI client's, and a coworker's sits under the delegation
+  tool; Z6 spells the delegate tool two ways; Z4's second `llm` node is the
+  one that requests `book_table`; each Z2 `acall` is the only child of its
+  `call_tool`. §7.3's S14 heading is parsed for the kinds that stay `unknown`.
+- **The readings' §7 subsection parse ends at the next heading** (decisions
+  log D24; R-23; written after the entry above, in whose commit the change
+  landed and whose headline did not name it). A gate change, not a
+  behaviour change of the library. `tests/test_zoo_readings.py` read each
+  adapter subsection of `ADAPTERS.md` §7 from its heading to the next adapter
+  subsection, and the last one, `otel_genai`, to the end of the file, so it
+  ran on through §7.3 and §7.4, and §7.4's backticked rows would have been
+  read as `otel_genai` keys. Each subsection now ends at the next heading.
+- **An `orphan_siblings` conformance scenario** (decisions log
+  D23; R-17). No behaviour change. `orphan_parent` has one node, so no
+  scenario held an orphan beside anything it could be ordered against, and SPEC
+  §4.3's "an orphan is ordered only against its own" was compared across
+  dialects by nothing. The new scenario, in both dialects, is one root, one
+  child of it, and two orphans stating one absent parent: two `orphan_parent`,
+  one `parent` edge, and one `temporal` edge between the orphans, with none to
+  the root or its child. `orphan_parent` is unchanged. The corpus is now 30
+  scenarios, 25 compared across dialects (README's Conformance section), and
+  the tracked census moved with it: **58/167**, **153** records carrying a
+  span id, **149** trace-unique, **332** timestamp literals, **56** tracked
+  `*.jsonl`; S10's figures are retired as history in
+  `tests/test_doc_truth.py`, and every present-tense citation was recomputed.
+- **The sibling group is the stated parent id alone, at every prefix**
+  (decisions log D23; R-15, R-16). No behaviour change. SPEC
+  §4.3 says a node is a sibling of the nodes that state the same parent id; no
+  test told that key from the trace id and parent id together, which would cut
+  two orphans of one absent parent under different trace ids apart, and two
+  children of one present parent likewise. `tests/test_ordering.py` now
+  asserts both pairs keep their `temporal` edge. T5's
+  `test_orphans_and_a_root_never_share_a_chain_whatever_arrives_last` said
+  "two groups at every prefix" and checked the final chain only; it now
+  asserts the chain at each prefix, so a rule the batch and live paths share
+  wrongly cannot pass it by agreeing with itself.
+- **The seam's dropped-count and event paths are pinned** (decisions log
+  D23; R-11, R-14). No behaviour change. T3's and T4's entries
+  below say an unclaimed span reports its dropped count and its events with
+  `adapter` null, and SPEC §3.7 and §7 state how an event's `null` name and
+  an exception event's name are read (an exception event's `null`
+  attributes was not stated there; SPEC §7 states it from the entry *An
+  exception event's `null` attributes fold to none*, above); the tests held
+  only the envelope-keyed unclaimed span, an absent name, and an exception
+  event's adapter. `tests/test_envelope.py` now asserts that an unpacked span
+  with no `spanId` (no envelope) reports `attributes_dropped`,
+  `exception_event` and `span_event` with `adapter` null; that `name: null`
+  reads `""`; that `attributes: null` on an exception event reads as stating
+  none; that an exception event is read only where every attribute folds;
+  that a claimed span's `span_event` names its adapter; that an event named
+  `"Exception"` is a `span_event`; and that `Envelope.resource` and `scope`
+  are the record's level objects, not copies.
+- **The census holds each capture's node order and edge basis** (decisions log
+  D23; R-10). No behaviour change. T2's entry below says that on
+  the zoo's twelve captures no edge, basis or node position moves; the census
+  counted edges by kind only, so that was a hand check (R-10 repeated it).
+  `tests/zoo_census.py` now holds, per capture, the node id sequence and the
+  edge list `(kind, src, dst, basis)` in the graph's order (`STRUCTURES`, and
+  `WHOLE_STRUCTURES` for Z4's whole capture), and `tests/test_zoo.py`
+  re-derives both from the bodies every run, batch and incremental alike. A
+  change that moves a node, an edge or a basis now says so in the census.
+- **A declared time's two edges are pinned, and a check that could not fire
+  is gone** (decisions log D23; R-9). No behaviour change. SPEC
+  §3.1 says a declared nanosecond value written with a fraction or an exponent
+  is converted like any other, and that a declared count past 1e20 is still
+  over the suspicion line in seconds; no test held either.
+  `tests/test_read.py` now asserts that `startTimeUnixNano: "1.7e18"` reads
+  1700000000.0 with no `timestamp_unit_suspect`, and that
+  `"200000000000000000000"` reads 200000000000.0 and draws it. The
+  finiteness check on the converted value (`seam._in_seconds`, which
+  `record_time` calls) is removed: its input is already finite, and a
+  finite count divided by 1e9 is finite or raises `OverflowError`, which is
+  still caught.
+- **The unclaimed envelope node is pinned field by field** (decisions log
+  D23; R-6). No behaviour change. T1's entry below says an
+  unclaimed OTLP record's node takes its trace id and status from its envelope,
+  and that an envelope field of a type it cannot hold raises; the only
+  graph-level test was Z4's root, whose status is `UNSET` and whose trace id
+  every child states, and the type check was tested for `name` only.
+  `tests/test_envelope.py` now builds one unclaimed probe (status 2 with a
+  message, a stated trace id) beside a claimed record that states no trace id,
+  and asserts the node's `status`, `status_note`, `raw.source_id` and the
+  graph's trace id, with no `missing_trace_id`; asserts that an unreadable
+  start or end time, a non-string `parent_id`, `status_message`, span id or
+  trace id each raise `EnvelopeError` and the node falls back to the digest id;
+  and that a record of envelope levels with no span is marked as unpacked.
+- **`FIXTURES.md` names `fixtures/zoo/` and its contract** (decisions log
+  D23; R-5). No behaviour change. T0 added a fixture location
+  that §1 did not list and whose provenance §6's rule did not describe. §1 now
+  lists `zoo/` as the third location: a byte-for-byte copy of the zoo's
+  sealed captures at a named pin, never edited here; its provenance is each
+  capture's `MANIFEST.json` and the brief the zoo README cites, so §6's
+  `<name>.provenance.md` does not apply; and it may be used to claim exactly
+  what the census and the readings assert.
+- **The census holds the exporter's order, scope grouping and the zoo
+  README's instrumentation column** (decisions log D23; R-4).
+  No behaviour change. T0's entry below says the records are fed "in the
+  exporter's child-before-parent order (the zoo's S15, S21)"; that was true of
+  the bytes and asserted by no test. `tests/test_zoo.py` now asserts, per
+  capture, zero parent-before-child pairs in body order (every stated parent
+  the capture holds comes after its child, as many as the whole capture's
+  `parent` edges), each body's records contiguous by instrumentation scope
+  (non-vacuous on Z3, Z4 and Z6, whose bodies state two), and that
+  `fixtures/zoo/README.md`'s instrumentation column and "Collector 0.162.0"
+  equal each manifest's `project_manifest.instrumentation` and
+  `collector_version`.
+- **Each zoo seal is held to the value `fixtures/zoo/README.md` pins**
+  (decisions log D23; R-3). No behaviour change. T0's entry
+  below says `tests/test_zoo.py` re-derives every body's sha256 and every
+  manifest's seal; it did, but each only against the manifest beside it, so a
+  body rewritten with its manifest sha and seal recomputed to match still
+  passed. The test now reads the twelve seals from the README's table and
+  asserts each equals the seal recomputed from its manifest, which ties every
+  copied byte to a value written down at the pin.
+- **S13 is answered: Z5's real and recorded graphs differ in exactly eight
+  paths, all per-run identifiers the SDK and LangGraph generate, none the
+  library's** (after the stranger's-trace close; decisions log
+  D21 and D25). No behaviour change. The close registered S13 as open.
+  `tests/test_zoo_readings.py` now builds both Z5 graphs and masks what the
+  exporter generated: the trace id, every node and parent id by position in
+  `started_at` order, and every time with the `raw.source` fields that carry
+  it. It holds the graphs to differ at exactly eight paths and nowhere else,
+  byte for byte. On every node, the SDK's `service.instance.id` (its
+  per-process resource UUID) differs, and so does LangGraph's `checkpoint_ns`
+  UUID inside the `metadata` attribute (a UUID per graph step). Both are
+  verbatim record content in `raw`. The mask stays as it is: widening it would
+  hide the next such identifier. `c8de748`'s subject, "differ only in what the
+  exporter generated", predates its finding and is too narrow; it is not
+  amended. The eight paths, pinned by the test, are the citation. `TASKS.md`
+  states the paths and values, and every
+  zoo probe, S1–S22, now has a disposition.
+- **The adapters say what they do not map, and the zoo's two dialects, six
+  instrumentors are described** (stranger's-trace series, T6). No behaviour
+  change. `ADAPTERS.md` §7 adds two tables, one for `openinference` and one for
+  `otel_genai`. Each lists every attribute key the zoo's twelve captures leave
+  unmapped, with indices folded to `<n>`, and gives each key's disposition:
+  *reported, not mapped* with the reason, or *mapped at T3/T4* for the six
+  OTLP envelope keys. §7 also gives the readings that answer the zoo's S5, S6,
+  S9, S14, S16, S17, S19, S20 and S22, each cited to its probe:
+  - a node's scope is read from its envelope, in process only;
+  - nested `llm` nodes get the `parent` edge and nothing more;
+  - no zoo tool span records a call id, so `unpaired_call` is the correct
+    rendering;
+  - the four OpenInference kinds stay `unknown`;
+  - `graph.node.*` states a sequence;
+  - an `llm` node carries no agent identity.
+
+  `tests/test_zoo_readings.py` parses the tables and holds them equal to what
+  the adapters report on the corpus. It pins the in-process
+  `envelope(node.raw.source)` read on every node of every capture, batch and
+  `Builder`, and re-derives the readings' numbers. `SPEC.md` §3.1 no longer
+  says OpenInference states no agent-name attribute: Z3's openai-agents
+  instrumentor writes `agent.name`, and the adapter already declined it.
+- **The OTLP envelope is public: `spanweave.envelope(record) -> Envelope`**
+  (T1). The trace id, span id, parent, name, times and status the transport
+  stated for a record the reader unpacked from an export — the routing key a
+  receiver needs whether or not any adapter can read the span. The reader marks
+  each record it unpacked (by type, never by a key, so `raw.source` is
+  unchanged); any other record raises `EnvelopeError` with the new error code
+  `not_an_envelope` (`SPEC.md` §3.10), as does an unpacked record missing
+  either id or stating an envelope field in a type the envelope cannot hold.
+  §3.1's timestamp reading moved from the two adapters' identical copies to
+  `spanweave.seam.stated_time`, which the envelope reads by too.
+- **The zoo's captures are a fixture, and the audit's census is a gate**
+  (stranger's-trace series, T0). No behaviour change. `fixtures/zoo/` copies
+  the twelve captures' `json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at
+  `7eb5b69` byte for byte — 29 bodies, six agents built by implementers who
+  knew nothing about this library, under stock instrumentation — with each
+  capture's sealed `MANIFEST.json` beside them; `tests/test_zoo.py` re-derives
+  every body's sha256 and every manifest's seal, and that the copy holds
+  exactly those files. `tests/zoo_census.py` holds the counts the zoo's audit
+  reported for each capture (nodes, `parent` and `temporal` edges,
+  `orphan_parent`, `unpaired_call`, `unknown`, `timestamp_unit_suspect`), each
+  citing its `audit/*.md` and `PROBES.md` "The captures"; the test holds this
+  library to them, batch and incremental byte for byte, the records fed in the
+  exporter's child-before-parent order (the zoo's S15, S21). Every count
+  agrees with its report. The audit's Z4 graph is the four records the
+  receiver routed; the fifth, the root span no adapter claims (S1, L2), is
+  held separately as the one `unknown` node §6.1 makes of it. `make
+  conformance` runs the census; a later change that moves a count updates it
+  in its own commit, with the reason. `.gitattributes` keeps a checkout from
+  rewriting the copied bytes.
 - **The package ships `py.typed` (PEP 561).** No behaviour change: one empty
   file under `spanweave/`, plus the checks that keep it shipping. The
   distribution has advertised `Typing :: Typed` and `mypy --strict` since Phase
@@ -538,6 +1007,148 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   label. `SPEC.md` §8 states it. (audit finding 4)
 
 ### Changed
+
+- **`make conformance` runs the zoo readings** (after the stranger's-trace
+  close; decisions log D22). No behaviour change. The target
+  now runs `tests/test_zoo_readings.py` beside `tests/test_conformance.py` and
+  `tests/test_zoo.py`. The module re-derives what `ADAPTERS.md` §7 and
+  `TASKS.md` say about the zoo's captures, so it is a reading over the corpus,
+  and the corpus's run now runs it: 983 passed / 2 skipped, up from 929.
+  `make check` already ran it and still does. The close's entry below said
+  `make conformance` did not, and that is no longer so.
+- **The stranger's-trace series is closed, and `WORKPLAN.md` is gone with it**
+  (T7, this commit). No behaviour change: nothing under `spanweave/` moved,
+  `tests/serialized_shape.json` is untouched, and `SCHEMA_VERSION` is still
+  `"0.1"`, unfrozen. `TASKS.md` now holds everything of the plan file that
+  outlives the series, under *The stranger's-trace series*:
+  - a registry row per batch, T0–T7, with each final status and commit,
+    including the three halts and decisions (T1, T3, T4);
+  - the thirteen-row decisions log and the dated resume note, both verbatim;
+  - a disposition for every zoo probe, S1–S22. S13 is the exception: no
+    batch, decision or reading names it, so it is registered as open;
+  - the choices T4, T5 and T6 made beyond their rows, carried as
+    **unconfirmed**;
+  - the zoo corpus and the census recorded as the stranger corpus: twelve
+    captures from `SigorMatt/spanweave-zoo` `7eb5b69` held by
+    `tests/zoo_census.py`, read by the two dialects the library already has.
+    It adds no adapter and takes no part in the cross-dialect equivalence
+    test, so `ROADMAP.md` Phase 4's gate is not met, as `ROADMAP.md` now says
+    (decisions log D14). T7's row had asked for the run to be
+    recorded as the third dialect having been run; that was the plan's
+    mistake.
+
+  The README's Documents row for `WORKPLAN.md` and the `WORKPLAN.md` exclusion
+  in `durable_documents()` are removed, the pair every series close removes.
+  `tests/test_zoo_readings.py`'s two citations of the plan file are
+  re-pointed at `TASKS.md`. `OPEN_QUESTIONS.md` gains a preamble for §20–§22,
+  as the earlier closes did for §10–§19. This series has no review archive
+  yet: its scoped close review, the PR to `main` and Qodo's review of it come
+  after this commit. `make conformance` still does not run
+  `tests/test_zoo_readings.py`, which is registered as open.
+- **Siblings are grouped by the parent the record states** (T5; zoo S18, L3;
+  `SPEC.md` §4.3, §10.2, §10.6). A `temporal` chain's group is `""` for a
+  root and the stated parent id for every other node, present or absent — so an
+  orphan is ordered only against nodes stating the same parent, never against a
+  root or an orphan of another absent parent. Before, every orphan sat at trace
+  root, so a partial input (a sampled trace, any prefix of a child-before-parent
+  stream) asserted orders its complete graph withdraws. Z2's first body alone
+  now yields one `temporal` edge, not two; Z5's census moves `temporal` 2 → 1 on
+  both captures (its `fetch` and second `http_get` are orphans of different
+  absent parents); every other census count and every conformance expected
+  graph is unchanged. A parent arriving after its children now moves no record
+  between groups, so the live builder's group move (`_regroup_many`,
+  `_leave`) is gone; incremental still equals batch at every prefix. New gate:
+  no arrival-order prefix of any zoo capture orders two nodes the whole capture
+  leaves unordered.
+- **A span's events are reported, and an exception is one the graph can see**
+  (stranger's-trace series, T4; the zoo's S11, S17; `OPEN_QUESTIONS.md` §22,
+  option 2; `SPEC.md` §3.7, §7). On a record the reader unpacked from an
+  export, each OTLP span event is now an **`info`** diagnostic on its node
+  instead of part of one unmapped `<record>.events` key: the OpenTelemetry
+  API's `exception` event (`record_exception`) is the new code
+  **`exception_event`**, `source: {type, message, escaped, time}` — the
+  `exception.*` attributes as stated (Z5's `escaped` stays the string
+  `"False"`), never `exception.stacktrace`, which stays in `raw.source` — and
+  any other event is the new code **`span_event`**, `source: {name, time}`.
+  `time` is the event's `timeUnixNano` in unix seconds, kept as reported even
+  after the node's `ended_at`. The level grades the report, not the trace:
+  whether a span failed is still its `status`, and a caught exception on a
+  span whose status is unset is `info` like any event. A span no adapter
+  claimed reports its events too (`adapter` `null`); an entry that cannot be
+  read is named `<record>.events[<i>]` in `unmapped_attributes`; a flat
+  record's `events` is still an unmapped key. **Nothing serialized changes
+  shape** and `DiagnosticLevel` is unchanged; `tests/serialized_shape.json`
+  moves by the two codes' four lines. On the zoo, Z5 gains two
+  `exception_event` (the two failed `http_get` calls, `ConnectionError`) and
+  Z2 two `span_event` per capture (`First Token Stream Event`, each after its
+  span's end); no `unmapped_attributes` count moves.
+
+- **The OTLP envelope is not an unmapped attribute, and a dropped count is a
+  diagnostic** (stranger's-trace series, T3; the zoo's S4, S7, S8, S10, and
+  S6, S21 by the envelope; `OPEN_QUESTIONS.md` §21, option 3; `SPEC.md` §3.7,
+  §7). On a record the reader unpacked from an export, `flags`, `kind`,
+  `resource_spans` and `scope_spans` are the transport's: they stay verbatim
+  in `raw.source` and `unmapped_attributes` no longer names them (on a flat
+  record the same names are still keys, and still reported). A
+  `droppedAttributesCount` above zero is the new diagnostic code
+  **`attributes_dropped`** (warning, `source: {"count": n}`, record-scoped,
+  also on a span no adapter claimed) instead of an unmapped
+  `<record>.droppedAttributesCount`; zero or `null` says nothing, and a value
+  that is not a `uint32` stays an unmapped key. `spanweave.Envelope` gains
+  `resource` and `scope`: the level objects the record carries, `{}` where the
+  export omits one, so a consumer reads which instrumentation scope wrote a
+  span without knowing the record shape. **Nothing serialized changes shape**:
+  no field, no `PASSTHROUGH` path; `tests/serialized_shape.json` moves by the
+  new code's two lines, as `undecodable_bytes` did. On the zoo,
+  `unmapped_attributes` goes Z3 102 → 75 and Z2 23 → 9 (nodes that reported
+  only the envelope lose the diagnostic), every other capture's diagnostics
+  each name four keys fewer, and Z3 gains 18 `attributes_dropped`; the census
+  now holds both counts and each capture's scope names (Z3, Z4 and Z6 state
+  two). A consumer counting `unmapped_attributes` sees fewer.
+
+- **A declared unit is not a suspicion: an OTLP time is read in seconds**
+  (stranger's-trace series, T2; the zoo's S3; `SPEC.md` §3.1, §3.7, §5, §7).
+  `startTimeUnixNano` / `endTimeUnixNano` declare nanoseconds in their name,
+  and the record the reader unpacked from an export carries that fact as its
+  mark, so §3.1's time reader (`seam.record_time`, which both adapters and the
+  envelope now call) converts such a time to unix seconds — the nearest
+  `float` to the count divided by 10⁹, correctly rounded and so the same on
+  every machine — while `raw.source` keeps the nanosecond string verbatim.
+  `timestamp_unit_suspect` now fires only on a value whose unit nothing
+  declared: a flat record's `start_time` of 1.7e18 still draws it, and a
+  conformant OTLP export draws none (it drew one per span, documented as
+  expected at R11, `OPEN_QUESTIONS.md` §17 — the warning reported the format
+  and was silent about the one span in seconds). **Every OTLP-unpacked node's
+  `started_at` / `ended_at` changes value and type** (an `int` of
+  nanoseconds becomes a `float` of seconds); flat inputs are unchanged. Costs,
+  stated in §3.1: the float's spacing (~238 ns today) can make two siblings
+  closer than that read as one time, with a *tied* `temporal` basis — on the
+  zoo's twelve captures no edge, basis or node position moves; a declared
+  count no float holds in seconds is not read (`unmapped_attributes` +
+  `missing_timestamp`); and a span that writes seconds into a nanosecond
+  field is believed. The zoo census's `timestamp_unit_suspect` goes to 0 on
+  every capture (31, 23, 102, 4, 4, 26, 16 in the reports; Z4's whole capture
+  5 → 0). `otlp_container` is re-rendered with its times in the nanoseconds
+  its fields declare, and is still `llm_tool_llm`'s graph byte for byte.
+
+- **Every unclaimed OTLP node with a span id changes id** (stranger's-trace
+  series, T1; `OPEN_QUESTIONS.md` §20, option 1). A record the reader unpacked
+  from an OTLP export and no adapter claims was an `unknown` node with a
+  derived `sw_…` id and no relations; it is now **keyed and placed by its
+  envelope**: its node id is the span id the export states (§3.6 rule 1), its
+  `parent_id` and `trace_id` are its relations, and its `name`, times and
+  status are the node's (`SPEC.md` §6.1). Kind stays `unknown`, provenance
+  still names no adapter, and `unclaimed_record` now says no dialect read its
+  attributes. A flat record, and an unpacked one whose envelope states no id,
+  are rendered exactly as before. On the zoo's Z4 capture the root span
+  `concierge.conversation`, which no adapter claims, is now the parent its
+  four `llm` children state: 4 `parent` edges and 0 `orphan_parent` where
+  there were 0 and 4, its `missing_timestamp` gone, and one more
+  `timestamp_unit_suspect` for the nanosecond times it now carries
+  (`tests/zoo_census.py`, the zoo's S1, S2, S12). No conformance scenario
+  renders an unclaimed record, so no expected graph moves. A record unpacked
+  from an export and a flat record that parse equal are no longer collapsed
+  as duplicates (`SPEC.md` §7): only one of them carries an envelope.
 
 - **The live-graphs series is closed in this repository, and `WORKPLAN.md` is
   gone with it.** From the run-4 cold review's A2 and A3 (batch L28, this

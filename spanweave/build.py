@@ -221,7 +221,7 @@ def build_contributed_graph(
     edges = _explicit_edges(ordered, ids, by_span_id, collected, by_node)
     if temporal:
         edges = deduplicated(
-            [*edges, *_temporal_edges(nodes, edges, collected, by_node)]
+            [*edges, *_temporal_edges(ordered, nodes, collected, by_node)]
         )
 
     nodes = in_order(nodes, edges, collected, whole_input)
@@ -568,6 +568,11 @@ def _report_timestamp_unit_suspect(
     adapter: str | None,
 ) -> None:
     """A reported time too large to be unix seconds (`SPEC.md` §3.1).
+
+    It reads the value the span carries, so it speaks of a unit nothing
+    declared: a time whose field declares nanoseconds arrives here already in
+    seconds (`seam.record_time`), and no `fixed64` count reaches the line once
+    converted.
 
     **One per node**, not one per value: both endpoints of a span share one
     field encoding, so two reports would say one thing twice, and the fields
@@ -1025,29 +1030,34 @@ def temporal_chain(siblings: Iterable[Node]) -> list[Edge]:
     ]
 
 
-def sibling_group(node: Node, parent_of: Mapping[NodeId, NodeId]) -> str:
+def sibling_group(span: NormalizedSpan) -> str:
     """Which temporal chain a node belongs to (`SPEC.md` §4.3).
 
-    Nodes with no parent are siblings of each other at trace root -- and so is
-    a node whose stated parent is not in this input, because in *this* graph it
-    has none. `""` is that root group, and it is a group like any other.
+    The parent the record **states**, whether or not this input carries it: a
+    node with no stated parent is at trace root, `""`, and every other node is
+    in the group of the id it named. So an orphan is ordered only against nodes
+    that name the same parent, and a parent arriving later moves nobody -- an
+    order between two nodes stating different parents was never something the
+    telemetry stated, and a complete input would withdraw it.
+
+    `""` cannot collide with a stated id: an empty parent reference is no
+    parent (§4.0), so it reaches the builder as `None`.
     """
-    return parent_of.get(node.id, "")
+    return span.parent_id if span.parent_id is not None else ""
 
 
 def _temporal_edges(
+    spans: Sequence[NormalizedSpan],
     nodes: Sequence[Node],
-    edges: Sequence[Edge],
     collected: DiagnosticCollector,
     by_node: Mapping[NodeId, str | None],
 ) -> list[Edge]:
-    parent_of = {edge.dst: edge.src for edge in edges if edge.kind is EdgeKind.PARENT}
     groups: dict[str, list[Node]] = {}
-    for node in nodes:
+    for span, node in zip(spans, nodes, strict=True):
         if node.started_at is None:
             report_missing_timestamp(node.id, collected, by_node[node.id])
             continue
-        groups.setdefault(sibling_group(node, parent_of), []).append(node)
+        groups.setdefault(sibling_group(span), []).append(node)
 
     found = []
     for parent in sorted(groups):

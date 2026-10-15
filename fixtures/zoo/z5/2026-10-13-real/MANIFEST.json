@@ -1,0 +1,86 @@
+{
+  "bodies": [
+    {
+      "bytes": 5934,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "11593fe91c70f74ccdd1d360e59a524ce4cac99857421042222652b71e125608"
+    },
+    {
+      "bytes": 8070,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "fd17223d310deb8d063a3d612b0be0ae7e5024c5a921fe9412db237fffa0caef"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T22:20:08.834933+00:00",
+  "files": [
+    {
+      "bytes": 239,
+      "file": "bodies.jsonl",
+      "sha256": "9a7d4764162943e884a5a84cf5c79e0bd93f1347d56fad7d5e1d8e20b3dd9449"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "69444f8f03388cee02f5a7b8666217aa3f904f57ca3eeebd394d9473ceaf420a"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 488,
+      "file": "json/0001.headers.json",
+      "sha256": "0e185a6b720c1b722fa2f1f330a7c2c14c1079423842acf82a9dbc56d2f76d5f"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0001.headers.raw",
+      "sha256": "2390a91557fc16372b825f47ed448ac29dde3f112a552294a177e6a53c35a552"
+    },
+    {
+      "bytes": 575,
+      "file": "raw/0001.headers.json",
+      "sha256": "920a5a3f0ea553c3b5eab56c0fe025a5d972cd6808c655b514bcab6b825c567b"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0001.headers.raw",
+      "sha256": "0a4a869ea16809d3a939656e69685b5ccab132c838c66ce1510beff12a3199a1"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "real",
+  "project_manifest": {
+    "base_url": "https://api.tokenfactory.nebius.com/v1/",
+    "contract_version": "1.2",
+    "endpoint": "http://localhost:4318",
+    "framework": "langgraph",
+    "framework_version": "1.2.14",
+    "instrumentation": [
+      "openinference-instrumentation-langchain==0.1.79"
+    ],
+    "mode": "real",
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T22:20:01.756Z"
+  },
+  "seal": "6cdcb6f563a37413a20c1f90a3fabeeb6db0e79fc9c6b2ad3b588a2b0000a8b2",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T22:19:59.636913+00:00"
+}

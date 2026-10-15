@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -174,6 +175,19 @@ SAFETY_RULES = (no_network, no_unsafe, no_hash)
 # `max_severity` all fail. That is deliberate: a gate with a clever exemption
 # rule is a gate someone will argue with.
 #
+# One stem has a rule, and it is stated here rather than hidden: `grade`
+# (GRADE_STEM, below) matches only where a word starts. It is the only banned
+# stem that is also the tail of an ordinary word core needs -- "degrade", as in
+# CLAUDE.md's "degrade honestly", which must stay sayable in core -- so a plain
+# substring would fail the project's own vocabulary. The pattern is
+# `grad(e|es|ed|ing)` not preceded by a letter: grade, grades, graded, grader,
+# grading, `max_grade` and `GRADE` fail; degrade, upgrade and downgrade pass.
+# The start is "no letter before", not `\b`, because `\b` counts `_` as part
+# of a word and would let `max_grade` through. There is no end boundary, so
+# `grader` and `gradeless` fail too. Known limits: camel case lowers away its
+# boundary, so `maxGrade` (-> `maxgrade`) passes; and the gate reads
+# identifiers and string literals, docstrings included, never `#` comments.
+#
 # A deliberate exception requires a spec change, and there are none. The one
 # collision found so far -- `Diagnostic.severity` in SPEC.md 3.7 -- was
 # resolved by renaming the field to `level` rather than by carving a hole here,
@@ -199,6 +213,9 @@ SEMANTIC_VOCABULARY = (
     "quality",
     "hallucinat",
 )
+
+# The banned stem matched at a word start only; why is in the comment above.
+GRADE_STEM = re.compile(r"(?<![a-z])grad(?:e|es|ed|ing)")
 
 # Dialect ids. Legal under spanweave/adapters/ and nowhere else: the builder
 # owns graphs and must never learn a dialect name (DESIGN.md 3). The rule is
@@ -258,6 +275,17 @@ def neutrality(path: str, source: str, tree: ast.AST) -> list[Violation]:
                         f"consumer (CLAUDE.md 1)",
                     )
                 )
+        if GRADE_STEM.search(lowered):
+            found.append(
+                Violation(
+                    "neutrality",
+                    path,
+                    line,
+                    f"{what} carries the semantic word 'grade'; core "
+                    f"assigns no such judgement -- it belongs in a "
+                    f"consumer (CLAUDE.md 1)",
+                )
+            )
     return found
 
 

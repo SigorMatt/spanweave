@@ -95,7 +95,7 @@ class PayloadState(StrEnum):
 class DiagnosticLevel(StrEnum):
     """How loudly to report a mapping gap. Never "error": errors raise.
 
-    This grades the report, not the trace (`SPEC.md` §3.7).
+    A level is a property of the report, never of the trace (`SPEC.md` §3.7).
     """
 
     INFO = "info"
@@ -200,9 +200,10 @@ class Node:
     raw: RawRecord
     provenance: Provenance
     operation: str | None = None
-    #: Unix seconds, as reported. An integer literal stays an `int` and a
-    #: fractional one a `float` -- float64 cannot hold epoch nanoseconds
-    #: (`SPEC.md` §3.1). Never rescaled, never converted between the two.
+    #: Unix seconds. An integer literal stays an `int` and a fractional one a
+    #: `float` -- float64 cannot hold epoch nanoseconds (`SPEC.md` §3.1). A
+    #: field that declares no unit is never rescaled; one that declares
+    #: nanoseconds is carried as the `float` seconds it converts to.
     started_at: int | float | None = None
     ended_at: int | float | None = None
     status: Status = Status.UNSET

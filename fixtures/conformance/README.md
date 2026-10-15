@@ -19,7 +19,10 @@ One directory per scenario:
 
 **The rule this corpus exists to enforce:** every dialect rendering of a
 scenario must produce that scenario's single canonical graph. Run it with
-`make conformance`.
+`make conformance`, which runs this corpus's equivalence suite
+(`tests/test_conformance.py`) and, beside it, the zoo gates over
+`fixtures/zoo/`: the census (`tests/test_zoo.py`) and the readings
+(`tests/test_zoo_readings.py`).
 
 If your adapter fails, the adapter is wrong — or the model is. Finding out which
 is the point. **Do not edit an expected graph to make a test pass**
@@ -140,6 +143,14 @@ Added since, each for a reason recorded at its task:
   than left to be discovered; the one sweep whose numbers `ROADMAP.md`
   publishes was widened to read every rendering through the library, and the
   rest sample rather than claim.
+
+- **`orphan_siblings`** (decisions log D23; R-17).
+  `orphan_parent` has one node, so no scenario held an orphan beside anything
+  it could be ordered against, and `SPEC.md` §4.3's rule -- a node's sibling
+  group is the parent it **states**, present or not -- was compared across
+  dialects by nothing. One root, one child of it, and two orphans stating one
+  absent parent: the orphans are chained to each other and to nothing else.
+  `orphan_parent` is unchanged.
 
 ## Three things this README used to get wrong, kept as a warning
 

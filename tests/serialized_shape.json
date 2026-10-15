@@ -175,12 +175,15 @@
   "$.nodes_removed[].usage.extra"
  ],
  "diagnostic_source": {
+  "attributes_dropped": "{\"count\": int}",
   "everything else": "the offending fragment, as the type it arrived as",
+  "exception_event": "{\"type\": JsonValue, \"message\": JsonValue, \"escaped\": JsonValue, \"time\": number \\| null}",
   "malformed_record": "str",
   "missing_timestamp": "null",
   "missing_trace_id": "null",
   "ordering_cycle": "list[str]",
   "payload_parse_failed": "null",
+  "span_event": "{\"name\": str, \"time\": number \\| null}",
   "timestamp_unit_suspect": "{\"started_at\": number, \"ended_at\": number}",
   "undecodable_bytes": "null",
   "unmapped_attributes": "list[str]",
@@ -382,8 +385,10 @@
    "derived"
   ],
   "diagnostic_codes": [
+   "attributes_dropped",
    "duplicate_record",
    "duplicate_source_id",
+   "exception_event",
    "malformed_record",
    "missing_timestamp",
    "missing_trace_id",
@@ -392,6 +397,7 @@
    "ordering_cycle",
    "orphan_parent",
    "payload_parse_failed",
+   "span_event",
    "timestamp_unit_suspect",
    "unclaimed_record",
    "undecodable_bytes",

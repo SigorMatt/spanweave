@@ -1,0 +1,87 @@
+{
+  "bodies": [
+    {
+      "bytes": 499035,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "6c453312bb6eeee2744e619f1100e105c89a1bc5a6054944c798d1ed8cc91f30"
+    },
+    {
+      "bytes": 696252,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "1a95c71692cf25eda5bfabd3794347bb9bbb5f85f23b29cd32fe7ba4c680efc2"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T22:19:50.020170+00:00",
+  "files": [
+    {
+      "bytes": 243,
+      "file": "bodies.jsonl",
+      "sha256": "719f15366a8e0e5b126a58bc77e5edf64a8a025bd00a86d6b2ce146028ee278c"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "45e1e08f33e7a7d53aba311885b066fe15c8f1b0bd92f3974752aebb223fef22"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 492,
+      "file": "json/0001.headers.json",
+      "sha256": "63259af385ba7ad06d6b24ee9c07696d933e7d2c6cfba5430f2f81e2f22eae65"
+    },
+    {
+      "bytes": 196,
+      "file": "json/0001.headers.raw",
+      "sha256": "d132530ec4fff44618c81537a7208cfecdbdfc9773c391b30bb62a22506da1eb"
+    },
+    {
+      "bytes": 579,
+      "file": "raw/0001.headers.json",
+      "sha256": "e87b8693766ce0dcedf4ca92317b5be7a9379296a0d91005f7ae56798247f8c9"
+    },
+    {
+      "bytes": 227,
+      "file": "raw/0001.headers.raw",
+      "sha256": "4ead19c97b94a0f11c4c12477c3066197972c8d39d64d066099f4431d746c587"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "recorded",
+  "project_manifest": {
+    "base_url": "http://127.0.0.1:8765/v1/",
+    "contract_version": "1.2",
+    "endpoint": "http://localhost:4318",
+    "framework": "openai-agents",
+    "framework_version": "0.23.1",
+    "instrumentation": [
+      "openinference-instrumentation-openai-agents==2.5.3",
+      "openinference-instrumentation-openai==0.1.65"
+    ],
+    "mode": "recorded",
+    "model": "echo-planner-stub",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T22:19:48.420Z"
+  },
+  "seal": "dc812474cf27936c8fed663b82712efbe0c032fce6298f42ca6b6e899d13f78a",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T22:19:45.474248+00:00"
+}

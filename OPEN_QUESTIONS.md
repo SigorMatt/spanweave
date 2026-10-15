@@ -34,6 +34,14 @@ dispositioned, and the threads left open — is in `TASKS.md` under *The
 live-graphs series*. These references are kept as written, for the reason the
 audit's are.
 
+**Entries §20–§22 were written as halts during the stranger's-trace series**
+(2026-10-14) and refer to that series' own `WORKPLAN.md`. Each carries the
+maintainer's decision beneath it. The file was deleted at the series' close on
+2026-10-14, and everything of it that outlives the series — the batch registry
+with final statuses, the decisions log in full, the resume note, and each
+probe's disposition — is in `TASKS.md` under *The stranger's-trace series*.
+These references are kept as written, for the reason the audit's are.
+
 ---
 
 ## 1. Should `unknown` nodes be promotable?
@@ -491,9 +499,13 @@ timestamp values, **0** above 1e11, **0** whose shortest float repr differs
 from the literal in the file, **0** pairs of distinct literals collapsing onto
 one float. **13** sibling pairs, minimum gap **136 µs** — over 500x the ULP at
 that magnitude. Widen the scan to every trace file the repository carries and
-**10** of the tracked corpus's **316** timestamp literals sit above the line —
+**26** of the tracked corpus's **332** timestamp literals sit above the line —
 five per dialect in `timestamp_units`, which C1 wrote to exercise the ceiling,
-and they are exactly the ten whose float differs from the digits in the file.
+and eight per dialect in `otlp_container`, whose `…UnixNano` fields batch T2
+re-rendered in the nanoseconds they declare (there they are read in seconds,
+`SPEC.md` §3.1, and draw no diagnostic) — and they are exactly the twenty-six
+whose float differs from the digits in the file. Until T2 the figure was ten:
+`otlp_container` carried seconds in those fields (§17(b)).
 
 *Provenance of these figures. This paragraph asserted 154 timestamp values, 41
 sibling pairs and a minimum gap of 81 µs over "the 17 captured trace files",
@@ -565,9 +577,11 @@ but not to the input literal — `1.7000000001e+18` against `1700000000100000100
 is both a different spelling and a different number, and recovering the
 original means re-reading `raw.source`. Option 2: integer in, identical integer
 out; fractional seconds are unaffected, since Python's repr is
-shortest-round-trip and the **10** literals that differ from it, of **316** in
-the tracked corpus, are the integer nanosecond values in `timestamp_units` that
-option 2 keeps exactly. Option 3: nothing round-trips — every value is rescaled
+shortest-round-trip and the **26** literals that differ from it, of **332** in
+the tracked corpus, are the integer nanosecond values in `timestamp_units`, which
+option 2 keeps exactly, and — since batch T2 — in `otlp_container`, whose fields
+declare nanoseconds, so §3.1 reads them in seconds and the digits stay in
+`raw.source`. Option 3: nothing round-trips — every value is rescaled
 twice and comes back out as a float. Option 4: exact in both directions, at the price of a custom encoder.
 
 **C1's two handoffs, answered.**
@@ -990,13 +1004,13 @@ source.
 in this repo's own harness — and not observed.** Said plainly, because G3 will
 ask whether E is a freeze precondition and the answer turns on this.
 
-What the corpus shows, scanned end to end — **56** files, **159** records
+What the corpus shows, scanned end to end — **58** files, **167** records
 (tracked files only):
 
 - **1 file** carries both markers, and it is
   `fixtures/conformance/mixed_instrumentation/`, constructed here by batch E3
-  out of two renderings of one scenario. Of the rest, **29** are
-  `openinference`-only and **26** are `otel_genai`-only. **Constructed is not
+  out of two renderings of one scenario. Of the rest, **30** are
+  `openinference`-only and **27** are `otel_genai`-only. **Constructed is not
   observed**, which is the whole point of this subsection.
 - **0 records** carry both markers. **0 records** carry neither.
 
@@ -1054,7 +1068,7 @@ per-record scan that returns `0.9` if **any** record in its sample carries its
 prefix in `attributes`, and `0.0` otherwise. That makes `detect([record])` a
 per-record classifier with no new method: *this adapter claims this record* iff
 `detect([record]) >= MINIMUM_CONFIDENCE`. Checked against a direct marker scan
-over all **159** tracked corpus records: **0 disagreements**. (The check was
+over all **167** tracked corpus records: **0 disagreements**. (The check was
 first run over 177 records of a working tree, batch E1; `tests/corpus_census.py`
 re-runs it over what a checkout holds on every test run.)
 
@@ -1145,8 +1159,8 @@ missing an adapter"*, which is a thing this library should be able to say.
   which was 117 of 117 in a checkout — so mixed dispatch moved **no id at all**
   in any fixture or capture that then existed. It is no longer every record:
   batch A5 added `derived_ids` and `derived_ids_shuffled` *because* nothing
-  exercised rule 2, so of the **159** tracked corpus records, **145** carry a
-  `span_id` and **141** of those are trace-unique. The other 18 take the two
+  exercised rule 2, so of the **167** tracked corpus records, **153** carry a
+  `span_id` and **149** of those are trace-unique. The other 18 take the two
   rules below — 14 with no *usable* span id (12 that state none, and the 2
   `empty_ids` records that state `""`, which is no id either — batch S3,
   `SPEC.md` §3.6), 4 sharing one — and that is where
@@ -1360,7 +1374,7 @@ The reasons, in order:
    means one claimant and `adapter_id` is the only thing dispatch feeds into an
    id; same `declared_confidence` (same first-50 sample); one `Meta.adapters`
    entry. (This read *"rule 1 for all 177 corpus records"* until batch R5.
-   Today 141 of the 159 tracked records take rule 1, and the conclusion does
+   Today 149 of the 167 tracked records take rule 1, and the conclusion does
    not depend on which rule any of them takes.)
 4. It makes the refusal proportionate. Today a mixed file is refused *entirely*
    and the recommended remedy silently damages it. Under (a) the refusal
@@ -1839,8 +1853,8 @@ agent may draft the text and assemble the links; posting is a halt point
 
 **(h) Where this meets G3, and E.** G3 asks whether mixed instrumentation is a
 freeze precondition. Not this memo's to decide; §12 (E1) supplies the fact it
-turns on — a mixed trace is **constructible but not observed**: **56** corpus
-files, **159** records (tracked files only), **0** carrying both markers. The gate above interacts with
+turns on — a mixed trace is **constructible but not observed**: **58** corpus
+files, **167** records (tracked files only), **0** carrying both markers. The gate above interacts with
 that in one direction worth having in front of G3:
 
 - **This gate is the mechanism by which a mixed trace would first be
@@ -1999,7 +2013,7 @@ id. That is an outside-evidence event — §13's B column — not a new gate.
 **Evidential power and urgency point different ways, as the brief asks be said.**
 The row's argument is about **power**: how much would a mixed trace tell us. The
 answer above is *less than the row assumes, and on constructed input almost
-nothing*. §12(c)'s finding is about **urgency**: **56** corpus files, **159**
+nothing*. §12(c)'s finding is about **urgency**: **58** corpus files, **167**
 records (tracked files only), **0** carrying both markers — constructible,
 structurally motivated, first-party
 evidence in `capture/backends.py` that the project itself steers around the
@@ -2088,7 +2102,7 @@ it.
    covering all of them is honest, is shorter than four, and does not require
    the roadmap to relitigate each.
 3. **Do not add a "mixed trace observed" condition.** **(f)**.
-4. **Record the absence as a measurement**: **56** files, **159** records
+4. **Record the absence as a measurement**: **58** files, **167** records
    (tracked files only), 0 with both markers, with the `capture/backends.py`
    comment as the strongest first-party evidence and the honest note that it is
    a prediction about the world.
@@ -2180,7 +2194,7 @@ sufficient*:
 > capture above.
 
 *The draft above quotes §12(c)'s working-tree pair. What landed in
-`ROADMAP.md` states the tracked corpus instead — 56 files, 159 records,
+`ROADMAP.md` states the tracked corpus instead — 58 files, 167 records,
 counted by `tests/corpus_census.py` — and names one constructed mixed file
 that did not exist when this was drafted. The **0** is the same in both
 (batch R5, 2026-09-11).*
@@ -2914,11 +2928,11 @@ first member key. Measured over the whole tree today:
   F2's own: the two `otlp_container` renderings, which are the only *inputs*
   among them, and the scenario note that describes the fixture. That is the
   feature reaching its own input rather than an existing input moving.
-- **54 of 54** tracked `*.jsonl` files begin with `{`, and the first member key
-  of the first record is `trace_id` in **54 of 54** (tracked files only).
+- **56 of 56** tracked `*.jsonl` files begin with `{`, and the first member key
+  of the first record is `trace_id` in **56 of 56** (tracked files only).
 
 *Provenance. The second bullet said 64 of 64 from batch F1 (2026-09-10) until
-batch R9 (2026-09-11). A checkout then carried 50 `*.jsonl` files (54 today, tracked files only); the extra 14 were
+batch R9 (2026-09-11). A checkout then carried 50 `*.jsonl` files (56 today, tracked files only); the extra 14 were
 the fleet captures under the git-ignored `capture/_scratch/`, which is the same
 14 files batch R5 found in the 57/177 pair. Both counts are all-of-them, which
 is the only part the argument uses.*
@@ -3328,6 +3342,25 @@ model field, no schema, no stored expectation, no fixture. What **(a)**–**(h)*
 describe stays live as the memo for the reopening conditions in **(h)**, which
 are conditions to watch rather than work to schedule.
 
+**Superseded by batch T2 (2026-10-14), on the maintainer's decision in the
+stranger's-trace series (`WORKPLAN.md` §3, T2; the zoo's S3).** The reopening
+condition arrived as a stranger's trace: twelve zoo captures, every span an
+OTLP span, every one warned. The decision is neither (a) nor (c) but a form of
+(b), placed where (e)'s objection to it does not hold: a unit declared by the
+field name is *known*, so §3.1's time reader — not the reader, and not by a
+record key — converts a declared nanosecond count to `float` unix seconds,
+while `raw.source` keeps the integer string, so no digit leaves the graph and
+the normalized field and the record disagree only in the unit the record
+declared. `timestamp_unit_suspect` keeps its job for the undeclared case. (e)'s
+measured cost stands and is stated in `SPEC.md` §3.1 rather than avoided: the
+float's ~238 ns spacing can tie two siblings the export kept apart, and the
+`temporal` edge then says it is tied; on the zoo's captures nothing ties.
+(a′)'s converse check is still not made — a span that writes seconds into a
+nanosecond field is believed. `otlp_container` (the 16 values measured in (b) above) was
+re-rendered in real nanoseconds, and is still `llm_tool_llm`'s byte for byte,
+because the correctly rounded division gives the float the seconds literal
+parses to.
+
 ---
 
 ## 18. L1: Can the graph update as records arrive without giving up an invariant?
@@ -3667,3 +3700,324 @@ in the words it was recorded in:
 > emits nothing about it. (4) The showcase (L8) is agentgolden's rules
 > evaluated per delta, rules file unchanged, bringing its own trace since no
 > conformance fixture carries the scenario.
+
+---
+
+## 20. T1: Is an unclaimed record keyed by the span id its envelope states?
+
+*Written 2026-10-14 by batch T1 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`), as the halt that batch's brief names. Nothing in this
+commit changes behaviour.*
+
+**(a) The question.** T1's row asks for a public `spanweave.envelope(record)`
+and states an acceptance on Z4's real capture
+(`fixtures/zoo/z4/2026-10-12-real`, both bodies): `build` over the five
+records yields 5 nodes, **4 `parent` edges, 0 `orphan_parent`**, 1
+`unclaimed_record`, 1 `unknown`. The fifth record is the root span
+`concierge.conversation` (`span_id` `3013a003149d6951`, no `attributes`), which
+no adapter claims; the other four are `llm` spans stating
+`parent_id: "3013a003149d6951"`. Measured on the parent `1b44743`:
+
+```
+5 nodes   edges: {temporal: 3}   parent: 0
+diagnostics: {orphan_parent: 4, timestamp_unit_suspect: 4, unmapped_attributes: 4,
+              missing_timestamp: 1, unclaimed_record: 1, unpaired_call: 1}
+unclaimed node id: sw_db75e287d7632844
+orphan_parent.source (all four): "3013a003149d6951"
+```
+
+The four children name a span the input carries, and find no node with that
+id, because the unclaimed root's node id is derived (§3.6 rule 2) rather than
+its envelope span id. The row's target needs the unclaimed node to be keyed by
+`3013a003149d6951`. **Does any rule say it is?**
+
+**(b) Why the spec does not, and in places says the opposite.**
+
+- §3.6 rule 1 keys a node by its span id when **"the dialect supplies"** one.
+  An unclaimed record has no dialect: §6.1's whole definition of it is that no
+  adapter read it.
+- §3.6's `adapter_id` paragraph states the material of rules 2 and 3 for an
+  unclaimed record (`adapter_id` is the empty string) — i.e. the spec already
+  contemplates an unclaimed record's id as *derived*, and says nothing of a
+  span-id key for one.
+- §6.1's table gives an unclaimed record exactly two things: an `unknown` node
+  carrying the record verbatim, and `unclaimed_record`. It states no relation.
+- `spanweave/seam.py`'s `unclaimed_span` says in its contract that reading the
+  record's own fields there "would be this module deciding what a span
+  envelope looks like on behalf of an adapter that declined it", and keys by
+  the canonical digest.
+- The T1 decision (`WORKPLAN.md` §3) supports making the envelope *public*
+  ("trace id, span id and parent id are the transport's"), and also says
+  "`classify` is unchanged; an unclaimed record is still an `unknown` node with
+  `unclaimed_record` (§6.1)". It is silent on the unclaimed node's id and
+  relations.
+
+So the 4-parent/0-orphan target is a new rule, not a reading of one. The brief
+forbids inventing it. The `envelope()` half alone does not meet the row's
+acceptance either: on its own it changes no count in the Z4 build, so landing
+it as "T1" would fail the row without saying so.
+
+**(c) Options.**
+
+1. **The envelope keys an unclaimed node.** An unclaimed record whose record
+   shape carries a readable `span_id` (non-empty string, read by
+   `seam.span_ref`) gets that as its node id under rule 1, and its `parent_id`
+   and `trace_id` (via `parent_ref`, and the existing trace rule) become its
+   relations. Kind stays `unknown`, provenance names no adapter,
+   `unclaimed_record` stays. Z4 then gives 4 `parent` and 0 `orphan_parent`.
+   *Spec:* §3.6 rule 1 ("the record's envelope or its dialect"), §3.6's
+   `adapter_id` paragraph, §6.1's table row, §7 (the envelope as a stated
+   contract, which `envelope()` exposes); `seam.unclaimed_span`'s docstring
+   reversed. *Sub-questions the maintainer must settle with it:*
+   - **(1a) Which records.** Only records the reader unpacked from an OTLP
+     export (the reader knows the envelope), or any record whose shape carries
+     the renamed keys (`span_id`, `parent_id`, `trace_id`) — e.g. a flat JSONL
+     record from a dialect nobody registered? The second reads a key name as
+     an envelope in a file that never declared one.
+   - **(1b) How much of the envelope.** Id and parent only (the row's counts),
+     or also `name`, `start_time`/`end_time` and `status`, which `envelope()`
+     returns? The latter changes Z4's `temporal` edges and removes its
+     `missing_timestamp`, counts the row does not state; and it would put
+     §3.1's timestamp reading on a record no dialect read.
+   - **(1c) What moves elsewhere.** Every existing unclaimed node with a span
+     id changes id. No conformance scenario renders one
+     (`mixed_instrumentation/scenario.md`: "no scenario renders it"), but the
+     zoo census's Z4 counts move (`tests/zoo_census.py`) and any test pinning
+     an unclaimed `sw_` id would.
+2. **`envelope()` only; the row's acceptance restated.** Land the public,
+   typed `envelope(record) -> Envelope(...)` and `EnvelopeError` over the
+   record shape (§7), with which a receiver can route every record by trace
+   (L2). The unclaimed root stays `sw_…`; Z4 stays 0 `parent` / 4
+   `orphan_parent`, and S12 is answered by the reading that each orphan's
+   `source` already names `3013a003149d6951`, which `envelope()` of the
+   unclaimed node's `raw.source` returns as its `span_id` — the reader can tell
+   the absent parent is the unclaimed root. S2 is answered by a reading, not a
+   count. Requires the maintainer to rewrite T1's acceptance.
+3. **Defer the identity question past this series.** As (2) for this series,
+   with (1) recorded in `DEBT.md`/`TASKS.md` as the open thread, to be decided
+   when a second capture shows an unclaimed record in the middle of a tree
+   (Z4's is its root, which makes "orphan" and "root not read" the same fact).
+
+**(d) Provisional stance.** None taken. The batch stopped at the halt. If (1)
+is chosen, (1a) and (1b) need answers before code; if (2) or (3), the row's
+acceptance must say 0 `parent` / 4 `orphan_parent` on Z4's full capture.
+
+**The decision (2026-10-14, maintainer).** Option 1. (1a) Records the reader
+unpacked from an OTLP export, marked as such; `envelope()` raises on any
+other. (1b) The whole envelope — id, parent, trace, name, times, status —
+because the reader owns those nine keys and reads none of the attributes,
+which is exactly what `unclaimed_record` then says. (1c) Accepted: the id
+change is recorded in the CHANGELOG and the census moves with reasons.
+Options 2 and 3 are declined: an `unknown` node without the identity the
+transport stated answers S12 by explanation where the graph could answer it
+by an edge the telemetry stated.
+
+## 21. T3: Is `meta.resource` / `meta.scope` a schema change?
+
+*Written 2026-10-14 by batch T3 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`, parent `1b9b40d`), as the halt its brief names: "if adding
+them to `meta` turns out to be a schema change under the repo's own
+schema/version gates, stop and report rather than bump anything." Nothing in
+this commit changes behaviour.*
+
+**(a) The question.** T3's row reports the OTLP resource and scope "once per
+graph in `meta` (`resource`, `scope` as the record carries them)", and the
+§3 decision for T3/T4 says both "No schema change this series (... a field
+added now would move the thing being measured)" and "`meta` gains `resource`
+and `scope`". Under this repository's own gates those two sentences cannot
+both hold.
+
+**(b) Why it is a schema change here.**
+
+- `Meta` is a model dataclass (`spanweave/model.py`) listed in
+  `tests/schema_shape.py`'s `SERIALIZED_MODELS`; a new field moves the
+  artifact's `model` section, and `serialize._meta` emitting it moves the
+  `document` key tree (`$.meta.resource…`, `$.meta.scope…`).
+  `tests/test_schema_shape.py`'s gate says of exactly this: "If this fails,
+  the serialized graph changed", and §3.9 makes that artifact "what
+  additive-only is measured against" after the freeze.
+- The values are verbatim record content (`{"resource": {"attributes": […]}}`,
+  `{"scope": {"name", "version"}}`), so pinning their container but not their
+  contents needs `$.meta.resource…` / `$.meta.scope…` added to `PASSTHROUGH` —
+  the widening that file names as "exactly how someone would blind this
+  instrument". That is a decision about the shape tripwire, not a patch.
+- No `schema_version` bump would be needed (§3.9: `0.x` never tracks), so
+  the *version* gate does not fire; the *shape* gate does, and `make shape`
+  would hide the move only by committing it.
+- By contrast the row's other new surface, the `attributes_dropped` code, is
+  an extension §3.7 already permits ("Seed codes (extend deliberately)") and
+  has precedent (`undecodable_bytes`, `be16fa8`, regenerated the artifact's
+  `vocabularies` and `diagnostic_source` sections). It too moves the
+  artifact, so the maintainer should say whether it is inside "no schema
+  change".
+
+**Measured on the parent** (`tests/zoo_census.py`'s feeds, all twelve captures):
+
+- Every unpacked node on all twelve captures names all four keys
+  (`<record>.flags`, `.kind`, `.resource_spans`, `.scope_spans`) in its
+  `unmapped_attributes` — not only Z3.
+- Z3 (`2026-10-13-real` and `-recorded`, 102 records each): 1 distinct
+  resource, **2 distinct scopes** — `openinference.instrumentation.openai`
+  `0.1.65` and **`openinference.instrumentation.openai_agents`** `2.5.3`
+  (underscore; the row writes `openai-agents`). Z4 and Z6 also carry 2
+  scopes. So a per-graph `scope` is a collection, not a value, and so is
+  `resource` for any input two services exported.
+- Z3: 18 records carry `droppedAttributesCount > 0` (the row's 18 holds);
+  today each is reported as `<record>.droppedAttributesCount`.
+- Z3's 102 `unmapped_attributes` become **75**, not 102 "that no longer name
+  the four keys": 27 nodes carry nothing unmapped but the four envelope keys
+  (and none of them a dropped count), so their diagnostic disappears. Z2
+  23 → 9 the same way.
+
+**(c) Options.**
+
+1. **Add the fields, and call it what the gate calls it.** `Meta` gains
+   `resource` and `scope` (each a sorted, distinct tuple of the levels as the
+   records carry them — plural in content, since Z3 has two scopes), `make
+   shape` regenerates the artifact with both paths added to `PASSTHROUGH`, no
+   version bump. The §3 decision is restated as "no change to `Node`, `Edge`
+   or `Diagnostic`; `Meta` gains two per-graph fields", and §3.9 says so.
+   Sub-questions: singular or plural names; the whole level object
+   (`{"resource": …, "schemaUrl": …}`) or only `resource` / `scope`; sort key
+   (canonical JSON); and whether a non-OTLP input gets `[]` or omits the key.
+2. **No `meta` field; report the levels through the diagnostic channel.** One
+   per-graph `info` diagnostic per distinct resource and per distinct scope
+   (e.g. `otlp_resource`, `otlp_scope`, `source` the level verbatim, no
+   `node_id`) — the channel the decision already chose for dropped counts and
+   span events. `Meta` and the key tree do not move; the code vocabulary does,
+   exactly as `attributes_dropped` does. Cost: §3.7 calls diagnostics "what
+   the library could not confidently map", and a scope is a fact, not a gap.
+3. **No per-graph report; the per-node record is the report.** The four keys
+   stop being reported per node, `attributes_dropped` lands, and resource and
+   scope stay where §7 already puts them, verbatim in each node's
+   `raw.source`; `Envelope` (a public in-process type, not serialized) could
+   gain `resource` and `scope` so a consumer reads a node's scope without
+   knowing the record shape. S6/S21 are answered by that reading. Nothing
+   serialized moves except the code vocabulary.
+4. **Split T3.** Land the four keys' removal from `unmapped_attributes` and
+   `attributes_dropped` now (no `Meta` change), and carry the per-graph
+   resource/scope question to T6/T7 with whichever of 1–3 is chosen.
+
+**(d) Provisional stance.** None taken; the batch stopped at the halt. Under
+any option the row's acceptance should read: Z3 `unmapped_attributes` 102 →
+75 with none naming the four keys; 18 `attributes_dropped`; scope names
+`openinference.instrumentation.openai_agents` and
+`openinference.instrumentation.openai`.
+
+**The decision (2026-10-14, maintainer).** Option 3. The `meta` sentence of
+the T3/T4 decision is withdrawn; "no schema change this series" means no
+field on any serialized model, no `PASSTHROUGH` widening, no key-tree move —
+and a diagnostic code is a vocabulary word, allowed by §3.7 and regenerated
+into the artifact as `be16fa8` did. Resource and scope are per-node facts
+the transport stated (Z3 carries two scopes on one graph, and S6 asks which
+span each wrote), so they are read from `Envelope`, which gains `resource`
+and `scope` as the level objects the record carries, and they stay verbatim
+in `raw.source`. Option 1 is declined because widening the shape gate on the
+series that supplies the freeze's precondition is what `schema_shape.py`
+calls blinding the instrument, and a per-graph list answers the wrong
+question; option 2 because a scope is a fact, not a gap; option 4 because
+nothing is left to carry. The row's numbers are corrected as (d) says.
+
+## 22. T4: Can an `exception_event` diagnostic carry level `error`?
+
+*Written 2026-10-14 by batch T4 of the stranger's-trace series (`WORKPLAN.md`,
+branch `stranger`, parent `288c8ea`), as the halt its brief names: "if
+completing the batch would require a model or schema change ... or a rule the
+spec does not already state — stop". Nothing in this commit changes
+behaviour.*
+
+**(a) The question.** T4's row reports each OTLP `exception` span event as an
+`exception_event` diagnostic "(level `error`, ...)". `DiagnosticLevel` is a
+closed enum of two members, `info` and `warning` (`spanweave/model.py`), and
+SPEC §3.7 states the field's contract in its type line: `level: info |
+warning  # never "error": errors raise`. The row cannot be met as written
+without changing that contract.
+
+**(b) Why it is a model change and not a vocabulary word.**
+
+- A third `DiagnosticLevel` member is a new value of a closed enum on a
+  serialized model. `tests/serialized_shape.json` carries it in
+  `vocabularies.DiagnosticLevel`; the 2026-10-14 Option 3 decision allows the
+  **diagnostic code** vocabulary to grow (`diagnostic_codes`,
+  `diagnostic_source`) and nothing else, so this is outside what "no schema
+  change this series" permits.
+- It contradicts a rule §3.7 states, not one it omits. §3.7: the level
+  "grades how loudly to report a mapping gap — nothing about the trace", and
+  the `level`/`severity` paragraph exists to keep core from grading what the
+  telemetry *means* (CLAUDE.md invariant 1). `error` on an exception would be
+  the first level that grades the trace — "the span failed" — rather than the
+  report, and `error` already means "raises" in §3.10.
+- The graph already sees the failure: Z5's two `http_get` tool nodes carry
+  `status` `error` from the span's own status (`Status` vocabulary). What the
+  graph cannot see is the event's type/message/time; that part needs no level.
+
+**(c) Options.**
+
+1. **`exception_event` at level `warning`.** Everything else as the row says
+   (`source: {type, message, escaped, time}`, record-scoped, `<record>.events`
+   leaves `unmapped_attributes` on unpacked records only, per T3 (a)). The
+   code vocabulary grows by two words (`exception_event`, `span_event`), the
+   artifact moves in `vocabularies.diagnostic_codes` and `diagnostic_source`
+   only. "An exception is an error the graph can see" is then true through
+   the node's `status` plus a diagnostic naming the exception, not through
+   the level.
+2. **Both codes at level `info`.** As 1, but an exception event is no louder
+   than any other event: neither is a mapping gap, both are facts the
+   transport stated that the model has no field for. Keeps `warning` meaning
+   "something the library could not map", which `attributes_dropped` already
+   stretches.
+3. **Add `error` to `DiagnosticLevel`.** As the row says. Moves
+   `vocabularies.DiagnosticLevel` and §3.7's type line; the Option 3
+   restatement must be widened to allow it, and §3.7's "nothing about the
+   trace" paragraph rewritten. Declined by this batch only in the sense that
+   it cannot take it unasked.
+4. **Split T4.** Land `span_event` (info) and `<record>.events` leaving
+   `unmapped_attributes` now; carry `exception_event` to a decision.
+
+**(d) Further choices any option needs, for the same decision.**
+
+- *Where `exception.*` is read.* `exception` and `exception.type` /
+  `.message` / `.escaped` are OTel trace semantic conventions, not OTLP
+  proto fields. The event list (`name`, `timeUnixNano`, `attributes`) is
+  envelope; reading `exception.*` keys inside it in `seam.py` is arguably a
+  dialect read outside the adapters. Alternatives: read them in the seam as
+  the OTLP convention both adapters inherit (no adapter branches on them), or
+  in each adapter (OpenInference and OTel GenAI both use them).
+- *Rendering of `escaped` and `time`.* Z5 states `exception.escaped` as the
+  string `"False"`, not a `boolValue`. Carry the value as the attribute
+  states it (verbatim `"False"`), or read it as a bool (a rule §7 does not
+  state). `time`: the event's `timeUnixNano` read in float seconds by T2's
+  rule (`seam.stated_time`), kept as reported even past the node's
+  `ended_at` (Z2: both events are after `ended_at`, by ~6.6 s and ~0.48 s on
+  the real capture).
+- *Exposure.* §3.7's keys-only rule is for `unmapped_attributes`, but
+  `exception.message` is content (Z5's names a URL); the row copies it into
+  `source`. `exception.stacktrace` is left out by the row. To confirm.
+- *Unclaimed spans.* As `attributes_dropped` (T3 (c)): an unpacked span no
+  adapter claimed reports its events too, `adapter` null.
+
+**(e) Measured on `288c8ea`.** Z5 (both captures): two `exception` events,
+one per `http_get` tool node with `status` `error`, `exception.type`
+`ConnectionError`, messages ending "(attempt 1)" / "(attempt 2)". Z2: four
+`First Token Stream Event` events (two in `-real`, one each in `0002.json`
+and `0003.json`; two in `-recorded/0001.json`), each `timeUnixNano` after its
+span's `endTimeUnixNano`. No other capture carries events. Five
+`unmapped_attributes` name `<record>.events` across Z2 and Z5, and none names
+it alone, so removing the key moves no `unmapped_attributes` count; the
+census moves only by the new codes.
+
+**The decision (2026-10-14, maintainer).** Option 2. A level grades the
+report, not the trace; an event is a fact the transport stated, fully
+carried in `source`, so it is `info` — and a caught exception on a span whose
+status is unset is exactly the case where any louder level would contradict
+the telemetry. The failure the graph can see is the node's `status`, where
+the telemetry put it. Option 3 is declined because `error` means "raises" and
+a third level moves a vocabulary the T3 restatement froze; option 1 because
+`warning` is for a mapping gap, which an event is not; option 4 because
+nothing remains to carry. (d): `exception.*` is read in the seam as the
+OpenTelemetry API's own `record_exception` convention, stated in SPEC §7, so
+no adapter branches on it; `escaped` and every value are carried as stated;
+`time` is T2's float seconds, kept past `ended_at` as reported;
+`exception.message` is copied into `source` because it is the fact reported,
+`exception.stacktrace` is not and stays verbatim in `raw.source`; unclaimed
+spans report their events with `adapter` null.

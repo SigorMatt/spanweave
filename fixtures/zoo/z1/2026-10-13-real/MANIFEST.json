@@ -1,0 +1,124 @@
+{
+  "bodies": [
+    {
+      "bytes": 49592,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "5a688e99d76881181b833fba2e34de1921b4fcbb903022b79cc7f3675be329f2"
+    },
+    {
+      "bytes": 64569,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "6aa9ab3299693b472fe195b4d5fbbac36a614a4b627ae00618a81fb867e5992f"
+    },
+    {
+      "bytes": 31379,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0002.body",
+      "sha256": "3880e8d5da61925e8fc2f40a11c7a5f0041e53980455b3df00a35b1fe20cd660"
+    },
+    {
+      "bytes": 37523,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0002.json",
+      "sha256": "dee0b32660a62a7f79e340a7c992710dd7a270a997f79f56e2aad627fef61026"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-13T18:26:46.807957+00:00",
+  "files": [
+    {
+      "bytes": 482,
+      "file": "bodies.jsonl",
+      "sha256": "abb6e77e4787e671aa485bdd70997679a4cdc0c2b26b65f95981b6d5e922b203"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "ab6d316f4bce650514af3627e4e7ef2f9e9a0edce6b9456e4567c3772ae2147c"
+    },
+    {
+      "bytes": 82,
+      "file": "forwards.jsonl",
+      "sha256": "a7366d994fac0629c956e7b8ef05bea516609f0676f302f729210488cf668198"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0001.headers.json",
+      "sha256": "78fd1edda675de4096e6e05c8cc5f59325777fcab78626ebc482cc75df4a6dce"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0001.headers.raw",
+      "sha256": "dbc9b1e6393d94ad0035e9b8ed268157491440d0d04726c11bccd3be1bb5bb81"
+    },
+    {
+      "bytes": 490,
+      "file": "json/0002.headers.json",
+      "sha256": "a397835f8d7c5512f1dedce07bb94614e93cc88508eaa35fde8075b129659d8e"
+    },
+    {
+      "bytes": 195,
+      "file": "json/0002.headers.raw",
+      "sha256": "49f0161dc1841ba96e103ba17fd532489656e238ee35b7dbaeff98bfef453673"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0001.headers.json",
+      "sha256": "9c910d7252434c21f41c76ffb2a5a0bad0a5a69212903a0ca7cccae4169b3576"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0001.headers.raw",
+      "sha256": "f970cc2ea92118f5bc38772fd0ce97b2aae5b481225e8d262c514671fc4b4863"
+    },
+    {
+      "bytes": 577,
+      "file": "raw/0002.headers.json",
+      "sha256": "ab175910cc82a1a8aa090d4252133f00d3729cfa488f4cc195f8e75036d37aaa"
+    },
+    {
+      "bytes": 226,
+      "file": "raw/0002.headers.raw",
+      "sha256": "f3686d640fccde6a7dba07070715b048b4eadc7a3f95ac68fbcac76b31a44038"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    },
+    {
+      "file": "raw/0002.body",
+      "status": 200
+    }
+  ],
+  "kind": "real",
+  "project_manifest": {
+    "base_url": "https://api.tokenfactory.nebius.com/v1/",
+    "contract_version": "1.3",
+    "endpoint": "http://localhost:4318",
+    "framework": "langchain",
+    "framework_version": "1.4.5",
+    "instrumentation": [
+      "openinference-instrumentation-langchain==0.1.79"
+    ],
+    "mode": "real",
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-13T18:26:35.057477Z"
+  },
+  "seal": "6376317e68e83b0cbc97df11dc20125f98925884e5fa4e541e0b3bc85ae256e8",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-13T18:26:29.548212+00:00"
+}

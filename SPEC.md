@@ -56,7 +56,7 @@ Node:
   kind:        NodeKind        # §3.2
   name:        str             # operation name as reported
   operation:   str | None      # tool or model name, when stated (below)
-  started_at:  int | float | None   # unix seconds as reported; None if the
+  started_at:  int | float | None   # unix seconds (below); None if the
   ended_at:    int | float | None   #   dialect omits it
   status:      Status          # ok | error | unset
   status_note: str | None      # error message as reported, verbatim
@@ -80,8 +80,11 @@ else does, and `None` is an answer rather than a gap to be filled.
 
 **No dialect's agent, chain or retriever name is read into `operation`.** OTel
 GenAI states an agent's name normatively, in `gen_ai.agent.name`, and the
-adapter deliberately declines it. OpenInference states no name attribute for
-any of the three kinds, so its adapter has nothing to decline. The rule is
+adapter deliberately declines it. OpenInference's openai-agents instrumentor
+writes `agent.name` on its agent span (the zoo's Z3; `ADAPTERS.md` §7.1), and
+the `openinference` adapter declines it the same way: reported, not read. This
+sentence once said OpenInference stated no such attribute. That was true of
+every capture until the zoo's, and the rule never depended on it. The rule is
 stated here rather than left to each adapter because the alternative is
 asymmetry: a field exactly one dialect could fill would be that dialect's
 attribute wearing a normalized name, and a consumer reading it would get a
@@ -116,12 +119,15 @@ Two precisions, so the rule is not read wider than it is:
 
 #### Timestamps
 
-`started_at` and `ended_at` are **unix seconds, as reported**. The library
-never rescales, never converts, and never infers a unit: what the telemetry
-put in the field is what the node carries, and a consumer that needs another
-unit converts it itself. Only three things are decided here — which
-*renderings* of a value the library will read, what numeric type it is carried
-as, and when the library says the value looks like it is not in seconds.
+`started_at` and `ended_at` are **unix seconds**. The library **never infers
+a unit**: a field that does not declare one is carried as reported, and a
+consumer that needs another unit converts it itself. **A field that declares
+its unit is read in it** — today exactly one does, OTLP's
+`startTimeUnixNano` / `endTimeUnixNano`, which declare nanoseconds in their
+name (below, *Declared nanoseconds*; batch T2). Only four things are decided
+here — which *renderings* of a value the library will read, what numeric type
+it is carried as, how a declared unit is read, and when the library says the
+value looks like it is not in seconds.
 
 **Renderings.** A timestamp is read from a JSON number, and from a **string
 that is exactly a JSON number literal** — OTLP JSON encodes 64-bit integers as
@@ -156,7 +162,9 @@ integer literal is carried as an `int` and a literal with a fraction or an
 exponent as a `float` — that is the whole rule, and it reads the *literal*,
 not the value: `1e9` is a `float` and `"1e9"` is the same `float`, while
 `1700000000` and `"1700000000"` are one `int`. Neither type is ever converted
-into the other.
+into the other — with the one exception a declared unit makes: a time whose
+field declares nanoseconds is carried as the `float` seconds it converts to
+(*Declared nanoseconds*, below).
 
 The reason is that `float` cannot hold what an exporter writes. float64's
 spacing at 1.7e18 is **256 ns**, so a time reported in epoch nanoseconds —
@@ -165,14 +173,54 @@ moment it is passed through `float()`: two spans a hundred nanoseconds apart
 collapse onto one number, and the `temporal` edge between them is then emitted
 as tied (§4.3), asserting that neither started first when one demonstrably
 did. A seconds field carrying nanosecond digits sits on the same floor, so
-this is a property of the magnitude rather than of the unit.
+this is a property of the magnitude rather than of the unit. (Seconds at
+present epochs have the same floor, ~238 ns; that is the cost a declared unit
+accepts, below.)
 
-Keeping the reported integer is **not** a unit conversion and not an opinion
-about the unit: nothing is scaled, nothing is inferred, and the number a
+For a field that declares no unit, keeping the reported integer is **not** a
+unit conversion and not an opinion about the unit: nothing is scaled, nothing is inferred, and the number a
 consumer reads is the number the record wrote — which is also what makes it
 round-trip, since an integer in serializes as the identical integer out. A
 consumer that wants one numeric type coerces it, in the same way a consumer
 that wants one unit converts it.
+
+**Declared nanoseconds.** A record the reader unpacked from an OTLP export
+(§7) carries `start_time` / `end_time` as the reader's renaming of
+`startTimeUnixNano` / `endTimeUnixNano`, and those names declare the unit. So
+for such a record — and only for one: the declaration is the reader's mark
+(`spanweave.read.Unpacked`, §7), never a key, and a flat record's `start_time`
+declares nothing — the value is read by the rendering rule above and then
+**converted to unix seconds**: the nearest `float` to the reported count
+divided by 10⁹. That division is Python's true division of two integers (or of
+a `float` by an integer, for a declared value written with a fraction or an
+exponent), which is correctly rounded, so the result is the same on every
+machine and under every interpreter setting (§5). Every reader of a record's
+times — both adapters, and the envelope (§7) — goes through the one function
+that does this (`seam.record_time`), so the rule cannot drift between them.
+
+Nothing is lost, and the cost is stated rather than softened:
+
+- **The digits stay in the graph.** `raw.source` holds the nanosecond string
+  the export wrote, verbatim (§3.5), so a consumer that needs the exact count
+  reads it there, and a round trip writes it back byte for byte.
+- **The normalized field is a float, and a float has a spacing.** At present
+  epochs that spacing is ~238 ns (2⁻²² s), so two siblings the export wrote
+  closer together than it can read as **one** time, and the `temporal` edge
+  between them carries the *tied* basis (§4.3) — it says that the field
+  cannot order them, which is true of the field; the order the export stated
+  is in `raw.source`. This is the loss the "Numeric type" paragraph above
+  avoids for an undeclared integer, accepted here because the alternative is
+  a field that does not hold unix seconds. On the zoo's twelve captures it
+  ties nothing: every edge, basis and node position is what it was before T2.
+- **A declared count no float holds once divided** — possible only for a
+  quoted integer of hundreds of digits, far past any `fixed64` — is a time
+  this rule does not read, and takes the door every unread rendering takes
+  (next paragraph and below).
+- **A declared unit is believed.** A span that writes seconds into
+  `startTimeUnixNano` reads as a time a few seconds after the epoch, and no
+  diagnostic says so: the field said nanoseconds. A converse check (a
+  declared nanosecond count below the line cannot be wall-clock) is not made
+  (`OPEN_QUESTIONS.md` §17).
 
 **Finite, or not read.** A rendering the table accepts is read only when what
 it parses to is a **finite number**. Two things are not, and neither is a
@@ -211,6 +259,12 @@ record and writes back as the string it was.
 
 **Unit suspicion.** A `started_at` or `ended_at` strictly greater than
 **1e11** gets a `timestamp_unit_suspect` diagnostic (§3.7, level `warning`).
+The check reads the value the node carries, so it is a statement about a value
+whose unit **nothing declared**: a declared nanosecond count is in seconds by
+the time it is checked, and no `fixed64` count (at most ~1.8e19 ns, ~1.8e10 s)
+reaches the line once converted. A conformant OTLP export therefore draws
+none. (A declared count past 1e20 — not a `fixed64` — would still be over the
+line in seconds, and is reported like any other value there.)
 1e11 seconds after the epoch is the year 5138, so no wall-clock time in
 seconds reaches it, while *now* in milliseconds is ~1.8e12 and in nanoseconds
 ~1.8e18. The value above the line is therefore evidence about the **unit of
@@ -359,8 +413,12 @@ it out would make a shuffled input produce a different graph, breaking §5.2.
 
 Node ids are deterministic and stable across runs, machines, and Python versions.
 
-1. If the dialect supplies a span id that is unique within the trace, the node id
-   is that string, unchanged.
+1. If the record's envelope or its dialect supplies a span id that is unique
+   within the trace, the node id is that string, unchanged. The **envelope** is
+   the OTLP envelope of a record the reader unpacked from an export (§7,
+   `spanweave.envelope`); it is what keys a record no adapter claimed (§6.1),
+   and for a claimed record it states the same `span_id` the dialect reads, so
+   the two sources never disagree.
 2. Otherwise, if the `source_key` is unique within the trace, the node id is
    `sw_` + the first 16 hex chars of
    `sha256(adapter_id + "\x00" + trace_id + "\x00" + source_key)`, where
@@ -495,7 +553,11 @@ input the material of rule 2 and rule 3 differs per record, and it is the
 **empty string** for a record no adapter claimed — the same way `trace_id` is
 where the input states none. Rule 1 never consults it, which is why an input
 whose dialect states span ids gets exactly the same ids however its records
-were dispatched.
+were dispatched. An unclaimed record reaches rules 2 and 3 only when it has no
+readable envelope — a flat record, or an unpacked one `spanweave.envelope`
+refuses — and is then keyed by its canonical digest. **Every unclaimed OTLP
+record whose envelope states a span id changed id at batch T1** (from a
+derived `sw_` id to that span id; `CHANGELOG.md`, `OPEN_QUESTIONS.md` §20).
 
 **`duplicate_source_id` reports a reused *span id*, not a shared `source_key`.**
 Rule 3 fires on the `source_key`, so the two are not the same event, and the
@@ -598,15 +660,18 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `unpaired_result` | a tool result with no requesting call |
 | `missing_timestamp` | no start time; temporal edges omitted for this node |
 | `nonmonotonic_time` | `ended_at` precedes `started_at` |
-| `timestamp_unit_suspect` | a reported `started_at`/`ended_at` exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported. On a conformant OTLP JSON export every span is over the line, so **one per span is the expected output** and reports the encoding, not the run (§7) |
+| `timestamp_unit_suspect` | a `started_at`/`ended_at` whose unit nothing declared exceeds 1e11, which unix seconds cannot (§3.1); the value is kept as reported. A time whose field declares nanoseconds (OTLP's `startTimeUnixNano`) is read in seconds and does not draw it, so a conformant OTLP JSON export draws **none** (§7; until batch T2 it drew one per span) |
 | `duplicate_source_id` | two records claimed the same source id |
 | `duplicate_record` | the same record appeared more than once in the input; one copy is kept (§7) |
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
-| `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter |
+| `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter. Where the node is keyed and placed by the record's OTLP envelope (§6.1), what nobody read is the span's attributes, and the message says so |
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
+| `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Level **`warning`** (`Diagnostic`'s default): unlike an event, it says the record holds less than the span did. Batch T3 |
+| `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
+| `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
 
 `unmapped_attributes` records attribute **keys only**, never values — the values
 are already preserved verbatim in `RawRecord`, and duplicating payload content
@@ -615,6 +680,31 @@ names, and also record fields, written `<record>.<field>`: a field the adapter
 recognizes but cannot read — a `start_time` in a rendering §3.1 does not
 accept — is *not* normalized, and saying so here is what keeps it from
 vanishing between the raw record and a `None`.
+
+**A record's OTLP envelope is not an unmapped attribute.** On a record the
+reader unpacked from an export (§7), `flags`, `kind`, `resource_spans` and
+`scope_spans` are the transport's, not the span's: they stay verbatim in
+`raw.source` and are not named here. Every span of every export carries them,
+so naming them reported the transport once per span — on the zoo's Z3 capture,
+27 of 102 `unmapped_attributes` named nothing else (the zoo's Z3 audit node
+table, `audit/z3-2026-10-13-{real,recorded}.md` step 4 at the pin, as
+`tests/zoo_census.py`'s `_Z3` cites it; `PROBES.md` S7 does not state the
+count). Its
+`droppedAttributesCount`, read as a count, is reported as `attributes_dropped`
+instead; a value that is not a count stays reported here as
+`<record>.droppedAttributesCount`, like any key read and not usable. A **flat**
+record declared no envelope, so the same names there are keys like any other,
+and are reported (batch T3, `OPEN_QUESTIONS.md` §21).
+
+**Nor are its events.** On an unpacked record, `events` is OTLP's list of the
+span's events, and each entry is reported as `exception_event` or
+`span_event` instead (§7, batch T4). An entry the reading cannot hold — not an
+object, a `name` that is not a string, a `timeUnixNano` §3.1 does not read, or
+an `exception` event whose attributes do not fold — is a key read and not
+usable, and is named `<record>.events[<i>]`, its place in *this span's* list,
+as a link entry is. An `events` value reported as `null` states no events and
+is not reported, as a `null` `links` is not; any other value that is not a list
+is `<record>.events`. A flat record's `events` is a key like any other.
 
 The timestamps are not the only fields it holds for. A record's **identity
 fields** — `span_id`, `parent_id`, `trace_id`, `name` — are read as plain
@@ -706,7 +796,7 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; three carry an object, four carry nothing, and one carries something
+arrived as; six carry an object, four carry nothing, and one carries something
 the library computed rather than something it was given. Those three counts are
 measured from the table below by `tests/test_codes.py`, beside the count
 `CONTRACTS.md` states, so the next row added fails the build instead of ageing
@@ -723,6 +813,9 @@ this sentence.
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
 | `undecodable_bytes` | `null` — the offending fragment is a byte sequence, and JSON has no way to write one, so there is nothing of it to carry. The text that stands in its place survives where the record does: on the record itself, or on the `malformed_record` for a line that would not parse |
 | `ordering_cycle` | `list[str]` — the node ids that could not be ordered topologically. **Derived, not transcribed:** the cycle is something the library computed, and no input record contains it |
+| `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
+| `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
+| `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -999,6 +1092,7 @@ SpanweaveError:
 | `duplicate_adapter_id` | `AdapterSelectionError` | two adapters claim the same id |
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
+| `not_an_envelope` | `EnvelopeError` | `spanweave.envelope` was given a record with no readable OTLP envelope: one the reader did not unpack from an export, one that states no `trace_id` or no `span_id`, or one stating an envelope field in a type the envelope cannot hold (§7) |
 | `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
@@ -1226,10 +1320,29 @@ the first time someone meets it.
 Emitting a `temporal` edge for every ordered pair is O(n²) and useless. The rule
 is narrow and stated:
 
-> For each set of sibling nodes sharing the same `parent` (nodes with no parent
-> are siblings of each other at trace root), sort by `(started_at, node_id)` and
-> emit a `temporal` edge between **consecutive** siblings only.
-> `basis = "sibling start_time ordering"`.
+> For each set of sibling nodes sharing the same **stated** parent, sort by
+> `(started_at, node_id)` and emit a `temporal` edge between **consecutive**
+> siblings only. `basis = "sibling start_time ordering"`.
+
+**The sibling group is the parent the record states**, not the `parent` edge
+the input happens to resolve: nodes that state no parent (§4.0) are siblings of
+each other at trace root, and every other node is a sibling of the nodes that
+state the same parent id — whether or not that parent is in this input, and
+whether or not the id resolves to one node (§3.6). So an orphan (§3.7
+`orphan_parent`) is ordered only against nodes stating the parent it states,
+never against a root and never against an orphan of a different absent parent.
+
+That is the reading of "sharing the same `parent`" that survives a partial
+input. Grouping by the resolved edge put every orphan at trace root, so a
+partial graph — a sampled trace, an export cut mid-run, any prefix of a stream
+whose exporter sends a child before its parent — ordered nodes whose stated
+parents differ, and asserted an order the complete graph withdraws: an order
+between two nodes under different parents was never something the telemetry
+stated. Grouped by the stated id, an arriving parent changes no group (§10.2),
+and the chain a group has in a partial input is the chain it keeps. A
+`temporal` edge between orphans of one stated parent is an ordinary chain edge
+and carries the basis this section gives any other; its warrant is `derived`,
+as always.
 
 Nodes with no `started_at` are excluded from temporal edges and get a
 `missing_timestamp` diagnostic. Ties are broken by `node_id`, ascending, and the
@@ -1338,6 +1451,9 @@ library by a constant of its own (§5.3).
     is exactly the shape of a determinism claim that is quietly false.
 - No clocks, no randomness, no `hash()`, no set iteration order, no
   dict-insertion-order dependence in any output-affecting path.
+- The one arithmetic a normalized value goes through — a declared nanosecond
+  count divided into seconds (§3.1) — is Python's correctly rounded true
+  division, so it is a function of the reported digits alone, on any machine.
 
 ### 5.3 The digit limit is the library's
 
@@ -1365,7 +1481,10 @@ converts it:
   unreadable JSON, reported as `malformed_record` (§7);
 - a **quoted** timestamp of more than 4300 digits is not read: `started_at`
   or `ended_at` is `null`, the field is named in `unmapped_attributes`, and
-  the node gets `missing_timestamp` (§3.1);
+  the node gets `missing_timestamp` (§3.1) — and so is one of 4300 digits or
+  fewer whose field declares nanoseconds and which no float holds once
+  converted to seconds (§3.1, *Declared nanoseconds*); the division that
+  decides it is integer arithmetic, so no interpreter setting moves it;
 - an OTLP `intValue` of more than 4300 digits is carried verbatim as the
   decimal string it arrived as (§7).
 
@@ -1498,7 +1617,7 @@ declares reaches `0.5`.
 | every record claimed by the same one adapter | that adapter parses the input, and `meta.adapters` carries its one entry — the single-dialect case, unchanged |
 | a record claimed by **two** adapters | a **hard error** (`adapter_ambiguous`), naming the record's position, its span id where it has one, and both claimants |
 | no record claimed by any adapter | a **hard error** (`adapter_unconfident`), listing every declared confidence |
-| a record claimed by **no** adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning). Its `provenance` names no adapter (§3.5), and it is never handed to a designated one |
+| a record claimed by **no** adapter | an `unknown` node carrying the record verbatim, plus `unclaimed_record` (warning). Its `provenance` names no adapter (§3.5), and it is never handed to a designated one. Where the reader unpacked the record from an OTLP export and its envelope is readable (§7, `spanweave.envelope`), the node is **keyed and placed by that envelope**: its id is the envelope's `span_id` (§3.6 rule 1), its `parent_id` and `trace_id` are its relations, and its `name`, `started_at`/`ended_at` (§3.1) and `status`/`status_note` are the node's; `unclaimed_record` then says that no dialect read its attributes. Otherwise — a flat record, or an envelope that cannot be read — every field a dialect would have supplied is absent and the id is derived (§3.6 rule 2) |
 | several adapters each claiming records, none claiming a record another claims | a **mixed** build: each adapter parses the records it claimed, the builder receives all of their spans together, `meta.adapters` lists every contributor (§3.9), and each node's `provenance` names the adapter that produced it |
 
 - `--adapter <id>` bypasses classification entirely: the named adapter parses
@@ -1522,6 +1641,22 @@ declares reaches `0.5`.
 - **Nothing is claimed by proximity.** A record's classification is a function
   of that record alone, so it cannot depend on input order, on registration
   order, or on how many neighbours matched (§5).
+- **An unclaimed record's envelope is read; its attributes are not.** The
+  nine keys the reader renamed out of an OTLP span (§7) are the transport's —
+  trace id, span id and parent id are how the export says which span this is
+  and where it sits — and reading them is not deciding what a span looks like
+  on behalf of an adapter that declined it: it is reading what the transport
+  stated before any adapter was asked. The one key the reader does not read,
+  `attributes`, is the dialect's, and it is exactly what `unclaimed_record`
+  reports nobody read. An `unknown` node is first-class (§3.2), and a
+  first-class node has a name and a time where the telemetry gave it one. Kind
+  stays `unknown`, provenance still names no adapter, and the record is still
+  never handed to a designated one. So a root span no adapter claims is the
+  parent its children state, by the `explicit` `parent` edge the telemetry
+  stated, rather than the absent parent of every child (`OPEN_QUESTIONS.md`
+  §20; the zoo's Z4, `tests/zoo_census.py`). A key named `span_id` in a flat
+  file is **not** an envelope: the file declared none, and only the reader
+  knows which records it unpacked.
 - **A mixed input is not an ambiguous one.** Each record has exactly one
   answer, so nothing is guessed; every join is made on what the telemetry
   stated and never on who parsed it, and an edge whose two ends came from
@@ -1667,7 +1802,9 @@ declares reaches `0.5`.
     are emitted in canonical-digest order, not in the order the copies
     appeared.
   - Two records that differ **anywhere**, including two that share a span id,
-    are both kept. That is §3.6 rule 3's case, not this one.
+    are both kept. That is §3.6 rule 3's case, not this one. So are a record
+    the reader unpacked from an OTLP export and a flat record equal to it: the
+    first carries an envelope and the second does not (*OTLP JSON*, below).
 - **No interpreter setting is load-bearing for what a graph says.** The
   library's digit limit (4300 digits, §5.3) decides whether an integer literal
   is read at all, whether a quoted one is read as a timestamp (§3.1), and
@@ -1816,10 +1953,48 @@ declares reaches `0.5`.
     `parentSpanId`, `name`, `startTimeUnixNano`, `endTimeUnixNano`,
     `status.code`, `status.message`, `attributes` — one of those is folded, and
     **every other key of the span is carried under its own OTLP name**, where
-    `unmapped_attributes` names it. `kind` is one of those: no dialect reads an
-    OTLP `SpanKind`, and mapping one onto a `NodeKind` would be an
-    interpretation made below the adapter seam, by the one layer forbidden to
-    have one.
+    `unmapped_attributes` names it — except the span's `flags` and `kind`,
+    which are the envelope and are not named there (§3.7, batch T3). `kind`
+    is carried and read by nothing: no dialect reads an OTLP `SpanKind`, and
+    mapping one onto a `NodeKind` would be an interpretation made below the
+    adapter seam, by the one layer forbidden to have one.
+  - **`droppedAttributesCount` is read as the count it is**: a `uint32`,
+    which proto3 JSON writes as a number and accepts as a decimal string, and
+    whose `null` is its default, zero. Above zero it is reported as
+    `attributes_dropped` (§3.7, `source: {"count": n}`) — the export says
+    attributes are missing and names none, which is a fact about the span,
+    not a key nobody read. Zero says nothing. Any other value is not a count
+    and stays an unmapped key.
+  - **`events` is carried verbatim and each event is reported** (batch T4,
+    `OPEN_QUESTIONS.md` §22, option 2). The reader renames nothing in it and
+    folds nothing: the list stays under its OTLP name, each entry as the
+    export wrote it, so `raw.source` holds every event — attributes,
+    stacktrace and all. Below the seam (`seam.span_events`) each entry of an
+    unpacked record's `events` becomes one `info` diagnostic on its node, in
+    the order the span lists them (§3.7). The event's `timeUnixNano` declares
+    nanoseconds in its name as the span's times do, so it is read by §3.1's
+    rule and converted to unix seconds by the same function (T2's rule), and
+    it is **kept as reported** even after the node's `ended_at` — an event
+    the instrumentor stamped after the span closed is what the export says,
+    and nothing is repaired. An event named `exception` is read by **the
+    OpenTelemetry API's own convention**: `record_exception` writes that
+    event with the attributes `exception.type`, `exception.message`,
+    `exception.escaped` and `exception.stacktrace`. That is the SDK's rule,
+    not an instrumentor's, and every dialect built on the SDK inherits it, so
+    it is read here — the one place no dialect is named — and no adapter
+    branches on it. Its attributes are folded by this reader's `attributes`
+    rule (above); an `attributes` reported as `null` is an event stating no
+    attributes, and folds to the empty mapping, so each of the first three
+    is reported `null` (§3.8) and nothing is unmapped. An `attributes` that is
+    neither a list nor `null` — an object, a string, a number — is not OTLP's
+    attribute list and does not fold, so the event is not read and is named
+    `<record>.events[<i>]` (§3.7). The first three are
+    reported **as stated** — no value is
+    interpreted, so an `escaped` written as the string `"False"` is reported
+    as that string; `exception.stacktrace` is not copied into the
+    diagnostic, and stays in the record. Any other event reports its name and
+    time. Nothing about an event becomes a node field: whether the span
+    failed is its `status`, which the export states separately.
   - **`parentSpanId` is renamed like the other eight, empty string and all.**
     A root span's `parentSpanId` is a proto3 `bytes` field holding its default,
     which a marshaler may omit or may write as `""` — both are conformant, and
@@ -1839,31 +2014,26 @@ declares reaches `0.5`.
     as the string it arrived as rather than raised out of the reader:
     **where the format states a type, the reader honours it; where the format
     states only a name, the value goes to the layer that owns the field.**
-    `startTimeUnixNano` states only a name, so it is carried verbatim and read
-    by §3.1's rule for a numeric string — the rule written for this encoding.
+    `startTimeUnixNano` states a name and no type, so it is carried verbatim
+    and read by §3.1's rule for a numeric string — the rule written for this
+    encoding — and the unit its name declares is honoured there, by the time
+    reader, not here (§3.1, *Declared nanoseconds*).
     A repeated key keeps the last, and every entry the fold could not take —
     a non-object entry, a missing or non-string `key`, an unrecognized `value`
     tag, and **both** copies of a repeated key — is kept in a list under
     `attributes_unfolded`, which is omitted when there is nothing to put in it.
-  - **A conformant export draws one `timestamp_unit_suspect` per span** (§3.7),
-    and that is the expected output rather than a defect report.
-    `startTimeUnixNano` states a unit, but it states it in a *name*, so the
-    value is carried verbatim and §3.1's ceiling is over the line on every
-    span. The warning is a statement about the **model's field contract** —
-    `started_at` is unix seconds — and not about the telemetry, which is as
-    conformant as its field name says. **Nothing is rescaled**: the reported
-    number is kept exactly (§3.1), so no digit is lost and every edge is still
-    built from what the export wrote. A rescale here is refused outright, and
-    not on a technicality — `float()` at epoch-nanosecond magnitude has a
-    spacing of 256 ns (§3.1's figure), so it would merge spans the record kept
-    apart and make the normalized field disagree with `raw.source` with nothing
-    to report it.
-    The cost of leaving it is stated rather than softened: on such a file the
-    diagnostic is a function of a format the consumer already knows, and a span
-    genuinely encoded in seconds among nanosecond neighbours is the one span it
-    is *silent* about. A consumer that does not want it filters one code and
-    loses nothing it could have used. Stating a unit at the seam was weighed
-    against that and held (`OPEN_QUESTIONS.md` §17).
+  - **A conformant export draws no `timestamp_unit_suspect`** (§3.7).
+    `startTimeUnixNano` declares its unit in its *name*, and the record the
+    reader unpacked carries that fact as its mark (below), so §3.1's time
+    reader converts the value to unix seconds while `raw.source` keeps the
+    string the export wrote. Until batch T2 the value was carried as reported
+    and §3.1's ceiling was over the line on every span — one warning per span,
+    reporting the format rather than the run, and silent about the one span
+    genuinely encoded in seconds (`OPEN_QUESTIONS.md` §17; the zoo's S3). The
+    reader still converts nothing: renaming the key is all it does, and the
+    conversion belongs to the one function every reader of a record's times
+    calls. What the conversion costs — a float's spacing, ~238 ns today — is
+    stated in §3.1, not here, because it is a property of the field.
   - **`status.code`** becomes `"UNSET"`, `"OK"` or `"ERROR"`, read from the
     proto enum name (`STATUS_CODE_OK`) or its number (`0`, `1`, `2`), because
     proto3 JSON permits either. Any other value is carried verbatim, read as
@@ -1886,10 +2056,62 @@ declares reaches `0.5`.
     is omitted when that level carries nothing but its children. They are
     **not** merged into the span's `attributes`: that would fabricate
     attributes no instrumentor wrote, and a resource attribute could change
-    which adapter claims the span (§6.1).
+    which adapter claims the span (§6.1). Nor are they reported, per node or
+    per graph: they are the envelope (§3.7), and which instrumentation scope
+    wrote a span is read per span from `Envelope.scope` (below) — one export
+    can carry two scopes, as the zoo's Z3 does
+    (`openinference.instrumentation.openai_agents` and
+    `openinference.instrumentation.openai`), so it is not a fact about the
+    graph (`OPEN_QUESTIONS.md` §21, option 3).
   - **An envelope level with no spans is not a discard**: it is yielded as a
     record of its own and becomes an `unknown` node carrying it, exactly as any
     other record the library cannot read as a span does.
+  - **The reader marks every record it unpacked, and the envelope is public.**
+    The mark is the record's type (`spanweave.read.Unpacked`, a `dict`), never
+    a key: the record compares, digests and serializes exactly as the plain
+    object with the same items, so nothing is invented in `raw.source`. A copy
+    taken through `json` is a flat record again, because the mark is a fact
+    about how the record was read and only the reader can state it.
+    `spanweave.envelope(record) -> Envelope` reads a marked record's envelope:
+
+    ```
+    Envelope:
+      trace_id:    str               # required
+      span_id:     str               # required
+      parent_id:   str | None        # absent, null or "" -> None (§3.6)
+      name:        str               # absent -> "" (proto3's default)
+      started_at:  int | float | None  # §3.1's reading, in seconds; absent -> None
+      ended_at:    int | float | None
+      status:      Status            # the reader's name, else UNSET (above)
+      status_note: str | None        # status.message, absent -> None
+      resource:    dict              # resource_spans as carried; absent -> {}
+      scope:       dict              # scope_spans as carried; absent -> {}
+    ```
+
+    `resource` and `scope` are the level objects the record carries, the same
+    objects `raw.source` holds, and `{}` where the export states nothing at
+    that level, as proto3 JSON omits a default. A consumer reads a span's
+    scope as `envelope(record).scope.get("scope")` without knowing where the
+    reader put it. Nothing serialized carries them but `raw.source`
+    (batch T3).
+
+    It raises `EnvelopeError` (`not_an_envelope`, §3.10) on a record the
+    reader did not mark; on a marked record that states no `trace_id` or no
+    `span_id` (absent, `null` or `""` — the two fields OTLP requires of every
+    span, which an envelope level with no spans does not have); and on a field
+    present in a type the envelope cannot hold — an id, `parent_id`, `name` or
+    `status_message` that is not a string, a time §3.1 does not read, a
+    `resource_spans` or `scope_spans` that is not an object. It never
+    returns a partial envelope, because a guessed field would be
+    indistinguishable from one the export stated. It reads no attribute and
+    consults no adapter: a receiver routes every record by its `trace_id`
+    whether or not anything can read the span (§6.1 keys an unclaimed record
+    by the same envelope).
+  - **A marked record and a flat record that parse equal are two records**,
+    not two copies of one (the duplicate rule below compares the mark with the
+    digest). Only one of them carries an envelope, and an unclaimed record is
+    keyed by its envelope where it has one (§6.1), so collapsing them would
+    keep whichever came first and make a node id depend on line order (§5.2).
   - **Reading it needs the whole input**, as the JSON array form does and for
     the same reason: a document is not a record until its closing brace. The
     reader buffers only when the input's first member key is `resourceSpans`;
@@ -2168,8 +2390,9 @@ Everything a batch build would say differently about `k` records than about
   later than the span that declared it earliest so far (§4.2.1) — which moves
   **that one span's** basis and no other's, because every other span declaring
   the same receipt was already not the earliest and still is;
-- the `temporal` chain of the sibling group it joins, and of the group it leaves
-  when it is given a parent;
+- the `temporal` chain of the sibling group it joins — and of no other: a
+  record's group is the parent it **states** (§4.3), so the arrival of that
+  parent gives it a `parent` edge and moves it out of no group;
 - the canonical position of every node, and — where it changes one of the three
   facts below — every derived **node id**.
 
@@ -2342,7 +2565,8 @@ restated **in full**, so what an arrival costs is usually the *size* of the keys
 it touched and not their number. **Two** keys are not, and they are exactly the
 two that grow with the stream rather than with the record — a sibling group's
 temporal chain and a call id's `data` edges — so each is stated below rather than
-left to be the worst of them, as is the arrival that moves a whole group at once.
+left to be the worst of them, as is the arrival that gives a whole group its
+parent at once.
 All three shapes occur in real telemetry, all three are measured by `make bench`
 (`tests/live_cost.py`), and its `--smoke` form — which `make check` runs — asserts
 that each of the three still builds one edge where it once built many.
@@ -2352,16 +2576,13 @@ because it would otherwise be the worst of them: one wide
 sibling group is the whole input. A group's members are kept in §4.3's order, so
 a joining record is placed by a search and only the chain edges adjacent to that
 place change — **at most one removed and two added**, whatever the group already
-holds — and a record given a parent (§10.2) leaves one group and joins another at
-the same price. One arrival can give a parent to *every* record waiting on it, a
-trace's root arriving after its children being the ordinary case, and then the
-move is made **once** rather than once per child: where the records moving are
-the whole of the group they leave and the group they join holds nothing yet, the
-chain they had is the chain they keep — a `temporal` edge names its two endpoints
-and not the group they sit in, and §4.3's key moved for none of them — so the
-group is re-keyed and **no edge moves at all**. A move that empties only part of
-a group is the per-record price above, once per record moved. The rule is §4.3's
-unchanged, and the chain is the one a batch build of the same prefix emits, which
+holds. One arrival can give a parent to *every* record waiting on it, a trace's
+root arriving after its children being the ordinary case, and that arrival moves
+**no edge of any chain**: a record's group is the parent it states (§4.3), so
+the children were in their parent's group before it arrived and stay there. (Until
+batch T5 an orphan sat at trace root and a late parent moved its children; the
+whole-group move was bounded here then, and is now not a move at all.) The rule
+is §4.3's unchanged, and the chain is the one a batch build of the same prefix emits, which
 is §10.1; what is bounded is only how much of it an arrival rebuilds.
 
 A call id's `data` edges are **not** restated either, for the mirror reason: a
@@ -2427,8 +2648,9 @@ root with 20,000 tool children (20,001 records, 20,001 nodes, 39,999 edges).
   this implementation's constants and **not** a consequence of §4.2.1. What
   §4.2.1 does settle is the one thing no constant can buy: none of the
   declarations may be dropped to get there.
-- **The arrival that regroups the whole input** — the wide shape's root fed last
-  — makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
+- **The arrival that resolves the whole input's parents** — the wide shape's root
+  fed last, measured before batch T5 made it move no child between groups —
+  makes the same 2,000-child input cost 235.9 ms against 220.7 ms fed
   root-first, 19.9 ms of it inside that single `feed`.
 - **A materialization's sort** is 18.0 ms of a 249.9 ms `graph()` on the loop
   shape and 86.9 ms of 298.7 ms on the wide one: a fourteenth of the call where

@@ -1,0 +1,87 @@
+{
+  "bodies": [
+    {
+      "bytes": 114281,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "7e0a3be31a33a9b6d2cb2c1a648c94460f26021baf1ff05022d54393026e95a3"
+    },
+    {
+      "bytes": 133167,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "41129b9db2446adf8c48f049930466785795d0bdf0bb51c53decd809d7b14b66"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-14T00:21:13.289440+00:00",
+  "files": [
+    {
+      "bytes": 243,
+      "file": "bodies.jsonl",
+      "sha256": "e34ee272f61fe066708f1e8a75ff8879e654c9c4f2e8e48da3bed90cc00f418e"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "e1b1850a1a36cfa35ea81fb13e9c8a4be3f39cb0cdf33634d0222ced37432f36"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 492,
+      "file": "json/0001.headers.json",
+      "sha256": "01ef932604670f03dfe8745a7857f6cd1235c8721f183772fd6df3b2cf95866a"
+    },
+    {
+      "bytes": 196,
+      "file": "json/0001.headers.raw",
+      "sha256": "ee6ba9b6dce6bd9ca9576b07c4276e751cf8459cad6ea641ab0ea348c99e78ec"
+    },
+    {
+      "bytes": 579,
+      "file": "raw/0001.headers.json",
+      "sha256": "4e4f581f50cc7d879196b2f1ceaec52ba1bdead7691cc646dee52ae54888391d"
+    },
+    {
+      "bytes": 227,
+      "file": "raw/0001.headers.raw",
+      "sha256": "aba0e5d16110fb67d8edbb950b4b5e67d476e735e2190aa193c148909afe54db"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "recorded",
+  "project_manifest": {
+    "base_url": "http://127.0.0.1:18765/v1",
+    "contract_version": "1.3",
+    "endpoint": "http://localhost:4318",
+    "framework": "crewai",
+    "framework_version": "1.15.27",
+    "instrumentation": [
+      "openinference-instrumentation-crewai==1.1.21",
+      "openinference-instrumentation-openai==0.1.65"
+    ],
+    "mode": "recorded",
+    "model": "stub-release-model",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-14T00:21:08.196Z"
+  },
+  "seal": "a9e7228940f7b3c8e042864a058b7db53af2c6454a69d307c6a3163c94fae9d6",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-14T00:21:07.379044+00:00"
+}

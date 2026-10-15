@@ -328,6 +328,232 @@ def test_every_make_target_a_document_names_exists():
     assert not missing, f"documents name make targets that do not exist: {missing}"
 
 
+# What `make conformance` runs today, in the recipe's order. CI runs the target
+# on ubuntu and macOS (`.github/workflows/ci.yml`); the existence check above
+# says nothing of what it runs, so a file dropped from the recipe left every
+# test green (R-24). Changing the list is changing the gate: edit both.
+CONFORMANCE_RUNS = (
+    "tests/test_conformance.py",
+    "tests/test_zoo.py",
+    "tests/test_zoo_readings.py",
+)
+
+# Every option the recipe passes to pytest today, by name. An option not on
+# this list is red whatever it does: `--deselect=…`, `--collect-only`, `-k`,
+# `--ignore`, `-p no:…` all change what the run executes while leaving the
+# files it names alone (decisions log D24; R-14). Adding one is
+# changing the gate: say why in the same change.
+CONFORMANCE_OPTIONS = frozenset({"-v"})
+
+
+def make_dry_run(target: str) -> tuple[list[str], str]:
+    """What `make -n target` prints: the command lines, and its stderr.
+
+    `make -n` prints the recipe make resolved -- a later rule overriding this
+    one included -- and executes nothing. Reading the Makefile's text instead
+    missed `gates conformance:` appended below the recipe, which make ran in
+    its place (decisions log D24; R-15). `--no-print-directory`
+    because under `make check` this make is a sub-make, which would otherwise
+    print the directory it enters as if it were a command.
+    """
+    result = subprocess.run(
+        ["make", "-n", "--no-print-directory", target],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"make -n {target} exited {result.returncode}: {result.stderr}"
+    )
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    return lines, result.stderr
+
+
+def conformance_recipe_faults(lines: list[str], stderr: str) -> list[str]:
+    """Why the effective conformance recipe is not the gate, or nothing.
+
+    Matched on "overriding" because GNU make 4 says "overriding recipe" and
+    the 3.81 macOS ships says "overriding commands"; either means a rule
+    defined twice, and make runs the last one.
+    """
+    faults = []
+    if "overriding" in stderr:
+        faults.append(f"make warns of an overriding recipe: {stderr.strip()}")
+    if len(lines) != 1:
+        return [*faults, f"the recipe is not one command: {lines}"]
+    words = shlex.split(lines[0])
+    if words[:3] != ["uv", "run", "pytest"]:
+        return [*faults, f"the recipe does not run pytest: {lines[0]}"]
+    unlisted = sorted(
+        {word for word in words[3:] if word.startswith("-")} - CONFORMANCE_OPTIONS
+    )
+    if unlisted:
+        faults.append(
+            f"it passes pytest {unlisted}, which CONFORMANCE_OPTIONS does not "
+            f"list; an option can empty the run while the files stay the same"
+        )
+    runs = tuple(word for word in words[3:] if not word.startswith("-"))
+    if runs != CONFORMANCE_RUNS:
+        faults.append(f"it runs {runs}, not {CONFORMANCE_RUNS}")
+    return faults
+
+
+def test_make_conformance_runs_exactly_the_files_it_names_today():
+    faults = conformance_recipe_faults(*make_dry_run("conformance"))
+    assert not faults, (
+        f"make conformance is not the gate CI thinks it runs: {faults}. CI's "
+        f"conformance job is this recipe; a file left out of it, or an option "
+        f"that runs none of it, is a gate that stopped running."
+    )
+
+
+_RECIPE = "uv run pytest " + " ".join(CONFORMANCE_RUNS) + " -v"
+
+
+@pytest.mark.parametrize(
+    ("lines", "stderr"),
+    [
+        pytest.param(
+            [_RECIPE + " --deselect=tests/test_zoo_readings.py"], "", id="deselect="
+        ),
+        pytest.param([_RECIPE + " --collect-only"], "", id="collect-only"),
+        pytest.param([_RECIPE + " -k conformance"], "", id="k"),
+        pytest.param([_RECIPE + " --ignore=tests/test_zoo.py"], "", id="ignore="),
+        pytest.param([_RECIPE + " -p no:randomly"], "", id="p-no"),
+        pytest.param(
+            [_RECIPE.replace(" tests/test_zoo.py", "")], "", id="file-dropped"
+        ),
+        pytest.param([_RECIPE + " tests/test_zoo.py"], "", id="file-repeated"),
+        pytest.param(["true"], "", id="not-pytest"),
+        pytest.param([_RECIPE, "true"], "", id="two-commands"),
+        pytest.param(
+            [_RECIPE],
+            "Makefile:144: warning: overriding recipe for target 'conformance'\n",
+            id="override-gnu-make-4",
+        ),
+        pytest.param(
+            [_RECIPE],
+            "Makefile:144: warning: overriding commands for target `conformance'\n",
+            id="override-gnu-make-3.81",
+        ),
+    ],
+)
+def test_the_conformance_pin_is_red_on_a_planted_recipe(lines, stderr):
+    assert conformance_recipe_faults(lines, stderr)
+
+
+def test_the_conformance_pin_reads_the_recipe_as_the_shell_would():
+    # Quoting a path changes nothing the shell runs, so it changes nothing here.
+    quoted = _RECIPE.replace("tests/test_zoo.py", "'tests/test_zoo.py'")
+    assert conformance_recipe_faults([quoted], "") == []
+    assert conformance_recipe_faults([_RECIPE], "") == []
+
+
+# The documents that say what `make conformance` runs. Each carries one
+# sentence naming every file in CONFORMANCE_RUNS, and the pin above holds the
+# recipe to that tuple; so editing the recipe and the tuple together, as the
+# comment there instructs, now reddens these too (decisions log D24;
+# R-16).
+CONFORMANCE_DOCS = (
+    "README.md",
+    "ENVIRONMENT.md",
+    "fixtures/conformance/README.md",
+)
+
+_TEST_FILE = re.compile(r"\btest_\w+\.py\b")
+
+
+def paragraphs(text: str) -> list[str]:
+    """Blocks split at blank lines and at the start of a list item.
+
+    A list's items sit on adjacent lines, so a blank-line split alone would
+    make `ENVIRONMENT.md`'s whole command list one paragraph, and a file named
+    in the next item would count for this one.
+    """
+    blocks: list[list[str]] = [[]]
+    for line in text.splitlines():
+        if not line.strip() or re.match(r"\s*[-*] ", line):
+            blocks.append([])
+        if line.strip():
+            blocks[-1].append(line)
+    return ["\n".join(block) for block in blocks if block]
+
+
+def conformance_doc_faults(text: str) -> list[str]:
+    """Why a document's account of `make conformance` is not the recipe's.
+
+    A paragraph that mentions `make conformance` and names a file the recipe
+    runs is an account of the recipe, and must name exactly the basenames of
+    CONFORMANCE_RUNS: one still naming a file the recipe dropped is as stale
+    as one missing a file it gained. At least one paragraph must be such an
+    account. A paragraph naming only other test files is about something
+    else (`ENVIRONMENT.md`'s digit-limit note names `test_determinism.py`
+    beside `make conformance`) and is not read.
+    """
+    runs = {pathlib.PurePosixPath(run).name for run in CONFORMANCE_RUNS}
+    faults = []
+    naming = 0
+    for paragraph in paragraphs(text):
+        if "make conformance" not in paragraph:
+            continue
+        named = set(_TEST_FILE.findall(paragraph))
+        if not named & runs:
+            continue
+        naming += 1
+        if named != runs:
+            faults.append(
+                f"a paragraph names {sorted(named)}, the recipe runs "
+                f"{sorted(runs)}: {paragraph[:80]!r}"
+            )
+    if not naming:
+        faults.append(f"no paragraph mentioning make conformance names {sorted(runs)}")
+    return faults
+
+
+@pytest.mark.parametrize("relative", CONFORMANCE_DOCS)
+def test_the_conformance_docs_name_the_files_the_recipe_runs(relative):
+    faults = conformance_doc_faults(read(relative))
+    assert not faults, f"{relative}: {faults}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("Run `make conformance`.", id="names-none"),
+        pytest.param(
+            "`make conformance` runs `tests/test_conformance.py`.", id="names-one"
+        ),
+        pytest.param(
+            "`make conformance` runs test_conformance.py, test_zoo.py,\n"
+            "test_zoo_readings.py and test_extra.py.",
+            id="names-one-more",
+        ),
+        pytest.param(
+            "`make conformance` runs test_conformance.py, test_zoo.py and\n"
+            "test_zoo_readings.py.\n\n`make conformance` runs test_zoo.py.",
+            id="a-second-paragraph-stale",
+        ),
+        pytest.param(
+            "- `make conformance` runs test_conformance.py\n"
+            "- the readings, test_zoo.py and test_zoo_readings.py",
+            id="split-across-list-items",
+        ),
+    ],
+)
+def test_the_conformance_docs_pin_is_red_on_a_planted_text(text):
+    assert conformance_doc_faults(text)
+
+
+def test_the_conformance_docs_pin_reads_a_paragraph_over_lines():
+    text = (
+        "Run it with `make conformance`, which runs\n"
+        "`tests/test_conformance.py` and the zoo gates,\n"
+        "`tests/test_zoo.py` and `tests/test_zoo_readings.py`.\n\n"
+        "`tests/test_zoo.py` alone is the census."
+    )
+    assert conformance_doc_faults(text) == []
+
+
 def test_every_cli_subcommand_a_document_invokes_exists():
     """Fenced lines only, unlike the make scan above, and for a stated reason.
 
@@ -396,12 +622,13 @@ def durable_documents() -> list[pathlib.Path]:
     A second exclusion stood here while a series was open: `WORKPLAN.md`, that
     series' own execution state, which owns `patches/` as its scratch drop and
     is written to be deleted at series close. That is exactly why nothing
-    durable was allowed to depend on it, and it is gone again: the live-graphs
-    series closed and the file went with it (`TASKS.md`, *The live-graphs
-    series*). It has gone five times now -- four across the September 2026
-    audit-fix series and its reopenings, once here -- so the exclusion is a
-    fixture of a **series**, not of a file: the next series' plan file needs
-    it back, and takes it back out at its own close.
+    durable was allowed to depend on it, and it is gone again: the
+    stranger's-trace series closed and the file went with it (`TASKS.md`,
+    *The stranger's-trace series*). It has gone six times now -- four across
+    the September 2026 audit-fix series and its reopenings, once at the
+    live-graphs series' close, once here -- so the exclusion is a fixture of a
+    **series**, not of a file: the next series' plan file needs it back, and
+    takes it back out at its own close.
     """
     return [
         path
@@ -445,6 +672,165 @@ def test_every_review_a_document_cites_is_in_the_repository():
         if not (ROOT / review).is_file()
     }
     assert not missing, f"documents cite reviews that are not in the tree: {missing}"
+
+
+# -- Decisions, cited by their row's id ------------------------------------
+#
+# The stranger's-trace decisions log was cited by date and batch, and on
+# 2026-10-14 most such pairs name several rows, one cited pair named none, and
+# nothing held a citation to the log at all: a relay file's bare name, or a row
+# that does not exist, passed every test (cold review of 2026-10-15, R-17,
+# R-18). Each row now has an id, and a citation names it.
+
+DECISIONS_SERIES = "\n## The stranger's-trace series"
+DECISIONS_HEADING = "### Decisions taken  *(the plan file's §3, folded in full)*"
+
+#: A row of the log, by its id and its date.
+DECISION_ROW = re.compile(r"^\| (D\d+) \| (\d{4}-\d{2}-\d{2}) \|", re.M)
+#: A row of the intro's map: a relay file's name and the ids of its rows.
+RELAY_MAP_ROW = re.compile(
+    r"^\| `(decisions-spanweave-\d{4}-\d{2}-\d{2}[a-z]?)` \| (D\d+(?:, D\d+)*) \|$",
+    re.M,
+)
+#: A citation: the log's name, then one id or a list of them.
+DECISION_CITATION = re.compile(r"\bdecisions log (D\d+(?:(?:,| and|, and) D\d+)*)")
+#: The forms the ids replaced: a date or a batch where the id goes, and the
+#: log cited with no row at all. A date is this log's only if a row holds it:
+#: the live-graphs series' log has rows of its own dates and no ids.
+UNNUMBERED_CITATION = re.compile(
+    r"\bdecisions[- ]log(?: rows? of)?[:,]? "
+    r"(?:(\d{4}-\d{2}-\d{2})\b|[TS]\d|review\b)"
+    r"|\(decisions log\)"
+)
+#: A relay file's name, which only the map may carry.
+RELAY_NAME = re.compile(
+    r"\bdecisions[- ](?:spanweave-|live-)?\d{4}-\d{2}-\d{2}[a-z]?\b"
+)
+
+
+def decisions_log() -> str:
+    """The stranger's-trace series' decisions log: its intro, map and table."""
+    tasks = read("TASKS.md")
+    series = tasks[tasks.index(DECISIONS_SERIES) :]
+    start = series.index(DECISIONS_HEADING)
+    return series[start : series.index("\n### ", start + len(DECISIONS_HEADING))]
+
+
+def decision_rows() -> dict[str, str]:
+    """Each row's id and its date, in the table's order."""
+    return dict(DECISION_ROW.findall(decisions_log()))
+
+
+def relay_map() -> dict[str, list[str]]:
+    return {
+        name: ids.split(", ") for name, ids in RELAY_MAP_ROW.findall(decisions_log())
+    }
+
+
+def flowed(text: str) -> str:
+    """The text with each line break read as a space, and a comment's `#` or
+    `#:` after one read as nothing, so a citation wrapped across lines reads
+    as one."""
+    return re.sub(r"\s*\n\s*(?:#:?(?=\s))?\s*", " ", text)
+
+
+def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
+    """Each citation of a decision that names no row by its id."""
+    text = flowed(text)
+    faults = [
+        f"{match.group(0)!r} cites {cited}, which is no row of the log"
+        for match in DECISION_CITATION.finditer(text)
+        for cited in re.findall(r"D\d+", match.group(1))
+        if cited not in rows
+    ]
+    faults += [
+        f"{match.group(0)!r} cites the log by date or batch, not by a row's id"
+        for match in UNNUMBERED_CITATION.finditer(text)
+        if match.group(1) is None or match.group(1) in rows.values()
+    ]
+    faults += [
+        f"{match.group(0)!r} names a relay file, which only the log's map may"
+        for match in RELAY_NAME.finditer(text)
+    ]
+    return faults
+
+
+def citing_files() -> list[pathlib.Path]:
+    """The durable documents and the tests: where a decision is cited."""
+    return durable_documents() + sorted((ROOT / "tests").rglob("*.py"))
+
+
+def test_the_decisions_log_numbers_its_rows_in_order():
+    ids = list(decision_rows())
+    assert ids, "the decisions log's table was not found, or has no `#` column"
+    assert ids == [f"D{n}" for n in range(1, len(ids) + 1)], ids
+
+
+def test_the_relay_map_points_each_file_at_rows_that_exist():
+    ids = set(decision_rows())
+    mapped = relay_map()
+    assert mapped, "the decisions log's intro carries no relay-file map"
+    missing = {name: rows for name, rows in mapped.items() if not set(rows) <= ids}
+    assert not missing, f"the relay map names rows the log does not have: {missing}"
+
+
+def test_every_decision_citation_names_a_row_by_its_id():
+    rows = decision_rows()
+    cited = 0
+    faults: dict[str, list[str]] = {}
+    for path in citing_files():
+        text = path.read_text(encoding="utf-8")
+        if path == ROOT / "TASKS.md":
+            text = RELAY_MAP_ROW.sub("", text)
+        cited += len(DECISION_CITATION.findall(flowed(text)))
+        if found := citation_faults(text, rows):
+            faults[str(path.relative_to(ROOT))] = found
+    assert cited, "no document or test cites a decision; the scan read nothing"
+    assert not faults, (
+        "a decision is cited by something other than its row's id in "
+        "`TASKS.md`'s decisions log (`decisions log D<n>`); a relay file's "
+        f"name reaches its rows through the log's map:\n  {faults}"
+    )
+
+
+#: Citations the resolver refuses. Each is split so that this file, which the
+#: resolver reads, does not carry it whole.
+CITATIONS_REFUSED = [
+    "(decisions log " + "D99)",
+    "(decisions log D3 and " + "D99)",
+    "(decisions log D17, D18 and " + "D99)",
+    "(decisions log D17, D18, and " + "D99)",
+    "(decisions log\n#: " + "D99)",
+    "(decisions log\n    " + "D99)",
+    "(decisions log: " + "2026-10-14, T9; R-1)",
+    "(decisions-log row of " + "2026-10-14, review)",
+    "(decisions log " + "2026-10-15, review)",
+    "(decisions log, " + "T4)",
+    "as were T2's (decisions " + "log).",
+    "(decisions " + "2026-10-14g, commit 3)",
+    "applies decisions-spanweave-" + "2026-10-14e",
+    "decisions-" + "live-2026-10-02",
+]
+#: Citations and mentions it lets through.
+CITATIONS_KEPT = [
+    "(decisions log D1)",
+    "(decisions log D15 and D16)",
+    "(decisions log D17, D18 and D19; R-3)",
+    "(decisions log\n# D23)",
+    "the decisions log in full, verbatim",
+    "the decisions-log rows of **2026-09-30**",
+    "the `WORKPLAN.md` §3 decisions-log rows of 2026-09-30",
+]
+
+
+@pytest.mark.parametrize("text", CITATIONS_REFUSED)
+def test_the_citation_resolver_refuses(text):
+    assert citation_faults(text, decision_rows()), text
+
+
+@pytest.mark.parametrize("text", CITATIONS_KEPT)
+def test_the_citation_resolver_keeps(text):
+    assert citation_faults(text, decision_rows()) == [], text
 
 
 # -- `CONTRACTS.md` against `SPEC.md` --------------------------------------
@@ -2544,12 +2930,18 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # `54/155` was the tracked corpus from batch S3 until batch S10 added the
     # two `empty_link_target` renderings, and S3's `CHANGELOG.md` entry
     # records it in this spelling; retired for the reason `52/151` was.
+    #
+    # `56/159` was the tracked corpus from batch S10 until the review's R-17
+    # (decisions log D23) added the two `orphan_siblings`
+    # renderings, and S10's `CHANGELOG.md` entry records it; retired the same
+    # way.
     "corpus files / records as N/M": {
         (57, 177),
         (43, 117),
         (14, 60),
         (52, 151),
         (54, 155),
+        (56, 159),
     },
     # R5's pair of span-id figures, superseded by S3's two records: an empty
     # `span_id` is no span id (`SPEC.md` §3.6), so the corpus went 139 -> 141
@@ -2559,12 +2951,17 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     # S3's own pair, superseded the same way by S10's four records, all of
     # which state a usable span id: 141 -> 145 carrying one, 137 -> 141
     # trace-unique. S3's `CHANGELOG.md` entry records the pair it measured.
-    "records carrying a span id": {(139,), (141,)},
-    "trace-unique span ids": {(135,), (137,)},
+    #
+    # S10's pair, superseded by R-17's eight `orphan_siblings` records, all
+    # stating a usable span id: 145 -> 153 carrying one, 141 -> 149
+    # trace-unique. S10's `CHANGELOG.md` entry records the pair it measured.
+    "records carrying a span id": {(139,), (141,), (145,)},
+    "trace-unique span ids": {(135,), (137,), (141,)},
     # C3 said "the 17 captured trace files"; D2 said 15 (batch R9).
     "captured files": {(17,), (15,)},
     # S3 measured 308 over the tracked corpus; S10's four records add 8.
-    "timestamp literals": {(154,), (308,)},
+    # S10's 316 joins it: R-17's eight records add 16.
+    "timestamp literals": {(154,), (308,), (316,)},
     "sibling pairs": {(41,)},
     "minimum sibling gap": {(81,)},
     "`data` edges": {(24,)},
@@ -2573,8 +2970,9 @@ RETIRED_CENSUS_FIGURES: dict[str, set[tuple[int, ...]]] = {
     "tracked `*.jsonl` head scan": {(64, 64), (50, 50)},
     "corpus `*.jsonl` files": {(64,)},
     # Both, in the `N tracked *.jsonl` spelling batch S9 gave a family.
-    # S3's `52` joins them: S10 added two renderings.
-    "tracked `*.jsonl` files": {(64,), (50,), (52,)},
+    # S3's `52` joins them: S10 added two renderings. S10's `54` joins them:
+    # R-17 added two.
+    "tracked `*.jsonl` files": {(64,), (50,), (52,), (54,)},
     # F1's `46` counted the lines of an export `probe1.py` never committed.
     "`malformed_record` diagnostics for an indented export": {(46,)},
 }

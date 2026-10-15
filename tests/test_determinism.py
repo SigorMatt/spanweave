@@ -505,7 +505,11 @@ def test_the_graph_every_setting_agrees_on_is_the_librarys_limit(tmp_path):
     (node,) = json.loads(_built_under("640", export), parse_int=str)["nodes"]
     assert node["raw"]["source"]["attributes"]["past"] == digit_limit.past()
     assert node["raw"]["source"]["attributes"]["inside"] == digit_limit.inside()
-    assert node["started_at"] == digit_limit.inside()
+    # Read inside the limit, and then -- its field declares nanoseconds -- a
+    # count no float holds once divided into seconds, so not a time §3.1 reads
+    # (batch T2). The digits stay verbatim in the record.
+    assert node["started_at"] is None
+    assert node["raw"]["source"]["start_time"] == digit_limit.inside()
 
 
 def test_the_guarantee_holds_past_the_digit_limit_in_process():

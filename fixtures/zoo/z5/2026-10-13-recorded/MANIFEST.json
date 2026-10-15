@@ -1,0 +1,86 @@
+{
+  "bodies": [
+    {
+      "bytes": 5934,
+      "content_encoding": null,
+      "content_type": "application/x-protobuf",
+      "file": "raw/0001.body",
+      "sha256": "1ba7b194beb39799dc587e7b6e372e76645100c45a2e78a7fcc9158cd0bae9e3"
+    },
+    {
+      "bytes": 8070,
+      "content_encoding": null,
+      "content_type": "application/json",
+      "file": "json/0001.json",
+      "sha256": "0668b127ed4887f731212dfa8bc35403fadd06ca1a28d684412a5b3439639124"
+    }
+  ],
+  "collector_version": "0.162.0",
+  "ended_at": "2026-10-12T22:20:22.279293+00:00",
+  "files": [
+    {
+      "bytes": 239,
+      "file": "bodies.jsonl",
+      "sha256": "a518756da7980b2da9a745ce897c330e22cd7ecb39862266fd61f84eab12c435"
+    },
+    {
+      "bytes": 2861,
+      "file": "collector.log",
+      "sha256": "3f9a5684e6bc7a9e75693ea5827abb6948ef12b365def7d4ba9ed690c74725f2"
+    },
+    {
+      "bytes": 41,
+      "file": "forwards.jsonl",
+      "sha256": "8abd636f60e4823845cfb3b0ff6b3612ec20e2e542773650f5e22a9bf5f5f734"
+    },
+    {
+      "bytes": 488,
+      "file": "json/0001.headers.json",
+      "sha256": "86c865e35091cc9c967d0d5ee34ba2f44fc9f40801adfaff22299b0127f97229"
+    },
+    {
+      "bytes": 194,
+      "file": "json/0001.headers.raw",
+      "sha256": "2390a91557fc16372b825f47ed448ac29dde3f112a552294a177e6a53c35a552"
+    },
+    {
+      "bytes": 575,
+      "file": "raw/0001.headers.json",
+      "sha256": "be31443c69e3c113759090adfb58222105f6c5be779735e2768235ffb561e776"
+    },
+    {
+      "bytes": 225,
+      "file": "raw/0001.headers.raw",
+      "sha256": "0a4a869ea16809d3a939656e69685b5ccab132c838c66ce1510beff12a3199a1"
+    }
+  ],
+  "forwards": [
+    {
+      "file": "raw/0001.body",
+      "status": 200
+    }
+  ],
+  "kind": "recorded",
+  "project_manifest": {
+    "base_url": "http://127.0.0.1:8765/v1/",
+    "contract_version": "1.2",
+    "endpoint": "http://localhost:4318",
+    "framework": "langgraph",
+    "framework_version": "1.2.14",
+    "instrumentation": [
+      "openinference-instrumentation-langchain==0.1.79"
+    ],
+    "mode": "recorded",
+    "model": "flaky-fetcher-stub",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "sdk": {
+      "exporter": "opentelemetry-exporter-otlp-proto-http==1.45.1",
+      "opentelemetry-sdk": "1.45.1"
+    },
+    "started_at": "2026-10-12T22:20:16.045Z"
+  },
+  "seal": "c9870c1480d1f44f7e06861e325510803bd8497392497795045d88e066548f5d",
+  "sink_version": "0.0.1",
+  "started_at": "2026-10-12T22:20:13.980953+00:00"
+}
