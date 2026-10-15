@@ -449,6 +449,111 @@ def test_the_conformance_pin_reads_the_recipe_as_the_shell_would():
     assert conformance_recipe_faults([_RECIPE], "") == []
 
 
+# The documents that say what `make conformance` runs. Each carries one
+# sentence naming every file in CONFORMANCE_RUNS, and the pin above holds the
+# recipe to that tuple; so editing the recipe and the tuple together, as the
+# comment there instructs, now reddens these too (cold review of 2026-10-15,
+# R-16).
+CONFORMANCE_DOCS = (
+    "README.md",
+    "ENVIRONMENT.md",
+    "fixtures/conformance/README.md",
+)
+
+_TEST_FILE = re.compile(r"\btest_\w+\.py\b")
+
+
+def paragraphs(text: str) -> list[str]:
+    """Blocks split at blank lines and at the start of a list item.
+
+    A list's items sit on adjacent lines, so a blank-line split alone would
+    make `ENVIRONMENT.md`'s whole command list one paragraph, and a file named
+    in the next item would count for this one.
+    """
+    blocks: list[list[str]] = [[]]
+    for line in text.splitlines():
+        if not line.strip() or re.match(r"\s*[-*] ", line):
+            blocks.append([])
+        if line.strip():
+            blocks[-1].append(line)
+    return ["\n".join(block) for block in blocks if block]
+
+
+def conformance_doc_faults(text: str) -> list[str]:
+    """Why a document's account of `make conformance` is not the recipe's.
+
+    A paragraph that mentions `make conformance` and names a file the recipe
+    runs is an account of the recipe, and must name exactly the basenames of
+    CONFORMANCE_RUNS: one still naming a file the recipe dropped is as stale
+    as one missing a file it gained. At least one paragraph must be such an
+    account. A paragraph naming only other test files is about something
+    else (`ENVIRONMENT.md`'s digit-limit note names `test_determinism.py`
+    beside `make conformance`) and is not read.
+    """
+    runs = {pathlib.PurePosixPath(run).name for run in CONFORMANCE_RUNS}
+    faults = []
+    naming = 0
+    for paragraph in paragraphs(text):
+        if "make conformance" not in paragraph:
+            continue
+        named = set(_TEST_FILE.findall(paragraph))
+        if not named & runs:
+            continue
+        naming += 1
+        if named != runs:
+            faults.append(
+                f"a paragraph names {sorted(named)}, the recipe runs "
+                f"{sorted(runs)}: {paragraph[:80]!r}"
+            )
+    if not naming:
+        faults.append(f"no paragraph mentioning make conformance names {sorted(runs)}")
+    return faults
+
+
+@pytest.mark.parametrize("relative", CONFORMANCE_DOCS)
+def test_the_conformance_docs_name_the_files_the_recipe_runs(relative):
+    faults = conformance_doc_faults(read(relative))
+    assert not faults, f"{relative}: {faults}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("Run `make conformance`.", id="names-none"),
+        pytest.param(
+            "`make conformance` runs `tests/test_conformance.py`.", id="names-one"
+        ),
+        pytest.param(
+            "`make conformance` runs test_conformance.py, test_zoo.py,\n"
+            "test_zoo_readings.py and test_extra.py.",
+            id="names-one-more",
+        ),
+        pytest.param(
+            "`make conformance` runs test_conformance.py, test_zoo.py and\n"
+            "test_zoo_readings.py.\n\n`make conformance` runs test_zoo.py.",
+            id="a-second-paragraph-stale",
+        ),
+        pytest.param(
+            "- `make conformance` runs test_conformance.py\n"
+            "- the readings, test_zoo.py and test_zoo_readings.py",
+            id="split-across-list-items",
+        ),
+    ],
+)
+def test_the_conformance_docs_pin_is_red_on_a_planted_text(text):
+    assert conformance_doc_faults(text)
+
+
+def test_the_conformance_docs_pin_reads_a_paragraph_over_lines():
+    text = (
+        "Run it with `make conformance`, which runs\n"
+        "`tests/test_conformance.py` and the zoo gates,\n"
+        "`tests/test_zoo.py` and `tests/test_zoo_readings.py`.\n\n"
+        "`tests/test_zoo.py` alone is the census."
+    )
+    assert conformance_doc_faults(text) == []
+
+
 def test_every_cli_subcommand_a_document_invokes_exists():
     """Fenced lines only, unlike the make scan above, and for a stated reason.
 

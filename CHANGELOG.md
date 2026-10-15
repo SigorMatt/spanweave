@@ -15,6 +15,17 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The conformance docs name the gates the recipe runs** (cold review of
+  2026-10-15, R-16). No behaviour change. `README.md`, `ENVIRONMENT.md` and
+  `fixtures/conformance/README.md` said what `make conformance` runs and
+  nothing held them to it: reverting them to the stale text, trimming the
+  readings from `README.md`, or saying the target runs only
+  `tests/test_conformance.py` left every test green, as would editing the
+  recipe and `CONFORMANCE_RUNS` together. Each now names every file in
+  `CONFORMANCE_RUNS` in one sentence (`README.md`'s Development block and
+  `ENVIRONMENT.md`'s Corpus line gain `tests/test_conformance.py`), and
+  `tests/test_doc_truth.py` asserts that a paragraph naming
+  `make conformance` and a file the recipe runs names exactly those files.
 - **A citation of `ADAPTERS.md` §7.4 names its row, and Z2's only child is
   pinned** (cold review of 2026-10-15, R-12). No behaviour change. §7's prose
   cited §7.4 bare, so a reader could not tell which row held a fact, and
