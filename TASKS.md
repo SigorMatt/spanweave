@@ -13816,7 +13816,10 @@ prose until a stranger reads it.
   there, because they are edits to `fixtures/zoo/`. The cold review of
   2026-10-15, a read of the range after it, is archived and every finding
   dispositioned too (*Cold review of the series — 2026-10-15* below). The
-  PR, Qodo's review of it and the merge remain.
+  PR is open, as pull request #5, and Qodo's review of it at `b7e7e2e` is
+  archived and both its findings dispositioned (*Qodo's review of PR #5 —
+  2026-10-15* below). Qodo's review of the push after it and the merge
+  remain.
 - **The Phase 4 gate is not met.** The close recorded the zoo run as the
   third dialect having been run. That was the plan's mistake, carried from the
   series brief, and it is corrected after the close (decisions log
@@ -14067,7 +14070,7 @@ decisions log D10, D11 and D12.
 ### Decisions taken  *(the plan file's §3, folded in full)*
 
 Decisions arrive as relay files and live in this table. Each row has an id
-in its `#` column, `D1`…`D26`, in the order the rows were written, and a
+in its `#` column, `D1`…`D27`, in the order the rows were written, and a
 decision is cited by it, as `decisions log D<n>`; `tests/test_doc_truth.py`
 resolves every such citation in the durable documents and `tests/` to a row
 here. The ids are this log's: the September 2026 audit's batches D1 and D2 are
@@ -14088,6 +14091,7 @@ map:
 | `decisions-spanweave-2026-10-14f` | D17, D18, D19, D20, D21 |
 | `decisions-spanweave-2026-10-14g` | D22, D23 |
 | `decisions-spanweave-2026-10-15` | D24, D25, D26 |
+| `decisions-spanweave-2026-10-15b` | D27 |
 
 D1–D6 came from no relay file: the plan file held them when `43e330a` opened
 the series. The e file asked for three commits: its third is D14–D16; its
@@ -14110,7 +14114,10 @@ D21 (R-26), and `2196d38` struck them from the row in place. The cold review
 of 2026-10-15 found that against this log's own rule (R-19): D21 is restored
 to its text as first written, at `7ea83aa`, and D25 corrects it. D24–D26 are
 that review's: D24 its dispositions, D25 the S13 correction, and D26 the
-decision `0df6d00` carried, which no row held (R-22).
+decision `0df6d00` carried, which no row held (R-22). D27 is Qodo's review of
+pull request #5, dispositioned; the 2026-10-15b file is that review's
+dispositions, and the two commits that applied it before its row was written
+cite the review by finding.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14140,6 +14147,7 @@ decision `0df6d00` carried, which no row held (R-22).
 | D24 | 2026-10-15 | review | The cold review of 2026-10-15 (R-1…R-23 and two notes outside its range), dispositioned. Accepted: R-1 (its limit stated), R-2, R-3, R-5, R-6, R-7, R-9, R-10, R-11, R-12, R-13, R-14, R-15, R-16, R-17 (the resolver, not the size tripwire), R-18, R-19, R-20, R-21, R-22, R-23 (the record line), and both notes. Read, recorded: R-4, R-8. Declined: R-17's size tripwire, because a guard for a byte count in prose is a parser of English; the resolver and the readings pin are the guards. From this run on a finding gets its own commit unless two share one mechanism, and the pairing is in the subject (R-23). A decision row carries an id and is cited by it, `decisions log D<n>`, and the intro maps each relay file to its rows (R-17, R-18). Nothing is amended or force-pushed. | maintainer |
 | D25 | 2026-10-15 | S13 | Corrects D21 (R-19). D21 stands as first written, and its graph sizes and their attribution to T3 and T4 are withdrawn: no test holds them, and the cold review of 2026-10-14 measured T2 as most of the change and T4 as growth (R-26). The eight paths, pinned by the test, are the citation. D23 ordered the sizes out of D21 and `2196d38` struck them in place, which this log's rule does not allow: a verbatim log is corrected by a later row (D20), and this is that row. | maintainer |
 | D26 | 2026-10-15 | zoo | The series' never-edit rule for `fixtures/zoo/` covers the zoo's bodies and manifests, the record copied byte for byte from the zoo at its pin. `fixtures/zoo/README.md` is ours and is edited like any other document this repository writes. `0df6d00` carried this decision and cited D23 for it, which does not hold it (R-22); this row does. | maintainer |
+| D27 | 2026-10-15 | review | Qodo's review of pull request #5 at `b7e7e2e` (two findings), dispositioned. Both accepted. Finding 2, a bug: an exception event's `attributes` is read only as a list or as omitted or `null`, and any other value leaves the event unread, named `<record>.events[<i>]`, as SPEC §3.7 says of an entry that does not fold; the same class as R-9 of the cold review of 2026-10-15, fixed the same way. Finding 1, a rule violation: "a level grades the report, never the trace" in `spanweave/diagnostics.py` and `spanweave/seam.py` becomes "a level is a property of the report, never of the trace", comments only. The phrase was the maintainer's own (D13) and stays in this file and SPEC §3.7, which are not core code; the rule is `CLAUDE.md`'s and Qodo applied it correctly. The comment and its two inline comments are archived as fetched; the PR summary comment carries no findings and is not. | maintainer |
 
 ### Cold review of the series — 2026-10-14
 
@@ -14253,6 +14261,37 @@ message (decisions log D24; R-23). This archive is the last of those commits.
 | R-23 — several findings per commit against "its own commit" | **accepted, the record line**, `80e5331`: the 2026-10-14 section says the findings were grouped as the decisions file paired them, the pairing recorded per commit, and `911a0e2`'s subsection parse has its own CHANGELOG line. **Read, recorded, the grouping** (decisions log D24): it was the decisions file's; from this run on a finding gets its own commit unless two share one mechanism, and the pairing is named |
 | Note: `tests/test_read.py`'s four review comments cite scratch paths | **accepted**, `80e5331`: they cite the archives under `reviews/` or the rows those reviews produced |
 | Note: §7.4's Z4 `scopes` row read beside the S6 prose | **accepted**, `80e5331`: `ADAPTERS.md` says Z4's second scope is the unclaimed root's own tracer, not a second instrumentor |
+
+### Qodo's review of PR #5 — 2026-10-15
+
+`reviews/2026-10-15-qodo-pr5.md` holds three comments by
+`qodo-code-review[bot]` on pull request #5, all rendered against `b7e7e2e`,
+each its `body` field as the GitHub API returned it, unchanged: the issue
+comment *Code Review by Qodo*, id `6181552064`, which carries the two
+findings, and the two inline comments of review `5526471693` (whose own body
+is empty), id `4277735923` on finding 1 and id `4277735929` on finding 2. Each
+body sits in the archive between a ````` ````text ````` line and a
+````` ```` ````` line, less the line break before the closing one; extracted
+so, each is byte-identical to the scratch drop's copy of it, which was itself
+compared byte for byte with the `body` field of the API's response, and its
+`sha256` is the same on all three:
+
+| Comment | Bytes | `sha256` |
+|---|---|---|
+| issue comment `6181552064` | 8,217 | `e44aecc1edb0cee2b4246418b5a8da8364301002296c04c2acc5f9a02eb2c89b` |
+| inline comment `4277735923` | 1,308 | `4b246c3874991037bde240d2352a09bd54618fe44936d74d738ff4994e2c1949` |
+| inline comment `4277735929` | 1,574 | `b59e76c22137636bcc9b00cff67670478dac3ee602d81562beea9cc2fb4408e8` |
+
+As for the cold reviews, the digests are written here and not in the archive.
+The archive's header says where each comment came from and how to extract it,
+and nothing outside its fences is the bot's. A first comment from the same bot
+that day, id `6181520837`, is a PR summary and carries no findings; it is not
+archived. The maintainer's dispositions are decisions log D27, above.
+
+| Finding | Disposition |
+|---|---|
+| Qodo 2 — Malformed exception attributes go unreported (Bug, Correctness) | **accepted**, `f692a31`: `attributes` is read only as a list or as omitted or `null`; any other value leaves the event unread, named `<record>.events[<i>]` (decisions log D27) |
+| Qodo 1 — Core diagnostics use evaluative wording (Rule violation, Maintainability) | **accepted**, `72ae42e`: "a level grades the report, never the trace" is "a level is a property of the report, never of the trace" in both comments (decisions log D27) |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 

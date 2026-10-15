@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Qodo's review of PR #5 is archived, and both findings have a
+  disposition** (decisions log D27). No behaviour change.
+  `reviews/2026-10-15-qodo-pr5.md` holds the "Code Review by Qodo" comment
+  and its two inline comments, each body as fetched, unchanged, their
+  `sha256`s in `TASKS.md`, which gains a line per finding: finding 2
+  accepted and fixed by the exception-attributes entry below, finding 1
+  accepted and fixed by the core-comments entry below. The PR summary
+  comment carries no findings and is not archived.
 - **No evaluative wording in core comments** (Qodo's review of PR #5,
   finding 1). The `exception_event` comment in `spanweave/diagnostics.py`
   and the `span_events` docstring in `spanweave/seam.py` said "a level
