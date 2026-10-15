@@ -13813,8 +13813,10 @@ prose until a stranger reads it.
   under `reviews/`. Since then, the cold review of 2026-10-14, a read of the
   whole series range, is archived and every finding dispositioned (*Cold
   review of the series* below); two parts of what it asked for are open
-  there, because they are edits to `fixtures/zoo/`. The PR, Qodo's review of
-  it and the merge remain.
+  there, because they are edits to `fixtures/zoo/`. The cold review of
+  2026-10-15, a read of the range after it, is archived and every finding
+  dispositioned too (*Cold review of the series — 2026-10-15* below). The
+  PR, Qodo's review of it and the merge remain.
 - **The Phase 4 gate is not met.** The close recorded the zoo run as the
   third dialect having been run. That was the plan's mistake, carried from the
   series brief, and it is corrected after the close (decisions log
@@ -14199,6 +14201,58 @@ message stays.
 | R-27 — decisions cited only in an ignored directory | **accepted**, `2196d38` (with R-26). Its message counts 19 `TASKS.md` citations rewritten; the grep showed 20. The message stays |
 | R-28 — the census "in its own commit" | **accepted**, `2195604` named; **not made.** The sentence is in `fixtures/zoo/README.md`, which is never edited in this series; `2195604`'s subject names the zoo README anyway. **Done** by the commit after this archive, *fixtures: the zoo README lists the census fields and says which commit moves a count*, as R-12's (decisions log D26): the README says the census is updated "in the commit that moves it, with the reason" |
 | `5f6fd13`'s title (non-code commits) | **read, no change.** "No serialized shape moves" overstated what its own text allowed (a code is a vocabulary word); the §21 decision is the rule |
+
+### Cold review of the series — 2026-10-15
+
+`reviews/2026-10-15-stranger.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-15.md` directly under
+`patches/`: `cmp` silent, and `sha256`
+`f24d95058778e4cf37ef40b61a8fe8f0b913e53c28869e17ccdc10e01068a3b3` on both
+sides. It takes the dated name the earlier archives carry. As for them, the
+scratch name and the whole digest are written here and not in the archive,
+which is kept byte-for-byte; the scratch name is provenance and not a path to
+open.
+
+A cold read of `7ea83aa..b7e7e2e`, eighteen commits: one sub-agent per commit
+touching code, fixtures, tests or the `Makefile` (fifteen), the three others
+read directly, every parent derived as `<sha>^` and a mutation shown at each
+commit that adds a test. The range moved while it ran (`0df6d00` and
+`b7e7e2e` were committed during it) and both were read. It found the zoo's
+fixtures byte-identical to the zoo at its pin, no clock, randomness or
+network added, and the census and readings re-derived by independent
+scripts; it raised twenty-three findings, R-1…R-23, and two notes outside its
+range. The maintainer's dispositions are decisions log D24, above. Each
+accepted finding was applied on `stranger` as its own commit, or paired with
+another where the two share one mechanism, the pairing named in the commit
+message (decisions log D24; R-23). This archive is the last of those commits.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `f590bff`, the README seal is not independent of the copy | **accepted, its limit stated**, `6efdfa7`. The seal table says the seals are copied from the zoo's sealed manifests at the pin and are the pin; the test holds the copy to the README, and holding the README to the zoo is the reviewer's, by comparing against the zoo checkout at `7eb5b69` |
+| R-2 — `6fe41f8`, "S16 by the Z2 `temporal` count" holds nothing | **accepted**, `80e5331`: the T0 row says S16 is held by `4bc9032`'s node-and-edge structures |
+| R-3 — `6fe41f8`, the contiguity check rests on an untested helper | **accepted**, `ea37864` |
+| R-4 — `6fe41f8`, two mutation counts do not reproduce | **read, recorded** (decisions log D24). The counts were 2 and 3, not 1; the tests named do go red. Recorded as measured in the 2026-10-14 table's R-4 line by `80e5331`; the message stays |
+| R-5 — `65560a7`, the unclaimed node's status is pinned at one value | **accepted**, `2ea8c17` |
+| R-6 — `4bc9032`, the census comment overstates the match with R-10's check | **accepted**, `80e5331`: the `STRUCTURES` comment says 1,092 edges, T5's four Z5 `temporal` edges removed since R-10's 1,096 |
+| R-7 — `10224a1`, a pinned behaviour SPEC does not state | **accepted**, `3adf700` |
+| R-8 — `2195604`, the subject names a change the commit does not make | **read, recorded** (decisions log D24). History; noted in the 2026-10-14 table's R-12 line by `80e5331`, the edit being `0df6d00`'s. The message stays |
+| R-9 — `2195604`, a mutation of the stated `events` rule survives | **accepted**, `c5944fb` |
+| R-10 — `1ce0c43`, `orphan_parent`'s scenario text states the rule pinned against | **accepted**, `21143a6` |
+| R-11 — `911a0e2`, the prose-number guard lets spelled counts through | **accepted**, `b142377` (with R-13; one mechanism). "one" stays excluded by design, and the test says so |
+| R-12 — `911a0e2`, "only child" cited to a row that does not measure it | **accepted**, `8eb5ec5` |
+| R-13 — `911a0e2`, the CHANGELOG corpus guard reads spelled numbers only | **accepted**, `b142377` (with R-11; one mechanism) |
+| R-14 — `8f4c1d9`, `=` flags and `--collect-only` empty the run with the pin green | **accepted**, `eba4320` (with R-15; one mechanism) |
+| R-15 — `8f4c1d9`, a later multi-target rule overrides the recipe unseen | **accepted**, `eba4320` (with R-14; one mechanism) |
+| R-16 — `7557955`, the corrected docs are unguarded | **accepted**, `4ec011b` |
+| R-17 — `2196d38`, R-26 and R-27 can come back silently | **accepted, the resolver**, `2dddcce` (with R-18, R-19, R-22; one mechanism, a decision reached by its row's id). **Declined, the size tripwire** (decisions log D24): a guard for a byte count in prose is a parser of English; the resolver and the readings pin are the guards |
+| R-18 — `2196d38`, a registry citation names a group, not the row | **accepted**, `2dddcce`: rows carry ids, citations take the form `decisions log D<n>`, and the intro maps each relay file to its rows |
+| R-19 — `2196d38`, the S13 row is re-worded in place | **accepted**, `2dddcce`: D21 is restored to its text as first written, and D25 corrects it |
+| R-20 — `0df6d00`, the census paragraph is pinned by nothing | **accepted**, `6efdfa7` |
+| R-21 — `0df6d00`, the README says it is never edited, in the commit that edits it | **accepted**, `6efdfa7`: the README and `FIXTURES.md` say the bodies and manifests are never edited and the README is ours |
+| R-22 — `0df6d00`, the scoping decision cited to a row that does not hold it | **accepted**, `2dddcce`: decisions log D26 holds it, and the citations name it |
+| R-23 — several findings per commit against "its own commit" | **accepted, the record line**, `80e5331`: the 2026-10-14 section says the findings were grouped as the decisions file paired them, the pairing recorded per commit, and `911a0e2`'s subsection parse has its own CHANGELOG line. **Read, recorded, the grouping** (decisions log D24): it was the decisions file's; from this run on a finding gets its own commit unless two share one mechanism, and the pairing is named |
+| Note: `tests/test_read.py`'s four review comments cite scratch paths | **accepted**, `80e5331`: they cite the archives under `reviews/` or the rows those reviews produced |
+| Note: §7.4's Z4 `scopes` row read beside the S6 prose | **accepted**, `80e5331`: `ADAPTERS.md` says Z4's second scope is the unclaimed root's own tracer, not a second instrumentor |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 

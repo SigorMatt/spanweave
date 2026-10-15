@@ -15,6 +15,12 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The cold review of 2026-10-15 is archived, and every finding has a
+  disposition** (decisions log D24). No behaviour change.
+  `reviews/2026-10-15-stranger.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-23, and per note
+  outside its range: the commit that answered it, or the reading it was
+  read, recorded or declined with.
 - **The record says what holds S16, what the structures match, and how
   the last series was grouped** (decisions log D24; R-2, R-4, R-6, R-8,
   R-23 and the review's two notes outside its range). No behaviour change.
