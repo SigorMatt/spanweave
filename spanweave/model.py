@@ -95,7 +95,7 @@ class PayloadState(StrEnum):
 class DiagnosticLevel(StrEnum):
     """How loudly to report a mapping gap. Never "error": errors raise.
 
-    This grades the report, not the trace (`SPEC.md` §3.7).
+    A level is a property of the report, never of the trace (`SPEC.md` §3.7).
     """
 
     INFO = "info"

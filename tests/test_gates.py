@@ -124,10 +124,38 @@ def test_neutrality_gate_is_case_insensitive():
 def test_neutrality_gate_covers_every_banned_word():
     # A word silently dropped from the list is a hole nobody would notice, so
     # each one is exercised rather than trusted.
-    for word in gates.SEMANTIC_VOCABULARY:
+    for word in (*gates.SEMANTIC_VOCABULARY, "grade"):
         source = f'MARKER = "{word}"'
         found = gates.check_source("spanweave/planted.py", source, [gates.neutrality])
         assert [v.rule for v in found] == ["neutrality"], word
+
+
+# `grade` is banned at a word start only (the comment above GRADE_STEM in
+# tests/gates.py says why): every form of the word fails, in a docstring, a
+# string literal or a name, snake case included...
+PLANTED_GRADE = [
+    'def level():\n    """This grades the report, not the trace."""',
+    'NOTE = "graded by the reader"',
+    'ROLE = "Grader"',
+    'MODE = "grading"',
+    "max_grade = 0",
+    'LABEL = "GRADE"',
+]
+
+
+@pytest.mark.parametrize("source", PLANTED_GRADE)
+def test_neutrality_gate_fails_on_grade_at_a_word_start(source):
+    found = gates.check_source("spanweave/planted.py", source, [gates.neutrality])
+    assert [v.rule for v in found] == ["neutrality"]
+    assert "'grade'" in found[0].detail
+
+
+# ...and the words that merely end in it pass, because "degrade honestly" is
+# this project's own instruction (CLAUDE.md) and must stay sayable in core.
+@pytest.mark.parametrize("word", ["degrade", "degrades", "downgrade", "upgraded"])
+def test_neutrality_gate_passes_on_words_ending_in_grade(word):
+    source = f'def note():\n    """Nothing to {word} to."""\nMARKER = "{word}"'
+    assert gates.check_source("spanweave/planted.py", source, [gates.neutrality]) == []
 
 
 def test_neutrality_gate_passes_on_neutral_vocabulary():

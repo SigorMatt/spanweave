@@ -15,6 +15,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The last "grades" leaves core, and the neutrality gate learns the
+  stem.** The `DiagnosticLevel` docstring in `spanweave/model.py` said
+  "This grades the report, not the trace"; it now says a level "is a
+  property of the report, never of the trace", as the core-comments entry
+  below did for `diagnostics.py` and `seam.py`. The neutrality gate
+  (`tests/gates.py`) now bans `grade` too, so the word cannot return
+  unnoticed: grade, grades, graded, grader, grading and `max_grade` fail,
+  in identifiers and string literals, docstrings included. It matches at a
+  word start only, the one stem with a boundary, because "degrade" is the
+  project's own word (`CLAUDE.md`, "degrade honestly") and must stay
+  sayable in core; degrade, upgrade and downgrade pass. Known limits, in
+  the gate's comment: camel case (`maxGrade`) passes, and `#` comments are
+  not read, which `TASKS.md` carries as an open thread. No behaviour
+  changed.
 - **Qodo's review of PR #5 is archived, and both findings have a
   disposition** (decisions log D27). No behaviour change.
   `reviews/2026-10-15-qodo-pr5.md` holds the "Code Review by Qodo" comment

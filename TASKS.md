@@ -82,7 +82,9 @@ Code executes against.
   - **neutrality** — fails if semantic vocabulary appears in identifiers or
     string literals under `spanweave/`: `severity`, `risk`, `secret`,
     `sensitive`, `sink`, `taint`, `vulnerab`, `attack`, `malicious`, `threat`,
-    `cost`, `price`, `usd`, `score`, `quality`, `hallucinat`. Encodes
+    `cost`, `price`, `usd`, `score`, `quality`, `hallucinat`; and, added
+    after the stranger's-trace close, `grade` at a word start only, so that
+    "degrade" stays legal (`tests/gates.py` says why). Encodes
     `CLAUDE.md` 1. Maintain the banned list in one place with a rationale
     comment; a deliberate exception requires a spec change.
   - **no-dialect-in-builder** — fails if a known dialect id (`openinference`,
@@ -13820,6 +13822,11 @@ prose until a stranger reads it.
   archived and both its findings dispositioned (*Qodo's review of PR #5 —
   2026-10-15* below). Qodo's review of the push after it and the merge
   remain.
+- **The neutrality gate does not read `#` comments.** It reads identifiers,
+  string literals and docstrings under `spanweave/`; `CLAUDE.md` invariant 1,
+  as Qodo applied it, covers comments too. Extending it needs word-boundary
+  matching for the existing list (`certainty` holds `taint`, `underscore`
+  holds `score`) and is its own change.
 - **The Phase 4 gate is not met.** The close recorded the zoo run as the
   third dialect having been run. That was the plan's mistake, carried from the
   series brief, and it is corrected after the close (decisions log
