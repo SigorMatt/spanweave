@@ -15,6 +15,17 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`make conformance` is pinned on its effective command** (cold review of
+  2026-10-15, R-14, R-15). No behaviour change. The pin read the Makefile's
+  text and dropped every word starting with `-`, so `--deselect=…` or
+  `--collect-only` appended to the recipe emptied the run with the pin
+  green, and a later `gates conformance:` rule replaced the recipe unseen.
+  `tests/test_doc_truth.py` now reads `make -n conformance` (what make would
+  run, overrides included, nothing executed), splits it as the shell would,
+  and holds it to pytest, to `CONFORMANCE_RUNS` exactly, and to options
+  listed by name in `CONFORMANCE_OPTIONS` (today `-v` alone); an
+  "overriding" warning from make is red. Each fault is planted in a test of
+  its own.
 - **`scope_runs` and the README's "as above" are tested on their own** (cold
   review of 2026-10-15, R-3). No behaviour change. The scope-contiguity test
   was only as good as `tests/zoo_census.py`'s `scope_runs`, which no test

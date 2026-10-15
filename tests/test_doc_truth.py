@@ -338,33 +338,115 @@ CONFORMANCE_RUNS = (
     "tests/test_zoo_readings.py",
 )
 
+# Every option the recipe passes to pytest today, by name. An option not on
+# this list is red whatever it does: `--deselect=…`, `--collect-only`, `-k`,
+# `--ignore`, `-p no:…` all change what the run executes while leaving the
+# files it names alone (cold review of 2026-10-15, R-14). Adding one is
+# changing the gate: say why in the same change.
+CONFORMANCE_OPTIONS = frozenset({"-v"})
 
-def makefile_recipe(target: str) -> list[str]:
-    """The tab-indented lines under `target:`, up to the first line that is not."""
-    lines = read("Makefile").splitlines()
-    head = re.compile(rf"{re.escape(target)}:")
-    starts = [i for i, line in enumerate(lines) if head.match(line)]
-    assert len(starts) == 1, f"Makefile defines {target!r} {len(starts)} times"
-    recipe: list[str] = []
-    for line in lines[starts[0] + 1 :]:
-        if not line.startswith("\t"):
-            break
-        recipe.append(line.strip())
-    return recipe
+
+def make_dry_run(target: str) -> tuple[list[str], str]:
+    """What `make -n target` prints: the command lines, and its stderr.
+
+    `make -n` prints the recipe make resolved -- a later rule overriding this
+    one included -- and executes nothing. Reading the Makefile's text instead
+    missed `gates conformance:` appended below the recipe, which make ran in
+    its place (cold review of 2026-10-15, R-15). `--no-print-directory`
+    because under `make check` this make is a sub-make, which would otherwise
+    print the directory it enters as if it were a command.
+    """
+    result = subprocess.run(
+        ["make", "-n", "--no-print-directory", target],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"make -n {target} exited {result.returncode}: {result.stderr}"
+    )
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    return lines, result.stderr
+
+
+def conformance_recipe_faults(lines: list[str], stderr: str) -> list[str]:
+    """Why the effective conformance recipe is not the gate, or nothing.
+
+    Matched on "overriding" because GNU make 4 says "overriding recipe" and
+    the 3.81 macOS ships says "overriding commands"; either means a rule
+    defined twice, and make runs the last one.
+    """
+    faults = []
+    if "overriding" in stderr:
+        faults.append(f"make warns of an overriding recipe: {stderr.strip()}")
+    if len(lines) != 1:
+        return [*faults, f"the recipe is not one command: {lines}"]
+    words = shlex.split(lines[0])
+    if words[:3] != ["uv", "run", "pytest"]:
+        return [*faults, f"the recipe does not run pytest: {lines[0]}"]
+    unlisted = sorted(
+        {word for word in words[3:] if word.startswith("-")} - CONFORMANCE_OPTIONS
+    )
+    if unlisted:
+        faults.append(
+            f"it passes pytest {unlisted}, which CONFORMANCE_OPTIONS does not "
+            f"list; an option can empty the run while the files stay the same"
+        )
+    runs = tuple(word for word in words[3:] if not word.startswith("-"))
+    if runs != CONFORMANCE_RUNS:
+        faults.append(f"it runs {runs}, not {CONFORMANCE_RUNS}")
+    return faults
 
 
 def test_make_conformance_runs_exactly_the_files_it_names_today():
-    recipe = makefile_recipe("conformance")
-    assert len(recipe) == 1, f"conformance's recipe is not one command: {recipe}"
-    words = recipe[0].split()
-    assert words[:3] == ["uv", "run", "pytest"], (
-        f"conformance does not run pytest: {recipe}"
+    faults = conformance_recipe_faults(*make_dry_run("conformance"))
+    assert not faults, (
+        f"make conformance is not the gate CI thinks it runs: {faults}. CI's "
+        f"conformance job is this recipe; a file left out of it, or an option "
+        f"that runs none of it, is a gate that stopped running."
     )
-    runs = tuple(word for word in words[3:] if not word.startswith("-"))
-    assert runs == CONFORMANCE_RUNS, (
-        f"make conformance runs {runs}, not {CONFORMANCE_RUNS}. CI's conformance "
-        f"job is this recipe; a file left out of it is a gate that stopped running."
-    )
+
+
+_RECIPE = "uv run pytest " + " ".join(CONFORMANCE_RUNS) + " -v"
+
+
+@pytest.mark.parametrize(
+    ("lines", "stderr"),
+    [
+        pytest.param(
+            [_RECIPE + " --deselect=tests/test_zoo_readings.py"], "", id="deselect="
+        ),
+        pytest.param([_RECIPE + " --collect-only"], "", id="collect-only"),
+        pytest.param([_RECIPE + " -k conformance"], "", id="k"),
+        pytest.param([_RECIPE + " --ignore=tests/test_zoo.py"], "", id="ignore="),
+        pytest.param([_RECIPE + " -p no:randomly"], "", id="p-no"),
+        pytest.param(
+            [_RECIPE.replace(" tests/test_zoo.py", "")], "", id="file-dropped"
+        ),
+        pytest.param([_RECIPE + " tests/test_zoo.py"], "", id="file-repeated"),
+        pytest.param(["true"], "", id="not-pytest"),
+        pytest.param([_RECIPE, "true"], "", id="two-commands"),
+        pytest.param(
+            [_RECIPE],
+            "Makefile:144: warning: overriding recipe for target 'conformance'\n",
+            id="override-gnu-make-4",
+        ),
+        pytest.param(
+            [_RECIPE],
+            "Makefile:144: warning: overriding commands for target `conformance'\n",
+            id="override-gnu-make-3.81",
+        ),
+    ],
+)
+def test_the_conformance_pin_is_red_on_a_planted_recipe(lines, stderr):
+    assert conformance_recipe_faults(lines, stderr)
+
+
+def test_the_conformance_pin_reads_the_recipe_as_the_shell_would():
+    # Quoting a path changes nothing the shell runs, so it changes nothing here.
+    quoted = _RECIPE.replace("tests/test_zoo.py", "'tests/test_zoo.py'")
+    assert conformance_recipe_faults([quoted], "") == []
+    assert conformance_recipe_faults([_RECIPE], "") == []
 
 
 def test_every_cli_subcommand_a_document_invokes_exists():
