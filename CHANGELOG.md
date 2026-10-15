@@ -15,6 +15,14 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The cold review of 2026-10-14 takes the dated name the earlier archives
+  carry** (decisions log: 2026-10-14, review). No behaviour change.
+  The archive was named after its scratch file; it is now
+  `reviews/2026-10-14-stranger.md`, renamed with its bytes unchanged
+  (`sha256`
+  `d65647e1bb14638fb0999f47f9a23bd62ffc734fcb4bd6528ca1c8aad46cf01a`), and
+  the path is updated here and in `TASKS.md`. The scratch drop keeps its
+  name, which `TASKS.md` records as provenance.
 - **The zoo README lists the census as it is and says which commit moves a
   count** (decisions log: 2026-10-14, review; R-12, R-28). No behaviour
   change. `fixtures/zoo/README.md` named the census's original seven counts;
@@ -27,7 +35,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   and manifests, not this README; nothing else under `fixtures/zoo/` changes.
 - **The cold review of 2026-10-14 is archived, and every finding has a
   disposition** (decisions log: 2026-10-14, review). No behaviour change.
-  `reviews/REVIEW-2026-10-14.md` is the review byte for byte, its `sha256`
+  `reviews/2026-10-14-stranger.md` is the review byte for byte, its `sha256`
   in `TASKS.md`, which gains a line per finding, R-1…R-28: the commit that
   answered it, or the reading it was read or declined with. Two parts were
   left open: R-12's census-field list and R-28's wording are edits to

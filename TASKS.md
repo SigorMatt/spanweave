@@ -14106,11 +14106,17 @@ from it.
 
 ### Cold review of the series — 2026-10-14
 
-`reviews/REVIEW-2026-10-14.md`, archived byte-for-byte from the untracked
-scratch drop, where the file has the same name directly under `patches/`:
-`cmp` silent, and `sha256`
+`reviews/2026-10-14-stranger.md`, archived byte-for-byte from the untracked
+scratch drop, where the file was named `REVIEW-2026-10-14.md` directly under
+`patches/`: `cmp` silent, and `sha256`
 `d65647e1bb14638fb0999f47f9a23bd62ffc734fcb4bd6528ca1c8aad46cf01a` on both
-sides.
+sides. `de3c516` archived it under the scratch name, as the decision stated
+it; the commit "reviews: the archive takes the dated name the earlier series
+use" renamed it to the dated name the earlier archives carry, bytes unchanged
+(the same `sha256`). `de3c516`'s message names the scratch name as the
+archive's and stays. As for the earlier archives, the scratch name and the
+whole digest are written here and not in the archive, which is kept
+byte-for-byte; the scratch name is provenance and not a path to open.
 
 A cold read of `fec7da2..7ea83aa`, thirty commits: one sub-agent per code
 commit (eleven), the nineteen others read directly, every parent derived as
