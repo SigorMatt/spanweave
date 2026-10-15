@@ -28,9 +28,11 @@ reference dangled.
 
 ## Cross-dialect notes
 
-In this graph s1 has no parent, so it is a root — which also makes it a root
-*sibling* for the temporal rule (`SPEC.md` §4.3). There is only one node here,
-so nothing follows from that, but the choice is visible in `clock_skew`.
+In this graph s1 has no `parent` edge, but it states a parent, and for the
+temporal rule a node's sibling group is the parent it **states** (`SPEC.md`
+§4.3). So s1 is ordered against nothing: it states an absent parent, which
+makes it neither a root nor a root's sibling, and no other node here states
+that parent. The case with company is `orphan_siblings`.
 
 ## Dialects
 

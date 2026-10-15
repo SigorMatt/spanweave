@@ -15,6 +15,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`orphan_parent`'s scenario text agrees with `SPEC.md` §4.3** (cold
+  review of 2026-10-15, R-10). No behaviour change; the canonical graph is
+  unchanged. `fixtures/conformance/orphan_parent/scenario.md` said the orphan
+  is a root and so a root sibling for the temporal rule, and that the choice
+  is visible in `clock_skew`. §4.3 groups a node by the parent it states,
+  never against a root, and `clock_skew` has no orphan. The text now says the
+  orphan states an absent parent, so it is neither a root nor a root's
+  sibling and is ordered against nothing, and points at `orphan_siblings` for
+  the case with company.
 - **An exception event's `null` attributes fold to none, in `SPEC.md`**
   (cold review of 2026-10-15, R-7). No behaviour change. `SPEC.md` §7's
   fold rule for an `exception` event now says that `attributes: null` is an
