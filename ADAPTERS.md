@@ -557,8 +557,8 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   `parent` edge the records carry. It does not say "one call", because no
   record says so.
 - **One instrumentor, an `llm` node nested in another** (S17). Z2's inner
-  `astream_chat` is the only child of an outer one (§7.4), and both ends come
-  from one scope, `llama_index`. This is not S6's case of stacked
+  `astream_chat` is the only child of an outer one (§7.4), and parent and child
+  come from one scope, `llama_index`. This is not S6's case of stacked
   instrumentors. The reading is the same: the `parent` edge the records state,
   and nothing more.
 - **No tool span in the zoo records a call id** (S9, S5). The LangChain (Z1,
@@ -570,10 +570,10 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   would hide this. On Z6 it would also need a spelling `tool.name` does not
   share (`Delegate work to coworker` against `delegate_work_to_coworker`, S9).
 - **Z4's `unpaired_call`** (S5). It does not follow from S1. The GenAI handler
-  exports no tool span at all, so the `book_table` call the second `llm` node
-  requests is fulfilled by no span in the input. With the root span built
-  (batch T1), the count is unchanged (§7.4; `tests/zoo_census.py`,
-  `_Z4_WHOLE`).
+  exports no tool span at all, so the `book_table` call an `llm` node requests
+  (`tests/test_zoo_readings.py` pins which) is fulfilled by no span in the
+  input. With the root span built (batch T1), the count is unchanged (§7.4;
+  `tests/zoo_census.py`, `_Z4_WHOLE`).
 - **`PROMPT`, `RERANKER`, `GUARDRAIL` and `EVALUATOR` are `unknown` by design**
   (S14). `NodeKind` is closed (`SPEC.md` §3.2). Each of these becomes an
   `unknown` node with an `unknown_span_kind` diagnostic, and the dialect's
@@ -593,7 +593,7 @@ root span is claimed by no adapter. It reports `unclaimed_record` and never
   `call_tool` siblings by `started_at`. That is an order and not a precedence:
   record order and end order are not used (§7.4; `tests/zoo_census.py`).
 - **Z6's real and recorded captures are shapes of one crew** (S22). This is
-  right. Each graph is what its run exported, and the census holds both
+  right. Each graph is what its run exported, and the census holds each
   (`tests/zoo_census.py`).
 
 ### 7.4 The numbers

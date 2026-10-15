@@ -25,8 +25,14 @@ and every reading that states a number or a set is held to the corpus here:
 * **The readings' numbers** (§7.4). Every number §7 states is a row of §7.4's
   table, which the test parses and re-derives from the zoo row by row; §7's
   prose states none of its own, and the test fails if it does. The corpus
-  numbers the CHANGELOG cites (captures, agents, envelope keys) are
-  `CORPUS`, held to the zoo and to every place the CHANGELOG states them.
+  numbers the CHANGELOG cites (captures, agents, envelope keys, dialects and
+  instrumentors, bodies, the OpenInference kinds `unknown` by design, Z4's
+  records) are `CORPUS`, held to the zoo and to every place the CHANGELOG
+  states them, in digits or in words. Both number guards are tripwires for
+  counts, not parsers of English: the prose guard reads digits, number words
+  but "one", tens, ordinals, roman numerals and the common count words; the
+  CHANGELOG guard reads digits, number words, tens and ordinals. The readings
+  pin the facts.
 * **The readings' facts** (§7.3): the `llm`-in-`llm` nesting and the scopes
   and names at each end (S6, S17), the absence of any call id on a tool span
   (S9, S5), the `llm` node's normalized attributes (S20), the OpenInference
@@ -349,15 +355,43 @@ TEMPORAL = spanweave.EdgeKind.TEMPORAL
 NUMBERS = re.compile(r"^### 7\.4 ", re.MULTILINE)
 #: `| number | where | value |`
 NUMBER_ROW = re.compile(r"^\| (.+?) \| (.+?) \| (\d+) \|$")
-#: The corpus numbers the CHANGELOG cites: noun -> number. §7.4 states each
-#: too, and `test_adapters_md_s_numbers_are_the_zoo_s` derives them.
-CORPUS = {"captures": 12, "agents": 6, "OTLP envelope keys": 6}
-#: The number words a document spells a count in.
+#: The corpus numbers the CHANGELOG cites: the phrase it cites them in, each
+#: `{}` a number, -> the numbers. `test_adapters_md_s_numbers_are_the_zoo_s`
+#: derives every one from the zoo (`_corpus`); §7.4 states the first three too.
+CORPUS: dict[str, tuple[int, ...]] = {
+    "{} captures": (12,),
+    "{} agents": (6,),
+    "{} OTLP envelope keys": (6,),
+    "{} dialects, {} instrumentors": (2, 6),
+    "{} bodies": (29,),
+    "{} OpenInference kinds": (4,),
+    # Z4's audited records, and the root span beside them (`tests/zoo_census.py`).
+    "Z4 graph is the {} records the receiver routed; the {}": (4, 5),
+}
+#: The number words a document spells a count in, each at its value; the tens,
+#: which compound with a unit ("twenty-nine"); and the ordinals, from "first".
 WORDS = [
     *("zero", "one", "two", "three", "four", "five", "six", "seven", "eight"),
     *("nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen"),
     *("sixteen", "seventeen", "eighteen", "nineteen", "twenty"),
 ]
+TENS = {
+    **{"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60},
+    **{"seventy": 70, "eighty": 80, "ninety": 90},
+}
+ORDINALS = [
+    *("first", "second", "third", "fourth", "fifth", "sixth", "seventh"),
+    *("eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth"),
+    *("fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth"),
+    *("nineteenth", "twentieth"),
+]
+#: A number as a document writes one: digits ("1,000"), a tens word and its
+#: unit ("twenty-nine"), a number word, an ordinal.
+NUMBER = (
+    r"\d[\d,]*\d|\d"
+    rf"|(?:{'|'.join(TENS)})(?:-(?:{'|'.join(WORDS[1:10])}))?"
+    rf"|{'|'.join(sorted(WORDS + ORDINALS, key=len, reverse=True))}"
+)
 CHANGELOG_MD = ROOT / "CHANGELOG.md"
 
 
@@ -446,14 +480,37 @@ def _numbers() -> dict[tuple[str, str], int]:
     return rows
 
 
-def _corpus() -> dict[str, int]:
-    """The corpus numbers, from the zoo: captures, agents, and the envelope
-    keys T3/T4 took out of `unmapped_attributes` that its records carry."""
+def _corpus() -> dict[str, tuple[int, ...]]:
+    """The corpus numbers, from the zoo, keyed as `CORPUS` is: its captures,
+    agents and bodies; the envelope keys T3/T4 took out of
+    `unmapped_attributes` that its records carry; the dialects that claim its
+    records and the instrumentors (scopes) of the records they claim; the
+    OpenInference kinds that are `unknown` by design (`UNKNOWN_KINDS`, held to
+    §7.3 and the adapter below; the zoo itself reports only `PROMPT`); and Z4's
+    records the audit fed its build, then every record of the capture."""
     _, carried = _observed()
+    claimed = [
+        node
+        for _, graph in _graphs()
+        for node in graph.nodes()
+        if node.provenance.adapter_id is not None
+    ]
+    z4 = [capture for capture in CAPTURES if _project(capture) == "Z4"]
+    (routed,) = {len(zoo_census.audit_feed(capture)) for capture in z4}
+    (whole,) = {len(zoo_census.records(capture)) for capture in z4}
     return {
-        "captures": len(CAPTURES),
-        "agents": len({_project(capture) for capture in CAPTURES}),
-        "OTLP envelope keys": len({key for keys in carried.values() for key in keys}),
+        "{} captures": (len(CAPTURES),),
+        "{} agents": (len({_project(capture) for capture in CAPTURES}),),
+        "{} OTLP envelope keys": (
+            len({key for keys in carried.values() for key in keys}),
+        ),
+        "{} dialects, {} instrumentors": (
+            len({node.provenance.adapter_id for node in claimed}),
+            len({_scope(node) for node in claimed}),
+        ),
+        "{} bodies": (sum(len(zoo_census.bodies(capture)) for capture in CAPTURES),),
+        "{} OpenInference kinds": (len(UNKNOWN_KINDS),),
+        "Z4 graph is the {} records the receiver routed; the {}": (routed, whole),
     }
 
 
@@ -470,9 +527,9 @@ def test_adapters_md_s_numbers_are_the_zoo_s():
     corpus = _corpus()
     assert corpus == CORPUS
     by_name = {
-        "captures": corpus["captures"],
-        "agents": corpus["agents"],
-        "OTLP envelope keys mapped at T3/T4": corpus["OTLP envelope keys"],
+        "captures": corpus["{} captures"][0],
+        "agents": corpus["{} agents"][0],
+        "OTLP envelope keys mapped at T3/T4": corpus["{} OTLP envelope keys"][0],
     }
     graphs = _graphs()
     for (number, where), value in sorted(documented.items()):
@@ -488,14 +545,39 @@ def test_adapters_md_s_numbers_are_the_zoo_s():
         assert held == [value] * len(held), (number, where, held)
 
 
+# The two guards below are tripwires for counts, not parsers of English. They
+# read digits, number words, tens, ordinals and the common count words; a
+# count said any other way ("the only child", "from one scope") passes them.
+# What holds a fact is the reading that pins it: §7.4's rows, `CORPUS`, and
+# the named-fact tests further down.
+
 #: What §7's prose may carry that reads like a number and is a name: a
-#: backticked span, a section (§3.7), a probe, project or batch (S5, Z1, T3),
-#: a decision's option.
-NAMES = re.compile(r"`[^`]*`|§\d+(?:\.\d+)*|\b[SZT]\d+\b|\boption \d+\b")
-#: A number in prose: a digit, or a count spelled out. "one" is not one here:
-#: §7 uses it as a pronoun and an article ("one nested in the other", "one
-#: crew"), never as a count it cites.
-SPELLED = re.compile(r"\d|\b(?:" + "|".join(w for w in WORDS if w != "one") + r")\b")
+#: backticked span other than a bare number, a section (§3.7), a probe,
+#: project or batch (S5, Z1, T3), a decision's option with its batch
+#: ("batch T3, option 3").
+NAMES = re.compile(r"`[^`]*`|§\d+(?:\.\d+)*|\b[SZT]\d+\b|\bbatch T\d+, option \d+\b")
+#: A backticked span that is a number and nothing else (`48`).
+BACKTICKED_NUMBER = re.compile(r"`\s*\d[\d.,]*\s*`")
+#: A number in prose: a digit, a number word, a tens word, an ordinal, or a
+#: count word. "one" is not one here: §7 uses it as a pronoun and an article
+#: ("one nested in the other", "one crew"), never as a count it cites; "the
+#: count is still one" passes, by this choice.
+COUNT_WORDS = ("dozen", "dozens", "pair", "pairs", "both", "single", "once")
+COUNT_WORDS += ("twice", "half", "halves")
+SPELLED = re.compile(
+    r"\d|\b(?:"
+    + "|".join([w for w in WORDS if w != "one"] + [*TENS, *ORDINALS, *COUNT_WORDS])
+    + r")\b"
+)
+#: A roman numeral up to XX, read before the prose is lowered.
+ROMAN = re.compile(r"\b(?:XX|X?(?:IX|IV|VI{0,3}|I{1,3})|X)\b")
+
+
+def _numbers_in_prose(prose: str) -> list[str]:
+    """Every number `prose` states once names are taken out."""
+    stated = BACKTICKED_NUMBER.findall(prose)
+    unnamed = NAMES.sub("", prose)
+    return stated + ROMAN.findall(unnamed) + SPELLED.findall(unnamed.lower())
 
 
 def test_adapters_md_s_prose_states_no_number_of_its_own():
@@ -505,19 +587,129 @@ def test_adapters_md_s_prose_states_no_number_of_its_own():
         for line in _section().splitlines()
         if not line.startswith("|")
     )
-    stated = SPELLED.findall(NAMES.sub("", prose).lower())
-    assert stated == [], "a number in ADAPTERS.md §7's prose, not in §7.4"
+    stated = _numbers_in_prose(prose)
+    assert stated == [], f"a number in ADAPTERS.md §7's prose, not in §7.4: {stated}"
+
+
+#: R-11's edits, each a count the prose guard let through (cold review of
+#: 2026-10-15, R-11). "the count is still one" is not here: "one" is excluded
+#: by design (`SPELLED`).
+COUNTS_IN_PROSE = [
+    "a dozen captures",
+    "both captures",
+    "a single scope",
+    "once per capture",
+    "twice per call",
+    "a pair of scopes",
+    "half the nodes",
+    "thirty spans",
+    "twenty-five spans",
+    "XII captures",
+    "the first llm node",
+    "`48`",
+    "option 25 nested",
+    "1,000 spans",
+    "Z3 holds 25",
+]
+#: Names and the excluded "one", which the guard lets through.
+NAMES_IN_PROSE = [
+    "the count is still one",
+    "Z1 has one unpaired call",
+    "(batch T3, option 3)",
+    "§7.4",
+    "Z4, S16, T1",
+    "`llama_index`",
+    "`gen_ai.request.model`",
+    "Instrumentors stacked on one client",
+    "PROMPT, RERANKER, GUARDRAIL",
+]
+
+
+@pytest.mark.parametrize("prose", COUNTS_IN_PROSE)
+def test_the_prose_guard_reads_a_count(prose):
+    assert _numbers_in_prose(prose), prose
+
+
+@pytest.mark.parametrize("prose", NAMES_IN_PROSE)
+def test_the_prose_guard_lets_a_name_through(prose):
+    assert _numbers_in_prose(prose) == [], prose
+
+
+def _count(number: str) -> int:
+    """`NUMBER`'s value."""
+    number = number.lower().replace(",", "")
+    if number.isdigit():
+        return int(number)
+    tens, _, unit = number.partition("-")
+    if tens in TENS:
+        return TENS[tens] + (WORDS.index(unit) if unit else 0)
+    if number in ORDINALS:
+        return ORDINALS.index(number) + 1
+    return WORDS.index(number)
+
+
+def _changelog_faults(changelog: str) -> list[str]:
+    """Each `CORPUS` phrase the text cites with other numbers, or never cites."""
+    text = " ".join(changelog.split())
+    faults = []
+    for phrase, numbers in CORPUS.items():
+        pattern = rf"({NUMBER})".join(re.escape(part) for part in phrase.split("{}"))
+        stated = [
+            tuple(_count(number) for number in match.groups())
+            for match in re.finditer(rf"\b{pattern}\b", text, re.IGNORECASE)
+        ]
+        if not stated:
+            faults.append(f"CHANGELOG cites no {phrase!r}")
+        faults += [
+            f"{phrase!r} cited as {cited}" for cited in stated if cited != numbers
+        ]
+    return faults
 
 
 def test_the_changelog_states_the_corpus_numbers_the_test_holds():
-    """CHANGELOG cites the zoo's captures, agents and envelope keys by number:
-    each place it does, the number is `CORPUS`'s (R-18)."""
+    """CHANGELOG cites the corpus numbers `CORPUS` holds: each place it does,
+    in digits or in words, the number is `CORPUS`'s (R-18; cold review of
+    2026-10-15, R-13)."""
+    assert _changelog_faults(CHANGELOG_MD.read_text(encoding="utf-8")) == []
+
+
+#: R-13's edit, and one per `CORPUS` phrase: each a number changed, which the
+#: guard reads whether it is written in digits or in words.
+CHANGELOG_CHANGED = [
+    ("the zoo's twelve captures", "the zoo's 11 captures"),
+    ("the zoo's twelve captures", "the zoo's thirteen captures"),
+    ("six agents", "seven agents"),
+    ("six OTLP envelope keys", "7 OTLP envelope keys"),
+    ("two dialects, six instrumentors", "two dialects, seven instrumentors"),
+    ("two dialects, six instrumentors", "three dialects, six instrumentors"),
+    ("29 bodies", "30 bodies"),
+    ("29 bodies", "twenty-eight bodies"),
+    ("the four OpenInference kinds", "the five OpenInference kinds"),
+    ("Z4 graph is the four records", "Z4 graph is the 5 records"),
+    ("routed; the fifth,", "routed; the sixth,"),
+]
+#: The same numbers spelled the other way, which the guard reads as the same.
+CHANGELOG_RESPELLED = [
+    ("the zoo's twelve captures", "the zoo's 12 captures"),
+    ("six OTLP envelope keys", "6 OTLP envelope keys"),
+    ("29 bodies", "twenty-nine bodies"),
+]
+
+
+def _changelog_with(old: str, new: str) -> str:
     changelog = " ".join(CHANGELOG_MD.read_text(encoding="utf-8").split())
-    words = "|".join(WORDS)
-    for noun, number in CORPUS.items():
-        stated = re.findall(rf"\b({words}) {noun}\b", changelog, re.IGNORECASE)
-        assert stated, f"CHANGELOG cites no number of {noun}"
-        assert {word.lower() for word in stated} == {WORDS[number]}, noun
+    assert old in changelog, old
+    return changelog.replace(old, new)
+
+
+@pytest.mark.parametrize(("old", "new"), CHANGELOG_CHANGED)
+def test_the_changelog_guard_reads_a_corpus_number_changed(old, new):
+    assert _changelog_faults(_changelog_with(old, new)), new
+
+
+@pytest.mark.parametrize(("old", "new"), CHANGELOG_RESPELLED)
+def test_the_changelog_guard_reads_digits_and_words_alike(old, new):
+    assert _changelog_faults(_changelog_with(old, new)) == [], new
 
 
 # --- The readings' facts (ADAPTERS.md §7.3) ----------------------------------

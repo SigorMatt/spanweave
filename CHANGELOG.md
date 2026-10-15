@@ -15,6 +15,26 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The prose and CHANGELOG number guards read digits, tens and the common
+  count words** (cold review of 2026-10-15, R-11, R-13). No behaviour change.
+  `tests/test_zoo_readings.py`'s guard on `ADAPTERS.md` §7's prose read digits
+  and the number words up to twenty, so a dozen, a pair, both, single, once,
+  twice, half, tens above twenty, ordinals, roman numerals, a backticked
+  number and "option" followed by any number all passed. It now reads each;
+  an option is a name only with its batch ("batch T3, option 3"). "one" stays
+  unread, by design: §7 uses it as a pronoun and an article. Three phrases in
+  §7 tripped the stronger guard and are reworded, with no fact lost: the ends
+  of Z2's nested edge are "parent and child", the census "holds each" of Z6's
+  graphs, and Z4's `book_table` call is requested by "an `llm` node", which
+  `test_z4_s_second_llm_node_requests_book_table` pins. The guard on this
+  file read spelled numbers only; it now reads digits too, and holds more of
+  the corpus numbers it cites: the zoo's two dialects, six instrumentors, its
+  29 bodies, the four OpenInference kinds `unknown` by design, and Z4's four
+  audited records and the fifth. Each is a `CORPUS` entry, derived from the
+  zoo, except the kinds, which are held to §7.3 and the adapter (the zoo
+  reports only `PROMPT`). Both
+  guards are tripwires for counts, not parsers of English; the readings pin
+  the facts.
 - **`orphan_parent`'s scenario text agrees with `SPEC.md` §4.3** (cold
   review of 2026-10-15, R-10). No behaviour change; the canonical graph is
   unchanged. `fixtures/conformance/orphan_parent/scenario.md` said the orphan
