@@ -1,0 +1,1608 @@
+
+òÒ
+Õ
+"
+telemetry.sdk.language
+python
+%
+telemetry.sdk.name
+opentelemetry
+!
+telemetry.sdk.version
+1.45.1
+=
+service.instance.id&
+$6b8c1f23-a725-4c42-965f-a927aa689647
+
+service.name
+echo-planner‹Î
+.
+$openinference.instrumentation.openai0.1.65œN
+zì—Óo¬é5Öë¬ŒYÌÓü¡†®"/Ÿ+tiòŸ*ChatCompletion09™=m=Ë›AäÜ=Ë›JS
+Bllm.input_messages.12.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.12.message.tool_calls.0.tool_call.function.arguments!
+{"item": "washers", "qty": 150}J,
+"llm.input_messages.13.message.role
+toolJN
+*llm.input_messages.13.message.tool_call_id 
+chatcmpl-tool-833be617f70108e4Ju
+%llm.input_messages.13.message.contentL
+J{"order_id": "PO-0003", "item": "washers", "qty": 150, "status": "placed"}J1
+"llm.input_messages.14.message.role
+	assistantJ[
+7llm.input_messages.14.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJW
+Bllm.input_messages.14.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.14.message.tool_calls.0.tool_call.function.arguments
+{"item": "hinges"}J,
+"llm.input_messages.15.message.role
+toolJN
+*llm.input_messages.15.message.tool_call_id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJL
+%llm.input_messages.15.message.content#
+!{"item": "hinges", "on_hand": 12}J1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.0.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}J1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.0.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.0.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656JM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.0.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1Ju
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}J1
+"llm.input_messages.22.message.role
+	assistantJ[
+7llm.input_messages.22.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JW
+Bllm.input_messages.22.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.22.message.tool_calls.0.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715JM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}J1
+"llm.input_messages.24.message.role
+	assistantJ[
+7llm.input_messages.24.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JS
+Bllm.input_messages.24.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.24.message.tool_calls.0.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126Jt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}J1
+"llm.input_messages.26.message.role
+	assistantJ[
+7llm.input_messages.26.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-be1611477e12594bJW
+Bllm.input_messages.26.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.26.message.tool_calls.0.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}J1
+"llm.input_messages.28.message.role
+	assistantJ[
+7llm.input_messages.28.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJS
+Bllm.input_messages.28.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.28.message.tool_calls.0.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}J1
+"llm.input_messages.30.message.role
+	assistantJ[
+7llm.input_messages.30.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJW
+Bllm.input_messages.30.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.30.message.tool_calls.0.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}J1
+"llm.input_messages.32.message.role
+	assistantJ[
+7llm.input_messages.32.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JS
+Bllm.input_messages.32.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.32.message.tool_calls.0.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353Jt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}J1
+"llm.input_messages.34.message.role
+	assistantJ[
+7llm.input_messages.34.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJW
+Bllm.input_messages.34.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.34.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}J1
+"llm.input_messages.36.message.role
+	assistantJ[
+7llm.input_messages.36.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJS
+Bllm.input_messages.36.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.36.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}J1
+"llm.input_messages.38.message.role
+	assistantJ[
+7llm.input_messages.38.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJW
+Bllm.input_messages.38.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.38.message.tool_calls.0.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}J1
+"llm.input_messages.40.message.role
+	assistantJ[
+7llm.input_messages.40.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JS
+Bllm.input_messages.40.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.40.message.tool_calls.0.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1Jt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}J1
+"llm.input_messages.42.message.role
+	assistantJ[
+7llm.input_messages.42.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-af853086bdacf831JW
+Bllm.input_messages.42.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.42.message.tool_calls.0.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831JM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}J1
+"llm.input_messages.44.message.role
+	assistantJ[
+7llm.input_messages.44.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JS
+Bllm.input_messages.44.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.44.message.tool_calls.0.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125Ju
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}J6
+llm.model_name$
+"Qwen/Qwen3-235B-A22B-Instruct-2507J
+llm.token_count.total˝J
+llm.token_count.promptÁJ 
+llm.token_count.completionJ0
+)llm.token_count.prompt_details.cache_readJ1
+"llm.output_messages.0.message.role
+	assistantJ[
+7llm.output_messages.0.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JW
+Bllm.output_messages.0.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.output_messages.0.message.tool_calls.0.tool_call.function.arguments
+{"item": "pulleys"}J!
+llm.finish_reason
+
+tool_callsJ 
+openinference.span.kind
+LLMP2zÖ   •N
+zì—Óo¬é5Öë¬ŒYe&æÉ≥I´Ä"À,`ô&‘*ChatCompletion09_hüà=Ë›A8~¢=Ë›JW
+Bllm.input_messages.14.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.14.message.tool_calls.0.tool_call.function.arguments
+{"item": "hinges"}J,
+"llm.input_messages.15.message.role
+toolJN
+*llm.input_messages.15.message.tool_call_id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJL
+%llm.input_messages.15.message.content#
+!{"item": "hinges", "on_hand": 12}J1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.0.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}J1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.0.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.0.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656JM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.0.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1Ju
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}J1
+"llm.input_messages.22.message.role
+	assistantJ[
+7llm.input_messages.22.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JW
+Bllm.input_messages.22.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.22.message.tool_calls.0.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715JM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}J1
+"llm.input_messages.24.message.role
+	assistantJ[
+7llm.input_messages.24.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JS
+Bllm.input_messages.24.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.24.message.tool_calls.0.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126Jt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}J1
+"llm.input_messages.26.message.role
+	assistantJ[
+7llm.input_messages.26.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-be1611477e12594bJW
+Bllm.input_messages.26.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.26.message.tool_calls.0.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}J1
+"llm.input_messages.28.message.role
+	assistantJ[
+7llm.input_messages.28.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJS
+Bllm.input_messages.28.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.28.message.tool_calls.0.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}J1
+"llm.input_messages.30.message.role
+	assistantJ[
+7llm.input_messages.30.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJW
+Bllm.input_messages.30.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.30.message.tool_calls.0.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}J1
+"llm.input_messages.32.message.role
+	assistantJ[
+7llm.input_messages.32.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JS
+Bllm.input_messages.32.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.32.message.tool_calls.0.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353Jt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}J1
+"llm.input_messages.34.message.role
+	assistantJ[
+7llm.input_messages.34.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJW
+Bllm.input_messages.34.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.34.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}J1
+"llm.input_messages.36.message.role
+	assistantJ[
+7llm.input_messages.36.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJS
+Bllm.input_messages.36.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.36.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}J1
+"llm.input_messages.38.message.role
+	assistantJ[
+7llm.input_messages.38.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJW
+Bllm.input_messages.38.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.38.message.tool_calls.0.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}J1
+"llm.input_messages.40.message.role
+	assistantJ[
+7llm.input_messages.40.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JS
+Bllm.input_messages.40.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.40.message.tool_calls.0.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1Jt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}J1
+"llm.input_messages.42.message.role
+	assistantJ[
+7llm.input_messages.42.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-af853086bdacf831JW
+Bllm.input_messages.42.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.42.message.tool_calls.0.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831JM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}J1
+"llm.input_messages.44.message.role
+	assistantJ[
+7llm.input_messages.44.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JS
+Bllm.input_messages.44.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.44.message.tool_calls.0.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125Ju
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}J1
+"llm.input_messages.46.message.role
+	assistantJ[
+7llm.input_messages.46.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JW
+Bllm.input_messages.46.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.46.message.tool_calls.0.tool_call.function.arguments
+{"item": "pulleys"}J,
+"llm.input_messages.47.message.role
+toolJN
+*llm.input_messages.47.message.tool_call_id 
+chatcmpl-tool-b0238d64b7107523JL
+%llm.input_messages.47.message.content#
+!{"item": "pulleys", "on_hand": 2}J6
+llm.model_name$
+"Qwen/Qwen3-235B-A22B-Instruct-2507J
+llm.token_count.totalµJ
+llm.token_count.promptòJ 
+llm.token_count.completionJ0
+)llm.token_count.prompt_details.cache_readJ1
+"llm.output_messages.0.message.role
+	assistantJ[
+7llm.output_messages.0.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b87f8c9865f654d5JS
+Bllm.output_messages.0.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.output_messages.0.message.tool_calls.0.tool_call.function.arguments 
+{"item": "pulleys", "qty": 10}J!
+llm.finish_reason
+
+tool_callsJ 
+openinference.span.kind
+LLMP9zÖ   ØN
+zì—Óo¬é5Öë¬ŒY´ƒVΩÏ`"õ£ÇŸÉ„wÃ*ChatCompletion09˜¿‡£=Ë›A†drπ=Ë›J1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.0.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}J1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.0.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.0.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656JM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.0.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1Ju
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}J1
+"llm.input_messages.22.message.role
+	assistantJ[
+7llm.input_messages.22.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JW
+Bllm.input_messages.22.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.22.message.tool_calls.0.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715JM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}J1
+"llm.input_messages.24.message.role
+	assistantJ[
+7llm.input_messages.24.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JS
+Bllm.input_messages.24.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.24.message.tool_calls.0.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126Jt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}J1
+"llm.input_messages.26.message.role
+	assistantJ[
+7llm.input_messages.26.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-be1611477e12594bJW
+Bllm.input_messages.26.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.26.message.tool_calls.0.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}J1
+"llm.input_messages.28.message.role
+	assistantJ[
+7llm.input_messages.28.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJS
+Bllm.input_messages.28.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.28.message.tool_calls.0.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}J1
+"llm.input_messages.30.message.role
+	assistantJ[
+7llm.input_messages.30.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJW
+Bllm.input_messages.30.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.30.message.tool_calls.0.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}J1
+"llm.input_messages.32.message.role
+	assistantJ[
+7llm.input_messages.32.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JS
+Bllm.input_messages.32.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.32.message.tool_calls.0.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353Jt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}J1
+"llm.input_messages.34.message.role
+	assistantJ[
+7llm.input_messages.34.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJW
+Bllm.input_messages.34.message.tool_calls.0.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.34.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}J1
+"llm.input_messages.36.message.role
+	assistantJ[
+7llm.input_messages.36.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJS
+Bllm.input_messages.36.message.tool_calls.0.tool_call.function.name
+place_orderJj
+Gllm.input_messages.36.message.tool_calls.0.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}J1
+"llm.input_messages.38.message.role
+	assistantJ[
+7llm.input_messages.38.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJW
+Bllm.input_messages.38.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.38.message.tool_calls.0.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}J1
+"llm.input_messages.40.message.role
+	assistantJ[
+7llm.input_messages.40.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JS
+Bllm.input_messages.40.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.40.message.tool_calls.0.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1Jt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}J1
+"llm.input_messages.42.message.role
+	assistantJ[
+7llm.input_messages.42.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-af853086bdacf831JW
+Bllm.input_messages.42.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.42.message.tool_calls.0.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831JM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}J1
+"llm.input_messages.44.message.role
+	assistantJ[
+7llm.input_messages.44.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JS
+Bllm.input_messages.44.message.tool_calls.0.tool_call.function.name
+place_orderJl
+Gllm.input_messages.44.message.tool_calls.0.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125Ju
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}J1
+"llm.input_messages.46.message.role
+	assistantJ[
+7llm.input_messages.46.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JW
+Bllm.input_messages.46.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.input_messages.46.message.tool_calls.0.tool_call.function.arguments
+{"item": "pulleys"}J,
+"llm.input_messages.47.message.role
+toolJN
+*llm.input_messages.47.message.tool_call_id 
+chatcmpl-tool-b0238d64b7107523JL
+%llm.input_messages.47.message.content#
+!{"item": "pulleys", "on_hand": 2}J1
+"llm.input_messages.48.message.role
+	assistantJ[
+7llm.input_messages.48.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b87f8c9865f654d5JS
+Bllm.input_messages.48.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.input_messages.48.message.tool_calls.0.tool_call.function.arguments 
+{"item": "pulleys", "qty": 10}J,
+"llm.input_messages.49.message.role
+toolJN
+*llm.input_messages.49.message.tool_call_id 
+chatcmpl-tool-b87f8c9865f654d5Jt
+%llm.input_messages.49.message.contentK
+I{"order_id": "PO-0012", "item": "pulleys", "qty": 10, "status": "placed"}J6
+llm.model_name$
+"Qwen/Qwen3-235B-A22B-Instruct-2507J
+llm.token_count.totalÔJ
+llm.token_count.prompt‚J 
+llm.token_count.completionJ0
+)llm.token_count.prompt_details.cache_read∞J1
+"llm.output_messages.0.message.role
+	assistantJm
+%llm.output_messages.0.message.contentD
+BRestock orders have been successfully placed for all listed items.J
+llm.finish_reason
+stopJ 
+openinference.span.kind
+LLMP>zÖ   ‰É
+4
++openinference.instrumentation.openai_agents2.5.3πQ
+zì—Óo¬é5Öë¬ŒY/Ÿ+tiòŸ"±j@d≤Ò*
+generation09 !™k=Ë›A πéÜ=Ë›J1
+"llm.input_messages.12.message.role
+	assistantJ[
+7llm.input_messages.12.message.tool_calls.5.tool_call.id 
+chatcmpl-tool-833be617f70108e4JS
+Bllm.input_messages.12.message.tool_calls.5.tool_call.function.name
+place_orderJl
+Gllm.input_messages.12.message.tool_calls.5.tool_call.function.arguments!
+{"item": "washers", "qty": 150}J,
+"llm.input_messages.13.message.role
+toolJu
+%llm.input_messages.13.message.contentL
+J{"order_id": "PO-0003", "item": "washers", "qty": 150, "status": "placed"}JN
+*llm.input_messages.13.message.tool_call_id 
+chatcmpl-tool-833be617f70108e4J1
+"llm.input_messages.14.message.role
+	assistantJ[
+7llm.input_messages.14.message.tool_calls.6.tool_call.id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJW
+Bllm.input_messages.14.message.tool_calls.6.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.14.message.tool_calls.6.tool_call.function.arguments
+{"item": "hinges"}J,
+"llm.input_messages.15.message.role
+toolJL
+%llm.input_messages.15.message.content#
+!{"item": "hinges", "on_hand": 12}JN
+*llm.input_messages.15.message.tool_call_id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJ1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.7.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.7.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.7.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}JN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJ1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.8.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.8.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.8.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}JN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.9.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.9.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.9.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJu
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}JN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1J1
+"llm.input_messages.22.message.role
+	assistantJ\
+8llm.input_messages.22.message.tool_calls.10.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JX
+Cllm.input_messages.22.message.tool_calls.10.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.22.message.tool_calls.10.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}JN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715J1
+"llm.input_messages.24.message.role
+	assistantJ\
+8llm.input_messages.24.message.tool_calls.11.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JT
+Cllm.input_messages.24.message.tool_calls.11.tool_call.function.name
+place_orderJl
+Hllm.input_messages.24.message.tool_calls.11.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}JN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126J1
+"llm.input_messages.26.message.role
+	assistantJ\
+8llm.input_messages.26.message.tool_calls.12.tool_call.id 
+chatcmpl-tool-be1611477e12594bJX
+Cllm.input_messages.26.message.tool_calls.12.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.26.message.tool_calls.12.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}JN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJ1
+"llm.input_messages.28.message.role
+	assistantJ\
+8llm.input_messages.28.message.tool_calls.13.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJT
+Cllm.input_messages.28.message.tool_calls.13.tool_call.function.name
+place_orderJl
+Hllm.input_messages.28.message.tool_calls.13.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}JN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJ1
+"llm.input_messages.30.message.role
+	assistantJ\
+8llm.input_messages.30.message.tool_calls.14.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJX
+Cllm.input_messages.30.message.tool_calls.14.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.30.message.tool_calls.14.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}JN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJ1
+"llm.input_messages.32.message.role
+	assistantJ\
+8llm.input_messages.32.message.tool_calls.15.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JT
+Cllm.input_messages.32.message.tool_calls.15.tool_call.function.name
+place_orderJl
+Hllm.input_messages.32.message.tool_calls.15.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}JN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353J1
+"llm.input_messages.34.message.role
+	assistantJ\
+8llm.input_messages.34.message.tool_calls.16.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJX
+Cllm.input_messages.34.message.tool_calls.16.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.34.message.tool_calls.16.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}JN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJ1
+"llm.input_messages.36.message.role
+	assistantJ\
+8llm.input_messages.36.message.tool_calls.17.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJT
+Cllm.input_messages.36.message.tool_calls.17.tool_call.function.name
+place_orderJk
+Hllm.input_messages.36.message.tool_calls.17.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}JN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJ1
+"llm.input_messages.38.message.role
+	assistantJ\
+8llm.input_messages.38.message.tool_calls.18.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJX
+Cllm.input_messages.38.message.tool_calls.18.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.38.message.tool_calls.18.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}JN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJ1
+"llm.input_messages.40.message.role
+	assistantJ\
+8llm.input_messages.40.message.tool_calls.19.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JT
+Cllm.input_messages.40.message.tool_calls.19.tool_call.function.name
+place_orderJl
+Hllm.input_messages.40.message.tool_calls.19.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}JN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1J1
+"llm.input_messages.42.message.role
+	assistantJ\
+8llm.input_messages.42.message.tool_calls.20.tool_call.id 
+chatcmpl-tool-af853086bdacf831JX
+Cllm.input_messages.42.message.tool_calls.20.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.42.message.tool_calls.20.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}JN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831J1
+"llm.input_messages.44.message.role
+	assistantJ\
+8llm.input_messages.44.message.tool_calls.21.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JT
+Cllm.input_messages.44.message.tool_calls.21.tool_call.function.name
+place_orderJm
+Hllm.input_messages.44.message.tool_calls.21.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJu
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}JN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125J∫
+output.value©
+¶[{"content": null, "refusal": null, "role": "assistant", "annotations": null, "audio": null, "function_call": null, "tool_calls": [{"id": "chatcmpl-tool-b0238d64b7107523", "function": {"arguments": "{\"item\": \"pulleys\"}", "name": "check_inventory"}, "type": "function"}], "reasoning": null}]J&
+output.mime_type
+application/jsonJ1
+"llm.output_messages.0.message.role
+	assistantJ[
+7llm.output_messages.0.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JW
+Bllm.output_messages.0.message.tool_calls.0.tool_call.function.name
+check_inventoryJ`
+Gllm.output_messages.0.message.tool_calls.0.tool_call.function.arguments
+{"item": "pulleys"}J
+llm.token_count.promptÁJ 
+llm.token_count.completionJ 
+openinference.span.kind
+LLMP-zÖ   —
+zì—Óo¬é5Öë¬ŒYÉ1Ê%°≥9"±j@d≤Ò*check_inventory09 —ÔÜ=Ë›A ïá=Ë›J
+	tool.name
+check_inventoryJ$
+input.value
+{"item": "pulleys"}J%
+input.mime_type
+application/jsonJ3
+output.value#
+!{"item": "pulleys", "on_hand": 2}J&
+output.mime_type
+application/jsonJN
+tool.description:
+8Return the number of units of an item currently on hand.Jº
+tool.parameters®
+•{"properties": {"item": {"title": "Item", "type": "string"}}, "required": ["item"], "title": "check_inventory_args", "type": "object", "additionalProperties": false}J!
+openinference.span.kind
+TOOLzÖ   n
+zì—Óo¬é5Öë¬ŒY±j@d≤Ò"hçáH≠*turn09 éàk=Ë›A òá=Ë›J"
+openinference.span.kind
+CHAINzÖ   õQ
+zì—Óo¬é5Öë¬ŒYÀ,`ô&‘".xáﬁ„∆c*
+generation09 73á=Ë›A /¢=Ë›J1
+"llm.input_messages.14.message.role
+	assistantJ[
+7llm.input_messages.14.message.tool_calls.6.tool_call.id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJW
+Bllm.input_messages.14.message.tool_calls.6.tool_call.function.name
+check_inventoryJ_
+Gllm.input_messages.14.message.tool_calls.6.tool_call.function.arguments
+{"item": "hinges"}J,
+"llm.input_messages.15.message.role
+toolJL
+%llm.input_messages.15.message.content#
+!{"item": "hinges", "on_hand": 12}JN
+*llm.input_messages.15.message.tool_call_id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJ1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.7.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.7.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.7.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}JN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJ1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.8.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.8.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.8.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}JN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.9.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.9.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.9.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJu
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}JN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1J1
+"llm.input_messages.22.message.role
+	assistantJ\
+8llm.input_messages.22.message.tool_calls.10.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JX
+Cllm.input_messages.22.message.tool_calls.10.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.22.message.tool_calls.10.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}JN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715J1
+"llm.input_messages.24.message.role
+	assistantJ\
+8llm.input_messages.24.message.tool_calls.11.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JT
+Cllm.input_messages.24.message.tool_calls.11.tool_call.function.name
+place_orderJl
+Hllm.input_messages.24.message.tool_calls.11.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}JN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126J1
+"llm.input_messages.26.message.role
+	assistantJ\
+8llm.input_messages.26.message.tool_calls.12.tool_call.id 
+chatcmpl-tool-be1611477e12594bJX
+Cllm.input_messages.26.message.tool_calls.12.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.26.message.tool_calls.12.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}JN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJ1
+"llm.input_messages.28.message.role
+	assistantJ\
+8llm.input_messages.28.message.tool_calls.13.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJT
+Cllm.input_messages.28.message.tool_calls.13.tool_call.function.name
+place_orderJl
+Hllm.input_messages.28.message.tool_calls.13.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}JN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJ1
+"llm.input_messages.30.message.role
+	assistantJ\
+8llm.input_messages.30.message.tool_calls.14.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJX
+Cllm.input_messages.30.message.tool_calls.14.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.30.message.tool_calls.14.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}JN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJ1
+"llm.input_messages.32.message.role
+	assistantJ\
+8llm.input_messages.32.message.tool_calls.15.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JT
+Cllm.input_messages.32.message.tool_calls.15.tool_call.function.name
+place_orderJl
+Hllm.input_messages.32.message.tool_calls.15.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}JN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353J1
+"llm.input_messages.34.message.role
+	assistantJ\
+8llm.input_messages.34.message.tool_calls.16.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJX
+Cllm.input_messages.34.message.tool_calls.16.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.34.message.tool_calls.16.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}JN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJ1
+"llm.input_messages.36.message.role
+	assistantJ\
+8llm.input_messages.36.message.tool_calls.17.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJT
+Cllm.input_messages.36.message.tool_calls.17.tool_call.function.name
+place_orderJk
+Hllm.input_messages.36.message.tool_calls.17.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}JN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJ1
+"llm.input_messages.38.message.role
+	assistantJ\
+8llm.input_messages.38.message.tool_calls.18.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJX
+Cllm.input_messages.38.message.tool_calls.18.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.38.message.tool_calls.18.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}JN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJ1
+"llm.input_messages.40.message.role
+	assistantJ\
+8llm.input_messages.40.message.tool_calls.19.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JT
+Cllm.input_messages.40.message.tool_calls.19.tool_call.function.name
+place_orderJl
+Hllm.input_messages.40.message.tool_calls.19.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}JN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1J1
+"llm.input_messages.42.message.role
+	assistantJ\
+8llm.input_messages.42.message.tool_calls.20.tool_call.id 
+chatcmpl-tool-af853086bdacf831JX
+Cllm.input_messages.42.message.tool_calls.20.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.42.message.tool_calls.20.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}JN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831J1
+"llm.input_messages.44.message.role
+	assistantJ\
+8llm.input_messages.44.message.tool_calls.21.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JT
+Cllm.input_messages.44.message.tool_calls.21.tool_call.function.name
+place_orderJm
+Hllm.input_messages.44.message.tool_calls.21.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJu
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}JN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125J1
+"llm.input_messages.46.message.role
+	assistantJ\
+8llm.input_messages.46.message.tool_calls.22.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JX
+Cllm.input_messages.46.message.tool_calls.22.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.46.message.tool_calls.22.tool_call.function.arguments
+{"item": "pulleys"}J,
+"llm.input_messages.47.message.role
+toolJL
+%llm.input_messages.47.message.content#
+!{"item": "pulleys", "on_hand": 2}JN
+*llm.input_messages.47.message.tool_call_id 
+chatcmpl-tool-b0238d64b7107523J√
+output.value≤
+Ø[{"content": null, "refusal": null, "role": "assistant", "annotations": null, "audio": null, "function_call": null, "tool_calls": [{"id": "chatcmpl-tool-b87f8c9865f654d5", "function": {"arguments": "{\"item\": \"pulleys\", \"qty\": 10}", "name": "place_order"}, "type": "function"}], "reasoning": null}]J&
+output.mime_type
+application/jsonJ1
+"llm.output_messages.0.message.role
+	assistantJ[
+7llm.output_messages.0.message.tool_calls.0.tool_call.id 
+chatcmpl-tool-b87f8c9865f654d5JS
+Bllm.output_messages.0.message.tool_calls.0.tool_call.function.name
+place_orderJk
+Gllm.output_messages.0.message.tool_calls.0.tool_call.function.arguments 
+{"item": "pulleys", "qty": 10}J
+llm.token_count.promptòJ 
+llm.token_count.completionJ 
+openinference.span.kind
+LLMP4zÖ   ¢
+zì—Óo¬é5Öë¬ŒYû˛ÕËπ=ØB".xáﬁ„∆c*place_order09 á}¢=Ë›A ±í¢=Ë›J
+	tool.name
+place_orderJ/
+input.value 
+{"item": "pulleys", "qty": 10}J%
+input.mime_type
+application/jsonJ[
+output.valueK
+I{"order_id": "PO-0012", "item": "pulleys", "qty": 10, "status": "placed"}J&
+output.mime_type
+application/jsonJE
+tool.description1
+/Place a restock order for qty units of an item.JÎ
+tool.parameters◊
+‘{"properties": {"item": {"title": "Item", "type": "string"}, "qty": {"title": "Qty", "type": "integer"}}, "required": ["item", "qty"], "title": "place_order_args", "type": "object", "additionalProperties": false}J!
+openinference.span.kind
+TOOLzÖ   n
+zì—Óo¬é5Öë¬ŒY.xáﬁ„∆c"hçáH≠*turn09 Ìá=Ë›A «ö¢=Ë›J"
+openinference.span.kind
+CHAINzÖ   ÊP
+zì—Óo¬é5Öë¬ŒYõ£ÇŸÉ„wÃ"=åICﬁ*
+generation09 ﬁ¡¢=Ë›A 1ùπ=Ë›JL
+%llm.input_messages.15.message.content#
+!{"item": "hinges", "on_hand": 12}JN
+*llm.input_messages.15.message.tool_call_id 
+chatcmpl-tool-bd0d6bb4d7e8bf0cJ1
+"llm.input_messages.16.message.role
+	assistantJ[
+7llm.input_messages.16.message.tool_calls.7.tool_call.id 
+chatcmpl-tool-adcc93466490d8fdJS
+Bllm.input_messages.16.message.tool_calls.7.tool_call.function.name
+place_orderJj
+Gllm.input_messages.16.message.tool_calls.7.tool_call.function.arguments
+{"item": "hinges", "qty": 40}J,
+"llm.input_messages.17.message.role
+toolJs
+%llm.input_messages.17.message.contentJ
+H{"order_id": "PO-0004", "item": "hinges", "qty": 40, "status": "placed"}JN
+*llm.input_messages.17.message.tool_call_id 
+chatcmpl-tool-adcc93466490d8fdJ1
+"llm.input_messages.18.message.role
+	assistantJ[
+7llm.input_messages.18.message.tool_calls.8.tool_call.id 
+chatcmpl-tool-95ae0db99a557656JW
+Bllm.input_messages.18.message.tool_calls.8.tool_call.function.name
+check_inventoryJa
+Gllm.input_messages.18.message.tool_calls.8.tool_call.function.arguments
+{"item": "brackets"}J,
+"llm.input_messages.19.message.role
+toolJM
+%llm.input_messages.19.message.content$
+"{"item": "brackets", "on_hand": 7}JN
+*llm.input_messages.19.message.tool_call_id 
+chatcmpl-tool-95ae0db99a557656J1
+"llm.input_messages.20.message.role
+	assistantJ[
+7llm.input_messages.20.message.tool_calls.9.tool_call.id 
+chatcmpl-tool-8564f7a4c9b54dc1JS
+Bllm.input_messages.20.message.tool_calls.9.tool_call.function.name
+place_orderJl
+Gllm.input_messages.20.message.tool_calls.9.tool_call.function.arguments!
+{"item": "brackets", "qty": 60}J,
+"llm.input_messages.21.message.role
+toolJu
+%llm.input_messages.21.message.contentL
+J{"order_id": "PO-0005", "item": "brackets", "qty": 60, "status": "placed"}JN
+*llm.input_messages.21.message.tool_call_id 
+chatcmpl-tool-8564f7a4c9b54dc1J1
+"llm.input_messages.22.message.role
+	assistantJ\
+8llm.input_messages.22.message.tool_calls.10.tool_call.id 
+chatcmpl-tool-a1b523a2ac2b3715JX
+Cllm.input_messages.22.message.tool_calls.10.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.22.message.tool_calls.10.tool_call.function.arguments
+{"item": "screws"}J,
+"llm.input_messages.23.message.role
+toolJM
+%llm.input_messages.23.message.content$
+"{"item": "screws", "on_hand": 410}JN
+*llm.input_messages.23.message.tool_call_id 
+chatcmpl-tool-a1b523a2ac2b3715J1
+"llm.input_messages.24.message.role
+	assistantJ\
+8llm.input_messages.24.message.tool_calls.11.tool_call.id 
+chatcmpl-tool-b4211d3c23f0b126JT
+Cllm.input_messages.24.message.tool_calls.11.tool_call.function.name
+place_orderJl
+Hllm.input_messages.24.message.tool_calls.11.tool_call.function.arguments 
+{"item": "screws", "qty": 500}J,
+"llm.input_messages.25.message.role
+toolJt
+%llm.input_messages.25.message.contentK
+I{"order_id": "PO-0006", "item": "screws", "qty": 500, "status": "placed"}JN
+*llm.input_messages.25.message.tool_call_id 
+chatcmpl-tool-b4211d3c23f0b126J1
+"llm.input_messages.26.message.role
+	assistantJ\
+8llm.input_messages.26.message.tool_calls.12.tool_call.id 
+chatcmpl-tool-be1611477e12594bJX
+Cllm.input_messages.26.message.tool_calls.12.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.26.message.tool_calls.12.tool_call.function.arguments
+{"item": "anchors"}J,
+"llm.input_messages.27.message.role
+toolJL
+%llm.input_messages.27.message.content#
+!{"item": "anchors", "on_hand": 3}JN
+*llm.input_messages.27.message.tool_call_id 
+chatcmpl-tool-be1611477e12594bJ1
+"llm.input_messages.28.message.role
+	assistantJ\
+8llm.input_messages.28.message.tool_calls.13.tool_call.id 
+chatcmpl-tool-9a759a102a8fbeabJT
+Cllm.input_messages.28.message.tool_calls.13.tool_call.function.name
+place_orderJl
+Hllm.input_messages.28.message.tool_calls.13.tool_call.function.arguments 
+{"item": "anchors", "qty": 80}J,
+"llm.input_messages.29.message.role
+toolJt
+%llm.input_messages.29.message.contentK
+I{"order_id": "PO-0007", "item": "anchors", "qty": 80, "status": "placed"}JN
+*llm.input_messages.29.message.tool_call_id 
+chatcmpl-tool-9a759a102a8fbeabJ1
+"llm.input_messages.30.message.role
+	assistantJ\
+8llm.input_messages.30.message.tool_calls.14.tool_call.id 
+chatcmpl-tool-a3ee0abce443c57aJX
+Cllm.input_messages.30.message.tool_calls.14.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.30.message.tool_calls.14.tool_call.function.arguments
+{"item": "rivets"}J,
+"llm.input_messages.31.message.role
+toolJL
+%llm.input_messages.31.message.content#
+!{"item": "rivets", "on_hand": 95}JN
+*llm.input_messages.31.message.tool_call_id 
+chatcmpl-tool-a3ee0abce443c57aJ1
+"llm.input_messages.32.message.role
+	assistantJ\
+8llm.input_messages.32.message.tool_calls.15.tool_call.id 
+chatcmpl-tool-9af5ab5c64fb6353JT
+Cllm.input_messages.32.message.tool_calls.15.tool_call.function.name
+place_orderJl
+Hllm.input_messages.32.message.tool_calls.15.tool_call.function.arguments 
+{"item": "rivets", "qty": 300}J,
+"llm.input_messages.33.message.role
+toolJt
+%llm.input_messages.33.message.contentK
+I{"order_id": "PO-0008", "item": "rivets", "qty": 300, "status": "placed"}JN
+*llm.input_messages.33.message.tool_call_id 
+chatcmpl-tool-9af5ab5c64fb6353J1
+"llm.input_messages.34.message.role
+	assistantJ\
+8llm.input_messages.34.message.tool_calls.16.tool_call.id 
+chatcmpl-tool-9b4d00696c63686aJX
+Cllm.input_messages.34.message.tool_calls.16.tool_call.function.name
+check_inventoryJ`
+Hllm.input_messages.34.message.tool_calls.16.tool_call.function.arguments
+{"item": "clamps"}J,
+"llm.input_messages.35.message.role
+toolJK
+%llm.input_messages.35.message.content"
+ {"item": "clamps", "on_hand": 0}JN
+*llm.input_messages.35.message.tool_call_id 
+chatcmpl-tool-9b4d00696c63686aJ1
+"llm.input_messages.36.message.role
+	assistantJ\
+8llm.input_messages.36.message.tool_calls.17.tool_call.id 
+chatcmpl-tool-b7e696b2ba0892ddJT
+Cllm.input_messages.36.message.tool_calls.17.tool_call.function.name
+place_orderJk
+Hllm.input_messages.36.message.tool_calls.17.tool_call.function.arguments
+{"item": "clamps", "qty": 25}J,
+"llm.input_messages.37.message.role
+toolJs
+%llm.input_messages.37.message.contentJ
+H{"order_id": "PO-0009", "item": "clamps", "qty": 25, "status": "placed"}JN
+*llm.input_messages.37.message.tool_call_id 
+chatcmpl-tool-b7e696b2ba0892ddJ1
+"llm.input_messages.38.message.role
+	assistantJ\
+8llm.input_messages.38.message.tool_calls.18.tool_call.id 
+chatcmpl-tool-afe18ab1482ed28aJX
+Cllm.input_messages.38.message.tool_calls.18.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.38.message.tool_calls.18.tool_call.function.arguments
+{"item": "springs"}J,
+"llm.input_messages.39.message.role
+toolJM
+%llm.input_messages.39.message.content$
+"{"item": "springs", "on_hand": 44}JN
+*llm.input_messages.39.message.tool_call_id 
+chatcmpl-tool-afe18ab1482ed28aJ1
+"llm.input_messages.40.message.role
+	assistantJ\
+8llm.input_messages.40.message.tool_calls.19.tool_call.id 
+chatcmpl-tool-bbf71fd3960d48b1JT
+Cllm.input_messages.40.message.tool_calls.19.tool_call.function.name
+place_orderJl
+Hllm.input_messages.40.message.tool_calls.19.tool_call.function.arguments 
+{"item": "springs", "qty": 90}J,
+"llm.input_messages.41.message.role
+toolJt
+%llm.input_messages.41.message.contentK
+I{"order_id": "PO-0010", "item": "springs", "qty": 90, "status": "placed"}JN
+*llm.input_messages.41.message.tool_call_id 
+chatcmpl-tool-bbf71fd3960d48b1J1
+"llm.input_messages.42.message.role
+	assistantJ\
+8llm.input_messages.42.message.tool_calls.20.tool_call.id 
+chatcmpl-tool-af853086bdacf831JX
+Cllm.input_messages.42.message.tool_calls.20.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.42.message.tool_calls.20.tool_call.function.arguments
+{"item": "gaskets"}J,
+"llm.input_messages.43.message.role
+toolJM
+%llm.input_messages.43.message.content$
+"{"item": "gaskets", "on_hand": 18}JN
+*llm.input_messages.43.message.tool_call_id 
+chatcmpl-tool-af853086bdacf831J1
+"llm.input_messages.44.message.role
+	assistantJ\
+8llm.input_messages.44.message.tool_calls.21.tool_call.id 
+chatcmpl-tool-a0eb4cce17f3b125JT
+Cllm.input_messages.44.message.tool_calls.21.tool_call.function.name
+place_orderJm
+Hllm.input_messages.44.message.tool_calls.21.tool_call.function.arguments!
+{"item": "gaskets", "qty": 120}J,
+"llm.input_messages.45.message.role
+toolJu
+%llm.input_messages.45.message.contentL
+J{"order_id": "PO-0011", "item": "gaskets", "qty": 120, "status": "placed"}JN
+*llm.input_messages.45.message.tool_call_id 
+chatcmpl-tool-a0eb4cce17f3b125J1
+"llm.input_messages.46.message.role
+	assistantJ\
+8llm.input_messages.46.message.tool_calls.22.tool_call.id 
+chatcmpl-tool-b0238d64b7107523JX
+Cllm.input_messages.46.message.tool_calls.22.tool_call.function.name
+check_inventoryJa
+Hllm.input_messages.46.message.tool_calls.22.tool_call.function.arguments
+{"item": "pulleys"}J,
+"llm.input_messages.47.message.role
+toolJL
+%llm.input_messages.47.message.content#
+!{"item": "pulleys", "on_hand": 2}JN
+*llm.input_messages.47.message.tool_call_id 
+chatcmpl-tool-b0238d64b7107523J1
+"llm.input_messages.48.message.role
+	assistantJ\
+8llm.input_messages.48.message.tool_calls.23.tool_call.id 
+chatcmpl-tool-b87f8c9865f654d5JT
+Cllm.input_messages.48.message.tool_calls.23.tool_call.function.name
+place_orderJl
+Hllm.input_messages.48.message.tool_calls.23.tool_call.function.arguments 
+{"item": "pulleys", "qty": 10}J,
+"llm.input_messages.49.message.role
+toolJt
+%llm.input_messages.49.message.contentK
+I{"order_id": "PO-0012", "item": "pulleys", "qty": 10, "status": "placed"}JN
+*llm.input_messages.49.message.tool_call_id 
+chatcmpl-tool-b87f8c9865f654d5JÌ
+output.value‹
+Ÿ[{"content": "Restock orders have been successfully placed for all listed items.", "refusal": null, "role": "assistant", "annotations": null, "audio": null, "function_call": null, "tool_calls": [], "reasoning": null}]J&
+output.mime_type
+application/jsonJ1
+"llm.output_messages.0.message.role
+	assistantJm
+%llm.output_messages.0.message.contentD
+BRestock orders have been successfully placed for all listed items.J
+llm.token_count.prompt‚J 
+llm.token_count.completionJ 
+openinference.span.kind
+LLMP9zÖ   n
+zì—Óo¬é5Öë¬ŒY=åICﬁ"hçáH≠*turn09 Oü¢=Ë›A á9∫=Ë›J"
+openinference.span.kind
+CHAINzÖ   µ
+zì—Óo¬é5Öë¬ŒYhçáH≠"D√}´±:÷*echo-planner09 ÎÁ:Ë›A ÙC∫=Ë›J
+graph.node.id
+echo-plannerJ
+
+agent.name
+echo-plannerJ"
+openinference.span.kind
+AGENTzÖ   x
+zì—Óo¬é5Öë¬ŒYD√}´±:÷"Dà‚zŸÛ±*Agent workflow09 “◊:Ë›A äG∫=Ë›J"
+openinference.span.kind
+CHAINzÖ   n
+zì—Óo¬é5Öë¬ŒYDà‚zŸÛ±*Agent workflow09O–’:Ë›AïKI∫=Ë›J"
+openinference.span.kind
+AGENTzÖ   

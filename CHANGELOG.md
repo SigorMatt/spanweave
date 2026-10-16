@@ -15,6 +15,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The raw bodies join the record** (wire series, W0). The zoo's
+  protobuf bodies -- the exporter's own bytes, which its `PROBES.md` L1
+  found every one of answered 415 -- are copied byte for byte from
+  `SigorMatt/spanweave-zoo` at `7eb5b69` into
+  `fixtures/zoo/<project>/<run-id>/raw/NNNN.body`, beside the Collector's
+  JSON re-encodings already there, and `.gitattributes` marks them
+  `binary`. `tests/test_zoo.py` re-derives each one's sha256 against its
+  sealed manifest entry (`content_type: application/x-protobuf`), counts
+  them against L1, and pairs every JSON body with the raw body it came
+  from by the manifest's `forwards` list (`tests/zoo_census.py`'s
+  `pairs`), asserting each pair shares its `NNNN` rather than assuming
+  it. `fixtures/zoo/README.md` gains a raw column, held by the test, and
+  says the pairs are the wire series' oracle. No library change.
 - **The last "grades" leaves core, and the neutrality gate learns the
   stem.** The `DiagnosticLevel` docstring in `spanweave/model.py` said
   "This grades the report, not the trace"; it now says a level "is a

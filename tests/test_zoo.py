@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import fields
 
 import pytest
@@ -36,10 +37,13 @@ from spanweave.model import JsonValue
 from tests import zoo_census
 from tests.zoo_census import (
     CAPTURES,
+    PROTOBUF,
+    ROOT,
     STRUCTURES,
     WHOLE_STRUCTURES,
     ZOO,
     ZOO_BODY_DIR,
+    ZOO_RAW_DIR,
     Capture,
     Census,
 )
@@ -61,6 +65,28 @@ def _listed_bodies(capture: Capture) -> dict[str, str]:
     return listed
 
 
+def _listed_raw_bodies(capture: Capture) -> dict[str, str]:
+    """`NNNN.body` -> sha256 for every protobuf body the manifest lists.
+
+    Chosen by the entry's `content_type`, as the manifest seals it; each such
+    entry is asserted to sit in `raw/`, so a protobuf body anywhere else, or a
+    `raw/` entry of another type, is a failure and not a silent omission.
+    """
+    document = zoo_census.manifest(capture)
+    entries = document["bodies"]
+    assert isinstance(entries, list)
+    listed: dict[str, str] = {}
+    for entry in entries:
+        assert isinstance(entry, dict)
+        directory, _, name = str(entry["file"]).partition("/")
+        is_protobuf = entry["content_type"] == PROTOBUF
+        assert is_protobuf == (directory == ZOO_RAW_DIR), entry
+        if is_protobuf:
+            assert entry["content_encoding"] is None, entry
+            listed[name] = str(entry["sha256"])
+    return listed
+
+
 def test_the_copy_holds_the_twelve_captures_and_nothing_else():
     on_disk = sorted(
         str(path.relative_to(ZOO)) for path in ZOO.rglob("*") if path.is_file()
@@ -69,11 +95,18 @@ def test_the_copy_holds_the_twelve_captures_and_nothing_else():
         ["README.md"]
         + [f"{c.run}/MANIFEST.json" for c in CAPTURES]
         + [f"{c.run}/{name}" for c in CAPTURES for name in _listed_bodies(c)]
+        + [
+            f"{c.run}/{ZOO_RAW_DIR}/{name}"
+            for c in CAPTURES
+            for name in _listed_raw_bodies(c)
+        ]
     )
     assert on_disk == expected
     assert len(CAPTURES) == 12
-    # PROBES.md "The captures": 29 bodies across the twelve.
+    # PROBES.md "The captures": 29 bodies across the twelve; and L1, "29 of 29
+    # bodies" answered 415 -- the raw ones, one for each.
     assert sum(len(c.records_per_body) for c in CAPTURES) == 29
+    assert sum(len(_listed_raw_bodies(c)) for c in CAPTURES) == 29
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
@@ -82,6 +115,57 @@ def test_every_body_is_the_zoo_s_byte_for_byte(capture):
     assert [path.name for path in zoo_census.bodies(capture)] == sorted(listed)
     for path in zoo_census.bodies(capture):
         assert zoo_census.sha256(path) == listed[path.name], path
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_raw_body_is_the_zoo_s_byte_for_byte(capture):
+    """The exporter's own protobuf bytes, as the manifest seals them."""
+    listed = _listed_raw_bodies(capture)
+    raw = zoo_census.raw_bodies(capture)
+    assert [path.name for path in raw] == sorted(listed)
+    for path in raw:
+        assert zoo_census.sha256(path) == listed[path.name], path
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_json_body_pairs_with_one_raw_body_by_the_forwards_list(capture):
+    """The wire series' oracle: each JSON body beside the raw body it came from.
+
+    `zoo_census.pairs` reads the pairing from the manifest's `forwards`; this
+    holds it to the bodies the manifest lists -- every JSON body paired, every
+    raw body paired exactly once -- and to the shared ordinal the zoo names
+    both forms of one export by (its `SPEC.md` §2.4), which §4.7 does not
+    promise and so is asserted here rather than assumed.
+    """
+    paired = zoo_census.pairs(capture)
+    json_names = [json_body.name for json_body, _ in paired]
+    raw_names = [raw_body.name for _, raw_body in paired]
+    assert json_names == sorted(_listed_bodies(capture))
+    assert sorted(raw_names) == sorted(_listed_raw_bodies(capture))
+    assert len(set(raw_names)) == len(raw_names)
+    for json_body, raw_body in paired:
+        assert json_body.stem == raw_body.stem, (json_body, raw_body)
+        assert raw_body.is_file(), raw_body
+
+
+def test_git_treats_every_raw_body_as_binary():
+    """`.gitattributes` marks the raw bodies `binary`: no diff, no merge, and
+    no line-ending conversion of the exporter's bytes on any checkout."""
+    paths = [
+        str(path.relative_to(ROOT))
+        for capture in CAPTURES
+        for path in zoo_census.raw_bodies(capture)
+    ]
+    assert len(paths) == 29
+    for attribute in ("binary", "diff", "merge", "text"):
+        answered = subprocess.run(
+            ["git", "-C", str(ROOT), "check-attr", attribute, "--", *paths],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        expected = "set" if attribute == "binary" else "unset"
+        assert answered == [f"{path}: {attribute}: {expected}" for path in paths]
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
@@ -122,6 +206,35 @@ def test_every_seal_is_the_one_the_readme_pins(capture):
     document = zoo_census.manifest(capture)
     assert zoo_census.seal_of(document) == pinned, capture.run
     assert document["seal"] == pinned, capture.run
+
+
+#: A capture's row of the README's table, its raw column: the count, then the
+#: bytes of each raw body in the order its JSON bodies pair with them.
+_README_RAW = re.compile(
+    r"^\| `(z\d/[^`]+)` \|(?: [^|]+ \|){3} (\d+) \(([\d, ]+)\) \| `[0-9a-f]{64}` \|$"
+)
+
+
+def _readme_raw() -> dict[str, tuple[int, list[int]]]:
+    """Capture run -> the README's raw column: (count, bytes per raw body)."""
+    named: dict[str, tuple[int, list[int]]] = {}
+    for line in (ZOO / "README.md").read_text(encoding="utf-8").splitlines():
+        match = _README_RAW.match(line)
+        if match is not None:
+            run, count, sizes = match.groups()
+            assert run not in named, run
+            named[run] = (int(count), [int(size) for size in sizes.split(", ")])
+    return named
+
+
+def test_the_readme_s_raw_column_is_each_capture_s_raw_bodies():
+    """Every number in the raw column, re-derived from the files: how many raw
+    bodies a capture holds and each one's length, in pair order."""
+    named = _readme_raw()
+    assert sorted(named) == sorted(IDS)
+    for capture in CAPTURES:
+        sizes = [raw.stat().st_size for _, raw in zoo_census.pairs(capture)]
+        assert named[capture.run] == (len(sizes), sizes), capture.run
 
 
 #: A capture's row of the README's table, its instrumentation column.

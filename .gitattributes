@@ -2,3 +2,6 @@
 # re-derives each file's sha256 against the zoo's sealed manifests. `-text`
 # turns off every line-ending conversion a checkout could apply to them.
 fixtures/zoo/** -text
+# The raw bodies are the exporter's protobuf, not text: `binary` also keeps
+# them out of textual diffs and merges.
+fixtures/zoo/**/raw/*.body binary

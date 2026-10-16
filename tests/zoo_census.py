@@ -1,8 +1,9 @@
 """The zoo census: what the audit counted on a stranger's trace, re-derived.
 
 `fixtures/zoo/` is a byte-for-byte copy of the twelve captures'
-`json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at `ZOO_PIN`, with each
-capture's sealed `MANIFEST.json` beside them (`fixtures/zoo/README.md`). Six
+`json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at `ZOO_PIN`, and of the
+`raw/NNNN.body` protobuf bodies each re-encodes (`pairs`), with each capture's
+sealed `MANIFEST.json` beside them (`fixtures/zoo/README.md`). Six
 agents, built by implementers who knew nothing about this library, under stock
 instrumentation (each manifest's `project_manifest.instrumentation`).
 
@@ -61,6 +62,12 @@ ZOO_PIN = "7eb5b6944ccef34861dbaf92e8f0acb0b7edaf99"
 
 #: Where a body sits in the zoo's capture directory, and so in its manifest.
 ZOO_BODY_DIR = "json"
+
+#: Where a raw body -- the exporter's own bytes -- sits, there and here.
+ZOO_RAW_DIR = "raw"
+
+#: The content type a zoo manifest gives a raw body: the exporter's protobuf.
+PROTOBUF = "application/x-protobuf"
 
 
 @dataclass(frozen=True)
@@ -1223,6 +1230,39 @@ class Record:
 def bodies(capture: Capture) -> list[pathlib.Path]:
     """The capture's bodies, in body order (`NNNN.json`)."""
     return sorted((ZOO / capture.run).glob("[0-9][0-9][0-9][0-9].json"))
+
+
+def raw_bodies(capture: Capture) -> list[pathlib.Path]:
+    """The capture's raw protobuf bodies, in receipt order (`raw/NNNN.body`)."""
+    return sorted((ZOO / capture.run / ZOO_RAW_DIR).glob("[0-9][0-9][0-9][0-9].body"))
+
+
+def pairs(capture: Capture) -> list[tuple[pathlib.Path, pathlib.Path]]:
+    """Each JSON body beside the raw body it re-encodes, in JSON body order.
+
+    The pairing is read from the manifest's `forwards` list -- one entry per
+    forward to the Collector, in the order they completed (the zoo's
+    `SPEC.md` §4.5) -- and not from the file names: the `k`-th JSON body, the
+    `k`-th POST the Collector made, is paired with the `k`-th body forwarded
+    to it. The zoo promises neither that nor the shared `NNNN` (§4.7: a batch
+    processor may coalesce or split); it holds when the Collector answers
+    every forward and makes one POST of each, and this refuses a capture where
+    the counts or a status say otherwise. `tests/test_zoo.py` asserts the
+    pairing and the file names agree on every capture rather than assuming
+    it; that each pair is one export is the wire series' oracle, not this.
+    """
+    forwards = manifest(capture)["forwards"]
+    assert isinstance(forwards, list)
+    raw: list[pathlib.Path] = []
+    for forward in forwards:
+        assert isinstance(forward, dict)
+        assert forward.get("status") == 200, (capture.run, forward)
+        directory, _, name = str(forward["file"]).partition("/")
+        assert directory == ZOO_RAW_DIR, (capture.run, forward)
+        raw.append(ZOO / capture.run / ZOO_RAW_DIR / name)
+    json_bodies = bodies(capture)
+    assert len(json_bodies) == len(raw), capture.run
+    return list(zip(json_bodies, raw, strict=True))
 
 
 def records(capture: Capture) -> list[Record]:
