@@ -4125,3 +4125,16 @@ new `NodeKind`, no normalized key, and no change to the graph a JSON export
 yields: the protobuf path ends in the same `read_records` call. 1A and 2B grow
 only the diagnostic source vocabulary or the code vocabulary, which the
 series' standing rules permit with the artifact regenerated.
+
+**The decision (2026-10-17, maintainer).** 1A, 2B, 3C. The other encoding
+of the same container gets the container's rules: a body that does not
+parse is one `malformed_record` with a `null` source, as `undecodable_bytes`
+already does for bytes JSON cannot write. Where the oracle is silent and
+invariant 2 is not, invariant 2 wins: unknown fields are reported per
+message under `unknown_fields`, with the path and the numbers, and the spans
+are kept — refusing the body (2A) would lose readable spans to report a
+number, and carrying the bytes (2C) would invent a representation; the
+Collector's own drop (2D) is the oracle's letter and not its point. A
+`doubleValue` is a float, said in §7 to be the one thing the pairs did not
+check, with a test that notices the day a pair appears and a zoo thread to
+make one.
