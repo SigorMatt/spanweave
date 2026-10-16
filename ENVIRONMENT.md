@@ -50,16 +50,17 @@ fix one deliberately, don't let them drift.
   protobuf wire format only (`spanweave.read_protobuf`, `SPEC.md` §7). Imported
   by one module, `spanweave/otlp_protobuf.py`, and only inside the function —
   the zero-dependencies gate allows exactly that and nothing more
-  (`tests/gates.py`, `OPTIONAL_EXTRA_MODULE`). Core must work fully without it,
-  and `make check` never installs it: there the protobuf tests skip, saying
-  why. CI's `otlp` job installs it (`uv sync --extra dev --extra otlp`) and
-  runs the whole suite with `SPANWEAVE_REQUIRE_OTLP=1`, under which a proto
-  runtime that will not import fails rather than skips.
+  (`tests/gates.py`, `OPTIONAL_EXTRA_MODULE`). Core must work fully without it.
+  The dev install includes the extra (`uv sync --extra dev --extra otlp`), so
+  local `make check` runs the protobuf tests (`tests/test_protobuf.py`); they
+  skip, saying why, only in an environment installed without the extra. CI's
+  `otlp` job runs the whole suite with `SPANWEAVE_REQUIRE_OTLP=1`, under which
+  a proto runtime that will not import fails rather than skips.
 - Adding **any** core runtime dependency is a halt point (`AGENT.md`).
 
 ## Commands (exact — the agent uses these, does not invent them)
 
-- Setup:   `uv sync --extra dev`
+- Setup:   `uv sync --extra dev --extra otlp`
 - Lint:    `uv run ruff check .`
 - Format:  `uv run ruff format --check .`
 - Types:   `uv run mypy spanweave`

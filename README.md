@@ -469,7 +469,7 @@ fails the build until the change is regenerated into the diff.
 ## Development
 
 ```
-uv sync --extra dev
+uv sync --extra dev --extra otlp   # otlp: the protobuf tests run instead of skipping
 make check          # the gate: lint, types, tests, the invariant gates, the CLI
 make conformance    # the corpus: every scenario, against its canonical graph
                     # (tests/test_conformance.py); and the zoo gates: its census

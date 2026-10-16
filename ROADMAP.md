@@ -586,8 +586,10 @@ and each of these is a claim the repo can already prove false:
   `spanweave --version` says so. This gate exists *because* it is unfrozen;
   announcing it as settled makes the freeze a formality and destroys the
   evidence the announcement was posted to collect.
-- **No dialect it does not read.** Langfuse, LangSmith, Logfire, Vercel and OTLP
-  protobuf are Phase 4 wants. "Supports OpenTelemetry" reads as all of them.
+- **No dialect it does not read.** Langfuse, LangSmith, Logfire and Vercel are
+  Phase 4 wants. OTLP protobuf is read (behind the `otlp` extra, since
+  `4ecf414`, by the reader, not an adapter). "Supports OpenTelemetry" must not
+  read as covering the unread ones.
 - **No unqualified equivalence claim.** `Node.name` is declared dialect-varying
   in **every** scenario compared across both dialects, so "one graph from two
   instrumentors" is a claim about everything `canonical()` compares *except*
