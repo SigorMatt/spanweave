@@ -259,6 +259,11 @@ a dialect for an adapter (registered in the `TASKS.md` audit section). F1 and
 F2 answered it on 2026-09-10: a container format in the reader, not an
 adapter.*
 
+*OTLP protobuf behind the `otlp` extra is done at `4ecf414`, by the wire
+series' W1: like raw OTLP JSON, it is read by the reader as the other encoding
+of the same container, not by an adapter (registered in the `TASKS.md` wire
+series section).*
+
 The flywheel is deliberate: the contribution surface is *"add your
 instrumentor"*, backed by a corpus that makes a correct contribution obvious and
 an incorrect one impossible to merge.

@@ -43,8 +43,12 @@ probe's disposition — is in `TASKS.md` under *The stranger's-trace series*.
 These references are kept as written, for the reason the audit's are.
 
 **Entry §23 was written as a halt during the wire series** (2026-10-17) and
-refers to that series' own `WORKPLAN.md`, which W2 deletes at the series'
-close.
+refers to that series' own `WORKPLAN.md`. It carries the maintainer's decision
+beneath it. The file was deleted at the series' close on 2026-10-17, and
+everything of it that outlives the series — the batch registry with final
+statuses, the decisions log in full, the resume note, and L1's disposition —
+is in `TASKS.md` under *The wire series*. These references are kept as
+written, for the reason the audit's are.
 
 ---
 

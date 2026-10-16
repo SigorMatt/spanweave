@@ -14440,12 +14440,180 @@ decisions log D15, D16, D17, D18 and D19.
   `make conformance` does not run the new module (its target names two files; Makefile left
   alone; `make check` runs it) — for the maintainer.
 
+## The wire series  *(closed 2026-10-17)*
+
+**Still open after the close. Read these first.**
+
+- **PR `wire` → `main` is not open yet.** The close stops at its commit. Per
+  the plan's §2, the remaining steps are: the push and CI on the pushed tip,
+  the aux cold review, the fix commits with their own scoped review, the PR,
+  Qodo's review of it (first fetch archived; post-push diff), and the merge
+  as a merge commit. Each review is archived into `reviews/` and
+  dispositioned here, as the earlier series did. At the close **this series
+  has no review archive**: no review of it has been run.
+- **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
+  job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
+  extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
+  fails rather than skips; but on one Python only. The protobuf path is not
+  run under the other interpreters the main job covers. Open.
+- **The extra's `protobuf>=4.25` floor is untested.** `pyproject.toml`'s
+  `otlp` extra states it; W1 built and tested against `protobuf` 7.36.0, and
+  `UnknownFieldSet`, which the `unknown_fields` report reads, needs about
+  4.24. No job installs the floor. Open: either a job that does, or a floor
+  the record can cite.
+- **The missing-extra error is a plain `SpanweaveError`, not a subclass.**
+  Without the extra, `read_protobuf` raises `SpanweaveError` with code
+  `otlp_extra_not_installed` (`SPEC.md` §3.10). Whether it should be its own
+  subclass, as `EnvelopeError` is, was not decided. Open, for the maintainer.
+- **The zoo thread for `doubleValue` (decisions log D33).** No zoo export
+  carries a `doubleValue`, so the pairs never checked how one renders, and
+  `read_protobuf` reads it as `MessageToDict`'s float (`SPEC.md` §7).
+  `tests/test_protobuf.py`'s
+  `test_the_zoo_holds_no_double_value_so_no_pair_checks_one` turns red the
+  day one appears. What would settle `1` against `1.0`: one export carrying
+  a `doubleValue`, captured in `SigorMatt/spanweave-zoo` and re-encoded by
+  the Collector — a capture, not a guess. A thread for the zoo, not a batch
+  here.
+- **`ROADMAP.md`'s announcement section still lists OTLP protobuf among
+  "Phase 4 wants"** (*What it must not claim*: "No dialect it does not
+  read"). The close edited `ROADMAP.md` only where its row said, the
+  Phase 4 line it marks done, and left that sentence as it is. Open, for
+  the maintainer.
+
+The wire series let the reader unpack the OTLP **protobuf** wire format into
+the same records it unpacks from OTLP/JSON. It answers the spanweave half of
+the zoo's L1 (`PROBES.md` at `SigorMatt/spanweave-zoo` `7eb5b69`): every
+capture's exports were sent by the stock Python OTLP/HTTP exporter as
+`application/x-protobuf`, and no consumer of this library could read one
+without a Collector in between. The zoo sealed, for every export, both the
+raw protobuf body and the Collector's JSON re-encoding of it, and those pairs
+are the series' oracle: `tests/test_protobuf.py` holds the protobuf path to
+the JSON path on every one, record by record and byte for byte of the built
+graph. The series ran on branch `wire` from `main` at `88c7339` in one run,
+W0 → W1 → W2, one batch per commit, and W1 halted once for a maintainer
+decision (`OPEN_QUESTIONS.md` §23).
+
+`WORKPLAN.md` was the series' execution state, and this close deletes it.
+That is the seventh deletion, after four in the September 2026 audit-fix
+series, one at the live-graphs close and one at the stranger's-trace close.
+Everything of it that outlives the series is in this section: the batch
+registry, the decisions log and resume note in full, and L1's disposition.
+§0, the operating protocol, is not carried. A future series reads it at
+`git show 028e645:WORKPLAN.md`, the file's last state.
+
+**What this repo does not contain.** L1's receiver half — a receiver that
+accepts the protobuf body the exporter sends — is `SigorMatt/spanweave-live`'s
+V1, in that repository's own series (V0–V4), which pins to this series'
+merge. It was never going to run here, so the spanweave half closes
+complete.
+
+**Ids.** In this section, `W<n>` is a batch of this series, `L1` the zoo's
+probe (`PROBES.md` L1) and `V<n>` a batch of `spanweave-live`'s receiver
+series. The live-graphs section above also uses `L1`, for its first memo
+batch, which is unrelated.
+
+### The batches, with final status
+
+| Batch | What it did | Origin (plan §5) | Final status | Commit |
+|---|---|---|---|---|
+| — | Series opened: the plan file, its README row and its `durable_documents()` exclusion | — | **done** | `7b4b606` |
+| W0 | The raw bodies join the record: the zoo's protobuf bodies copied byte for byte into `fixtures/zoo/<project>/<run-id>/raw/`, each re-derived against its manifest's sha256 and paired with its JSON body by the manifest's `forwards` list | `PROBES.md` L1; the manifests' `bodies` entries | **done**. The zoo's SPEC §4.7 does not promise JSON/raw pairing by `NNNN`, so the test reads `forwards` and asserts the ordinals agree rather than assuming it | `09245d9` |
+| W1 | The reader unpacks the OTLP protobuf wire format into the same records: `spanweave.read_protobuf`, in `spanweave/otlp_protobuf.py`, behind the `otlp` extra | L1; `ROADMAP.md` Phase 4 ("OTLP protobuf behind the `otlp` extra"); `OPEN_QUESTIONS.md` §16 (F1/F2) | **done (decided)**. Halted because three behaviours had no pair to decide them (`OPEN_QUESTIONS.md` §23), and 1A, 2B and 3C were decided (decisions log D31, D32 and D33). CI green on every job, including the new `otlp` job | halt `da215a0`, decided `898e9f5`, done `4ecf414` |
+| W2 | The series closes: this section, `WORKPLAN.md` deleted, `ROADMAP.md`'s Phase 4 line marked done | Close | **done**, except the PR and its reviews, which follow the push | the closing commit of the series |
+
+The `plan:` commits between the batches are execution state. They are
+`b20280f`, `ed5a84e`, `898e9f5` and `028e645`. Every fact they carried is in
+the resume note below.
+
+**`schema_version` is unchanged.** It is `"0.1"`, unfrozen, in
+`spanweave/version.py`. No field was added to `Node`, `Edge`, `Diagnostic` or
+`Meta`, no `PASSTHROUGH` path was added, and the serialized key tree did not
+move: decisions log D30, in D9's words. The shape artifact moved only in its
+vocabularies, for one diagnostic code, `unknown_fields`, and its `source`
+shape; that is §3.7's "extend deliberately", as D32 permits. W1's new error
+code, `otlp_extra_not_installed` (SPEC §3.10), is raised and never
+serialized.
+
+### The probe, and what answered it
+
+| Probe | Disposition | By |
+|---|---|---|
+| L1 — every body answered 415: the exporter sends protobuf and nothing here read it | **Change (spanweave's half).** The raw bodies are in the record beside their JSON twins (W0), and `read_protobuf` reads each into the records its JSON twin reads as, held to it on every pair by `tests/test_protobuf.py` (W1). Where the pairs are silent, decisions log D31, D32 and D33. **The receiver's half** is `spanweave-live`'s V1, not this repository's | W0, W1 |
+
+### Decisions taken  *(the plan file's §3, folded in full)*
+
+The plan file's decisions log, verbatim, with an id per row in its `#`
+column. The ids continue this file's numbering, `D28`…`D33`, rather than
+restarting it, so that `decisions log D<n>` names one row in the whole file;
+`tests/test_doc_truth.py` resolves every such citation against both
+series' logs. A decision reworded is a decision re-taken.
+
+A relay file is named in commit messages and here; elsewhere in the tree only
+the review archives, verbatim, name one. Each reaches its rows by this map:
+
+| Relay file | Rows |
+|---|---|
+| `decisions-spanweave-2026-10-17` | D31, D32, D33 |
+
+D28–D30 came from no relay file: the plan file held them when `7b4b606`
+opened the series.
+
+| # | Date | Batch | Decision | By |
+|---|---|---|---|---|
+| D28 | 2026-10-16 | series | The wire format is the reader's, not the receiver's: the stranger series decided the OTLP envelope is a container the reader owns (F1/F2, T1), and a second encoding of the same container is the same ownership; the receiver never reads a dialect, and a transcoder in the receiver would be a second reader of the envelope disagreeing subtly with the first. It is an optional extra because `protobuf` is a heavy dependency a JSON-only consumer should not pay for, and because the ROADMAP placed it there before this series existed. | maintainer |
+| D29 | 2026-10-16 | W1 | The oracle is the rule. Twenty-nine exports exist in both encodings, sealed by the zoo; the JSON path has built every graph this library has ever produced; the protobuf path is correct exactly when it yields the same records, and any place the two could differ (id encoding, 64-bit integers, enums, omitted defaults, unknown fields) is decided by the pair, stated in SPEC §7, and pinned by a mutation. A protobuf-only behaviour with no JSON counterpart is a halt, not a choice. | maintainer |
+| D30 | 2026-10-16 | W1 | No schema change: the records are the same records, so the graph, the shape artifact and `schema_version` cannot move; if the oracle shows they would, the batch halts. | maintainer |
+| D31 | 2026-10-17 | W1 | **1A.** A body that is not a protobuf message is one `malformed_record`, `skipped_records` 1, no records, `source` `null` — the `undecodable_bytes` precedent: JSON has no way to write the bytes, and inventing one (1B) would put in the record a representation the input never had. §3.7's source table gains the row. 1C declined: the reader never raises on malformed input, and the other encoding of the same container does not get a different rule. | maintainer |
+| D32 | 2026-10-17 | W1 | **2B.** Unknown fields are reported, never dropped and never fatal: the records are yielded, and each message that carries unknown fields draws one diagnostic under a new code, `unknown_fields` (level `warning`: the library could not map them — a gap, exactly what the level is for), `source` naming the message's path in the request and the field numbers and wire types as the proto runtime reports them. 2D is what the oracle rule says literally and what CLAUDE.md 2 forbids; where the two disagree, invariant 2 wins and the record says where the oracle was silent. 2A declined: refusing a whole body for one field a newer OTLP added would throw away every readable span to report one number. 2C declined for now: the bytes of a field with no definition have no representation the record ever had, and a consumer who needs them has the raw body; if one asks, it is a thread, not a guess. The code joins §3.7's vocabulary and the shape artifact is regenerated, as the series' standing rules permit. | maintainer |
+| D33 | 2026-10-17 | W1 | **3C.** `doubleValue` is `MessageToDict`'s float, stated in SPEC §7 as the one place the pairs could not check, with a test that the zoo holds no `doubleValue` (so the day one appears, the test says the claim is now checkable); and a thread at W2 for the zoo: one export carrying a `doubleValue` re-encoded by the Collector would settle `1` against `1.0` — a capture, not a guess (3B declined for being one). | maintainer |
+
+### The resume note  *(the plan file's §4, folded in full)*
+
+Every dated entry, verbatim and in order. The batches recorded their
+corrections, measurements and open items here, and only here; the open items
+in the last entry are registered above, under *Still open after the close*.
+
+- 2026-10-16: series opened on `wire` from `main` `88c7339`, from the zoo's
+  L1 at `7eb5b69`. The receiver's series (V0–V4) follows and pins to this
+  series' merge.
+- 2026-10-17: W0 done (`09245d9`). The zoo's SPEC §4.7 does not guarantee
+  JSON/raw pairing by `NNNN`; the test reads `forwards` and checks the
+  ordinals agree (they do in all 12 captures). That each pair is the same
+  export is W1's oracle to prove; `tests/zoo_census.py` `pairs()` serves it.
+- 2026-10-17: W1 halted before code (`da215a0`, OPEN_QUESTIONS §23): an
+  unparseable body (malformed_record with no text source), unknown proto
+  fields (MessageToDict drops them; the pairs cannot show any), and
+  `doubleValue` rendering (absent from the zoo) are behaviours no spec rule
+  or pair decides. A scratch prototype (MessageToDict, integer enums, hex
+  ids, then the JSON `read_records`) matched all 29 pairs on records and
+  `dumps` bytes; the Collector differs from MessageToDict only in hex ids
+  and integer `kind`/`status.code`. On resume: `otlp` extra lacks
+  `opentelemetry-proto` (lock refresh), the zero-deps gate needs a module
+  allowlist, mypy needs an override for the absent extra.
+- 2026-10-17: W1 decided (1A, 2B, 3C). The halt was right on all three: the
+  oracle is silent where the JSON path has nothing to show, and silence is
+  decided by the container's existing rules (1A), by invariant 2 over the
+  oracle's letter (2B), or by saying it is undecided and naming what would
+  decide it (3C). The three setup items (lock refresh for the extra, the
+  zero-deps gate's module allowlist, the mypy override) are W1's to make, in
+  its one commit. Run 1 resumes: W1 → W2.
+- 2026-10-17: W1 done (`4ecf414`): `spanweave.read_protobuf` in
+  `spanweave/otlp_protobuf.py`, CI green on all jobs including the new
+  `otlp` job (`SPANWEAVE_REQUIRE_OTLP=1`: a missing proto runtime fails,
+  not skips). Open for the close: the job runs one interpreter, not the
+  matrix; the extra's `protobuf>=4.25` floor is untested (built against
+  7.36.0; `UnknownFieldSet` needs ~4.24); the missing-extra error is a plain
+  `SpanweaveError` with code `otlp_extra_not_installed`, not a subclass.
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK; OTLP
   protobuf behind the `otlp` extra). OTLP JSON is not among them: F1/F2
   decided it a container the reader unpacks, not a dialect (2026-09-10;
-  `c943543`, `ff05b2d`; `OPEN_QUESTIONS.md` §16).
+  `c943543`, `ff05b2d`; `OPEN_QUESTIONS.md` §16). *OTLP protobuf is done, at
+  `4ecf414` (the wire series, W1): not an adapter either, but the other
+  encoding of the same container, read by the reader behind the `otlp` extra
+  (decisions log D28).*
 - Contributor conformance harness: one command validates a new adapter against
   the corpus.
 - `CONTRIBUTING.md` adapter walkthrough, written against a **real merged**

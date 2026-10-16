@@ -614,27 +614,26 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    Two exclusions, both because the excluded text is a record of a moment
-    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
-    copied verbatim, and a review that says a file was untracked *when it was
-    read* is reporting, not citing.
+    One exclusion, because the excluded text is a record of a moment rather
+    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
+    verbatim, and a review that says a file was untracked *when it was read*
+    is reporting, not citing.
 
-    `WORKPLAN.md` is the second: a series' own execution state, which owns
-    `patches/` as its scratch drop and is written to be deleted at series
-    close. That is exactly why nothing durable may depend on it. The file has
-    gone six times -- four across the September 2026 audit-fix series and
-    its reopenings, once at the live-graphs series' close, once at the
-    stranger's-trace series' close (`TASKS.md`, *The stranger's-trace
-    series*) -- and it is back again for the wire series, so the exclusion is
-    a fixture of a **series**, not of a file: it travels with whichever plan
-    file is currently live, and is removed again at the wire series' close,
-    with the file.
+    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
+    series' own execution state, which owns `patches/` as its scratch drop and
+    is written to be deleted at series close. That is exactly why nothing
+    durable was allowed to depend on it, and it is gone again: the wire
+    series closed and the file went with it (`TASKS.md`, *The wire series*).
+    It has gone seven times now -- four across the September 2026 audit-fix
+    series and its reopenings, once at the live-graphs series' close, once at
+    the stranger's-trace series' close, once here -- so the exclusion is a
+    fixture of a **series**, not of a file: the next series' plan file needs
+    it back, and takes it back out at its own close.
     """
     return [
         path
         for path in documents()
-        if path.name != "WORKPLAN.md"
-        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 
@@ -682,8 +681,12 @@ def test_every_review_a_document_cites_is_in_the_repository():
 # nothing held a citation to the log at all: a relay file's bare name, or a row
 # that does not exist, passed every test (cold review of 2026-10-15, R-17,
 # R-18). Each row now has an id, and a citation names it.
+#
+# A later series' log continues the numbering rather than restarting it (the
+# wire series' rows are D28 on), so `decisions log D<n>` names one row in the
+# whole file; the resolver reads every series' log, in the file's order.
 
-DECISIONS_SERIES = "\n## The stranger's-trace series"
+DECISIONS_SERIES = ("\n## The stranger's-trace series", "\n## The wire series")
 DECISIONS_HEADING = "### Decisions taken  *(the plan file's §3, folded in full)*"
 
 #: A row of the log, by its id and its date.
@@ -710,11 +713,16 @@ RELAY_NAME = re.compile(
 
 
 def decisions_log() -> str:
-    """The stranger's-trace series' decisions log: its intro, map and table."""
+    """Every series' decisions log that carries ids: each one's intro, map and
+    table, in the file's order."""
     tasks = read("TASKS.md")
-    series = tasks[tasks.index(DECISIONS_SERIES) :]
-    start = series.index(DECISIONS_HEADING)
-    return series[start : series.index("\n### ", start + len(DECISIONS_HEADING))]
+    logs = []
+    for heading in DECISIONS_SERIES:
+        series = tasks[tasks.index(heading) :]
+        start = series.index(DECISIONS_HEADING)
+        end = series.index("\n### ", start + len(DECISIONS_HEADING))
+        logs.append(series[start:end])
+    return "\n".join(logs)
 
 
 def decision_rows() -> dict[str, str]:

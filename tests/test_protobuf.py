@@ -75,7 +75,7 @@ def _built(read: spanweave.Records) -> bytes:
 
 
 def test_the_zoo_seals_twenty_nine_pairs():
-    """The number the series cites (`WORKPLAN.md`; `PROBES.md` L1)."""
+    """The number the series cites (`TASKS.md`, *The wire series*; `PROBES.md` L1)."""
     assert len(PAIRS) == 29
 
 

@@ -5,7 +5,7 @@ The fourth way of packing the same container (`SPEC.md` §7): an
 the stock OTLP/HTTP exporter sends every export (the zoo's L1). It is the
 **reader's**, not a dialect's and not a receiver's: the envelope is a container
 the reader owns, and a second encoding of the same container is the same
-ownership (`WORKPLAN.md` §3; `OPEN_QUESTIONS.md` §16).
+ownership (`TASKS.md`, decisions log D28; `OPEN_QUESTIONS.md` §16).
 
 **It is held to its JSON twin, and ends in it.** The body is parsed by the
 protobuf runtime, rendered as the OTLP/JSON the Collector writes for the same

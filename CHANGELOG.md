@@ -1050,6 +1050,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The wire series is closed, and `WORKPLAN.md` is gone with it** (W2, this
+  commit). No behaviour change: no rule under `spanweave/` moved (one
+  docstring's citation of the plan file is re-pointed),
+  `tests/serialized_shape.json` is untouched, and `SCHEMA_VERSION` is still
+  `"0.1"`, unfrozen. `TASKS.md` now holds everything of the plan file that
+  outlives the series, under *The wire series*:
+  - a registry row per batch, W0–W2, with each final status and commit,
+    including W1's halt and decision (`OPEN_QUESTIONS.md` §23);
+  - the decisions log and the dated resume note, both verbatim. The log's
+    rows carry ids that continue the stranger's-trace log's numbering
+    (decisions log D28 to D33), and `tests/test_doc_truth.py`'s citation
+    resolver now reads both logs, so `decisions log D<n>` still names one
+    row in the whole file;
+  - L1's spanweave half dispositioned (W0, W1); its receiver half is
+    `SigorMatt/spanweave-live`'s V1, not this repository's;
+  - the open items the last resume entry left, registered as open: the
+    `otlp` CI job runs one interpreter, the extra's `protobuf>=4.25` floor
+    is untested, the missing-extra error is a plain `SpanweaveError` and not
+    a subclass, and the zoo thread that would settle how a `doubleValue`
+    renders (decisions log D33).
+
+  `ROADMAP.md`'s Phase 4 line "OTLP protobuf behind the `otlp` extra" is
+  marked done at `4ecf414`, and `TASKS.md`'s Phase 4 bullet with it. The
+  README's Documents row for `WORKPLAN.md` and the `WORKPLAN.md` exclusion
+  in `durable_documents()` are removed, the pair every series close removes.
+  `spanweave/otlp_protobuf.py`'s and `tests/test_protobuf.py`'s citations of
+  the plan file are re-pointed at `TASKS.md`, and `OPEN_QUESTIONS.md`'s §23
+  preamble says where the file's content went. This series has no review
+  archive yet: its cold review, the PR to `main` and Qodo's review of it
+  come after this commit.
 - **`make conformance` runs the zoo readings** (after the stranger's-trace
   close; decisions log D22). No behaviour change. The target
   now runs `tests/test_zoo_readings.py` beside `tests/test_conformance.py` and
