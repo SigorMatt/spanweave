@@ -614,26 +614,27 @@ VERBATIM_PARTS = frozenset({"patches", "reviews"})
 def durable_documents() -> list[pathlib.Path]:
     """Documents that outlive a series, so their citations must resolve later.
 
-    One exclusion, because the excluded text is a record of a moment rather
-    than a claim made now: `reviews/` and `patches/` hold cold reviews copied
-    verbatim, and a review that says a file was untracked *when it was read*
-    is reporting, not citing.
+    Two exclusions, both because the excluded text is a record of a moment
+    rather than a claim made now. `reviews/` and `patches/` hold cold reviews
+    copied verbatim, and a review that says a file was untracked *when it was
+    read* is reporting, not citing.
 
-    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
-    series' own execution state, which owns `patches/` as its scratch drop and
-    is written to be deleted at series close. That is exactly why nothing
-    durable was allowed to depend on it, and it is gone again: the
-    stranger's-trace series closed and the file went with it (`TASKS.md`,
-    *The stranger's-trace series*). It has gone six times now -- four across
-    the September 2026 audit-fix series and its reopenings, once at the
-    live-graphs series' close, once here -- so the exclusion is a fixture of a
-    **series**, not of a file: the next series' plan file needs it back, and
-    takes it back out at its own close.
+    `WORKPLAN.md` is the second: a series' own execution state, which owns
+    `patches/` as its scratch drop and is written to be deleted at series
+    close. That is exactly why nothing durable may depend on it. The file has
+    gone six times -- four across the September 2026 audit-fix series and
+    its reopenings, once at the live-graphs series' close, once at the
+    stranger's-trace series' close (`TASKS.md`, *The stranger's-trace
+    series*) -- and it is back again for the wire series, so the exclusion is
+    a fixture of a **series**, not of a file: it travels with whichever plan
+    file is currently live, and is removed again at the wire series' close,
+    with the file.
     """
     return [
         path
         for path in documents()
-        if not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
+        if path.name != "WORKPLAN.md"
+        and not VERBATIM_PARTS & set(path.relative_to(ROOT).parts)
     ]
 
 
