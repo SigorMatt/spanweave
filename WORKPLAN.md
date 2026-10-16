@@ -11,7 +11,7 @@ pairs — and that is this series' oracle. One batch = one sub-agent = one
 commit = one concern. This file plus git is the only state; any session can
 resume cold from it.
 
-Last updated: 2026-10-17 (run 1: W0 done.)
+Last updated: 2026-10-17 (run 1: W0 done; W1 awaiting decision.)
 
 ---
 
@@ -156,7 +156,7 @@ at series close with §3 and §4 folded into TASKS.md.
 | ID | Batch | Status | Calls |
 |---|---|---|---|
 | W0 | **The raw bodies join the record.** `fixtures/zoo/<project>/<run-id>/raw/NNNN.body`: the 29 protobuf bodies copied byte for byte from the zoo at `7eb5b69` (the manifests already seal them: each `bodies` entry with `content_type: application/x-protobuf`), `.gitattributes` marking them binary; `tests/test_zoo.py` re-derives each raw body's sha256 against its manifest entry as it does for the JSON bodies, and asserts the pairing: for every JSON body there is exactly one raw body in the same manifest, same ordinal (the zoo's `forwards` list says which raw body each JSON body came from — the test reads it, not the file name). `fixtures/zoo/README.md` gains the raw column and says the pairs are the wire series' oracle. No library change. Tests red on the parent: the raw files are absent. | done (09245d9) | 3 |
-| W1 | **The reader unpacks the OTLP protobuf wire format into the same records.** L1. One additive API in `spanweave/` behind an optional extra `spanweave[otlp]` that depends on `opentelemetry-proto` (and so `protobuf`): a function taking the bytes of an `ExportTraceServiceRequest` and yielding the same flat, reader-marked records that the OTLP/JSON path yields for the same export — the batch names the function and its module (one module, the only one that imports the proto package, listed in the gates' allowlist for that import), with SPEC §7 and ADAPTERS.md naming it beside the container rules. The mapping from proto to the JSON shape is the OTLP/JSON specification's, not `protojson`'s where they differ: trace and span ids as lowercase hex, 64-bit integers as decimal strings, enums as the Collector writes them, defaults omitted — **the oracle decides every such choice**, and the batch records in SPEC §7 each place the Collector's encoding differs from `MessageToDict` so the choice is stated, not discovered. Without the extra installed, the function raises a `SpanweaveError` whose code names the extra; the JSON path is untouched and `make check` without the extra stays green (the proto tests skip with the reason, and CI gains a job with the extra). Tests red on the parent on all 29 pairs: `read_records(raw) == read_records(json)` record by record, and `dumps(build(raw records)) == dumps(build(json records))` byte for byte; the census (`tests/zoo_census.py`) runs each capture from its raw bodies as well as its JSON bodies and holds every count equal; a hand-made request with two resource spans and two scopes unpacks in document order. Mutations: a hex id emitted as base64; a `UnixNano` emitted as a number; an omitted default emitted — each red by the oracle. | todo | 6 |
+| W1 | **The reader unpacks the OTLP protobuf wire format into the same records.** L1. One additive API in `spanweave/` behind an optional extra `spanweave[otlp]` that depends on `opentelemetry-proto` (and so `protobuf`): a function taking the bytes of an `ExportTraceServiceRequest` and yielding the same flat, reader-marked records that the OTLP/JSON path yields for the same export — the batch names the function and its module (one module, the only one that imports the proto package, listed in the gates' allowlist for that import), with SPEC §7 and ADAPTERS.md naming it beside the container rules. The mapping from proto to the JSON shape is the OTLP/JSON specification's, not `protojson`'s where they differ: trace and span ids as lowercase hex, 64-bit integers as decimal strings, enums as the Collector writes them, defaults omitted — **the oracle decides every such choice**, and the batch records in SPEC §7 each place the Collector's encoding differs from `MessageToDict` so the choice is stated, not discovered. Without the extra installed, the function raises a `SpanweaveError` whose code names the extra; the JSON path is untouched and `make check` without the extra stays green (the proto tests skip with the reason, and CI gains a job with the extra). Tests red on the parent on all 29 pairs: `read_records(raw) == read_records(json)` record by record, and `dumps(build(raw records)) == dumps(build(json records))` byte for byte; the census (`tests/zoo_census.py`) runs each capture from its raw bodies as well as its JSON bodies and holds every count equal; a hand-made request with two resource spans and two scopes unpacks in document order. Mutations: a hex id emitted as base64; a `UnixNano` emitted as a number; an omitted default emitted — each red by the oracle. | awaiting decision (`OPEN_QUESTIONS.md` §23) | 6 |
 | W2 | **The series closes.** TASKS.md: registry W0–W2 with shas, §3 and §4 folded, L1's spanweave half dispositioned (the receiver's half is spanweave-live's V1); `reviews/`; CHANGELOG; `schema_version` unchanged; ROADMAP.md's Phase 4 line "OTLP protobuf behind the `otlp` extra" marked done with the sha, and nothing else there touched; WORKPLAN.md deleted; PR `wire` → `main`, a merge commit. No `plan:` commit follows. | awaiting W1 | 4 |
 
 ## 2. Execution order
@@ -183,6 +183,16 @@ the PR. Every batch: CI green on the pushed tip before `done`. The branch is
   JSON/raw pairing by `NNNN`; the test reads `forwards` and checks the
   ordinals agree (they do in all 12 captures). That each pair is the same
   export is W1's oracle to prove; `tests/zoo_census.py` `pairs()` serves it.
+- 2026-10-17: W1 halted before code (`da215a0`, OPEN_QUESTIONS §23): an
+  unparseable body (malformed_record with no text source), unknown proto
+  fields (MessageToDict drops them; the pairs cannot show any), and
+  `doubleValue` rendering (absent from the zoo) are behaviours no spec rule
+  or pair decides. A scratch prototype (MessageToDict, integer enums, hex
+  ids, then the JSON `read_records`) matched all 29 pairs on records and
+  `dumps` bytes; the Collector differs from MessageToDict only in hex ids
+  and integer `kind`/`status.code`. On resume: `otlp` extra lacks
+  `opentelemetry-proto` (lock refresh), the zero-deps gate needs a module
+  allowlist, mypy needs an override for the absent extra.
 
 ## 5. Origins
 
