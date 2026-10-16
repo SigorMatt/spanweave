@@ -365,6 +365,26 @@ NEUTRALITY_RULES = (
 # --------------------------------------------------------------------------
 
 
+#: The one module that may import an optional extra's packages, and which
+#: packages (batch W1): the `otlp` extra's protobuf runtime and OTLP schema,
+#: read by `spanweave.read_protobuf`. Only **inside a function** -- an import
+#: at module level would make `import spanweave` need the extra, which is a
+#: runtime dependency by another name -- and only these two top-level names.
+OPTIONAL_EXTRA_MODULE = "spanweave/otlp_protobuf.py"
+OPTIONAL_EXTRA_PACKAGES = ("google", "opentelemetry")
+
+
+def _imports_inside_functions(tree: ast.AST) -> set[int]:
+    """The lines of every import that sits in a function body."""
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Import | ast.ImportFrom):
+                    lines.add(inner.lineno)
+    return lines
+
+
 def zero_dependencies(path: str, source: str, tree: ast.AST) -> list[Violation]:
     """Core imports the standard library and itself. Nothing else.
 
@@ -372,11 +392,21 @@ def zero_dependencies(path: str, source: str, tree: ast.AST) -> list[Violation]:
     (`DESIGN.md` §7): a library meant to sit underneath other people's tools
     must not drag a tree into them. Adding one is a halt point (`AGENT.md`),
     so it is worth more than a line in `pyproject.toml` that nothing reads.
+
+    One module is allowed the `otlp` extra (`OPTIONAL_EXTRA_MODULE`), lazily:
+    the extra is optional exactly when nothing imports it until it is used.
     """
     found = []
+    lazy = (
+        _imports_inside_functions(tree)
+        if path.replace("\\", "/") == OPTIONAL_EXTRA_MODULE
+        else set()
+    )
     for imported, line in _imported_modules(tree):
         top = imported.split(".")[0]
         if top in ("spanweave", "__future__") or top in sys.stdlib_module_names:
+            continue
+        if top in OPTIONAL_EXTRA_PACKAGES and line in lazy:
             continue
         found.append(
             Violation(

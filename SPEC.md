@@ -666,9 +666,10 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter. Where the node is keyed and placed by the record's OTLP envelope (§6.1), what nobody read is the span's attributes, and the message says so |
-| `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
+| `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here. Also a body `spanweave.read_protobuf` could not parse as an `ExportTraceServiceRequest`, whose bytes JSON cannot write (§7) |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
+| `unknown_fields` | a message in an OTLP protobuf body carries fields the schema the reader was installed with does not define — a newer OTLP, or an extension (§7). The message is read without them, and this is the report that they were there: one per message, never a discard and never a refusal. Level **`warning`**: the library could not map them. Made by the reader, so it names no node and no adapter. Batch W1 (`OPEN_QUESTIONS.md` §23, 2B) |
 | `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Level **`warning`** (`Diagnostic`'s default): unlike an event, it says the record holds less than the span did. Batch T3 |
 | `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
 | `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
@@ -796,7 +797,7 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; six carry an object, four carry nothing, and one carries something
+arrived as; seven carry an object, four carry nothing, and one carries something
 the library computed rather than something it was given. Those three counts are
 measured from the table below by `tests/test_codes.py`, beside the count
 `CONTRACTS.md` states, so the next row added fails the build instead of ageing
@@ -807,7 +808,7 @@ this sentence.
 | `unpaired_call` | `{"call_id": str, "operation": str \| null}` |
 | `unpaired_result` | `{"call_id": str, "operation": str \| null}` |
 | `unmapped_attributes` | `list[str]` — attribute keys, never values |
-| `malformed_record` | `str` — the line's text |
+| `malformed_record` | `str` — the line's text; for a protobuf body that would not parse, nothing, as `undecodable_bytes` below and for its reason: the fragment is bytes (§7, batch W1) |
 | `missing_trace_id` | `null` — there is no fragment. The absence being reported is the graph's own empty `trace_id`, and there is no node to point at either |
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
@@ -816,6 +817,7 @@ this sentence.
 | `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
 | `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
 | `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
+| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. **Not** the field's bytes: a field with no definition has no name and no type, so there is no representation of it the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -1093,6 +1095,7 @@ SpanweaveError:
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
 | `not_an_envelope` | `EnvelopeError` | `spanweave.envelope` was given a record with no readable OTLP envelope: one the reader did not unpack from an export, one that states no `trace_id` or no `span_id`, or one stating an envelope field in a type the envelope cannot hold (§7) |
+| `otlp_extra_not_installed` | `SpanweaveError` | `spanweave.read_protobuf` was called and the `otlp` extra it reads with is not installed (§7). The code names the extra because installing it is the fix; nothing else in the library needs it, so `import spanweave` never raises this |
 | `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
@@ -2120,8 +2123,70 @@ declares reaches `0.5`.
     line by line as before, and each line that is an envelope is unpacked the
     same way. A JSON array of envelopes is unpacked element by element for the
     same reason.
-- A dialect-specific binary form (OTLP protobuf) is Phase 4 and lives behind an
-  optional extra — never in core (`ENVIRONMENT.md`).
+- **OTLP protobuf** — an `ExportTraceServiceRequest` sent as
+  `application/x-protobuf`, which is how the stock OTLP/HTTP exporter sends
+  every export — is the same container in a second encoding, and the reader's
+  for the same reason the JSON one is (batch W1, the zoo's L1).
+  **`spanweave.read_protobuf(data)`** takes the bytes of one request, in any
+  buffer `read_records` takes and refusing what it refuses, and returns the
+  `Records` `read_records` returns for the same export written as OTLP/JSON:
+  the same records, marked `Unpacked`, the same diagnostics, the same
+  `skipped_records`. It lives in `spanweave/otlp_protobuf.py`, the one module
+  that imports the protobuf runtime, and only when called — it is behind the
+  optional **`otlp`** extra (`pip install spanweave[otlp]`, which installs
+  `opentelemetry-proto` and `protobuf`), so `import spanweave` needs neither,
+  and called without them it raises `SpanweaveError` with the code
+  `otlp_extra_not_installed` (§3.10). Nothing else reads protobuf: `build`, the
+  CLI and `read_records` are unchanged, and the JSON path does not depend on
+  the extra in any way.
+  - **The JSON is the Collector's, and the oracle decides it.** The body is
+    parsed by the protobuf runtime, rendered as OTLP/JSON, and read by the
+    JSON reader above, so nothing about unpacking an export is written twice.
+    The rendering is the OTLP/JSON specification's as the Collector writes it,
+    not `MessageToDict`'s where the two differ; on the zoo's 29 pairs — every
+    export in it sealed both as the exporter's protobuf body and as the
+    Collector's JSON of it — they differ in exactly two places, and both are
+    the Collector's here:
+
+    | Field | Collector (used) | `MessageToDict` default |
+    |---|---|---|
+    | a span's `traceId`, `spanId`, `parentSpanId`; a link's `traceId`, `spanId` | lowercase hex | base64 |
+    | `kind`, `status.code` (enums) | the number | the enum's name |
+
+    Everything else already agrees on every pair: `*UnixNano` and `intValue`
+    as decimal strings (proto3 JSON's `int64`/`fixed64`), `flags` and
+    `droppedAttributesCount` as numbers, `bytesValue` as base64, and a
+    default omitted — an empty `parentSpanId` on a root span, an unset
+    `status` written `{}`. On every pair the records are equal record by
+    record, mark included, and the graph each builds is equal byte for byte;
+    `tests/test_protobuf.py` holds both, and the zoo census runs every capture
+    from its protobuf bodies as well as its JSON ones and holds every count,
+    node and edge equal. An empty body is an empty request, as its JSON
+    `{"resourceSpans": []}` is: no records, no diagnostics.
+  - **A body that will not parse is one `malformed_record`**, `skipped_records`
+    1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
+    (§3.7): JSON has no way to write the bytes, and carrying them in some
+    encoding would put a representation in the record the input never had.
+    It never raises, as no reading path does (`OPEN_QUESTIONS.md` §23, 1A).
+  - **A field the schema does not define is reported, never dropped.** The
+    runtime keeps such a field — from a newer OTLP than the installed
+    `opentelemetry-proto`, or an extension — with a number and a wire type and
+    no name, and `MessageToDict` drops it without a word. So the message is
+    read without it, and each message carrying any draws one `unknown_fields`
+    (`warning`, §3.7) naming its path in the request and each field's number
+    and wire type. The pairs cannot decide this one: no zoo body carries an
+    unknown field, and the Collector would not have written one into its JSON
+    either; matching it would be a silent discard (`CLAUDE.md` 2), and
+    refusing the body would lose every readable span to report one number
+    (§23, 2B). A graph built from such a body differs from its JSON twin's by
+    those diagnostics and nothing else.
+  - **A `doubleValue` is a float** — `MessageToDict`'s, so a `1.0` reads as
+    `1.0` and never as the integer `1`. **This is the one rendering the pairs
+    did not check**: no export in the zoo carries a `doubleValue`
+    (`tests/test_protobuf.py` asserts it, so the day one does the claim
+    becomes checkable), and OTLP/JSON lets a Collector write `1` or `1.0`,
+    which the JSON reader reads as an integer and a float respectively. A
+    capture of one, re-encoded by a Collector, would settle it (§23, 3C).
 
 ### Outputs
 

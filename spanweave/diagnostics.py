@@ -102,6 +102,15 @@ ATTRIBUTES_DROPPED = "attributes_dropped"
 EXCEPTION_EVENT = "exception_event"
 SPAN_EVENT = "span_event"
 
+# A message in an OTLP protobuf body carries fields the schema the reader was
+# installed with does not define -- a newer OTLP, or an extension. The message
+# is read without them, and this is the report that they were there: `source`
+# names the message's path in the request and each field's number and wire
+# type, never its bytes, which have no representation the input ever had.
+# Level `warning`: the library could not map them (`SPEC.md` §3.7, §7; batch
+# W1, `OPEN_QUESTIONS.md` §23).
+UNKNOWN_FIELDS = "unknown_fields"
+
 # No registered adapter claimed this record, so nothing read it: it is kept
 # as an `unknown` node carrying the record verbatim, with no adapter on its
 # provenance (`SPEC.md` §6.1). The honest report of "you are missing an
@@ -132,6 +141,7 @@ CODES = (
     TIMESTAMP_UNIT_SUSPECT,
     UNCLAIMED_RECORD,
     UNDECODABLE_BYTES,
+    UNKNOWN_FIELDS,
     UNKNOWN_SPAN_KIND,
     UNMAPPED_ATTRIBUTES,
     UNPAIRED_CALL,

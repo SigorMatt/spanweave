@@ -423,6 +423,47 @@ def test_the_dependency_gate_fails_on_a_planted_import(source):
     assert [v.rule for v in found] == ["zero-dependencies"]
 
 
+# The one exception, and its shape (batch W1): `spanweave/otlp_protobuf.py`
+# may import the `otlp` extra's packages, and only inside a function -- a
+# module-level import would make `import spanweave` need the extra.
+
+LAZY_PROTO = """
+def read(data):
+    from google.protobuf import json_format
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+"""
+
+
+def test_the_extra_s_module_may_import_the_extra_inside_a_function():
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, LAZY_PROTO, [gates.zero_dependencies]
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from google.protobuf import json_format",
+        "import opentelemetry.proto",
+        "def read(data):\n    import yaml\n",
+    ],
+    ids=["proto-at-module-level", "otlp-at-module-level", "another-package"],
+)
+def test_the_extra_s_module_imports_nothing_else_and_nothing_eagerly(source):
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies"]
+
+
+def test_no_other_module_may_import_the_extra():
+    found = gates.check_source(
+        "spanweave/read.py", LAZY_PROTO, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies", "zero-dependencies"]
+
+
 def test_pyproject_declares_no_runtime_dependencies():
     import tomllib
 

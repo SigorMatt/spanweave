@@ -36,9 +36,15 @@ dev = [
     "mypy>=1.11",
     "pytest>=8",
 ]
-# Phase 4 only: the binary OTLP form. Core must work fully without it and
-# `make check` never installs it.
+# Phase 4 only: the binary OTLP form, read by `spanweave.read_protobuf` in
+# `spanweave/otlp_protobuf.py` -- the one module that imports either package,
+# and only inside the function, so `import spanweave` never needs them. Core
+# must work fully without it and `make check` never installs it; CI's `otlp`
+# job does, so the protobuf tests run rather than skip (batch W1).
+# `opentelemetry-proto` is the `ExportTraceServiceRequest` definition;
+# `protobuf` is named too because the reader imports it directly.
 otlp = [
+    "opentelemetry-proto>=1.27",
     "protobuf>=4.25",
 ]
 
@@ -128,6 +134,15 @@ disallow_any_explicit = false
 [[tool.mypy.overrides]]
 module = ["tests.*", "examples.*", "capture.*"]
 strict = false
+
+# The `otlp` extra's packages, which `make check` never installs: without them
+# `spanweave/otlp_protobuf.py`'s lazy imports have nothing to resolve against,
+# and with them they may ship no type information. Either way they are `Any`
+# at that one module's edge, which handles them as such (batch W1).
+[[tool.mypy.overrides]]
+module = ["google.protobuf", "google.protobuf.*", "opentelemetry", "opentelemetry.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

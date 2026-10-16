@@ -1265,15 +1265,32 @@ def pairs(capture: Capture) -> list[tuple[pathlib.Path, pathlib.Path]]:
     return list(zip(json_bodies, raw, strict=True))
 
 
-def records(capture: Capture) -> list[Record]:
-    """Every record of every body, in body order, as `read_records` yields it.
+#: The two encodings every export in the zoo is sealed in: the Collector's
+#: OTLP/JSON (`json/NNNN.json`), and the exporter's own protobuf (`raw/`).
+ENCODINGS = ("json", "raw")
+
+
+def records(capture: Capture, encoding: str = "json") -> list[Record]:
+    """Every record of every body, in body order, as the reader yields it.
+
+    ``encoding`` is which half of each pair is read: the JSON body through
+    `spanweave.read_records`, or the raw body it re-encodes through
+    `spanweave.read_protobuf` (batch W1; needs the `otlp` extra). Either way a
+    record is named by its **JSON** body's name, so the two readings of one
+    capture line up record for record and `Capture.unrouted` names the same
+    records in both.
 
     A body the reader could not read whole is a failure here, not a smaller
     census: each read's diagnostics are returned to the caller to assert on.
     """
     out: list[Record] = []
-    for body in bodies(capture):
-        read = spanweave.read_records(body.read_bytes())
+    for body, raw in pairs(capture):
+        if encoding == "json":
+            read = spanweave.read_records(body.read_bytes())
+        elif encoding == "raw":
+            read = spanweave.read_protobuf(raw.read_bytes())
+        else:
+            raise ValueError(f"no encoding {encoding!r}; the zoo seals {ENCODINGS}")
         if read.diagnostics or read.skipped_records:
             raise AssertionError(f"{capture.run}/{body.name}: {read.diagnostics}")
         out.extend(
@@ -1283,10 +1300,12 @@ def records(capture: Capture) -> list[Record]:
     return out
 
 
-def audit_feed(capture: Capture) -> list[JsonValue]:
+def audit_feed(capture: Capture, encoding: str = "json") -> list[JsonValue]:
     """The records the audit fed the trace's build, in the order it fed them."""
     skip = set(capture.unrouted)
-    return [r.record for r in records(capture) if (r.body, r.index) not in skip]
+    return [
+        r.record for r in records(capture, encoding) if (r.body, r.index) not in skip
+    ]
 
 
 def count(graph: spanweave.Graph) -> Census:

@@ -243,6 +243,17 @@ receiver reading bytes in flight splits them on `\n` and keeps the remainder
 for its next call, rather than handing over an arbitrary boundary
 (`SPEC.md` §7).
 
+**`read_protobuf(data)` is the same reader for the OTLP protobuf wire format**
+— the `application/x-protobuf` body the stock OTLP/HTTP exporter sends. It
+returns the `Records` `read_records` returns for the same export written as
+OTLP/JSON, and is held to that on every export the zoo seals in both
+encodings (`SPEC.md` §7). It needs the optional `otlp` extra
+(`pip install spanweave[otlp]`); without it, it raises `SpanweaveError` with
+the code `otlp_extra_not_installed`, and nothing else in the library needs it.
+A body that will not parse is a `malformed_record`, and a field the installed
+OTLP schema does not define is reported as `unknown_fields` rather than
+dropped.
+
 **`envelope(record)` is what the transport stated about one span**, for a
 record the reader unpacked from an OTLP export: its trace id, span id, parent,
 name, times and status, as an `Envelope` — the routing key a receiver needs,
@@ -332,7 +343,7 @@ test, not a request.
 | For | Names |
 |---|---|
 | Building a graph | `build`, `Builder` |
-| Reading records without building one | `read_records`, `Records`, `envelope`, `Envelope` |
+| Reading records without building one | `read_records`, `read_protobuf`, `Records`, `envelope`, `Envelope` |
 | The graph and what it holds | `Graph`, `Node`, `Edge`, `Diagnostic`, `Meta`, `Payload`, `Provenance`, `RawRecord`, `Status`, `Usage` |
 | The closed vocabularies | `NodeKind`, `EdgeKind`, `Warrant`, `PayloadState`, `DiagnosticLevel` |
 | What changed between two versions | `Delta`, `BasisRewrite` |

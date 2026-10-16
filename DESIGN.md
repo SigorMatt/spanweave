@@ -57,7 +57,8 @@ redrawn later around whatever happened to occur.
 ├═════════════════════════════════════════════════┤  ← the seam (§3)
 │ Adapters  (adapters/*.py)                       │  all dialect mess
 ├─────────────────────────────────────────────────┤
-│ Reader  (read.py, jsoncodec.py)                 │  bytes -> JSON records
+│ Reader  (read.py, jsoncodec.py,                 │  bytes -> JSON records
+│          otlp_protobuf.py)                      │
 └─────────────────────────────────────────────────┘
 ```
 

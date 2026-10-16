@@ -15,6 +15,35 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **`spanweave.read_protobuf` reads the OTLP protobuf wire format** (wire
+  series, W1; the zoo's `PROBES.md` L1). It takes the bytes of one
+  `ExportTraceServiceRequest` -- the `application/x-protobuf` body the stock
+  OTLP/HTTP exporter sends -- and returns the `Records` `read_records`
+  returns for the same export written as OTLP/JSON. It lives in
+  `spanweave/otlp_protobuf.py`, behind the `otlp` extra, which now depends
+  on `opentelemetry-proto` as well as `protobuf` (`uv.lock` refreshed);
+  without the extra it raises `SpanweaveError` with the new code
+  `otlp_extra_not_installed` (`SPEC.md` §3.10), and `import spanweave`
+  needs neither package. The body is rendered as the Collector's OTLP/JSON
+  -- ids as hex and enums as numbers, the two places the Collector differs
+  from `MessageToDict`, now stated in `SPEC.md` §7 -- and handed to
+  `read_records`. `tests/test_protobuf.py` holds it to the zoo's 29 pairs:
+  the rendering is the Collector's document, the records are equal record
+  by record and the built graphs byte for byte, and the zoo census
+  (`tests/test_zoo.py`) runs every capture from its raw bodies too. Where
+  the pairs are silent, `OPEN_QUESTIONS.md` §23's decisions: a body that
+  will not parse is one `malformed_record` with `source` `null`; a message
+  carrying fields the installed schema does not define is read and draws
+  one new **`unknown_fields`** diagnostic (`warning`; its path and the
+  fields' numbers and wire types, `SPEC.md` §3.7), and the diagnostic code
+  vocabulary in `tests/serialized_shape.json` is regenerated for it -- no
+  other shape change, `schema_version` unchanged; a `doubleValue` is a
+  float, stated as the one rendering no pair checks. The zero-dependencies
+  gate allows that one module the extra's imports, inside a function only;
+  mypy has an override for the absent extra; CI gains an `otlp` job that
+  installs the extra and runs the suite with `SPANWEAVE_REQUIRE_OTLP=1`,
+  so the protobuf tests run there rather than skip. The JSON path is
+  unchanged.
 - **The raw bodies join the record** (wire series, W0). The zoo's
   protobuf bodies -- the exporter's own bytes, which its `PROBES.md` L1
   found every one of answered 415 -- are copied byte for byte from

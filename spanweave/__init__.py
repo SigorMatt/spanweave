@@ -45,6 +45,7 @@ from spanweave.model import (
     Usage,
     Warrant,
 )
+from spanweave.otlp_protobuf import read_protobuf
 from spanweave.read import Records, read_records
 from spanweave.seam import Envelope, envelope
 from spanweave.serialize import (
@@ -96,6 +97,7 @@ __all__ = [
     "dump",
     "dumps",
     "envelope",
+    "read_protobuf",
     "read_records",
     "to_document",
     "validate",

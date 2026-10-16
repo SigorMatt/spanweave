@@ -960,7 +960,7 @@ def read_records(data: bytes | bytearray | memoryview) -> Records:
     )
 
 
-def _as_bytes(data: object) -> bytes:
+def _as_bytes(data: object, reader: str = "read_records") -> bytes:
     """The bytes a caller handed over, copied where a copy is owed.
 
     Typed `object` so the check is reachable rather than merely declared. Three
@@ -984,7 +984,7 @@ def _as_bytes(data: object) -> bytes:
         return data
     if isinstance(data, memoryview) and (data.itemsize != 1 or not data.c_contiguous):
         raise TypeError(
-            f"read_records reads a memoryview of one byte per item, laid out "
+            f"{reader} reads a memoryview of one byte per item, laid out "
             f"contiguously, and got itemsize {data.itemsize} with "
             f"c_contiguous={data.c_contiguous}. A view over wider items would "
             f"be read in this machine's byte order, and a strided view names "
@@ -995,7 +995,7 @@ def _as_bytes(data: object) -> bytes:
     if isinstance(data, (bytearray, memoryview)):
         return bytes(data)
     raise TypeError(
-        f"read_records reads bytes already in memory -- bytes, a bytearray, or "
+        f"{reader} reads bytes already in memory -- bytes, a bytearray, or "
         f"a memoryview of single bytes -- and got {type(data).__name__}. Trace "
         f"content is bytes here: a `str` is a path everywhere else in this "
         f"library (`SPEC.md` §7), so reading one as content would make "

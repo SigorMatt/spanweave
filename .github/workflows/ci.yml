@@ -49,6 +49,25 @@ jobs:
       # dependencies: ENVIRONMENT.md network zone 1. It never publishes.
       - run: make install-check
 
+  otlp:
+    # The `otlp` extra (batch W1): `make check` never installs it, so there
+    # the protobuf tests skip. Here they run -- the zoo's 29 pairs, the census
+    # from the raw bodies -- and SPANWEAVE_REQUIRE_OTLP turns a proto runtime
+    # that will not import into a failure instead of a skip that passes.
+    runs-on: ubuntu-latest
+    env:
+      SPANWEAVE_REQUIRE_OTLP: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: uv sync --extra dev --extra otlp
+      - run: uv run --extra dev --extra otlp mypy spanweave
+      - run: uv run --extra dev --extra otlp pytest -rs
+
   determinism:
     # Determinism is a cross-machine claim (CLAUDE.md 4), so it is worth
     # proving on more than one OS rather than only on the machine that

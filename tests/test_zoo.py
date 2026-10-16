@@ -24,6 +24,7 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from dataclasses import fields
@@ -511,6 +512,34 @@ def test_the_audit_s_census_holds_batch_and_incremental(capture):
     # Where each node sits, and each edge with its basis (R-10): the bytes
     # above make the `Builder`'s graph this one, so both are held.
     assert zoo_census.structure(graph) == STRUCTURES[capture.run], capture.run
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_the_census_holds_from_the_raw_bodies_as_from_the_json(capture):
+    """Batch W1: each capture read from the exporter's protobuf, not the
+    Collector's JSON of it, builds every count, node and edge the census holds
+    -- the audit's feed and the whole capture alike, batch and incremental.
+    Skips without the `otlp` extra; CI's `otlp` job runs it."""
+    if not os.environ.get("SPANWEAVE_REQUIRE_OTLP"):
+        pytest.importorskip(
+            "opentelemetry.proto.collector.trace.v1.trace_service_pb2",
+            reason="the `otlp` extra is not installed: pip install spanweave[otlp]",
+        )
+    assert zoo_census.records(capture, "raw") == zoo_census.records(capture)
+    for feed, census, placed in (
+        (zoo_census.audit_feed(capture, "raw"), capture.census, STRUCTURES),
+        (
+            [r.record for r in zoo_census.records(capture, "raw")],
+            capture.whole if capture.whole is not None else capture.census,
+            {**STRUCTURES, **WHOLE_STRUCTURES},
+        ),
+    ):
+        batch, incremental = zoo_census.batch_and_incremental(feed)
+        assert batch == incremental
+        graph = graph_from_records(feed)
+        assert graph.trace_id == capture.trace_id
+        assert zoo_census.count(graph) == census, capture.run
+        assert zoo_census.structure(graph) == placed[capture.run], capture.run
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)

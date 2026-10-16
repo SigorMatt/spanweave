@@ -30,9 +30,18 @@ from tests.conformance import (
 
 def pytest_report_header(config):
     del config
+    try:
+        import opentelemetry.proto.collector.trace.v1.trace_service_pb2  # noqa: F401
+    except ImportError:
+        otlp = "absent -- the protobuf tests skip (pip install spanweave[otlp])"
+    else:
+        otlp = "installed -- the protobuf tests run"
     found = scenarios()
     backed = sorted(adapter_backed())
-    lines = [f"conformance dialects: declared={list(DIALECTS)} adapter-backed={backed}"]
+    lines = [
+        f"otlp extra: {otlp}",
+        f"conformance dialects: declared={list(DIALECTS)} adapter-backed={backed}",
+    ]
 
     per_dialect = {}
     for rendering in renderings(found):
