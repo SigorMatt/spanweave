@@ -14467,9 +14467,13 @@ decisions log D15, D16, D17, D18 and D19.
   every finding dispositioned (*Cold review of the series — 2026-10-17*
   below). The scoped review of those fixes, a read of `4689670..c4018b4`,
   is archived and every finding dispositioned too (*Scoped review of the
-  fixes — 2026-10-17* below), and its fixes are applied. The PR is not open
-  yet: the push and CI on the pushed tip, the PR, Qodo's review of it and
-  the merge remain.
+  fixes — 2026-10-17* below), and its fixes are applied. The PR is open,
+  as pull request #6, and Qodo's review of it at `f38c193` is archived and
+  its seven findings dispositioned (*Qodo's review of PR #6 — 2026-10-18*
+  below). The push of those fixes and CI on the pushed tip, the scoped
+  cold review of the three that touch `spanweave/` (`5f9db88`, `2066828`,
+  `8b68608`) together with Qodo's review of the push, and the merge
+  remain.
 - **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
   job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
   extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
@@ -14604,11 +14608,15 @@ the review archives, verbatim, name one. Each reaches its rows by this map:
 | `decisions-spanweave-2026-10-17` | D31, D32, D33 |
 | `decisions-spanweave-2026-10-17b` | D34 |
 | `decisions-spanweave-2026-10-17c` | D35 |
+| `decisions-spanweave-2026-10-18` | D36 |
 
 D28–D30 came from no relay file: the plan file held them when `7b4b606`
 opened the series. D34 was decided after the close, on the cold review of
 2026-10-17. It is a new row, not an edit. D35 was decided the same way, on
-the scoped review of those fixes.
+the scoped review of those fixes. D36 is Qodo's review of pull request #6,
+dispositioned; the 2026-10-18 file is that review's dispositions, and the
+commits that applied it before its row was written cite the review by
+finding.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14620,6 +14628,7 @@ the scoped review of those fixes.
 | D33 | 2026-10-17 | W1 | **3C.** `doubleValue` is `MessageToDict`'s float, stated in SPEC §7 as the one place the pairs could not check, with a test that the zoo holds no `doubleValue` (so the day one appears, the test says the claim is now checkable); and a thread at W2 for the zoo: one export carrying a `doubleValue` re-encoded by the Collector would settle `1` against `1.0` — a capture, not a guess (3B declined for being one). | maintainer |
 | D34 | 2026-10-17 | review | The cold review of 2026-10-17 of `88c7339..4689670` (R-1…R-18), dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-7, R-8, R-9, R-10, R-13 (the sha test and the record lines; the ordinal is removed, not bound), R-14, R-15, R-16, R-17, R-18. Read, recorded: R-12, the README row that said "are registered" before any was, deleted at the close. Declined with a reason: R-11 beyond what R-10's fix gives. A plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where the sha and corpus-count guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters. With R-10's fix the retired-figure guards do scan the plan, which is the part of R-11 worth having. Applied as eight commits on `wire`, one concern each; where a commit answers several findings they share one mechanism and the subject says so. If the extra's declared floors failed, they were to be raised to the lowest pair that passes, and said so in `pyproject.toml` and the CHANGELOG. Nothing is amended or force-pushed. | maintainer |
 | D35 | 2026-10-17 | review | The scoped review of 2026-10-17 of `4689670..c4018b4` (R-1…R-21), dispositioned. Accepted: R-1, R-2, R-3 (with its limit stated: the gate is syntactic, and a name bound by assignment is not chased), R-4, R-5, R-6, R-7, R-9, R-10, R-11 (the G7 branch), R-12 (the worst three; the rest recorded as the limit of a text-shape test), R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-20, R-21. Read, recorded: R-8, `21b106d`'s four guards under one subject, which were the grouping the maintainer gave. Declined with a reason: R-11's second bullet (`D33` changed to `D32`, a real but wrong row, stays green): a resolver holds that a citation exists, not that it is the right one; the only guard for meaning is a reader. Applied as ten commits on `wire`, one concern each; where several findings share one mechanism the subject says so. No `plan:` commits; nothing is amended or force-pushed. The loop is bounded: no third cold review unless a commit of this round touches `spanweave/` (none did); the PR, Qodo's review of it and the merge follow, and anything a further pass would find is a thread, registered at the next series' open. | maintainer |
+| D36 | 2026-10-18 | review | Qodo's review of pull request #6 at `f38c193` (seven findings), dispositioned. Accepted: finding 6, a bug: an id whose bytes are all zero is omitted, as the Collector omits it, so a root span whose exporter wrote zero bytes for its parent is a root and not an orphan; finding 7, a bug: `unknown_fields` says, per field, whether the installed schema defines the number and the wire type it expects, so a known field with the wrong wire type is not blamed on a newer schema; finding 4, a rule violation: the rendered document is written with sorted keys; finding 3, a rule violation: the tests import the proto modules by name, not by `__import__`. Accepted as a pin and a thread: finding 5, a bug: a non-finite `doubleValue` reads as its proto3 JSON spelling, a string, on both paths, and a test pins that the two agree; changing it would change the graph a JSON export yields, so whether it draws a diagnostic is a thread for the next spanweave series. Declined as a design change, answered in the record: finding 1, a rule violation: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, because the records are the JSON path's records for the same export (D29), and SPEC §7 says so; finding 2, a rule violation: the `otlp` extra is the decided exception to the zero-dependency rule (D28), held by the gate to a lazy import, one module and the extra's two prefixes, and `CLAUDE.md`'s rule says so. Applied as seven commits on `wire`, one concern each. No `plan:` commits; nothing is amended or force-pushed. Commits 1–3 (`5f9db88`, `2066828`, `8b68608`) touch `spanweave/`, so they get their own scoped cold review before the merge, together with Qodo's diff after the push. The comment and its seven inline comments are archived as first fetched; the PR summary comment carries no findings and is not. | maintainer |
 
 ### Cold review of the series — 2026-10-17
 
@@ -14723,6 +14732,52 @@ the record agreeing with itself.
 | R-19 — `c4018b4`, the length, indent and character rules unpinned | **accepted**, `ebdc27d` (with R-18): tests pin the length rule, the three-space indent, tildes and the closing info string; R-19's three mutations and `>=`→`>` are red |
 | R-20 — `c4018b4`, an unrelated thread rides along, and "every fence reader" overstates | **accepted**, `ebdc27d` (with R-18): the seven other fence readers read through the shared module, by `fenced_blocks()`, built on `fence_kinds()`, rather than calling `fence_kinds()` as the decisions' text has it, because they want a block's info string and body; that no tracked document's result changes is measured in the commit's message, not tested. The thread is the grouping the maintainer asked for, recorded under *Corrections after the close* |
 | R-21 — `3dfe461`, `d2053ae`, `c4018b4`, two commits after the archive unrecorded | **accepted**, the tenth commit (with R-7): *Corrections after the close* records both, with their reason |
+
+### Qodo's review of PR #6 — 2026-10-18
+
+`reviews/2026-10-18-qodo-pr6.md` holds eight comments by
+`qodo-code-review[bot]` on pull request #6, all rendered against `f38c193`,
+each its `body` field as the GitHub API returned it, unchanged: the issue
+comment *Code Review by Qodo*, id `6238057340`, which carries the seven
+findings, and the seven inline comments of review `5559191961` (whose own
+body is empty), ids `4303811452` to `4303811474` on findings 1 to 7, in
+order. Each body sits in the archive between a ````` ````text ````` line
+and a ````` ```` ````` line, less the line break before the closing one;
+extracted so, each is byte-identical to the scratch drop's copy of it, and
+to the `body` field of the API's response, and its `sha256` is the same on
+all three:
+
+| Comment | Bytes | `sha256` |
+|---|---|---|
+| issue comment `6238057340` | 25,320 | `c1c77df5a645d65f80d2c913fa872d6ef57f87793723944833816ef7eacce3ee` |
+| inline comment `4303811452` | 1,705 | `1c116bfc889166c2e4eb6fc70f00176b79dde8aa451479f09a14226bed17aa20` |
+| inline comment `4303811456` | 1,716 | `74129d6a334c67b3ef7e06b132c417246d034a10ad54ee2ba59e8b217986af79` |
+| inline comment `4303811460` | 1,431 | `5972b6cf4bd9f3fa5f87e7a4243de47361571145ef08d45811ff3b4c0577196d` |
+| inline comment `4303811464` | 1,509 | `0c314bfd8ebea7ef41263fad19086e13b7519dc9acb6721814ca4330a36385ac` |
+| inline comment `4303811466` | 1,501 | `13ed9d41a56ec4db3ec3e36a88f1c94c14fbe5719d5b5d24ef51f419bd1cf2a4` |
+| inline comment `4303811470` | 2,104 | `342747bd59fed514b704fd12ab98cfa3458859f44a506da5840f64676c51b5ba` |
+| inline comment `4303811474` | 1,681 | `119056c685f2d9f254a37ab670c73b911ca246a66722bec4c96e1a423f122b84` |
+
+As for the earlier archives, the digests are written here and not in the
+archive. The archive's header says where each comment came from and how to
+extract it, and nothing outside its fences is the bot's. The comments were
+posted on 2026-10-17; the archive takes the date of their dispositions. A
+first comment from the same bot that day, id `6238013976`, is a PR summary
+and carries no findings; it is not archived. The maintainer's dispositions
+are decisions log D36, above. They were applied on `wire` as seven commits,
+one concern each, and this archive is the last of them.
+
+`reviews/2026-10-18-qodo-pr6.md`: `sha256` `6b20fd35a537cb5b597392b4cab023c518a887f5dc10832964edcddef25021c5`, first anchored 2026-10-18, by the commit that archives it.
+
+| Finding | Disposition |
+|---|---|
+| Qodo 6 — All-zero parent ids turn root spans into orphans (Bug, Correctness) | **accepted**, `5f9db88`: a `traceId`, `spanId` or `parentSpanId`, a span's or a link's, whose bytes are all zero is omitted, as an empty one is: the Collector's rule, not a pair (`SPEC.md` §7). The JSON path is unchanged (decisions log D36) |
+| Qodo 7 — Malformed known fields are blamed on a newer schema (Bug, Observability) | **accepted**, `2066828`: each `unknown_fields` entry carries `defined` and `expected_wire_type`, and the message says "not readable as the installed schema defines it" of a defined number and "not defined by the installed schema" of the rest; no new code, `diagnostic_source` regenerated (decisions log D36) |
+| Qodo 4 — The reader emits unsorted JSON (Rule violation, Maintainability) | **accepted**, `8b68608`: `read_protobuf`'s intermediate text and the tests' serializations of rendered documents use `sort_keys=True`; the graph bytes moved on no pair (decisions log D36) |
+| Qodo 3 — Tests invoke a banned dynamic import (Rule violation, Security) | **accepted**, `f68995c`: `_pb2` in `tests/test_protobuf.py` imports the proto module by an explicit `from … import …` inside the extra guard, and two tests hold its two outcomes (decisions log D36) |
+| Qodo 5 — Non-finite doubles become strings silently (Bug, Correctness) | **accepted as a pin and a thread**, `97231d7`: the two paths agree on NaN and both infinities, each read as its proto3 JSON spelling, and `SPEC.md` §7 states the reading. Whether it draws a diagnostic is registered under *Still open after the close*, for the next spanweave series (decisions log D36) |
+| Qodo 1 — Protobuf records lose their original bytes (Rule violation, Correctness) | **declined as a design change, answered in the record**, `568adc2`: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, by decisions log D29, and `SPEC.md` §7 says so; nothing is lost but what `unknown_fields` reports, and the body's bytes are the caller's to keep (decisions log D36) |
+| Qodo 2 — Core package gains runtime protobuf dependencies (Rule violation, Architecture) | **declined as a design change, answered in the record**, `568adc2`: the `otlp` extra is the decided exception, by decisions log D28, and the gate holds it lazy, in one module and to the extra's two prefixes; `CLAUDE.md`'s zero-dependency rule now states the exception (decisions log D36) |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 

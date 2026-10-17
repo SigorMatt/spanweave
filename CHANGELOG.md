@@ -15,6 +15,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **Qodo's review of PR #6 is archived, and all seven findings have a
+  disposition** (decisions log D36). No behaviour change.
+  `reviews/2026-10-18-qodo-pr6.md` holds the "Code Review by Qodo" comment
+  and its seven inline comments, each body as first fetched, unchanged,
+  their `sha256`s in `TASKS.md`, which gains a line per finding: findings
+  6 and 7 accepted and fixed by the all-zero-id and `unknown_fields`
+  entries under Fixed; findings 4 and 3 accepted and fixed by two commits
+  that change no behaviour, sorted keys in the rendered document and the
+  proto modules imported by name in the tests; finding 5 accepted as a pin
+  and a thread; findings 1 and 2 declined as design changes and answered
+  in `SPEC.md` §7 and `CLAUDE.md`. The PR summary comment carries no
+  findings and is not archived.
 - **The scoped review of 2026-10-17 is archived, and every finding has a
   disposition** (decisions log D35). No behaviour change.
   `reviews/2026-10-17b-wire.md` is the review of the fixes byte for byte,
