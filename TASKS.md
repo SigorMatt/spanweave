@@ -11127,6 +11127,8 @@ it from the probe, so what remains in the probes is what no batch has closed.
 
 `WORKPLAN.md` §5, moved here. The review itself is `reviews/2026-09-10-run2.md`.
 
+`reviews/2026-09-10-run2.md`: `sha256` `1d12bd52c0968b5f68de2c11f8a0daf413e46466e8d7c32152b2bad53015a43b`, first anchored 2026-10-17; it agrees with the shortened digest `1d12bd52…a43b` recorded in `reviews/2026-09-11-run3.md` (§4, the Q3 table, line 285), its source; the full digest is re-derived from the archive's bytes.
+
 | Review finding | Batch |
 |---|---|
 | C3 digit-limit `ValueError` escapes `build` and the CLI | `audit-R1` |
@@ -11147,6 +11149,8 @@ a review whose nits quietly evaporate at the close is the one nobody writes
 again. The `§` column is the review's own section, and inside the table the
 review's spelling of a batch id is kept as it wrote it (`R1`, `R4`, `R5`) —
 quoting a document is not the place to apply this file's `audit-` prefix.
+
+`reviews/2026-09-11-run3.md`: `sha256` `6b3d0ee470b337c5eda8331a23d905c065774ae07baf92aecb3aff423858c2af`, first anchored 2026-10-17; no earlier digest was recorded.
 
 | § | Finding | Outcome |
 |---|---|---|
@@ -11196,6 +11200,8 @@ file's `audit-` prefix.
 
 Where a row names a batch, the closure was spot-checked at this close rather
 than read off the batch's own report; the rows say what was re-run.
+
+`reviews/2026-09-11-run4.md`: `sha256` `f7349552edd04ad105abac7cca7083e95ec2a67d24dd6c2444e0b3578ced6aa3`, first anchored 2026-10-17; the same full digest is recorded inside `reviews/2026-09-12-run5.md` (§7, line 772), its source, and equals the archive's bytes.
 
 | § | Finding | Outcome |
 |---|---|---|
@@ -11320,6 +11326,8 @@ Two files, both tracked:
   here and not in the archive, which is kept byte-for-byte; the name is
   provenance and not a path to open, because `patches/` is absent from a clean
   checkout and the doc-truth guard refuses a durable citation into it.
+
+`reviews/2026-09-20-qodo-bot.md`: `sha256` `a1284d2d44d94c944f0bf6fc8deea244763cd87094def798c4edb5e6b71a1119`, first anchored 2026-10-17; no earlier digest was recorded.
 
 **The nine items, and what answered each.** The `#` column is the number the
 comment renders, which is what the archive is filed under. The last column is
@@ -11735,6 +11743,8 @@ two blockers are also preserved here because both blockers became batches and
 the shape table is the only per-commit protocol evidence the series kept. The
 later cold read of run 2 — the one that reopened this section — is
 `reviews/2026-09-10-run2.md`.
+
+`reviews/2026-09-10-run1.md`: `sha256` `e2a8fa6023f8beb1ab42800e5143893a06cd35e4693cd61c88c2a8962dcb4cd0`, first anchored 2026-10-17; it agrees with the shortened digest `e2a8fa60…4cd0` recorded in `reviews/2026-09-11-run3.md` (§4, the Q3 table, line 284), its source; the full digest is re-derived from the archive's bytes.
 
 Both are in the repository because for a day they were not: they were written
 to `patches/`, which is untracked, and cited from here as if a reader could
@@ -14294,6 +14304,8 @@ The archive's header says where each comment came from and how to extract it,
 and nothing outside its fences is the bot's. A first comment from the same bot
 that day, id `6181520837`, is a PR summary and carries no findings; it is not
 archived. The maintainer's dispositions are decisions log D27, above.
+
+`reviews/2026-10-15-qodo-pr5.md`: `sha256` `72b9e2562b3bf4da4d86da96952eb1d1d399015fbf0fbfad3649439564e0f0fb`, first anchored 2026-10-17; no earlier digest was recorded.
 
 | Finding | Disposition |
 |---|---|

@@ -35,6 +35,7 @@ something the project has not done yet.
 from __future__ import annotations
 
 import ast
+import hashlib
 import itertools
 import json
 import pathlib
@@ -742,6 +743,146 @@ def test_every_review_a_document_cites_is_in_the_repository():
         if not (ROOT / review).is_file()
     }
     assert not missing, f"documents cite reviews that are not in the tree: {missing}"
+
+
+# -- Every review archive is held to its recorded sha256 ---------------------
+#
+# Each archive under `reviews/` is kept byte for byte, and each archiving
+# commit wrote "`cmp` silent, and `sha256` <digest>" into `TASKS.md` beside the
+# archive's name -- and then no test read it back. One byte of an archive could
+# change and every test stayed green (the sanity check `3dfe461`'s body
+# records). The registry is that prose, not a sidecar file: the digest stands
+# where the provenance is told, and this reads it from there.
+
+#: Where a digest is recorded, in the order a failure names its source.
+DIGEST_REGISTRY = ("TASKS.md", "CHANGELOG.md")
+
+ARCHIVE_NAME = re.compile(r"`(reviews/[A-Za-z0-9._-]+\.md)`")
+DIGEST_RECORD = re.compile(r"`sha256`\s+`([0-9a-f]{64})`")
+
+
+def digest_records(text: str) -> list[tuple[str, str]]:
+    """`(archive, digest)` for every digest the text ties to one archive.
+
+    A record is a `sha256` code span, then only whitespace, then a 64-hex code
+    span, and it belongs to the archive named before it in its paragraph
+    (`paragraphs()`: blank lines and list items split). **Exactly one** archive
+    may be named there. A paragraph naming two before a digest is not a
+    record of either: `CHANGELOG.md`'s live-graphs entry names run 2 and run 3
+    and then gives both digests, and "the last name wins" would hand run 2's
+    digest to run 3. An archive named *after* the digest -- a source cited for
+    it -- does not count. A table header's `sha256` is followed by `|`, so a
+    table of other digests is not read either.
+    """
+    records = []
+    for paragraph in paragraphs(text):
+        for match in DIGEST_RECORD.finditer(paragraph):
+            named = set(ARCHIVE_NAME.findall(paragraph[: match.start()]))
+            if len(named) == 1:
+                records.append((named.pop(), match.group(1)))
+    return records
+
+
+def archive_digest_faults(
+    registry: dict[str, str], archives: dict[str, bytes]
+) -> list[str]:
+    """Why an archive is not the bytes its record says it is.
+
+    `registry` maps a registry file's name to its text, in `DIGEST_REGISTRY`'s
+    order; `archives` maps `reviews/<name>.md` to its bytes. Every archive needs
+    a record. Every record in every registry file is read, so two different
+    digests for one archive are a fault wherever they stand, never a choice.
+    The digest compared is the first registry file's that records one.
+    """
+    recorded: dict[str, dict[str, set[str]]] = {}
+    for source, text in registry.items():
+        for archive, digest in digest_records(text):
+            recorded.setdefault(archive, {}).setdefault(source, set()).add(digest)
+    faults = []
+    for archive in sorted(set(recorded) - set(archives)):
+        faults.append(f"{archive}: a digest is recorded for an archive not in the tree")
+    for archive in sorted(archives):
+        by_source = recorded.get(archive, {})
+        if not by_source:
+            faults.append(
+                f"{archive}: no sha256 is recorded for it in {' or '.join(registry)}"
+            )
+            continue
+        digests = set().union(*by_source.values())
+        if len(digests) > 1:
+            faults.append(
+                f"{archive}: two different digests are recorded, "
+                f"{ {source: sorted(found) for source, found in by_source.items()} }"
+            )
+            continue
+        source = next(name for name in registry if name in by_source)
+        (digest,) = digests
+        actual = hashlib.sha256(archives[archive]).hexdigest()
+        if digest != actual:
+            faults.append(
+                f"{archive}: {source} records sha256 {digest}, its bytes are {actual}"
+            )
+    return faults
+
+
+def test_every_review_archive_is_the_bytes_its_recorded_sha256_says():
+    archives = {
+        str(path.relative_to(ROOT)): path.read_bytes()
+        for path in sorted((ROOT / "reviews").glob("*.md"))
+    }
+    assert archives, "no archive under reviews/; the scan found nothing"
+    registry = {name: read(name) for name in DIGEST_REGISTRY}
+    faults = archive_digest_faults(registry, archives)
+    assert not faults, "\n  ".join(["archives and their recorded sha256:", *faults])
+
+
+def test_the_archive_digest_scan_ties_one_digest_to_one_archive():
+    body = b"a review\n"
+    good = hashlib.sha256(body).hexdigest()
+    other = hashlib.sha256(b"another\n").hexdigest()
+    archives = {"reviews/a.md": body}
+
+    def faults(tasks: str, changelog: str = "") -> list[str]:
+        return archive_digest_faults(
+            {"TASKS.md": tasks, "CHANGELOG.md": changelog}, archives
+        )
+
+    # Wrapped across a line, as the archiving paragraphs write it.
+    wrapped = f"`reviews/a.md`, archived: `cmp` silent, and `sha256`\n`{good}`."
+    assert faults(wrapped) == []
+    # A source named after the digest does not count against it.
+    assert faults(f"- `reviews/a.md`: `sha256` `{good}`; also in `reviews/b.md`.") == []
+    # Only the changelog records it: the changelog is the source.
+    assert faults("", f"`reviews/a.md` (`sha256` `{good}`)") == []
+
+    wrong = faults(f"`reviews/a.md`: `sha256` `{other}`")
+    assert wrong == [
+        f"reviews/a.md: TASKS.md records sha256 {other}, its bytes are {good}"
+    ]
+    assert faults("", f"`reviews/a.md`: `sha256` `{other}`")[0].startswith(
+        "reviews/a.md: CHANGELOG.md records"
+    )
+    # Two different digests are a failure, in one file or across the two.
+    for tasks, changelog in (
+        (f"`reviews/a.md` `sha256` `{good}`\n\n`reviews/a.md` `sha256` `{other}`", ""),
+        (f"`reviews/a.md` `sha256` `{good}`", f"`reviews/a.md` `sha256` `{other}`"),
+    ):
+        (fault,) = faults(tasks, changelog)
+        assert "two different digests" in fault, fault
+    # Ambiguous paragraphs and tables are not records, so nothing is recorded.
+    missing = "reviews/a.md: no sha256 is recorded for it in TASKS.md or CHANGELOG.md"
+    for unread in (
+        f"`reviews/a.md` and `reviews/b.md`, `sha256`\n`{good}` and `{other}`",
+        f"`reviews/a.md`\n\n| `sha256` |\n|---|\n| `{good}` |",
+        f"`reviews/a.md` is archived.\n\nIts `sha256` `{good}`.",
+        f"`reviews/a.md` `sha256` `{good[:16]}`",
+    ):
+        assert faults(unread) == [missing], unread
+    # A record for an archive the tree does not hold.
+    stray = f"`reviews/a.md` `sha256` `{good}`\n\n`reviews/z.md` `sha256` `{good}`"
+    assert faults(stray) == [
+        "reviews/z.md: a digest is recorded for an archive not in the tree"
+    ]
 
 
 # -- Decisions, cited by their row's id ------------------------------------
