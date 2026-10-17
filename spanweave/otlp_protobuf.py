@@ -18,7 +18,9 @@ rather than base64, and enums (`kind`, `status.code`) are their numbers rather
 than their names. Everything else already agrees: 64-bit integers as decimal
 strings, defaults omitted. A link's ids are hex by the same rule, which is the
 OTLP/JSON specification's and not a pair's -- no pair carries a link (`SPEC.md`
-§7 lists what the pairs do not cover, and what holds each instead).
+§7 lists what the pairs do not cover, and what holds each instead). An id
+whose bytes are all zero, a span's or a link's, is omitted as an empty one is,
+because the Collector treats it as empty -- its rule, and not a pair's either.
 
 **Where the pairs are silent, the container's rules decide** (`OPEN_QUESTIONS.md`
 §23). A body that will not parse is one ``malformed_record`` with no
@@ -154,16 +156,25 @@ def _hex(entry: dict[str, Any], keys: tuple[str, ...]) -> None:
     """Each id ``MessageToDict`` wrote in base64, as the hex the Collector writes.
 
     Proto3 omits an empty ``bytes`` field, so an id the span does not state
-    stays absent, as it does in the Collector's JSON.
+    stays absent, as it does in the Collector's JSON. **An id whose bytes are
+    all zero is omitted too**: the Collector holds ids as fixed-size arrays
+    and treats the all-zero one as empty, so its JSON leaves it out, and a
+    root span whose exporter wrote eight zero bytes for its parent is a root
+    there (`SPEC.md` §7 -- the Collector's rule, not a pair). An id with any
+    byte not zero is hex, as every other.
     """
     for key in keys:
         if key in entry:
-            entry[key] = _base64_to_hex(entry[key])
+            raw = _base64_bytes(entry[key])
+            if any(raw):
+                entry[key] = raw.hex()
+            else:
+                del entry[key]
 
 
-def _base64_to_hex(value: str) -> str:
+def _base64_bytes(value: str) -> bytes:
     try:
-        return base64.b64decode(value, validate=True).hex()
+        return base64.b64decode(value, validate=True)
     except binascii.Error as failure:  # pragma: no cover -- the runtime wrote it
         raise AssertionError(f"MessageToDict wrote {value!r} as bytes") from failure
 

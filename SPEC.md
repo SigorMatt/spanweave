@@ -2182,6 +2182,7 @@ declares reaches `0.5`.
     | a link's `traceId`, `spanId` as lowercase hex | no span has a link | a hand-made request — spec, not pair |
     | `bytesValue` as standard base64; `arrayValue` as `{"values": [AnyValue…]}`; `kvlistValue` as `{"values": [{"key", "value"}…]}` | none | a hand-made request — spec, not pair |
     | `kind` 0, no `status` on the wire, `flags` 0: all three omitted | none | a hand-made request — spec, not pair |
+    | a `traceId`, `spanId` or `parentSpanId`, a span's or a link's, whose bytes are all zero: omitted, as an empty one is | none | a hand-made request (below) — the Collector's rule, not a pair |
     | a field the schema does not define | none | a hand-made request (below) |
     | `doubleValue` | none | a hand-made request (below) — spec, not pair |
 
@@ -2190,6 +2191,22 @@ declares reaches `0.5`.
     `status` reads as none. Every unset `status` in the zoo was sent as an
     empty message, so what a Collector writes for one absent from the wire is
     not shown by any pair.
+  - **An all-zero id is no id, as the Collector has it.** The Collector holds
+    trace and span ids as fixed-size arrays and treats the all-zero value as
+    empty, so its JSON for a body whose `parentSpanId` is eight zero bytes
+    omits the field, exactly as it omits an empty one. The rendering does the
+    same for every `traceId`, `spanId` and `parentSpanId`, a span's or a
+    link's, because the protobuf path yields what the JSON path yields for the
+    Collector's JSON of the same export: a root span whose exporter wrote zero
+    bytes for its parent is a root, with no `orphan_parent`, and its records
+    are those of the same request with the field unset; an all-zero `traceId`
+    reads as an unset one, which is no trace id (`missing_trace_id`, §3.7).
+    An id with any byte not zero is hex, as every other. No pair shows it —
+    the zoo's exporter leaves an unset id unset — so the row is the
+    Collector's rule, not a pair's. **The JSON path is untouched:** a JSON
+    record that *states* `"0000000000000000"` states an id there (§4.0;
+    `spanweave.seam`), and the two encodings differ on this only because the
+    Collector never writes one.
   - **A body that will not parse is one `malformed_record`**, `skipped_records`
     1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
     (§3.7): JSON has no way to write the bytes, and carrying them in some

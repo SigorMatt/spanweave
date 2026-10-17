@@ -2355,6 +2355,15 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **`read_protobuf` omits an all-zero id, as the Collector does** (Qodo's
+  review of PR #6, finding 6). A `traceId`, `spanId` or `parentSpanId`, a
+  span's or a link's, whose bytes are all zero was rendered as zero hex,
+  which the JSON reader reads as a stated id, so a root span whose exporter
+  wrote zero bytes for its parent drew an `orphan_parent` its Collector JSON
+  twin does not. The Collector treats the all-zero id as empty and omits it;
+  so does the rendering now (`SPEC.md` §7, the Collector's rule, not a
+  pair). The JSON path is unchanged: a JSON record stating
+  `"0000000000000000"` still states an id. No pair moves.
 - **L25's dedup test no longer states the premise its own failure disproves.**
   A docstring; no assertion, no source and no document behaviour moves (from
   the run-5 scoped cold review, finding L25-1). The test explained itself with

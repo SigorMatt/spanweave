@@ -448,16 +448,146 @@ def test_kind_zero_no_status_and_flags_zero_render_omitted():
 
     from spanweave.otlp_protobuf import _rendered
 
+    # Ids not all zero: an all-zero one is omitted too, and that is another
+    # test's (`test_an_all_zero_id_reads_as_an_unset_one`).
     span = trace_pb2.Span(
-        trace_id=bytes(16), span_id=bytes(8), name="s", kind=0, flags=0
+        trace_id=bytes([0x0D] * 16),
+        span_id=bytes([0xE1] * 8),
+        name="s",
+        kind=0,
+        flags=0,
     )
     assert not span.HasField("status")
     request = _request(pb2, span)
     (rendered,) = _spans(_rendered(request))
-    assert rendered == {"traceId": "00" * 16, "spanId": "00" * 8, "name": "s"}
+    assert rendered == {"traceId": "0d" * 16, "spanId": "e1" * 8, "name": "s"}
 
     (record,) = spanweave.read_protobuf(request.SerializeToString()).records
     assert not {"kind", "status", "flags"} & set(record)
+
+
+#: Ids with every byte above 0x9 and none zero, so the zero rule cannot reach
+#: them and uppercase hex would show.
+TRACE = bytes([0x0D] * 16)
+SPAN = bytes([0xE1] * 8)
+
+
+def _root(pb2: ModuleType, **fields: Any) -> Any:
+    """A request of one root span with one link, every id but the parent's
+    stated unless ``fields`` says otherwise (``None`` leaves a field unset).
+    An OpenInference span, so a graph builds from it."""
+    from opentelemetry.proto.common.v1 import common_pb2
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    kind = common_pb2.KeyValue(
+        key="openinference.span.kind", value=common_pb2.AnyValue(string_value="LLM")
+    )
+    link = {"trace_id": bytes([0xAB] * 16), "span_id": bytes([0xC0] * 8)}
+    span = {"trace_id": TRACE, "span_id": SPAN, "name": "root", "attributes": [kind]}
+    for key, value in fields.items():
+        owner, name = key.split(".")
+        target = link if owner == "link" else span
+        if value is None:
+            target.pop(name, None)
+        else:
+            target[name] = value
+    return _request(pb2, trace_pb2.Span(links=[trace_pb2.Span.Link(**link)], **span))
+
+
+def _codes(read: spanweave.Records) -> list[str]:
+    return [d["code"] for d in json.loads(_built(read))["diagnostics"]]
+
+
+def test_a_root_whose_parent_span_id_is_eight_zero_bytes_is_a_root():
+    """The Collector's rule, not a pair (`SPEC.md` §7): it treats an all-zero
+    id as empty and omits it, so the root is a root, with no `orphan_parent`,
+    and its records are those of the same request with the field unset."""
+    pb2 = _pb2()
+    from spanweave.otlp_protobuf import _rendered
+
+    zero = _root(pb2, **{"span.parent_span_id": bytes(8)})
+    unset = _root(pb2)
+    # The zero bytes are on the wire: proto3 writes a non-empty `bytes` field.
+    assert zero.SerializeToString() != unset.SerializeToString()
+    (rendered,) = _spans(_rendered(zero))
+    assert "parentSpanId" not in rendered
+
+    read = spanweave.read_protobuf(zero.SerializeToString())
+    assert read == spanweave.read_protobuf(unset.SerializeToString())
+    (record,) = read.records
+    assert "parent_id" not in record
+    assert "orphan_parent" not in _codes(read)
+    assert _built(read) == _built(spanweave.read_protobuf(unset.SerializeToString()))
+
+
+def test_an_all_zero_trace_id_is_no_trace_id():
+    """It yields the record the unset one yields, and the graph says what the
+    JSON path says for an omitted id: `missing_trace_id`."""
+    pb2 = _pb2()
+    from spanweave.otlp_protobuf import _rendered
+
+    zero = spanweave.read_protobuf(
+        _root(pb2, **{"span.trace_id": bytes(16)}).SerializeToString()
+    )
+    unset = spanweave.read_protobuf(
+        _root(pb2, **{"span.trace_id": None}).SerializeToString()
+    )
+    assert zero == unset
+    (record,) = zero.records
+    assert "trace_id" not in record
+    assert "missing_trace_id" in _codes(zero)
+    graph = json.loads(_built(zero))
+    assert graph["trace_id"] == ""
+    # ... as the same span's JSON with the id omitted reads.
+    document = _rendered(_root(pb2))
+    del _spans(document)[0]["traceId"]
+    assert spanweave.read_records(json.dumps(document).encode()) == zero
+
+
+ID_FIELDS = {
+    "span.trace_id": ("traceId", 16),
+    "span.span_id": ("spanId", 8),
+    "span.parent_span_id": ("parentSpanId", 8),
+    "link.trace_id": ("traceId", 16),
+    "link.span_id": ("spanId", 8),
+}
+
+
+@pytest.mark.parametrize("field", list(ID_FIELDS))
+def test_an_all_zero_id_reads_as_an_unset_one(field):
+    """Every id the rendering hexes, a span's and a link's: all zero is omitted,
+    as an empty one is, and nothing else in the request moves."""
+    pb2 = _pb2()
+    from spanweave.otlp_protobuf import _rendered
+
+    key, width = ID_FIELDS[field]
+    zero = _root(pb2, **{field: bytes(width)})
+    unset = _root(pb2, **{field: None})
+    assert _rendered(zero) == _rendered(unset)
+    (rendered,) = _spans(_rendered(zero))
+    owner = rendered["links"][0] if field.startswith("link.") else rendered
+    assert key not in owner
+    assert spanweave.read_protobuf(zero.SerializeToString()) == spanweave.read_protobuf(
+        unset.SerializeToString()
+    )
+
+
+@pytest.mark.parametrize("field", list(ID_FIELDS))
+def test_an_id_with_one_byte_not_zero_is_hex(field):
+    """All zero, not any zero: the last byte 1 and the rest zero is an id."""
+    pb2 = _pb2()
+    from spanweave.otlp_protobuf import _rendered
+
+    key, width = ID_FIELDS[field]
+    request = _root(pb2, **{field: bytes(width - 1) + b"\x01"})
+    (rendered,) = _spans(_rendered(request))
+    owner = rendered["links"][0] if field.startswith("link.") else rendered
+    assert owner[key] == "00" * (width - 1) + "01"
+    if field == "span.parent_span_id":
+        # A stated parent no input contains: the root is an orphan, as the
+        # Collector's JSON of this body would make it.
+        read = spanweave.read_protobuf(request.SerializeToString())
+        assert "orphan_parent" in _codes(read)
 
 
 def _attribute_lists(document: dict[str, Any]) -> list[tuple[str, list[Any]]]:
@@ -556,6 +686,10 @@ def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
                 for span in scope_entry.spans:
                     # A `status` stated in the JSON was a message on the wire.
                     assert span.HasField("status"), run
+                    # No id on the wire is all zero bytes: an unset one is
+                    # empty, and the Collector's omission is never shown.
+                    for value in (span.trace_id, span.span_id, span.parent_span_id):
+                        assert value == b"" or any(value), run
     assert kinds == {"stringValue", "intValue", "boolValue"}
 
 
@@ -591,7 +725,7 @@ def test_two_resources_and_two_scopes_unpack_in_document_order():
 
     def span(name: str, n: int) -> Any:
         return trace_pb2.Span(
-            trace_id=bytes(16), span_id=bytes([n] * 8), name=name, kind=2
+            trace_id=bytes([0xAB] * 16), span_id=bytes([n] * 8), name=name, kind=2
         )
 
     def resource(name: str) -> Any:
@@ -633,7 +767,7 @@ def test_two_resources_and_two_scopes_unpack_in_document_order():
         }
         # The Collector's encodings (`SPEC.md` §7): ids as lowercase hex, the
         # times as decimal strings, `kind` as its number.
-        assert record["trace_id"] == "00" * 16
+        assert record["trace_id"] == "ab" * 16
         assert record["kind"] == 2
         assert "start_time" not in record  # proto3's default is omitted
 

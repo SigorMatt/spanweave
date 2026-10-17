@@ -14502,8 +14502,12 @@ decisions log D15, D16, D17, D18 and D19.
   here.
 - **The "spec, not pair" set, for the zoo.** A span with no `Status` on the
   wire, `doubleValue`, `bytesValue`, `arrayValue`, `kvlistValue` and links
-  are each spec, not pair: no zoo export carries one. One hand-made export
-  sent through the zoo's Collector harness would settle every one.
+  are each spec, not pair: no zoo export carries one. So is an id whose
+  bytes are all zero, which `read_protobuf` omits as an empty one is — the
+  Collector's rule, not a pair (`SPEC.md` §7): the export should carry a
+  root span whose `parentSpanId` is zero bytes, and a link's zero ids. One
+  hand-made export sent through the zoo's Collector harness would settle
+  every one.
   `SigorMatt/spanweave-zoo`'s series 3 owns it; a thread for the zoo, not a
   batch here.
 - **`ROADMAP.md`'s announcement section still lists OTLP protobuf among
