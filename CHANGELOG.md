@@ -1050,6 +1050,29 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **The `otlp` extra's floors are raised to `protobuf>=5.27` and
+  `opentelemetry-proto>=1.28`, and CI now tests them** (cold review of
+  2026-10-17, R-16, R-18). The old floors, `protobuf>=4.25` and
+  `opentelemetry-proto>=1.27`, had never been installed. Measured, that pair
+  resolves (`opentelemetry-proto` 1.27 requires `protobuf>=3.19,<5.0`) and
+  passes the whole suite on Python 3.11–3.13. On 3.14 it fails: `protobuf`
+  before 5.27 does not import there ("Metaclasses with custom tp_new are not
+  supported"), and `opentelemetry-proto` 1.27 cannot take a later
+  `protobuf`. The lowest pair that passes on all four Pythons is
+  `protobuf` 5.27 with `opentelemetry-proto` 1.28. `uv.lock`'s
+  `requires-dist` moves with the bounds, and its resolved versions do not.
+  CI's `check` matrix now syncs `--extra dev --extra otlp`, ENVIRONMENT.md's
+  Setup, with `SPANWEAVE_REQUIRE_OTLP=1`, so the protobuf tests run on every
+  Python and a skip fails. The `otlp` job keeps its name and becomes a
+  matrix over the same Pythons. It installs `protobuf==5.27.*` and
+  `opentelemetry-proto==1.28.*` over the lock, prints and asserts the
+  installed versions, and runs mypy and the suite with `uv run --no-sync`,
+  because a plain `uv run` re-syncs to the lock and would silently undo the
+  floors. `tests/test_acceptance.py` holds that shape: the check job's
+  extras and `REQUIRE`, and the otlp job's pins and asserted versions equal
+  to `pyproject.toml`'s lower bounds, every `uv run` there `--no-sync`, and
+  its matrix equal to the check job's.
+
 - **The wire series is closed, and `WORKPLAN.md` is gone with it** (W2, this
   commit). No behaviour change: no rule under `spanweave/` moved (one
   docstring's citation of the plan file is re-pointed),

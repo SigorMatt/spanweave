@@ -396,8 +396,8 @@ otlp = [
 [package.metadata]
 requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
-    { name = "opentelemetry-proto", marker = "extra == 'otlp'", specifier = ">=1.27" },
-    { name = "protobuf", marker = "extra == 'otlp'", specifier = ">=4.25" },
+    { name = "opentelemetry-proto", marker = "extra == 'otlp'", specifier = ">=1.28" },
+    { name = "protobuf", marker = "extra == 'otlp'", specifier = ">=5.27" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]

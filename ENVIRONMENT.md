@@ -57,8 +57,13 @@ fix one deliberately, don't let them drift.
   The dev install includes the extra (`uv sync --extra dev --extra otlp`), so
   local `make check` runs the protobuf tests (`tests/test_protobuf.py`); they
   skip, saying why, only in an environment installed without the extra. CI's
-  `otlp` job runs the whole suite with `SPANWEAVE_REQUIRE_OTLP=1`, under which
-  a proto runtime that will not import fails rather than skips.
+  `check` matrix installs it the same way, and both it and the `otlp` job run
+  with `SPANWEAVE_REQUIRE_OTLP=1`, under which a proto runtime that will not
+  import fails rather than skips. The `otlp` job installs the extra's declared
+  lower bounds (`opentelemetry-proto>=1.28`, `protobuf>=5.27`) over the lock
+  and runs the whole suite against them on every Python the matrix covers, so
+  the floors are tested, not assumed (`pyproject.toml` says how they were
+  chosen).
 - Adding **any** core runtime dependency is a halt point (`AGENT.md`).
 
 ## Commands (exact — the agent uses these, does not invent them)

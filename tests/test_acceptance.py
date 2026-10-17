@@ -121,6 +121,155 @@ def test_ci_runs_the_same_harness_rather_than_its_own():
     assert "make check" in WORKFLOW
 
 
+def _job(name: str) -> str:
+    """One job of the workflow: its key line and everything indented under it."""
+    lines = WORKFLOW.splitlines()
+    start = lines.index(f"  {name}:")
+    body = [lines[start]]
+    for line in lines[start + 1 :]:
+        if re.match(r"  \S", line):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _runs(job: str) -> list[str]:
+    """A job's `run:` commands in order, a folded (`>-`) one joined as YAML
+    joins it, with single spaces."""
+    lines = job.splitlines()
+    runs = []
+    for index, line in enumerate(lines):
+        found = re.match(r"\s*(?:- )?run:\s*(.*)$", line)
+        if not found:
+            continue
+        command = found.group(1)
+        if command in (">-", ">"):
+            key = line.index("run:")
+            folded = []
+            for following in lines[index + 1 :]:
+                if len(following) - len(following.lstrip()) <= key:
+                    break
+                folded.append(following.strip())
+            command = " ".join(folded)
+        runs.append(command)
+    return runs
+
+
+def _requires_otlp(job: str) -> bool:
+    """The job's own `env:` sets SPANWEAVE_REQUIRE_OTLP to "1"."""
+    return bool(
+        re.search(
+            r'\n    env:\n(?:      .*\n)*?      SPANWEAVE_REQUIRE_OTLP: "1"\n', job
+        )
+    )
+
+
+def _otlp_floors() -> dict[str, str]:
+    """`pyproject.toml`'s `[otlp]` lower bounds: {package: "X.Y"}."""
+    import tomllib
+
+    declared = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    floors = {}
+    for requirement in declared["project"]["optional-dependencies"]["otlp"]:
+        bound = re.fullmatch(r"([A-Za-z0-9_.-]+)>=(\d+\.\d+)", requirement)
+        assert bound, f"[otlp] states {requirement!r}, not a `name>=X.Y` floor"
+        floors[bound.group(1)] = bound.group(2)
+    return floors
+
+
+def test_ci_check_job_installs_and_requires_the_otlp_extra():
+    """The matrix runs the protobuf tests on every Python, and a skip fails.
+
+    `make check` without the extra skips them, saying why, and passes: the
+    check job synced `--extra dev` alone while ENVIRONMENT.md's Setup said
+    `--extra dev --extra otlp` (cold review of 2026-10-17, R-16).
+    """
+    check = _job("check")
+    runs = _runs(check)
+    syncs = [run for run in runs if run.startswith("uv sync")]
+    assert syncs, "the check job no longer runs `uv sync`"
+    for sync in syncs:
+        assert "--extra dev" in sync and "--extra otlp" in sync, sync
+    assert _requires_otlp(check), (
+        "the check job does not set SPANWEAVE_REQUIRE_OTLP=1, so a proto "
+        "runtime that will not import is a skip that passes"
+    )
+    assert "make check" in runs
+
+
+def test_ci_otlp_job_runs_the_declared_floors():
+    """The floors `pyproject.toml` declares are the versions the job tests.
+
+    They were declared and never installed (cold review of 2026-10-17, R-18),
+    and once installed, the old pair failed on 3.14. So the pins are read
+    against the declaration rather than written twice and trusted. `uv run`
+    re-syncs to the lock by default, which would put the lock's versions back
+    under the suite without a word, so every `uv run` must be `--no-sync`.
+    """
+    floors = _otlp_floors()
+    assert set(floors) == {"protobuf", "opentelemetry-proto"}, floors
+    otlp = _job("otlp")
+    assert _requires_otlp(otlp), "the otlp job does not set SPANWEAVE_REQUIRE_OTLP=1"
+    runs = _runs(otlp)
+    sync = next(
+        (
+            index
+            for index, run in enumerate(runs)
+            if run.startswith("uv sync")
+            and "--extra dev" in run
+            and "--extra otlp" in run
+        ),
+        None,
+    )
+    assert sync is not None, "the otlp job does not sync the dev and otlp extras"
+    installs = [
+        index for index, run in enumerate(runs) if run.startswith("uv pip install")
+    ]
+    assert len(installs) == 1, f"expected one floor install, got {installs}"
+    install = installs[0]
+    assert install > sync, "the floors are installed before the sync replaces them"
+    pinned = dict(re.findall(r'"([A-Za-z0-9_.-]+)==(\d+\.\d+)\.\*"', runs[install]))
+    assert pinned == floors, (
+        f"the otlp job installs {pinned}; pyproject.toml's [otlp] floors are "
+        f"{floors}. A floor CI does not install is suspected, not tested."
+    )
+    asserted = {}
+    for run in runs[install + 1 :]:
+        asserted.update(
+            re.findall(r"v\['([A-Za-z0-9_.-]+)'\]\.startswith\('(\d+\.\d+)\.'\)", run)
+        )
+    assert asserted == floors, (
+        f"the otlp job asserts {asserted} installed after the floor install, "
+        f"not the floors {floors}"
+    )
+    for run in runs:
+        if run.startswith("uv run"):
+            assert "--no-sync" in run.split(), (
+                f"`{run}` re-syncs to the lock and undoes the floor install"
+            )
+    after = " ".join(runs[install + 1 :])
+    assert "mypy spanweave" in after and "pytest" in after, runs
+
+
+def test_ci_otlp_job_runs_the_floors_on_every_python_the_check_job_does():
+    """A floor is a claim per interpreter: the old pair passed on 3.11-3.13
+    and did not import on 3.14 (cold review of 2026-10-17, R-18)."""
+
+    def matrix(job: str) -> set[str]:
+        lines = [
+            line
+            for line in job.splitlines()
+            if line.strip().startswith("python-version:")
+        ]
+        assert len(lines) == 1, lines
+        return set(re.findall(r'"(\d+\.\d+)"', lines[0]))
+
+    assert matrix(_job("otlp")) == matrix(_job("check"))
+    assert "--python ${{ matrix.python-version }}" in next(
+        run for run in _runs(_job("otlp")) if run.startswith("uv sync")
+    )
+
+
 def test_ci_still_covers_every_supported_python():
     """The matrix is DERIVED from the classifiers, never listed twice.
 

@@ -15,6 +15,12 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The `otlp` extra is installed here, so the protobuf tests run on every
+    # Python in the matrix, and SPANWEAVE_REQUIRE_OTLP makes a proto runtime
+    # that will not import a failure rather than a skip that passes (cold
+    # review of 2026-10-17, R-16). The sync below is ENVIRONMENT.md's Setup.
+    env:
+      SPANWEAVE_REQUIRE_OTLP: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +47,7 @@ jobs:
         with:
           version: "0.11.25"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: uv sync --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --extra dev --extra otlp --python ${{ matrix.python-version }}
       # make check wraps the exact toolchain commands (ruff, mypy, pytest)
       # plus the invariant gates and phase done-whens -- the acceptance
       # harness, task 0.8.
@@ -56,13 +62,26 @@ jobs:
       - run: make install-check
 
   otlp:
-    # The `otlp` extra (batch W1): `make check` never installs it, so there
-    # the protobuf tests skip. Here they run -- the zoo's 29 pairs, the census
-    # from the raw bodies -- and SPANWEAVE_REQUIRE_OTLP turns a proto runtime
-    # that will not import into a failure instead of a skip that passes.
+    # The `otlp` extra at its declared FLOORS (cold review of 2026-10-17,
+    # R-18). The `check` matrix runs the protobuf tests against the lock's
+    # versions; this job runs the whole suite -- the zoo's 29 pairs, the
+    # census from the raw bodies -- against the lowest versions
+    # pyproject.toml's `[otlp]` admits, so the minimums are tested rather
+    # than suspected. `tests/test_acceptance.py` holds the pins below equal
+    # to pyproject.toml's lower bounds, and this matrix equal to the check
+    # job's: a floor is an interpreter-dependent claim (the previous pair,
+    # `protobuf` 4.25 with `opentelemetry-proto` 1.27, passed on 3.11-3.13
+    # and failed to import on 3.14). `uv run` re-syncs to the lock by
+    # default and would silently put the lock's versions back, so every
+    # `uv run` here is `--no-sync`, and a step prints and asserts the
+    # versions the suite actually ran against.
     runs-on: ubuntu-latest
     env:
       SPANWEAVE_REQUIRE_OTLP: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,9 +92,18 @@ jobs:
         with:
           version: "0.11.25"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: uv sync --extra dev --extra otlp
-      - run: uv run --extra dev --extra otlp mypy spanweave
-      - run: uv run --extra dev --extra otlp pytest -rs
+      - run: uv sync --extra dev --extra otlp --python ${{ matrix.python-version }}
+      - name: Install the floors over the lock
+        run: uv pip install "protobuf==5.27.*" "opentelemetry-proto==1.28.*"
+      - name: The floors are what is installed
+        run: >-
+          uv run --no-sync python -c "import importlib.metadata as m;
+          v = {p: m.version(p) for p in ('protobuf', 'opentelemetry-proto')};
+          print(v);
+          assert v['protobuf'].startswith('5.27.'), v;
+          assert v['opentelemetry-proto'].startswith('1.28.'), v"
+      - run: uv run --no-sync mypy spanweave
+      - run: uv run --no-sync pytest -rs
 
   determinism:
     # Determinism is a cross-machine claim (CLAUDE.md 4), so it is worth

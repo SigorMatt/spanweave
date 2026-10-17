@@ -585,7 +585,7 @@ def test_the_census_holds_from_the_raw_bodies_as_from_the_json(capture):
     """Batch W1: each capture read from the exporter's protobuf, not the
     Collector's JSON of it, builds every count, node and edge the census holds
     -- the audit's feed and the whole capture alike, batch and incremental.
-    Skips without the `otlp` extra; CI's `otlp` job runs it."""
+    Skips without the `otlp` extra; CI's `check` and `otlp` jobs run it."""
     if not os.environ.get("SPANWEAVE_REQUIRE_OTLP"):
         pytest.importorskip(
             "opentelemetry.proto.collector.trace.v1.trace_service_pb2",

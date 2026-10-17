@@ -39,13 +39,20 @@ dev = [
 # Phase 4 only: the binary OTLP form, read by `spanweave.read_protobuf` in
 # `spanweave/otlp_protobuf.py` -- the one module that imports either package,
 # and only inside the function, so `import spanweave` never needs them. Core
-# must work fully without it and `make check` never installs it; CI's `otlp`
-# job does, so the protobuf tests run rather than skip (batch W1).
-# `opentelemetry-proto` is the `ExportTraceServiceRequest` definition;
+# must work fully without it. The dev install (ENVIRONMENT.md's Setup) and
+# CI's `check` matrix install it, so `make check` runs the protobuf tests;
+# CI's `otlp` job installs these lower bounds themselves, on every Python the
+# classifiers name, and `tests/test_acceptance.py` holds its pins equal to
+# them. `opentelemetry-proto` is the `ExportTraceServiceRequest` definition;
 # `protobuf` is named too because the reader imports it directly.
+# The bounds are the lowest pair measured to pass the whole suite on 3.11 to
+# 3.14 (cold review of 2026-10-17, R-18). They were `>=1.27` and `>=4.25`,
+# which pass on 3.11-3.13 but not on 3.14: `protobuf` before 5.27 fails to
+# import there ("Metaclasses with custom tp_new are not supported"), and
+# `opentelemetry-proto` 1.27 requires `protobuf<5.0`.
 otlp = [
-    "opentelemetry-proto>=1.27",
-    "protobuf>=4.25",
+    "opentelemetry-proto>=1.28",
+    "protobuf>=5.27",
 ]
 
 [project.urls]
@@ -135,10 +142,11 @@ disallow_any_explicit = false
 module = ["tests.*", "examples.*", "capture.*"]
 strict = false
 
-# The `otlp` extra's packages, which `make check` never installs: without them
-# `spanweave/otlp_protobuf.py`'s lazy imports have nothing to resolve against,
-# and with them they may ship no type information. Either way they are `Any`
-# at that one module's edge, which handles them as such (batch W1).
+# The `otlp` extra's packages, which an install without the extra lacks:
+# without them `spanweave/otlp_protobuf.py`'s lazy imports have nothing to
+# resolve against, and with them they may ship no type information. Either way
+# they are `Any` at that one module's edge, which handles them as such (batch
+# W1).
 [[tool.mypy.overrides]]
 module = ["google.protobuf", "google.protobuf.*", "opentelemetry", "opentelemetry.*"]
 ignore_missing_imports = true

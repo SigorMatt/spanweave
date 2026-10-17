@@ -14,8 +14,9 @@ Where the pairs are silent the container's own rules decide (`OPEN_QUESTIONS.md`
 reported as `unknown_fields`; a `doubleValue` is a float, which no pair checks.
 
 The tests that need the proto runtime skip without the `otlp` extra, saying
-so; CI's `otlp` job installs it and sets `SPANWEAVE_REQUIRE_OTLP`, under which
-a missing runtime is a failure rather than a skip.
+so; CI's `check` matrix and `otlp` job (the latter at the extra's floors) install
+it and set `SPANWEAVE_REQUIRE_OTLP`, under which a missing runtime is a failure
+rather than a skip.
 """
 
 from __future__ import annotations
@@ -42,8 +43,8 @@ PAIRS = [
 ]
 PAIR_IDS = [f"{run}/{json_body.stem}" for run, json_body, _ in PAIRS]
 
-#: What CI's `otlp` job sets: there, a proto runtime that will not import is a
-#: broken job, not a reason to skip.
+#: What CI's `check` and `otlp` jobs set: there, a proto runtime that will not
+#: import is a broken job, not a reason to skip.
 REQUIRE = "SPANWEAVE_REQUIRE_OTLP"
 
 

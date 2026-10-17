@@ -14455,12 +14455,20 @@ decisions log D15, D16, D17, D18 and D19.
   job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
   extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
   fails rather than skips; but on one Python only. The protobuf path is not
-  run under the other interpreters the main job covers. Open.
+  run under the other interpreters the main job covers. **Closed** by the
+  2026-10-17 cold review's fixes (R-16): the `check` matrix installs the
+  extra and sets `SPANWEAVE_REQUIRE_OTLP=1`, and the `otlp` job is a matrix
+  over the same Pythons.
 - **The extra's `protobuf>=4.25` floor is untested.** `pyproject.toml`'s
   `otlp` extra states it; W1 built and tested against `protobuf` 7.36.0, and
   `UnknownFieldSet`, which the `unknown_fields` report reads, needs about
   4.24. No job installs the floor. Open: either a job that does, or a floor
-  the record can cite.
+  the record can cite. **Closed** by the 2026-10-17 cold review's fixes
+  (R-18): the `otlp` job installs the floors and runs the suite on them.
+  Measured first, 4.25 with `opentelemetry-proto` 1.27 passed on 3.11–3.13
+  and failed to import on 3.14, so the floors were raised to
+  `protobuf>=5.27` and `opentelemetry-proto>=1.28`, the lowest pair that
+  passed on all four (`pyproject.toml`).
 - **The missing-extra error is a plain `SpanweaveError`, not a subclass.**
   Without the extra, `read_protobuf` raises `SpanweaveError` with code
   `otlp_extra_not_installed` (`SPEC.md` §3.10). Whether it should be its own
