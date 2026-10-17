@@ -41,6 +41,7 @@ import pathlib
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 
 import pytest
@@ -308,9 +309,11 @@ def test_every_make_target_a_document_names_exists():
 
     The exclusion stays narrow on purpose. It is two directories, both of
     which exist to hold quoted text, and every other document -- `README.md`,
-    `SPEC.md`, `TASKS.md`, `CONTRIBUTING.md`, the Makefile's own neighbours --
-    is still scanned, so a target that does not exist, named by anything that
-    is speaking for the project today, is still red.
+    `SPEC.md`, `TASKS.md`, `CONTRIBUTING.md`, the Makefile's own neighbours,
+    and a series' `WORKPLAN.md` while one exists -- is scanned, so a target
+    that does not exist, named by anything that is speaking for the project
+    today, is red. A plan names the targets its batches run, so a typo there
+    is a gate a batch would skip (cold review of 2026-10-17, R-10).
     """
     targets = makefile_targets()
     assert {"check", "conformance"} <= targets, "Makefile parse produced nothing"
@@ -590,7 +593,9 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
     table = section(read("README.md"), "\n## Documents")
     listed = set(re.findall(r"^\| `([^`]+\.md)` \|", table, re.M))
     assert listed, "the README's Documents table parsed to nothing"
-    on_disk = {path.name for path in ROOT.glob("*.md")} - {"README.md"}
+    # A plan is deleted at its series' close, so the table -- a durable map
+    # -- does not list it: it is skipped on disk, and a row for it is a ghost.
+    on_disk = {path.name for path in ROOT.glob("*.md")} - {"README.md", PLAN_FILE}
     assert listed == on_disk, (
         "the README's Documents table has drifted from the repository root.\n"
         f"  listed but absent: {sorted(listed - on_disk)}\n"
@@ -610,25 +615,27 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
 #: Directories that archive text verbatim, and so quote paths as they stood.
 VERBATIM_PARTS = frozenset({"patches", "reviews"})
 
+#: A work series' execution state: at the root while the series runs, deleted
+#: at its close. Durable for every guard but the two that skip it by name.
+PLAN_FILE = "WORKPLAN.md"
+
 
 def durable_documents() -> list[pathlib.Path]:
-    """Documents that outlive a series, so their citations must resolve later.
+    """Documents that speak for the project, so their citations must resolve.
 
     One exclusion, because the excluded text is a record of a moment rather
     than a claim made now: `reviews/` and `patches/` hold cold reviews copied
     verbatim, and a review that says a file was untracked *when it was read*
     is reporting, not citing.
 
-    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
-    series' own execution state, which owns `patches/` as its scratch drop and
-    is written to be deleted at series close. That is exactly why nothing
-    durable was allowed to depend on it, and it is gone again: the wire
-    series closed and the file went with it (`TASKS.md`, *The wire series*).
-    It has gone seven times now -- four across the September 2026 audit-fix
-    series and its reopenings, once at the live-graphs series' close, once at
-    the stranger's-trace series' close, once here -- so the exclusion is a
-    fixture of a **series**, not of a file: the next series' plan file needs
-    it back, and takes it back out at its own close.
+    `WORKPLAN.md`, a series' execution state, is **in** whenever it exists.
+    Until 2026-10-17 it was excluded here by name -- re-added by each series'
+    opener, removed at each close -- and that took it out of every guard that
+    iterates this list (make targets, review and decision citations, retired
+    figures) when only two could not hold it (cold review of 2026-10-17,
+    R-10). Those two skip `PLAN_FILE` themselves, with the reason beside the
+    skip; every other guard reads the plan as it reads `SPEC.md`. A series'
+    opener needs no accommodation here.
     """
     return [
         path
@@ -646,6 +653,11 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
     """
     scratch: dict[str, set[str]] = {}
     for path in durable_documents():
+        # A plan cites `patches/` by design -- it is the series' scratch drop,
+        # where its cold reviews land -- and the plan is deleted at close, so
+        # nothing durable is left depending on what it points at there.
+        if path.relative_to(ROOT) == pathlib.Path(PLAN_FILE):
+            continue
         for span in code_spans(path.read_text(encoding="utf-8")):
             for match in re.finditer(r"\bpatches/\S+", span):
                 scratch.setdefault(match.group(0), set()).add(
@@ -657,6 +669,63 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
         "the file into `reviews/` and cite it there.\n"
         f"  {scratch}"
     )
+
+
+# -- A planted plan file, scanned by every guard but the two that skip it ----
+#
+# The repository carries no `WORKPLAN.md` between series, so these tests plant
+# one under a redirected `ROOT` -- a scratch root holding the plan beside what
+# the guard reads -- and never in the checkout.
+
+
+def plant_plan(tmp_path, monkeypatch, plan: str, *copied: str) -> None:
+    """A scratch `ROOT` holding `copied` (paths relative to the real root)
+    and a `WORKPLAN.md` reading `plan`; the module reads it from now on."""
+    for relative in copied:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / relative).read_bytes())
+    (tmp_path / PLAN_FILE).write_text(plan, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+
+def test_a_plan_naming_a_make_target_that_does_not_exist_is_red(tmp_path, monkeypatch):
+    plant_plan(
+        tmp_path, monkeypatch, "Each batch runs `make install-chek`.\n", "Makefile"
+    )
+    assert durable_documents() == [tmp_path / PLAN_FILE]
+    with pytest.raises(AssertionError, match=r"'install-chek': \['WORKPLAN\.md'\]"):
+        test_every_make_target_a_document_names_exists()
+
+
+def test_a_plan_citing_its_scratch_drop_passes_the_scratch_path_guard(
+    tmp_path, monkeypatch
+):
+    plant_plan(tmp_path, monkeypatch, "The review lands at `patches/REVIEW-x.md`.\n")
+    test_a_durable_document_cites_no_untracked_scratch_path()
+    # The skip is by name: the same citation anywhere else is still red.
+    (tmp_path / "NOTES.md").write_text("See `patches/REVIEW-x.md`.\n", encoding="utf-8")
+    with pytest.raises(
+        AssertionError, match=r"'patches/REVIEW-x\.md': \{'NOTES\.md'\}"
+    ):
+        test_a_durable_document_cites_no_untracked_scratch_path()
+
+
+def test_a_plan_at_the_root_is_not_owed_a_documents_row(tmp_path, monkeypatch):
+    listed = sorted(path.name for path in ROOT.glob("*.md"))
+    plant_plan(tmp_path, monkeypatch, "# plan\n", *listed)
+    test_the_readme_document_table_lists_every_document_and_no_ghosts()
+    # A row for the plan is a ghost: the table is durable and the plan is not.
+    readme = tmp_path / "README.md"
+    text = readme.read_text(encoding="utf-8")
+    row = "| `CONTRIBUTING.md` | How to contribute. |\n"
+    assert row in text, "the README's Documents table moved; re-anchor this test"
+    readme.write_text(
+        text.replace(row, row + f"| `{PLAN_FILE}` | Execution state. |\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match=r"listed but absent: \['WORKPLAN\.md'\]"):
+        test_the_readme_document_table_lists_every_document_and_no_ghosts()
 
 
 def test_every_review_a_document_cites_is_in_the_repository():

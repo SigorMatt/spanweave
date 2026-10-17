@@ -84,6 +84,18 @@ telemetry didn't say, whether the five payload states are distinguished
 correctly, and whether the degenerate scenarios are handled honestly. Those are
 where adapters go wrong.
 
+## Opening a work series
+
+A series' plan file, `WORKPLAN.md` at the root, needs no accommodation in the
+tests. Commit it and every doc-truth guard reads it as it reads `SPEC.md`,
+except two that skip it by name in `tests/test_doc_truth.py`: the scratch-path
+guard, because a plan cites `patches/` by design, and the README Documents-table
+guard, because the plan is deleted at the series' close and so has no row. Do
+not add a README row for it, and do not exclude it from `durable_documents()`.
+Each opener until the wire series did both, and the exclusion took the plan out
+of every guard, not only the two it could not pass (cold review of 2026-10-17,
+R-10).
+
 ## Reporting a bug
 
 The best bug report is a **failing scenario**: the smallest trace that
