@@ -5,3 +5,8 @@ fixtures/zoo/** -text
 # The raw bodies are the exporter's protobuf, not text: `binary` also keeps
 # them out of textual diffs and merges.
 fixtures/zoo/**/raw/*.body binary
+# The review archives are kept byte for byte, and `tests/test_doc_truth.py`
+# hashes each one's bytes against the sha256 TASKS.md records for it. Without
+# `-text`, a `core.autocrlf=true` checkout writes CRLF and every archive's
+# digest is red on that machine alone.
+reviews/** -text

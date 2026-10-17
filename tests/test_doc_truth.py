@@ -1047,6 +1047,57 @@ def test_the_archive_digest_scan_ties_one_digest_to_one_archive():
     ]
 
 
+def test_every_digest_record_in_one_paragraph_is_read():
+    """Two records in one paragraph are two records: a later correction does
+    not hide behind the first digest, and the first does not hide behind it.
+    Reading only a paragraph's first record (a `search`, not a `finditer`)
+    passed every other test (cold review of 2026-10-17, scoped, R-17)."""
+    body = b"a review\n"
+    good = hashlib.sha256(body).hexdigest()
+    other = hashlib.sha256(b"another\n").hexdigest()
+
+    def faults(tasks: str) -> list[str]:
+        return archive_digest_faults(
+            {"TASKS.md": tasks, "CHANGELOG.md": ""}, {"reviews/a.md": body}
+        )
+
+    for first, second in ((good, other), (other, good)):
+        paragraph = (
+            f"`reviews/a.md`: `sha256` `{first}`; corrected later to `sha256`\n"
+            f"`{second}`."
+        )
+        assert len(paragraphs(paragraph)) == 1
+        found = faults(paragraph)
+        assert [fault.split(", {")[0] for fault in found] == [
+            "reviews/a.md: two different digests are recorded"
+        ], found
+        assert digest_records(paragraph) == [
+            ("reviews/a.md", first),
+            ("reviews/a.md", second),
+        ]
+    # The same digest twice in one paragraph is one digest, and it holds.
+    assert faults(f"`reviews/a.md` `sha256` `{good}`, again `sha256` `{good}`") == []
+
+
+def test_git_converts_no_line_ending_of_a_review_archive():
+    """`.gitattributes` gives `reviews/**` `-text`, so the bytes the digest
+    test hashes are the committed bytes on every checkout. Without it a
+    `core.autocrlf=true` clone writes CRLF and all 17 archives were red there
+    alone, a result that depended on the machine (cold review of 2026-10-17,
+    scoped, R-16)."""
+    paths = [
+        str(path.relative_to(ROOT)) for path in sorted((ROOT / "reviews").glob("*.md"))
+    ]
+    assert paths, "no archive under reviews/; the scan found nothing"
+    answered = subprocess.run(
+        ["git", "-C", str(ROOT), "check-attr", "text", "--", *paths],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert answered == [f"{path}: text: unset" for path in paths]
+
+
 # -- Decisions, cited by their row's id ------------------------------------
 #
 # The stranger's-trace decisions log was cited by date and batch, and on
