@@ -13864,7 +13864,7 @@ prose until a stranger reads it.
   (decisions log D22) added it to the target.
 
 The stranger's-trace series answered the twenty-two probes (`PROBES.md`
-S1–S22) that `SigorMatt/spanweave-zoo` left for this library at `SigorMatt/spanweave-zoo` `7eb5b69`.
+S1–S22) that the zoo left for this library at `SigorMatt/spanweave-zoo` `7eb5b69`.
 The probes come from twelve captures of six agents, each built by an
 implementer who knew nothing about this library, under stock
 instrumentation. The series ran on branch `stranger` from `main` at `fec7da2`
@@ -14465,9 +14465,11 @@ decisions log D15, D16, D17, D18 and D19.
   has no review archive**: no review of it has been run. Since then, the
   cold review of 2026-10-17, a read of `88c7339..4689670`, is archived and
   every finding dispositioned (*Cold review of the series — 2026-10-17*
-  below). The PR is not open yet: the push and CI on the pushed tip, the
-  scoped review of the fix commits, the PR, Qodo's review of it and the
-  merge remain.
+  below). The scoped review of those fixes, a read of `4689670..c4018b4`,
+  is archived and every finding dispositioned too (*Scoped review of the
+  fixes — 2026-10-17* below), and its fixes are applied. The PR is not open
+  yet: the push and CI on the pushed tip, the PR, Qodo's review of it and
+  the merge remain.
 - **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
   job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
   extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
@@ -14584,10 +14586,12 @@ the review archives, verbatim, name one. Each reaches its rows by this map:
 |---|---|
 | `decisions-spanweave-2026-10-17` | D31, D32, D33 |
 | `decisions-spanweave-2026-10-17b` | D34 |
+| `decisions-spanweave-2026-10-17c` | D35 |
 
 D28–D30 came from no relay file: the plan file held them when `7b4b606`
 opened the series. D34 was decided after the close, on the cold review of
-2026-10-17. It is a new row, not an edit.
+2026-10-17. It is a new row, not an edit. D35 was decided the same way, on
+the scoped review of those fixes.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14598,6 +14602,7 @@ opened the series. D34 was decided after the close, on the cold review of
 | D32 | 2026-10-17 | W1 | **2B.** Unknown fields are reported, never dropped and never fatal: the records are yielded, and each message that carries unknown fields draws one diagnostic under a new code, `unknown_fields` (level `warning`: the library could not map them — a gap, exactly what the level is for), `source` naming the message's path in the request and the field numbers and wire types as the proto runtime reports them. 2D is what the oracle rule says literally and what CLAUDE.md 2 forbids; where the two disagree, invariant 2 wins and the record says where the oracle was silent. 2A declined: refusing a whole body for one field a newer OTLP added would throw away every readable span to report one number. 2C declined for now: the bytes of a field with no definition have no representation the record ever had, and a consumer who needs them has the raw body; if one asks, it is a thread, not a guess. The code joins §3.7's vocabulary and the shape artifact is regenerated, as the series' standing rules permit. | maintainer |
 | D33 | 2026-10-17 | W1 | **3C.** `doubleValue` is `MessageToDict`'s float, stated in SPEC §7 as the one place the pairs could not check, with a test that the zoo holds no `doubleValue` (so the day one appears, the test says the claim is now checkable); and a thread at W2 for the zoo: one export carrying a `doubleValue` re-encoded by the Collector would settle `1` against `1.0` — a capture, not a guess (3B declined for being one). | maintainer |
 | D34 | 2026-10-17 | review | The cold review of 2026-10-17 of `88c7339..4689670` (R-1…R-18), dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-7, R-8, R-9, R-10, R-13 (the sha test and the record lines; the ordinal is removed, not bound), R-14, R-15, R-16, R-17, R-18. Read, recorded: R-12, the README row that said "are registered" before any was, deleted at the close. Declined with a reason: R-11 beyond what R-10's fix gives. A plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where the sha and corpus-count guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters. With R-10's fix the retired-figure guards do scan the plan, which is the part of R-11 worth having. Applied as eight commits on `wire`, one concern each; where a commit answers several findings they share one mechanism and the subject says so. If the extra's declared floors failed, they were to be raised to the lowest pair that passes, and said so in `pyproject.toml` and the CHANGELOG. Nothing is amended or force-pushed. | maintainer |
+| D35 | 2026-10-17 | review | The scoped review of 2026-10-17 of `4689670..c4018b4` (R-1…R-21), dispositioned. Accepted: R-1, R-2, R-3 (with its limit stated: the gate is syntactic, and a name bound by assignment is not chased), R-4, R-5, R-6, R-7, R-9, R-10, R-11 (the G7 branch), R-12 (the worst three; the rest recorded as the limit of a text-shape test), R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-20, R-21. Read, recorded: R-8, `21b106d`'s four guards under one subject, which were the grouping the maintainer gave. Declined with a reason: R-11's second bullet (`D33` changed to `D32`, a real but wrong row, stays green): a resolver holds that a citation exists, not that it is the right one; the only guard for meaning is a reader. Applied as ten commits on `wire`, one concern each; where several findings share one mechanism the subject says so. No `plan:` commits; nothing is amended or force-pushed. The loop is bounded: no third cold review unless a commit of this round touches `spanweave/` (none did); the PR, Qodo's review of it and the merge follow, and anything a further pass would find is a thread, registered at the next series' open. | maintainer |
 
 ### Cold review of the series — 2026-10-17
 
@@ -14647,6 +14652,61 @@ under *Corrections after the close*, below.
 | R-17 — `4689670`, none of its changed lines held | **accepted**, `21b106d` (with R-7): a `uv sync` line's extras exist in `pyproject.toml`, and the ROADMAP sentence's sha resolves |
 | R-18 — `4ecf414`, the extra's floors never installed | **accepted**, `e709afa` (with R-16): the `otlp` job is a matrix that installs the floors. Measured first, `protobuf` 4.25 with `opentelemetry-proto` 1.27 does not import on Python 3.14 (protobuf before 5.27 does not), so the floors are raised to `protobuf>=5.27` and `opentelemetry-proto>=1.28`, the lowest pair that passes on every interpreter CI runs |
 
+### Scoped review of the fixes — 2026-10-17
+
+`reviews/2026-10-17b-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-17b.md`: `cmp` silent,
+and `sha256`
+`ea09b50ce7a76fbc1f334b2063028efd6091161696d8b41999d5fa78697755b0` on both
+sides. It takes the dated name the earlier archives carry, with the `b` of
+its scratch name, since the cold review above holds the date's plain name.
+As for the earlier archives, the scratch name and the whole digest are
+written here and not in the archive, which is kept byte-for-byte; the
+scratch name is provenance and not a path to open.
+
+A scoped read of `4689670..c4018b4`, ten commits: the eight fix commits of
+decisions log D34 and the two after the archive. One sub-agent per commit
+touching `spanweave/`, `fixtures/`, `tests/`, the `Makefile`,
+`pyproject.toml` or `.github/` (eight), each commit's tests run on its
+parent and its mutations on its tip in worktrees, each mutation reverted;
+the two record commits, `4521cc2` and `3dfe461`, and the cross-cutting
+checks read directly. It found the extra's floors passing on every
+interpreter CI runs, at the exact lower bounds too; `fixtures/zoo/`
+byte-identical to the zoo at its pin; no clock, randomness or network
+added; every mutation a commit names caught by the test it names; and every
+review archive equal to its recorded digest. It disclosed one breach of its
+own rules: one agent ran `git ls-remote --tags origin` once, read-only. It
+raised twenty-one findings, R-1…R-21. The maintainer's dispositions are
+decisions log D35, above. They were applied on `wire` as ten commits, one
+concern each; where several findings share one mechanism the subject says
+so (decisions log D24). This archive is in the tenth, with the record lines
+under *Corrections after the close*, below, because the archive is part of
+the record agreeing with itself.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `118f0d4`, the "no other kind" guard read span attributes only | **accepted**, `e3fccfa` (with R-2; two holes in one test file, one guard each): the census walks the resource, scope, span, event and link attribute lists and the values nested in `arrayValue` and `kvlistValue`, and SPEC §7 says so. R-1's resource and event mutations are red |
+| R-2 — `118f0d4`, the bytes said to show `+` and `/` showed only `/` | **accepted**, `e3fccfa` (with R-1): the fixture's bytes are `00 0f bf 10`, base64 `AA+/EA==`, and the test asserts both characters of its own fixture. The `+`→`-` mutation is red |
+| R-3 — `723515a`, an alias by assignment passes the dynamic-import ban | **accepted, with its limit stated**, `e2c4563` (with R-4; one file, `tests/gates.py`, one guard each): `importlib.__import__` joins `DYNAMIC_IMPORT_MEMBERS`; a reference to `import_module` or `__import__` that is not a call is banned, and so is `getattr` on `importlib` or `builtins` or of either name. Beyond the decisions' text, a bare `__import__` name reference is banned too, the Name form of the same hole. The gate is syntactic: a name bound by assignment is not chased, which the comment and `tests/test_gates.py` say and a test pins |
+| R-4 — `723515a`, the allowance not pinned to its two prefixes | **accepted**, `e2c4563` (with R-3): a test holds `OPTIONAL_EXTRA_PACKAGES` equal to the prefixes derived from `pyproject.toml`'s `[otlp]`, `google.protobuf` and `opentelemetry.proto`, and refuses `google._upb` |
+| R-5 — `5c020c6`, "did not answer 200" tested with a 5xx only | **accepted**, `88cc441`: the not-200 test plants a 502, a 404 and a 204, a forward with no `status` is refused, and the raw-directory assert in `pairs()` has its own test |
+| R-6 — `00e55dd`, "scanned by every other" pinned for one guard only | **accepted**, `0648755`: a planted plan is red in the review-citation, decision-citation and three retired-figure guards (M2, M3, M5), and in the sha guard, the seventh guard that reads the plan, which the decisions' text did not name; the two by-name skips match exactly `WORKPLAN.md` at the root, case-sensitive (M6, M7, M8 red) |
+| R-7 — `00e55dd`, CONTRIBUTING's history sentence false for the first two openers | **accepted**, the tenth commit (with R-10, R-15, R-21; one mechanism, the record agrees with itself): the sentence names the four openers that did both and the wire series' own, and the two that predate `durable_documents()`; it says the guards that iterate `durable_documents()` read the plan, not every guard |
+| R-8 — `21b106d`, four independent guards under one subject | **read, recorded** (decisions log D35): the grouping was the one the maintainer gave; recorded under *Corrections after the close* |
+| R-9 — `21b106d`, the sha test resolved against the object store, not the refs | **accepted**, `ba6e633`: each cited sha must be a commit `git rev-list --all` reaches, so a dangling commit is red and a full clone with tags is what the test vouches for; outside a repository the sha tests skip and say why, and CONTRIBUTING says the gates need a full clone with tags. The other doc-truth tests that read what git tracks still fail outside a repository rather than skip, as R-9 records; `ba6e633` does not reach them |
+| R-10 — `21b106d`, "four zoo-pin citations" is three | **accepted**, the tenth commit (with R-7): the count is set right under *Corrections after the close*, and the doubled repository name in the stranger's-trace section is made single |
+| R-11 — `21b106d`, the G7 branch and a wrong-row citation survive | **First bullet accepted**, `ba0a511`: the guard already skipped by sentence, so no guard code changes; a test pins the zoo figures read from this file at the measured value, `TASKS_ZOO_FIGURES = 10`, and G7 is red (under G7 this file falls to 3 figures read, not the review's 4: it had moved since `21b106d`). **Second bullet declined** (decisions log D35): `D33` changed to `D32`, a real but wrong row, stays green; a resolver holds that a citation exists, not that it is the right one, and the only guard for meaning is a reader. The resolver's docstring says so |
+| R-12 — `e709afa`, the CI-shape tests held the steps' text, not what they do | **accepted, the worst three**, `212650f` (with R-13, R-14; one mechanism, CI does what its steps say): a sync after the floor install, a `print` for an `assert` and a narrowed `pytest` are red, and so are `mypy spanweave \|\| true` and an appended `protobuf==7.*`; the lock-only drift is R-13's. The rest is recorded as the limit of a text-shape test: a step's `if:`, `continue-on-error:` or `shell:` is not seen |
+| R-13 — `e709afa`, nothing ties `uv.lock` to `pyproject.toml` | **accepted**, `212650f` (with R-12): every `uv sync` in CI is `--locked`. The `Makefile` has no `uv sync` of its own, and its `uv run` stages re-lock a stale lock by default, so `check` gains a first stage, `lock`, running `uv lock --check`. The lock-only drift is red in `make check` and in CI's sync, not in a test |
+| R-14 — `e709afa`, the floors job installed the newest patch of each floor | **accepted**, `212650f` (with R-12): the `otlp` job installs `protobuf==5.27.0` and `opentelemetry-proto==1.28.0` and asserts both, and its comment is true. The minor point, two findings in one commit, is D34's shared mechanism |
+| R-15 — `4521cc2`, "rather than by rewriting the record above" in the commit that edited two lines of it | **accepted**, the tenth commit (with R-7): the opening of *Corrections after the close* says which two lines were edited and why, and `FIXTURES.md`'s long line is wrapped |
+| R-16 — `d2053ae`, the archive digests fail on a CRLF checkout | **accepted**, `df72ac2` (with R-17; one guard): `.gitattributes` gives `reviews/**` `-text`, and a test holds each archive's `text` attribute unset. R-16's `core.autocrlf=true` reproduction is green |
+| R-17 — `d2053ae`, two records in one paragraph held by no text | **accepted**, `df72ac2` (with R-16): `digest_records` already used `finditer`, so what was missing was the test. A paragraph with two records, in both orders, holds "two different digests are recorded", and the single-`search` mutation is red |
+| R-18 — `c4018b4`, the reader called CommonMark's is not CommonMark's | **accepted**, `ebdc27d` (with R-19, R-20; one mechanism, one fence reader): tilde fences are read, a closing fence carries no info string, and the docstring says containers are not modelled |
+| R-19 — `c4018b4`, the length, indent and character rules unpinned | **accepted**, `ebdc27d` (with R-18): tests pin the length rule, the three-space indent, tildes and the closing info string; R-19's three mutations and `>=`→`>` are red |
+| R-20 — `c4018b4`, an unrelated thread rides along, and "every fence reader" overstates | **accepted**, `ebdc27d` (with R-18): the seven other fence readers read through the shared module, by `fenced_blocks()`, built on `fence_kinds()`, rather than calling `fence_kinds()` as the decisions' text has it, because they want a block's info string and body; that no tracked document's result changes is measured in the commit's message, not tested. The thread is the grouping the maintainer asked for, recorded under *Corrections after the close* |
+| R-21 — `3dfe461`, `d2053ae`, `c4018b4`, two commits after the archive unrecorded | **accepted**, the tenth commit (with R-7): *Corrections after the close* records both, with their reason |
+
 ### The resume note  *(the plan file's §4, folded in full)*
 
 Every dated entry, verbatim and in order, except one clause removed after
@@ -14687,11 +14747,18 @@ in the last entry are registered above, under *Still open after the close*.
   close: see *Corrections after the close*]); the missing-extra error is a plain
   `SpanweaveError` with code `otlp_extra_not_installed`, not a subclass.
 
-### Corrections after the close  *(the 2026-10-17 cold review)*
+### Corrections after the close  *(the 2026-10-17 reviews)*
 
-What the 2026-10-17 cold review of `wire` found untrue or unbound in the
-series' record, set right here rather than by rewriting the record above.
-`R-<n>` is that review's finding.
+What the 2026-10-17 cold review of `wire`, and the scoped review of its
+fixes, found untrue or unbound in the series' record. Each is set right here
+rather than by rewriting the record above, except two lines `4521cc2`
+edited in place: the close summary's "seventh deletion" ordinal, removed
+because a count no test holds is not stated; and the `UnknownFieldSet`
+version clause in W1's resume entry, removed and marked where it stood
+(the resume note's opening says so), because an unverified claim kept
+verbatim would still read as true. The items under *Still open after the
+close* are status, not record, and are edited in place. `R-<n>` alone is
+the cold review's finding; *scoped review, R-<n>* is the scoped review's.
 
 - **`285902e`'s counts were measured with the extra hidden.** Its message
   gives `make check` 3555 passed / 111 skipped, `make conformance` 1156
@@ -14713,6 +14780,35 @@ series' record, set right here rather than by rewriting the record above.
 - **`7b4b606`'s README row was premature.** It said "Items are registered
   in TASKS.md", in the present tense, when no W0–W2 entry was yet (R-12).
   The row was deleted at the close (`285902e`).
+- **`21b106d`'s "four zoo-pin citations" were three.** Its message says
+  this file's five-backtick prose line made a `startswith` reader drop the
+  rest of the file, "including four zoo-pin citations". After that line,
+  `21b106d:TASKS.md` cites the zoo's pin, `SigorMatt/spanweave-zoo`
+  `7eb5b69`, three times, at lines 14314, 14485 and 14577 (scoped review,
+  R-10). The same commit's qualifier gave the stranger's-trace section's
+  opening sentence the zoo's repository twice; it names it once now.
+- **Two commits followed the archive.** The cold review's section above
+  says "This archive is the last of those commits", and decisions log D34
+  "Applied as eight commits on `wire`". Both stay true of the
+  dispositions, since neither later commit answers a finding, but the
+  record named neither (scoped review, R-21). `d2053ae` holds every review
+  archive to the `sha256` this file records for it: `3dfe461`'s own sanity
+  check had found one changed byte of an archive left the suite green, so
+  the digests the record keeps were held by nothing. `c4018b4` gives the
+  three readers that split prose from code one fence rule: this file's
+  five-backtick prose line had them read the rest of the file as one
+  fenced block, the bound `21b106d` recorded and left. `c4018b4` also
+  carries the "spec, not pair" thread under *Still open after the close*,
+  which has nothing to do with fences; it is there because the maintainer
+  asked for it there (scoped review, R-20). `21b106d`'s four guards under
+  one subject were likewise the grouping the maintainer gave (scoped
+  review, R-8).
+- **`ebdc27d`'s message overstates one mutation's reach.** For `>=`→`>`
+  (a close must be strictly longer) it gives 22 failed: the length test,
+  the other four new tests, "and seventeen readers over real documents".
+  The seventeen are seventeen other tests: fourteen read real documents,
+  and three read hand-made text, two of them `FENCE_DOCUMENT`. Re-run for
+  this record, the same 22 fail. Recorded here, not by amending.
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

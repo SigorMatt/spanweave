@@ -62,10 +62,10 @@ fails on it (every body's sha256 against its manifest, JSON and raw alike;
 every JSON body paired with exactly one raw body, read from the manifest's
 `forwards` list, the pair sharing its `NNNN`; every raw body marked `binary`
 by `.gitattributes`; every seal against its manifest and against the value
-the README pins; and no file the manifests do not name). The README is not the record: it is ours, edited like any other
-document this repository writes (decisions log D26), and held by
-`tests/test_zoo.py` (its seals, instrumentation, Collector and census
-paragraph). Its provenance is the
+the README pins; and no file the manifests do not name). The README is not
+the record: it is ours, edited like any other document this repository
+writes (decisions log D26), and held by `tests/test_zoo.py` (its seals,
+instrumentation, Collector and census paragraph). Its provenance is the
 zoo's `MANIFEST.json` beside each capture and the brief the README cites —
 the zoo's own briefs and export contract, under which an implementer who knew
 nothing about this library built each agent. So §6's `<name>.provenance.md`

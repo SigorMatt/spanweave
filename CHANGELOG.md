@@ -15,6 +15,13 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The scoped review of 2026-10-17 is archived, and every finding has a
+  disposition** (decisions log D35). No behaviour change.
+  `reviews/2026-10-17b-wire.md` is the review of the fixes byte for byte,
+  its `sha256` in `TASKS.md`, which gains a line per finding, R-1…R-21:
+  the commit that answered it, or the reading it was read, recorded or
+  declined with. The record's own disagreements it found are set right in
+  `TASKS.md`, `CONTRIBUTING.md` and `FIXTURES.md`.
 - **The cold review of 2026-10-17 is archived, and every finding has a
   disposition** (decisions log D34). No behaviour change.
   `reviews/2026-10-17-wire.md` is the review byte for byte, its `sha256`

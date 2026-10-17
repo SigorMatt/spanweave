@@ -1231,7 +1231,13 @@ def flowed(text: str) -> str:
 
 
 def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
-    """Each citation of a decision that names no row by its id."""
+    """Each citation of a decision that names no row by its id.
+
+    It holds that a cited row exists, not that it is the right one: `D33`
+    changed to `D32`, a real row that decides something else, is no fault
+    here, and no resolver could make it one. The only guard for a
+    citation's meaning is a reader (cold review of 2026-10-17, scoped, R-11,
+    second bullet, declined: decisions log D35)."""
     text = flowed(text)
     faults = [
         f"{match.group(0)!r} cites {cited}, which is no row of the log"

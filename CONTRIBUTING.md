@@ -92,14 +92,19 @@ where adapters go wrong.
 ## Opening a work series
 
 A series' plan file, `WORKPLAN.md` at the root, needs no accommodation in the
-tests. Commit it and every doc-truth guard reads it as it reads `SPEC.md`,
-except two that skip it by name in `tests/test_doc_truth.py`: the scratch-path
-guard, because a plan cites `patches/` by design, and the README Documents-table
-guard, because the plan is deleted at the series' close and so has no row. Do
-not add a README row for it, and do not exclude it from `durable_documents()`.
-Each opener until the wire series did both, and the exclusion took the plan out
-of every guard, not only the two it could not pass (cold review of 2026-10-17,
-R-10).
+tests. Commit it and every doc-truth guard that iterates `durable_documents()`
+reads it as it reads `SPEC.md` (a guard that reads a named file, such as
+`SPEC.md`, does not), except two that skip it by name in
+`tests/test_doc_truth.py`: the scratch-path guard, because a plan cites
+`patches/` by design, and the README Documents-table guard, because the plan is
+deleted at the series' close and so has no row. Do not add a README row for it,
+and do not exclude it from `durable_documents()`. The openers `0533951`,
+`5fd4660`, `aac1915` and `43e330a` did both, and so did the wire series' own,
+`7b4b606`; the exclusion took the plan out of every guard, not only the two it
+could not pass (cold review of 2026-10-17, R-10). The two earliest openers,
+`02e9f6e` and `30766fc`, added the row only: they predate
+`durable_documents()`, and the exclusion first appeared in `0284ec3`, which
+opened no series.
 
 ## Reporting a bug
 
