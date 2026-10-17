@@ -2171,7 +2171,9 @@ declares reaches `0.5`.
     in `tests/test_protobuf.py` holds the rendering to that rule. Those rows
     are **the spec's, not a pair's**: no Collector re-encoding checked them,
     and a guard test fails the day a zoo body carries one, so the claim
-    becomes checkable.
+    becomes checkable. The guard reads every AnyValue in every JSON body:
+    the resource's, the scope's, the span's, each event's and each link's
+    attributes, and the values nested in an `arrayValue` or a `kvlistValue`.
 
     | What | In the 29 pairs | Held by |
     |---|---|---|

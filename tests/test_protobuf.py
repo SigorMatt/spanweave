@@ -21,6 +21,7 @@ rather than a skip.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -363,13 +364,18 @@ def test_a_link_s_ids_render_as_lowercase_hex():
 
 
 #: `bytesValue` is proto3 JSON's `bytes`: standard base64, padded. The bytes
-#: are chosen so base64 and hex differ and the alphabet's `+` and `/` appear.
-BYTES = bytes([0x00, 0xFB, 0xFF, 0x10])
+#: are chosen so base64 and hex differ and the alphabet's `+` and `/` appear
+#: (the test asserts both of its own fixture).
+BYTES = bytes([0x00, 0x0F, 0xBF, 0x10])
 
 
 def test_bytes_array_and_kvlist_values_render_as_the_otlp_json_spec_writes_them():
     """Spec, not pair: the zoo's AnyValues are `stringValue`, `intValue` and
     `boolValue` only (the guard below)."""
+    # URL-safe base64 differs from standard in exactly these two characters,
+    # so the fixture must show both, and must not read the same as hex.
+    standard = base64.b64encode(BYTES).decode("ascii")
+    assert "+" in standard and "/" in standard and standard != BYTES.hex()
     pb2 = _pb2()
     from opentelemetry.proto.common.v1 import common_pb2
     from opentelemetry.proto.trace.v1 import trace_pb2
@@ -406,7 +412,7 @@ def test_bytes_array_and_kvlist_values_render_as_the_otlp_json_spec_writes_them(
     request = _request(pb2, span)
     (rendered,) = _spans(_rendered(request))
     assert rendered["attributes"] == [
-        {"key": "bytes", "value": {"bytesValue": "APv/EA=="}},
+        {"key": "bytes", "value": {"bytesValue": "AA+/EA=="}},
         {
             "key": "array",
             "value": {
@@ -419,7 +425,7 @@ def test_bytes_array_and_kvlist_values_render_as_the_otlp_json_spec_writes_them(
                 "kvlistValue": {
                     "values": [
                         {"key": "t", "value": {"boolValue": True}},
-                        {"key": "b", "value": {"bytesValue": "APv/EA=="}},
+                        {"key": "b", "value": {"bytesValue": "AA+/EA=="}},
                     ]
                 }
             },
@@ -454,9 +460,86 @@ def test_kind_zero_no_status_and_flags_zero_render_omitted():
     assert not {"kind", "status", "flags"} & set(record)
 
 
+def _attribute_lists(document: dict[str, Any]) -> list[tuple[str, list[Any]]]:
+    """Every attribute list an OTLP/JSON trace document can hold, by path:
+    the resource's, the scope's, the span's, each event's and each link's."""
+    found: list[tuple[str, list[Any]]] = []
+    for r, resource_entry in enumerate(document.get("resourceSpans", [])):
+        at = f"resourceSpans[{r}]"
+        found.append((f"{at}.resource", resource_entry.get("resource", {})))
+        for s, scope_entry in enumerate(resource_entry.get("scopeSpans", [])):
+            at_scope = f"{at}.scopeSpans[{s}]"
+            found.append((f"{at_scope}.scope", scope_entry.get("scope", {})))
+            for n, span in enumerate(scope_entry.get("spans", [])):
+                at_span = f"{at_scope}.spans[{n}]"
+                found.append((at_span, span))
+                for key in ("events", "links"):
+                    for e, entry in enumerate(span.get(key, [])):
+                        found.append((f"{at_span}.{key}[{e}]", entry))
+    return [(path, owner.get("attributes", [])) for path, owner in found]
+
+
+def _any_value_kinds(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """Each AnyValue's kind with its path, in document order: every attribute
+    list, and every value nested in an `arrayValue` or a `kvlistValue`."""
+    kinds: list[tuple[str, str]] = []
+
+    def walk(path: str, value: dict[str, Any]) -> None:
+        for kind in value:
+            kinds.append((path, kind))
+        for i, item in enumerate(value.get("arrayValue", {}).get("values", [])):
+            walk(f"{path}.arrayValue[{i}]", item)
+        for entry in value.get("kvlistValue", {}).get("values", []):
+            walk(f"{path}.kvlistValue.{entry['key']}", entry["value"])
+
+    for path, attributes in _attribute_lists(document):
+        for attribute in attributes:
+            walk(f"{path}.{attribute['key']}", attribute["value"])
+    return kinds
+
+
+def test_the_any_value_census_reads_every_attribute_list_and_every_nested_value():
+    """The guard below is only as wide as this walk: a kind planted in each
+    place an AnyValue can sit is found there, and nowhere else."""
+
+    def attributes(key: str, value: dict[str, Any]) -> dict[str, Any]:
+        return {"attributes": [{"key": key, "value": value}]}
+
+    array = {"arrayValue": {"values": [{"intValue": "1"}, {}]}}
+    kvlist = {"kvlistValue": {"values": [{"key": "t", "value": {"boolValue": True}}]}}
+    span_entry = {
+        "attributes": [{"key": "a", "value": array}, {"key": "k", "value": kvlist}],
+        "events": [attributes("e", {"stringValue": "v"})],
+        "links": [attributes("l", {"intValue": "2"})],
+    }
+    scope_entry = {
+        "scope": {"name": "x", **attributes("c", {"bytesValue": "AA=="})},
+        "spans": [span_entry],
+    }
+    resource_entry = {
+        "resource": attributes("r", {"doubleValue": 1.5}),
+        "scopeSpans": [scope_entry],
+    }
+    document = {"resourceSpans": [resource_entry]}
+    span = "resourceSpans[0].scopeSpans[0].spans[0]"
+    assert _any_value_kinds(document) == [
+        ("resourceSpans[0].resource.r", "doubleValue"),
+        ("resourceSpans[0].scopeSpans[0].scope.c", "bytesValue"),
+        (f"{span}.a", "arrayValue"),
+        (f"{span}.a.arrayValue[0]", "intValue"),
+        (f"{span}.k", "kvlistValue"),
+        (f"{span}.k.kvlistValue.t", "boolValue"),
+        (f"{span}.events[0].e", "stringValue"),
+        (f"{span}.links[0].l", "intValue"),
+    ]
+
+
 def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
     """The day a pair carries one, this fails, and that row of `SPEC.md` §7's
-    table becomes the pairs' to check."""
+    table becomes the pairs' to check. Every AnyValue is read: the resource's,
+    the scope's, the span's, each event's and each link's attributes, and the
+    values nested in an `arrayValue` or a `kvlistValue` (the walk's own test
+    above)."""
     kinds: set[str] = set()
     for run, json_body, raw_body in PAIRS:
         document = json.loads(json_body.read_bytes())
@@ -466,8 +549,7 @@ def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
         for span in _spans(document):
             assert "links" not in span, run
             assert {"kind", "status", "flags"} <= set(span), run
-            for attribute in span.get("attributes", []):
-                kinds.update(attribute["value"])
+        kinds.update(kind for _, kind in _any_value_kinds(document))
         request = _pb2().ExportTraceServiceRequest.FromString(raw_body.read_bytes())
         for resource_entry in request.resource_spans:
             for scope_entry in resource_entry.scope_spans:
