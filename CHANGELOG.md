@@ -1055,6 +1055,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **CI does what its steps say: the `otlp` job installs the floors exactly,
+  the lock is checked, and the CI-shape tests hold what the steps do** (cold
+  review of 2026-10-17b, R-12, R-13, R-14). The `otlp` job installed
+  `protobuf==5.27.*` and `opentelemetry-proto==1.28.*`, the newest patch of
+  each, while its comment said the lowest versions `[otlp]` admits; it now
+  installs `==5.27.0` and `==1.28.0` and asserts exactly those. Every
+  `uv sync` in CI is `--locked`, and `make check` gains a first stage,
+  `lock`, that runs `uv lock --check`, so a `uv.lock` that has drifted from
+  `pyproject.toml` is red rather than re-locked unseen.
+  `tests/test_acceptance.py` now holds that nothing syncs or installs after
+  the floor install, that the version step's checks are `assert`
+  statements, that `mypy spanweave` and the whole suite run after it (no
+  path or selector on `pytest`), and that every sync is `--locked`. What a
+  test of the steps' text cannot see -- a step's `if:`,
+  `continue-on-error:` or `shell:` -- it does not claim to.
 - **The `otlp` extra's floors are raised to `protobuf>=5.27` and
   `opentelemetry-proto>=1.28`, and CI now tests them** (cold review of
   2026-10-17, R-16, R-18). The old floors, `protobuf>=4.25` and

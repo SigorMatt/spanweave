@@ -45,10 +45,25 @@ def _recipe(target: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "prerequisite", ["lint", "types", "test", "gates", "bench-smoke"]
+    "prerequisite", ["lock", "lint", "types", "test", "gates", "bench-smoke"]
 )
 def test_check_depends_on_every_stage(prerequisite):
-    assert prerequisite in _recipe("check").splitlines()[0]
+    assert prerequisite in _recipe("check").splitlines()[0].split()
+
+
+def test_check_checks_the_lock_before_anything_runs_under_it():
+    """A stale `uv.lock` is red, before a `uv run` can re-lock it unseen.
+
+    Nothing ran `uv lock --check`, `--locked` or `--frozen`, so `uv.lock`'s
+    `requires-dist` alone drifted from `pyproject.toml` left every gate green:
+    `uv run` re-locks by default and says nothing (cold review of 2026-10-17b,
+    R-13). `lock` is `check`'s first stage, because every stage after it is a
+    `uv run`.
+    """
+    commands = [line.strip() for line in _recipe("lock").splitlines()[1:]]
+    assert "uv lock --check" in commands, commands
+    stages = _recipe("check").splitlines()[0].split()[1:]
+    assert stages[0] == "lock", f"`check` runs {stages}; `lock` is not first"
 
 
 def test_check_smoke_tests_the_installed_entrypoint():
@@ -117,7 +132,7 @@ def test_gates_runs_the_gate_suites():
 
 
 def test_ci_runs_the_same_harness_rather_than_its_own():
-    assert "uv sync --extra dev" in WORKFLOW
+    assert "uv sync --locked --extra dev" in WORKFLOW
     assert "make check" in WORKFLOW
 
 
@@ -177,6 +192,24 @@ def _otlp_floors() -> dict[str, str]:
     return floors
 
 
+def test_every_ci_sync_is_locked():
+    """Every `uv sync` in CI refuses a lock that disagrees with pyproject.toml.
+
+    A plain `uv sync` re-locks a stale lock and installs what it re-resolved,
+    so CI tested a lock nobody committed (cold review of 2026-10-17b, R-13).
+    """
+    for name in ("check", "otlp", "determinism"):
+        syncs = [run for run in _runs(_job(name)) if run.startswith("uv sync")]
+        assert syncs, f"the {name} job no longer runs `uv sync`"
+        for sync in syncs:
+            assert "--locked" in sync.split(), (
+                f"the {name} job runs `{sync}`, which re-locks a stale uv.lock "
+                f"without a word; it must be `--locked`"
+            )
+    every = [run for run in _runs(WORKFLOW) if "uv sync" in run]
+    assert all("--locked" in run.split() for run in every), every
+
+
 def test_ci_check_job_installs_and_requires_the_otlp_extra():
     """The matrix runs the protobuf tests on every Python, and a skip fails.
 
@@ -228,27 +261,55 @@ def test_ci_otlp_job_runs_the_declared_floors():
     assert len(installs) == 1, f"expected one floor install, got {installs}"
     install = installs[0]
     assert install > sync, "the floors are installed before the sync replaces them"
-    pinned = dict(re.findall(r'"([A-Za-z0-9_.-]+)==(\d+\.\d+)\.\*"', runs[install]))
-    assert pinned == floors, (
-        f"the otlp job installs {pinned}; pyproject.toml's [otlp] floors are "
-        f"{floors}. A floor CI does not install is suspected, not tested."
+    # `>=5.27` admits 5.27.0, and `==5.27.*` installs the newest 5.27 patch
+    # (cold review of 2026-10-17b, R-14), so the pin is the floor exactly, and
+    # the line installs the two floors and nothing besides.
+    exact = {package: f"{floor}.0" for package, floor in floors.items()}
+    requirements = runs[install].split()[3:]
+    assert sorted(requirements) == sorted(
+        f'"{package}=={version}"' for package, version in exact.items()
+    ), (
+        f"the otlp job installs {requirements}; pyproject.toml's [otlp] floors "
+        f"are {exact}. A floor CI does not install is suspected, not tested."
     )
-    asserted = {}
-    for run in runs[install + 1 :]:
-        asserted.update(
-            re.findall(r"v\['([A-Za-z0-9_.-]+)'\]\.startswith\('(\d+\.\d+)\.'\)", run)
+    after = runs[install + 1 :]
+    # Nothing after the install may put the lock's versions back: a sync, a
+    # second install, or a `uv run` that re-syncs (R-12, the worst of them).
+    for run in after:
+        assert not re.search(r"\buv (?:sync|pip (?:install|sync))\b", run), (
+            f"`{run}` runs after the floor install and replaces the floors"
         )
-    assert asserted == floors, (
-        f"the otlp job asserts {asserted} installed after the floor install, "
-        f"not the floors {floors}"
-    )
     for run in runs:
         if run.startswith("uv run"):
             assert "--no-sync" in run.split(), (
                 f"`{run}` re-syncs to the lock and undoes the floor install"
             )
-    after = " ".join(runs[install + 1 :])
-    assert "mypy spanweave" in after and "pytest" in after, runs
+    # The version step ASSERTS: a statement of its own, `assert v[...] ==`,
+    # not a comparison a `print` would show and pass (R-12).
+    asserted = {}
+    for run in after:
+        for statement in run.split(";"):
+            found = re.fullmatch(
+                r"\s*assert v\['([A-Za-z0-9_.-]+)'\] == '([0-9.]+)', v\"?\s*",
+                statement,
+            )
+            if found:
+                asserted[found.group(1)] = found.group(2)
+    assert asserted == exact, (
+        f"the otlp job asserts {asserted} installed after the floor install, "
+        f"not the floors {exact}"
+    )
+    assert any(run.split()[-2:] == ["mypy", "spanweave"] for run in after), (
+        f"no step after the floor install ends `mypy spanweave`: {after}"
+    )
+    # The whole suite: `pytest` with report flags only, no path, no `-k`, no
+    # `-m`, no `--deselect` -- a narrowed run is a floor tested in part (R-12).
+    pytests = [run.split() for run in after if "pytest" in run.split()]
+    assert len(pytests) == 1, f"expected one pytest run after the floors: {after}"
+    arguments = pytests[0][pytests[0].index("pytest") + 1 :]
+    assert set(arguments) <= {"-rs", "-ra", "-v", "-q"}, (
+        f"the otlp job runs pytest {arguments}, not the whole suite"
+    )
 
 
 def test_ci_otlp_job_runs_the_floors_on_every_python_the_check_job_does():

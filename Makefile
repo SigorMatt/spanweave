@@ -2,10 +2,18 @@
 # before it counts as done (ENVIRONMENT.md): it wraps the exact toolchain
 # commands plus the phase done-whens as runnable checks.
 
-.PHONY: check install-check lint types test gates conformance shape stranger bench bench-smoke capture clean
+.PHONY: check install-check lock lint types test gates conformance shape stranger bench bench-smoke capture clean
 
-check: lint types test gates bench-smoke
+check: lock lint types test gates bench-smoke
 	uv run spanweave --version
+
+# `uv.lock` agrees with pyproject.toml, or the gate is red. It runs first: every
+# `uv run` below re-locks a stale lock by default and says nothing, so a lock
+# moved without its pyproject.toml (or the other way round) would pass every
+# stage after this one (cold review of 2026-10-17b, R-13). CI's `uv sync` lines
+# are `--locked` for the same reason.
+lock:
+	uv lock --check
 
 lint:
 	uv run ruff check .

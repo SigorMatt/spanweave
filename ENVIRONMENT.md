@@ -36,7 +36,9 @@ fix one deliberately, don't let them drift.
 - **`pyproject.toml` is the single source of truth** for metadata and dependencies.
 - Dependency tool: **uv**. The committed **`uv.lock`** pins exact versions so
   builds and graphs are reproducible byte-for-byte (`CLAUDE.md` 4). `uv.lock` is
-  committed and MUST NOT be gitignored.
+  committed and MUST NOT be gitignored. A lock that disagrees with
+  `pyproject.toml` is a failure, not a silent re-lock: `make check` runs
+  `uv lock --check` first, and every `uv sync` in CI is `--locked`.
 - Lint/format: **ruff**. Types: **mypy --strict** (code is fully type-annotated).
   Tests: **pytest**.
 
@@ -60,10 +62,10 @@ fix one deliberately, don't let them drift.
   `check` matrix installs it the same way, and both it and the `otlp` job run
   with `SPANWEAVE_REQUIRE_OTLP=1`, under which a proto runtime that will not
   import fails rather than skips. The `otlp` job installs the extra's declared
-  lower bounds (`opentelemetry-proto>=1.28`, `protobuf>=5.27`) over the lock
-  and runs the whole suite against them on every Python the matrix covers, so
-  the floors are tested, not assumed (`pyproject.toml` says how they were
-  chosen).
+  lower bounds (`opentelemetry-proto>=1.28`, `protobuf>=5.27`) exactly, as
+  `==1.28.0` and `==5.27.0`, over the lock, and runs the whole suite against
+  them on every Python the matrix covers, so the floors are tested, not
+  assumed (`pyproject.toml` says how they were chosen).
 - Adding **any** core runtime dependency is a halt point (`AGENT.md`).
 
 ## Commands (exact — the agent uses these, does not invent them)
