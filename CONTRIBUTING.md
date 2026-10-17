@@ -43,6 +43,11 @@ even if it works. In particular:
 A mergeable PR:
 
 - [ ] Passes `make check` — lint, `mypy --strict`, tests, and all gates.
+      The gates need a full clone with tags, which is what CI checks out
+      (`fetch-depth: 0`, `fetch-tags: true`): every sha a document cites must
+      be a commit a ref reaches, so a `--depth 1` or `--single-branch` clone
+      fails them, and a commit only your clone holds does not pass them.
+      Outside a git repository the sha tests skip and say why.
 - [ ] Adds or updates conformance fixtures, including at least one degenerate
       case (`FIXTURES.md` §3).
 - [ ] Passes cross-dialect equivalence against the **unmodified** expected

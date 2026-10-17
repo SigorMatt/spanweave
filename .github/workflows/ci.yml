@@ -35,9 +35,10 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
-        # Full history and tags: `tests/test_doc_truth.py` resolves every sha
-        # a document cites with `git cat-file`, and the default depth-1 clone
-        # holds one commit (cold review of 2026-10-17, R-13).
+        # Full history and tags: `tests/test_doc_truth.py` holds every sha a
+        # document cites to a commit a ref reaches (`git rev-list --all`), and
+        # the default depth-1 clone holds one commit (cold review of
+        # 2026-10-17, R-13; of 2026-10-17b, R-9).
         with:
           fetch-depth: 0
           fetch-tags: true

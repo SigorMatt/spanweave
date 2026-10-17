@@ -1238,6 +1238,19 @@ def test_the_citation_resolver_keeps(text):
 # *commit*: a blob or tree id that happens to share the prefix is not what a
 # citation names, and an ambiguous prefix names nothing.
 #
+# **And as a commit a ref reaches** (`git rev-list --all`), not merely one
+# the object store holds. A dangling commit -- `git commit-tree` with no ref
+# naming it, or a branch deleted locally -- resolves in the clone that made
+# it and in no other, so a resolver over the object store vouched for a
+# citation a fresh clone refuses (cold review of 2026-10-17b, R-9: a
+# `commit-tree` commit cited in `ROADMAP.md` was green). What the test
+# vouches for is a full clone with tags, which is what CI checks out
+# (`CONTRIBUTING.md`). Outside a git repository -- an unpacked sdist, a
+# `git archive` tree -- there is nothing to resolve against, and the sha
+# tests skip and say so rather than fail or pass vacuously. Twelve other
+# doc-truth tests, which read what git tracks, still fail there rather than
+# skip; R-9 records that, and this change does not reach them.
+#
 # **What counts as a citation, and why the shape is this narrow.** The
 # documents are full of hex that is not a sha: sha256 digests and their
 # prefixes, span and trace ids, `chatcmpl-tool-...` ids, number literals. A
@@ -1352,9 +1365,41 @@ def test_the_sha_scan_reads_fences_by_the_same_rule():
     assert sha_citations(FENCE_DOCUMENT) == [ShaCitation("fed4321", 10, None)]
 
 
+def require_this_repository() -> None:
+    """Skip the calling test, saying why, unless `ROOT` is the top of a git
+    work tree: outside one no sha can resolve, and a test that read that as
+    red, or as green, would be reporting on the checkout, not the documents."""
+    top = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if top.returncode != 0 or pathlib.Path(top.stdout.strip()).resolve() != (
+        ROOT.resolve()
+    ):
+        pytest.skip(
+            f"{ROOT} is not the top of a git repository, so no cited sha can be "
+            "resolved; the sha tests need a full clone with tags"
+        )
+
+
+def reachable_commits() -> set[str]:
+    """Every commit a ref reaches, as a full sha: what a full clone with
+    tags holds, whatever else this clone's object store happens to keep."""
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-list", "--all"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return set(listed)
+
+
 def unresolved_commits(shas: set[str]) -> set[str]:
-    """The shas that name no commit of this repository (missing, ambiguous,
-    or an object of another type)."""
+    """The shas that name no commit a ref of this repository reaches
+    (missing, ambiguous, an object of another type, or dangling)."""
+    require_this_repository()
+    reachable = reachable_commits()
     ordered = sorted(shas)
     answer = subprocess.run(
         ["git", "-C", str(ROOT), "cat-file", "--batch-check"],
@@ -1367,7 +1412,7 @@ def unresolved_commits(shas: set[str]) -> set[str]:
     return {
         sha
         for sha, line in zip(ordered, answer, strict=True)
-        if line.split()[1:2] != ["commit"]
+        if line.split()[1:2] != ["commit"] or line.split()[0] not in reachable
     }
 
 
@@ -1402,6 +1447,7 @@ def cited_shas_by_document() -> dict[str, list[ShaCitation]]:
 
 
 def test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository():
+    require_this_repository()
     cited = cited_shas_by_document()
     assert sum(map(len, cited.values())) > 100, "the sha scan read almost nothing"
     faults = sha_faults(cited)
@@ -1414,6 +1460,9 @@ def test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository():
 
 
 def test_every_hex_value_called_not_a_sha_is_still_cited_and_is_no_object():
+    # Outside a repository `cat-file -e` fails for every value, and this
+    # would pass having checked nothing (R-9).
+    require_this_repository()
     bare = {
         citation.sha
         for citations in cited_shas_by_document().values()
@@ -1482,6 +1531,7 @@ def test_another_repository_s_sha_is_exempt_only_when_named_beside_it():
 
 
 def test_a_sha_resolves_only_as_a_commit_of_this_repository():
+    require_this_repository()
     commit = _short("HEAD")
     blob = _short("HEAD:README.md")
     tree = _short("HEAD^{tree}")
@@ -1498,6 +1548,52 @@ def test_a_sha_resolves_only_as_a_commit_of_this_repository():
         "0000000",
         "e" * 40,
     }
+
+
+#: An identity for the scratch commits, so they need no user configuration.
+_SCRATCH_IDENTITY = ("-c", "user.name=t", "-c", "user.email=t@t.invalid")
+
+
+def _scratch_git(root: pathlib.Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *_SCRATCH_IDENTITY, *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_a_commit_no_ref_reaches_is_unresolved_though_the_store_holds_it(
+    tmp_path, monkeypatch
+):
+    _scratch_git(tmp_path, "init", "-q")
+    tree = _scratch_git(tmp_path, "hash-object", "-t", "tree", "-w", "/dev/null")
+    parent = _scratch_git(tmp_path, "commit-tree", tree, "-m", "parent")
+    child = _scratch_git(tmp_path, "commit-tree", tree, "-p", parent, "-m", "child")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    # Both are commits in the object store, and no ref names either.
+    assert _scratch_git(tmp_path, "cat-file", "-t", child) == "commit"
+    assert unresolved_commits({parent[:7], child}) == {parent[:7], child}
+    # A tag, not a branch, reaches the child, and through it the parent: what
+    # a ref reaches is its history, not only its tip.
+    _scratch_git(tmp_path, "update-ref", "refs/tags/rejected/x", child)
+    assert unresolved_commits({parent[:7], child}) == set()
+
+
+def test_the_sha_tests_skip_outside_the_top_of_a_repository(tmp_path, monkeypatch):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    inner = tmp_path / "repository" / "sub"
+    inner.mkdir(parents=True)
+    _scratch_git(tmp_path / "repository", "init", "-q")
+    for root in (plain, inner):
+        monkeypatch.setattr(sys.modules[__name__], "ROOT", root)
+        with pytest.raises(
+            pytest.skip.Exception, match=r"is not the top of a git repository"
+        ):
+            test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository()
+        with pytest.raises(pytest.skip.Exception, match=r"need a full clone with tags"):
+            test_every_hex_value_called_not_a_sha_is_still_cited_and_is_no_object()
 
 
 # -- The zoo's counts, read from the documents that state them -------------
