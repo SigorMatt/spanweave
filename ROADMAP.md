@@ -298,7 +298,7 @@ conformance corpus and run against the cross-dialect equivalence test.
 
 **The zoo corpus exists, and it is not the third dialect.** `fixtures/zoo/`
 holds twelve captures of six agents built by implementers who knew nothing
-about this library, copied byte for byte from the zoo at `7eb5b69`; the census
+about this library, copied byte for byte from the zoo at `SigorMatt/spanweave-zoo` `7eb5b69`; the census
 and the readings are its gates (`tests/zoo_census.py`,
 `tests/test_zoo_readings.py`, both run by `make conformance`). It is the corpus
 the flywheel above wanted — captures nobody shaped for the library, which make

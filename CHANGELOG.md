@@ -142,7 +142,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   states its limit: the seals are copied from the zoo's manifests at the
   pin and are the pin; the test holds the copy to the README, and holding
   the README to the zoo is a reviewer's comparison against the zoo at
-  `7eb5b69`.
+  `SigorMatt/spanweave-zoo` `7eb5b69`.
 - **Decision rows carry ids, every citation resolves to one, and the relay
   files map to rows** (decisions log D24; R-17, R-18, R-19, R-22). No
   behaviour change. Decisions were cited by date and batch, and on

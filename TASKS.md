@@ -13854,7 +13854,7 @@ prose until a stranger reads it.
   (decisions log D22) added it to the target.
 
 The stranger's-trace series answered the twenty-two probes (`PROBES.md`
-S1–S22) that `SigorMatt/spanweave-zoo` left for this library at `7eb5b69`.
+S1–S22) that `SigorMatt/spanweave-zoo` left for this library at `SigorMatt/spanweave-zoo` `7eb5b69`.
 The probes come from twelve captures of six agents, each built by an
 implementer who knew nothing about this library, under stock
 instrumentation. The series ran on branch `stranger` from `main` at `fec7da2`
@@ -14243,7 +14243,7 @@ message (decisions log D24; R-23). This archive is the last of those commits.
 
 | Finding | Disposition |
 |---|---|
-| R-1 — `f590bff`, the README seal is not independent of the copy | **accepted, its limit stated**, `6efdfa7`. The seal table says the seals are copied from the zoo's sealed manifests at the pin and are the pin; the test holds the copy to the README, and holding the README to the zoo is the reviewer's, by comparing against the zoo checkout at `7eb5b69` |
+| R-1 — `f590bff`, the README seal is not independent of the copy | **accepted, its limit stated**, `6efdfa7`. The seal table says the seals are copied from the zoo's sealed manifests at the pin and are the pin; the test holds the copy to the README, and holding the README to the zoo is the reviewer's, by comparing against the zoo checkout at `SigorMatt/spanweave-zoo` `7eb5b69` |
 | R-2 — `6fe41f8`, "S16 by the Z2 `temporal` count" holds nothing | **accepted**, `80e5331`: the T0 row says S16 is held by `4bc9032`'s node-and-edge structures |
 | R-3 — `6fe41f8`, the contiguity check rests on an untested helper | **accepted**, `ea37864` |
 | R-4 — `6fe41f8`, two mutation counts do not reproduce | **read, recorded** (decisions log D24). The counts were 2 and 3, not 1; the tests named do go red. Recorded as measured in the 2026-10-14 table's R-4 line by `80e5331`; the message stays |
@@ -14311,7 +14311,7 @@ What answered one later is stated above: T6's Makefile entry is answered by
 decisions log D15, D16, D17, D18 and D19.
 
 - 2026-10-14: series opened on `stranger` from `main` `fec7da2`, from the
-  zoo's `PROBES.md` at `7eb5b69`. The receiver's series (L1–L4) follows this
+  zoo's `PROBES.md` at `SigorMatt/spanweave-zoo` `7eb5b69`. The receiver's series (L1–L4) follows this
   one, because L2 needs T1.
 - 2026-10-14 T0 (`162f1b6`): the zoo holds 29 bodies, not 24 (2+1+3+1+4+1+2+1+1+1+11+1, as
   `PROBES.md` and L1's "29 of 29"); row corrected. Census matches all twelve audits on all
@@ -14574,7 +14574,7 @@ corrections, measurements and open items here, and only here; the open items
 in the last entry are registered above, under *Still open after the close*.
 
 - 2026-10-16: series opened on `wire` from `main` `88c7339`, from the zoo's
-  L1 at `7eb5b69`. The receiver's series (V0–V4) follows and pins to this
+  L1 at `SigorMatt/spanweave-zoo` `7eb5b69`. The receiver's series (V0–V4) follows and pins to this
   series' merge.
 - 2026-10-17: W0 done (`09245d9`). The zoo's SPEC §4.7 does not guarantee
   JSON/raw pairing by `NNNN`; the test reads `forwards` and checks the

@@ -7,7 +7,7 @@ instrumentation into a stock Collector 0.162.0 — once against a real model
 (`real`) and once against a recorded one (`recorded`).
 
 **Pin:** `SigorMatt/spanweave-zoo` at
-`7eb5b6944ccef34861dbaf92e8f0acb0b7edaf99` (`7eb5b69`), the commit its
+`7eb5b6944ccef34861dbaf92e8f0acb0b7edaf99`, the commit its
 `PROBES.md` and its twelve `audit/<project>-<run-id>.md` were written at.
 
 **The bodies and manifests are the record and are never edited; this README
@@ -59,7 +59,8 @@ their bytes in the order their JSON bodies pair with them.
 The seals are copied from the zoo's sealed manifests at the pin and are the
 pin: the test holds the copy to this table, and holding this table to the zoo
 is the reviewer's job, done by comparing it against a checkout of the zoo at
-`7eb5b69`, as the cold reviews of 2026-10-14 and 2026-10-15 did.
+`SigorMatt/spanweave-zoo` `7eb5b69`, as the cold reviews of 2026-10-14 and
+2026-10-15 did.
 
 **The census.** `tests/zoo_census.py` holds eleven counts for each capture —
 nodes, `parent` and `temporal` edges, `orphan_parent`, `unpaired_call`,

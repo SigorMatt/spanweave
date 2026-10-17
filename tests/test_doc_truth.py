@@ -48,6 +48,7 @@ import pytest
 
 import spanweave
 from spanweave.adapters import registered
+from tests import zoo_census
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
 from tests.corpus_census import (
     FRACTIONAL_FIGURES,
@@ -834,8 +835,21 @@ def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
 
 
 def citing_files() -> list[pathlib.Path]:
-    """The durable documents and the tests: where a decision is cited."""
-    return durable_documents() + sorted((ROOT / "tests").rglob("*.py"))
+    """The durable documents, the tests and the package: where a decision is
+    cited. The package's docstrings and comments cite the log too
+    (`otlp_protobuf.py`'s D28), and were outside this list until the cold
+    review of 2026-10-17 changed that one to D38 with the suite green (R-14)."""
+    return (
+        durable_documents()
+        + sorted((ROOT / "tests").rglob("*.py"))
+        + sorted((ROOT / "spanweave").rglob("*.py"))
+    )
+
+
+def test_the_citing_files_include_the_package_s_one_citation():
+    package = ROOT / "spanweave" / "otlp_protobuf.py"
+    assert package in citing_files()
+    assert DECISION_CITATION.search(flowed(package.read_text(encoding="utf-8")))
 
 
 def test_the_decisions_log_numbers_its_rows_in_order():
@@ -909,6 +923,506 @@ def test_the_citation_resolver_refuses(text):
 @pytest.mark.parametrize("text", CITATIONS_KEPT)
 def test_the_citation_resolver_keeps(text):
     assert citation_faults(text, decision_rows()) == [], text
+
+
+# -- Cited shas, held to the repository ------------------------------------
+#
+# A sha in a durable document is a citation like a file path: it names an
+# object a reader is meant to be able to open. Until 2026-10-17 nothing held
+# one -- `4ecf414` changed to `4ecf415` in `ROADMAP.md`, or a registry row's
+# `09245d9` changed to `09245d8`, left the suite green (cold review of
+# 2026-10-17, R-13, R-17). Each is now resolved by `git cat-file`, as a
+# *commit*: a blob or tree id that happens to share the prefix is not what a
+# citation names, and an ambiguous prefix names nothing.
+#
+# **What counts as a citation, and why the shape is this narrow.** The
+# documents are full of hex that is not a sha: sha256 digests and their
+# prefixes, span and trace ids, `chatcmpl-tool-...` ids, number literals. A
+# regex over all hex reads them as citations, and a guard that has to be
+# talked out of a hundred false positives is a guard on its way to being
+# switched off. So a sha is read in three shapes only:
+#
+# - a code span that is *nothing but* 7 to 40 hex digits, optionally a
+#   revision suffix (`^`, `~n`) or a range (`a..b`, `a^..HEAD`). A truncated
+#   digest is written with its ellipsis (`ec3eeae2...`), and so is not this
+#   shape; a full sha256 is 64 digits, past the 40 a sha can be;
+# - any 7-to-40-digit hex word inside a code span that is a `git` command
+#   (`git show 028e645:WORKPLAN.md`), where the position is a revision;
+# - outside code, a 7-digit word mixing letters and digits: what
+#   `git log --oneline` prints in this repository, pasted into prose
+#   ("fixed in 79f7dcd"). Prose is not read at other widths, because every
+#   longer bare hex run in prose is a digest prefix or an id; a longer sha
+#   is cited in a code span, where it is read at any width.
+#
+# The span shape still admits three values that are not shas, each written
+# bare in a code span, and each is named in `NOT_SHAS` with what it is. The
+# table fails closed: a new bare hex span that does not resolve is red until
+# someone says which it is, and an entry no document carries any more is red
+# too.
+#
+# **Another repository's sha** is that repository's to hold, and the
+# citation says so by naming it *beside* the sha: the code span immediately
+# before the sha's span is an `owner/repo` name, separated from it only by
+# whitespace (a line break and a blockquote's `>` included) and at most the
+# word `at` -- `` `SigorMatt/spanweave-zoo` at `7eb5b69` ``. A repository
+# named earlier in the sentence does not qualify a later sha, and naming
+# this repository qualifies nothing: its shas resolve here.
+
+#: This repository, as an `owner/repo` qualifier would name it.
+THIS_REPOSITORY = "SigorMatt/spanweave"
+
+#: Bare hex code spans that are not shas: value -> what it is and where.
+NOT_SHAS = {
+    "9db11f5f": "a canonical digest's first digits (the `café` example)",
+    "645fa443": "a canonical digest's first digits (the `café` example)",
+    "3013a003149d6951": "the span id of Z4's root span `concierge.conversation`",
+}
+
+#: Hex of a sha's width, with a letter in it: a run of digits alone in a
+#: span is a number (timestamps, ids), and a sha of digits alone -- about one
+#: 7-digit sha in twenty-seven -- is read only inside a `git` command.
+_HEX = r"(?=[0-9]*[a-f])[0-9a-f]{7,40}"
+_REVISION = rf"({_HEX}|HEAD)(?:\^|~\d*)*"
+#: A code span that is a revision or a range and nothing else.
+SHA_SPAN = re.compile(rf"{_REVISION}(?:\.\.{_REVISION})?")
+#: A hex word inside a `git` command span.
+GIT_COMMAND_SHA = re.compile(r"(?<![\w./-])[0-9a-f]{7,40}(?![\w/-])")
+#: A 7-digit sha in prose: a letter and a digit both, bounded by non-words.
+PROSE_SHA = re.compile(
+    r"(?<![\w./`-])(?=[0-9a-f]{0,6}[0-9])(?=[0-9a-f]{0,6}[a-f])[0-9a-f]{7}(?![\w/`-])"
+)
+#: A fence line, as CommonMark has it: a run of three or more backticks and
+#: no backtick after it. `TASKS.md` has a prose line that *opens* with five
+#: backticks (an inline span of a fence), which a `startswith` test reads as
+#: a fence and so reads the rest of the file as code.
+FENCE = re.compile(r" {0,3}`{3,}[^`]*$")
+#: An inline code span, matched within one line as `code_spans` matches it.
+INLINE_SPAN = re.compile(r"`([^`\n]+)`")
+#: An `owner/repo` span ending the text before a sha's span ("beside").
+REPOSITORY_BESIDE = re.compile(r"`([\w.-]+/[\w.-]+)`[\s>]*(?:at[\s>]+)?\Z")
+
+
+@dataclass(frozen=True)
+class ShaCitation:
+    sha: str
+    line: int
+    #: The `owner/repo` named beside it, if any.
+    repository: str | None
+
+
+def sha_citations(text: str) -> list[ShaCitation]:
+    """Every sha `text` cites, in the three shapes above, in text order."""
+    found: list[tuple[int, str, str | None]] = []
+    inside = False
+    offset = 0
+    prose_lines: list[tuple[int, str]] = []
+    for line in text.splitlines(keepends=True):
+        if FENCE.match(line):
+            inside = not inside
+        elif inside:
+            span = line.strip()
+            if span.startswith("git "):
+                found += [
+                    (offset + m.start(), m.group(0), None)
+                    for m in GIT_COMMAND_SHA.finditer(span)
+                ]
+        else:
+            prose_lines.append((offset, line))
+        offset += len(line)
+    for start, line in prose_lines:
+        for match in INLINE_SPAN.finditer(line):
+            span = match.group(1).strip()
+            at = start + match.start()
+            if span.startswith("git "):
+                found += [
+                    (at, m.group(0), None) for m in GIT_COMMAND_SHA.finditer(span)
+                ]
+            elif SHA_SPAN.fullmatch(span):
+                beside = REPOSITORY_BESIDE.search(text, 0, at)
+                repository = beside.group(1) if beside else None
+                found += [(at, sha, repository) for sha in re.findall(_HEX, span)]
+        prose = INLINE_SPAN.sub(lambda m: " " * len(m.group(0)), line)
+        found += [
+            (start + m.start(), m.group(0), None) for m in PROSE_SHA.finditer(prose)
+        ]
+    return [
+        ShaCitation(sha, text.count("\n", 0, at) + 1, repository)
+        for at, sha, repository in sorted(found)
+    ]
+
+
+def unresolved_commits(shas: set[str]) -> set[str]:
+    """The shas that name no commit of this repository (missing, ambiguous,
+    or an object of another type)."""
+    ordered = sorted(shas)
+    answer = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "--batch-check"],
+        input="".join(f"{sha}^{{commit}}\n" for sha in ordered),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert len(answer) == len(ordered), answer
+    return {
+        sha
+        for sha, line in zip(ordered, answer, strict=True)
+        if line.split()[1:2] != ["commit"]
+    }
+
+
+def held_here(citation: ShaCitation) -> bool:
+    """Whether this repository must hold the cited sha."""
+    return (
+        citation.repository in (None, THIS_REPOSITORY) and citation.sha not in NOT_SHAS
+    )
+
+
+def sha_faults(cited: dict[str, list[ShaCitation]]) -> dict[str, list[str]]:
+    """Per document, each cited sha this repository must hold and does not."""
+    missing = unresolved_commits(
+        {c.sha for citations in cited.values() for c in citations if held_here(c)}
+    )
+    faults = {
+        where: [
+            f"line {c.line}: {c.sha}"
+            for c in citations
+            if held_here(c) and c.sha in missing
+        ]
+        for where, citations in cited.items()
+    }
+    return {where: found for where, found in faults.items() if found}
+
+
+def cited_shas_by_document() -> dict[str, list[ShaCitation]]:
+    return {
+        str(path.relative_to(ROOT)): sha_citations(path.read_text(encoding="utf-8"))
+        for path in durable_documents()
+    }
+
+
+def test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository():
+    cited = cited_shas_by_document()
+    assert sum(map(len, cited.values())) > 100, "the sha scan read almost nothing"
+    faults = sha_faults(cited)
+    assert not faults, (
+        "a durable document cites a sha that is no commit of this repository. "
+        "A wrong sha in a dated record is a finding, not a fix; another "
+        "repository's sha names that repository beside it:\n"
+        f"  {faults}"
+    )
+
+
+def test_every_hex_value_called_not_a_sha_is_still_cited_and_is_no_object():
+    bare = {
+        citation.sha
+        for citations in cited_shas_by_document().values()
+        for citation in citations
+    }
+    assert set(NOT_SHAS) <= bare, sorted(set(NOT_SHAS) - bare)
+    for value in NOT_SHAS:
+        exists = subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e", value], capture_output=True
+        )
+        assert exists.returncode != 0, f"{value} names an object; it may be a sha"
+
+
+def _short(revision: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--short=7", revision],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_the_sha_scan_reads_each_shape_and_only_those():
+    text = (
+        "Fixed in abc1234 and `def5678`, `aaaa111..bbbb222`, `ccc3333^`,\n"
+        "`git show ddd4444:WORKPLAN.md`, and `" + "e" * 39 + "1`.\n"
+        "Not `ec3eeae2…`, not `chatcmpl-tool-ba26764988bf8aa9`, not 1234567,\n"
+        "not abcdefa, not `" + "f" * 64 + "`.\n"
+        "```\n"
+        "git log -1 fff6666\n"
+        "1234abc\n"
+        "```\n"
+        "```x` opens a prose line and is no fence, so `abcd999` is read.\n"
+    )
+    assert [c.sha for c in sha_citations(text)] == [
+        "abc1234",
+        "def5678",
+        "aaaa111",
+        "bbbb222",
+        "ccc3333",
+        "ddd4444",
+        "e" * 39 + "1",
+        "fff6666",
+        "abcd999",
+    ]
+
+
+def test_another_repository_s_sha_is_exempt_only_when_named_beside_it():
+    text = (
+        "`SigorMatt/spanweave-zoo` at\n> `1111aaa`, and `owner/other` `2222bbb`;\n"
+        "but `SigorMatt/spanweave-zoo` holds the pin `3333ccc`, and\n"
+        "`SigorMatt/spanweave` `4444ddd` is this repository's, and a bare\n"
+        "`2222bbb` is this repository's too.\n"
+    )
+    assert [(c.sha, c.repository) for c in sha_citations(text)] == [
+        ("1111aaa", "SigorMatt/spanweave-zoo"),
+        ("2222bbb", "owner/other"),
+        ("3333ccc", None),
+        ("4444ddd", "SigorMatt/spanweave"),
+        ("2222bbb", None),
+    ]
+    faults = sha_faults({"NOTES.md": sha_citations(text)})
+    assert faults == {
+        "NOTES.md": ["line 3: 3333ccc", "line 4: 4444ddd", "line 5: 2222bbb"]
+    }
+
+
+def test_a_sha_resolves_only_as_a_commit_of_this_repository():
+    commit = _short("HEAD")
+    blob = _short("HEAD:README.md")
+    tree = _short("HEAD^{tree}")
+    full = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert unresolved_commits({commit, full}) == set()
+    assert unresolved_commits({blob, tree, "0000000", "e" * 40}) == {
+        blob,
+        tree,
+        "0000000",
+        "e" * 40,
+    }
+
+
+# -- The zoo's counts, read from the documents that state them -------------
+#
+# `test_the_zoo_seals_twenty_nine_pairs` asserts the literal 29, and nothing
+# read it from the prose: "29 pairs" changed to "28 pairs" in `SPEC.md`,
+# `CHANGELOG.md`, `ci.yml` and `otlp_protobuf.py`'s docstring together left
+# the suite green, as did TASKS.md's "all 12 captures" changed to 13 and
+# D29's "Twenty-nine exports" changed to "Thirty" (cold review of
+# 2026-10-17, R-7, R-13). The figures are now read from the files that state
+# them and held to `tests/zoo_census.py`, as `test_codes` holds `SPEC.md`'s.
+#
+# **What is read.** A number -- digits or words -- directly before `pairs`,
+# `captures`, `exports` or `[raw|JSON] bodies`, in a paragraph that names the
+# zoo; a table is read in the scope of the paragraph before it, since a
+# table's rows rarely repeat their subject, and in its own if it names the zoo
+# (the decisions log's D29 row does; its intro does not). Each noun has one
+# census value: a capture is a capture, and a pair, a body and an export are
+# each one of the zoo's exports (decisions log D29). **What is not:** a figure
+# after `other` (a subset: "the other eight captures"), and a sentence that
+# records a correction ("the row's 24 bodies were 29, corrected at ..."),
+# which states the old figure on purpose. Out of reach, said rather than
+# carried: a figure in a paragraph that does not name the zoo, and the other
+# documents.
+
+#: The files the counts are read from, and how each one's prose is reached.
+ZOO_COUNT_SOURCES = (
+    "SPEC.md",
+    "CHANGELOG.md",
+    "TASKS.md",
+    ".github/workflows/ci.yml",
+    "spanweave/otlp_protobuf.py",
+)
+
+_UNITS = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen",
+]  # fmt: skip
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40}
+
+
+def number_value(word: str) -> int:
+    """`29`, `twelve`, `Twenty-nine` -> the integer."""
+    word = word.lower()
+    if word.isdigit():
+        return int(word)
+    if word in _UNITS:
+        return _UNITS.index(word) + 1
+    tens, _, unit = word.partition("-")
+    return _TENS[tens] + (_UNITS.index(unit) + 1 if unit else 0)
+
+
+_NUMBER = (
+    r"\d+|(?:" + "|".join(_TENS) + r")(?:-(?:" + "|".join(_UNITS[:9]) + r"))?"
+    r"|" + "|".join(sorted(_UNITS, key=len, reverse=True))
+)
+#: A zoo figure: the number, then its noun.
+ZOO_COUNT = re.compile(
+    rf"(?i)(?<![\w.,/-])(?<!other )({_NUMBER})\s+(?:(?:raw|json)\s+)?"
+    r"(pairs|captures|exports|bodies)\b"
+)
+#: A sentence that records a correction states a superseded figure.
+ZOO_CORRECTION = re.compile(r"\bcorrected\b", re.I)
+
+
+def zoo_census_counts() -> dict[str, int]:
+    """Each noun's census value, recounted from `fixtures/zoo/`."""
+    pairs = sum(len(zoo_census.pairs(capture)) for capture in zoo_census.CAPTURES)
+    bodies = sum(len(zoo_census.bodies(capture)) for capture in zoo_census.CAPTURES)
+    raw = sum(len(zoo_census.raw_bodies(capture)) for capture in zoo_census.CAPTURES)
+    assert pairs == bodies == raw, (pairs, bodies, raw)
+    return {
+        "captures": len(zoo_census.CAPTURES),
+        "pairs": pairs,
+        "exports": pairs,
+        "bodies": bodies,
+    }
+
+
+def prose_of(relative: str, text: str) -> str:
+    """The prose of a source file: a workflow's comments, a module's
+    docstring, a document whole. Paragraphs stay separated by blank lines."""
+    if relative.endswith(".yml"):
+        return "\n".join(
+            line.split("#", 1)[1] if line.lstrip().startswith("#") else ""
+            for line in text.splitlines()
+        )
+    if relative.endswith(".py"):
+        docstring = ast.get_docstring(ast.parse(text))
+        assert docstring, relative
+        return docstring
+    return text
+
+
+def zoo_count_figures(text: str) -> list[tuple[str, int, str]]:
+    """Each zoo figure the text asserts: (noun, value, sentence)."""
+    figures: list[tuple[str, int, str]] = []
+    in_scope = False
+    for paragraph in re.split(r"\n[\s>]*\n", text):
+        flowed_paragraph = " ".join(paragraph.split())
+        names_the_zoo = bool(re.search(r"\bzoo\b", flowed_paragraph, re.I))
+        if flowed_paragraph.lstrip("> ").startswith("|"):
+            in_scope = in_scope or names_the_zoo
+        else:
+            in_scope = names_the_zoo
+        if not in_scope:
+            continue
+        for sentence in SENTENCE_BOUNDARY.split(flowed_paragraph):
+            if ZOO_CORRECTION.search(sentence):
+                continue
+            figures += [
+                (match.group(2).lower(), number_value(match.group(1)), sentence)
+                for match in ZOO_COUNT.finditer(sentence)
+            ]
+    return figures
+
+
+def zoo_count_faults(text: str, counts: dict[str, int]) -> list[str]:
+    return [
+        f"{value} {noun} (the census: {counts[noun]}): {sentence[:160]!r}"
+        for noun, value, sentence in zoo_count_figures(text)
+        if value != counts[noun]
+    ]
+
+
+@pytest.mark.parametrize("relative", ZOO_COUNT_SOURCES)
+def test_the_zoo_counts_a_document_states_are_the_census(relative):
+    prose = prose_of(relative, read(relative))
+    assert zoo_count_figures(prose), f"{relative}: no zoo figure was read"
+    faults = zoo_count_faults(prose, zoo_census_counts())
+    assert not faults, f"{relative} states a zoo count the census does not:\n  " + (
+        "\n  ".join(faults)
+    )
+
+
+def test_the_zoo_count_scan_reads_the_spellings_and_skips_what_it_says():
+    counts = {"captures": 12, "pairs": 29, "exports": 29, "bodies": 29}
+    text = (
+        "On the zoo's 28 pairs, all thirteen captures and Thirty exports;\n"
+        "its 30 raw bodies.\n"
+        "\n"
+        "| What | In the 27 pairs |\n"
+        "|---|---|\n"
+        "\n"
+        "Nothing here.\n"
+        "\n"
+        "| D | Twenty-eight exports, sealed by the zoo |\n"
+        "\n"
+        "In the zoo, the other eight captures keep theirs. The row's 24 bodies\n"
+        "were 29, corrected at T0.\n"
+        "\n"
+        "Elsewhere, three pairs of something else entirely.\n"
+    )
+    assert [(n, v) for n, v, _ in zoo_count_figures(text)] == [
+        ("pairs", 28),
+        ("captures", 13),
+        ("exports", 30),
+        ("bodies", 30),
+        ("pairs", 27),
+        ("exports", 28),
+    ]
+    assert len(zoo_count_faults(text, counts)) == 6
+    # The workflow's comments and the module's docstring are what is read.
+    assert prose_of("ci.yml", "  # the zoo's 29 pairs\n  run: 28 pairs\n").strip() == (
+        "the zoo's 29 pairs"
+    )
+    assert prose_of("m.py", '"""The zoo\'s 29 pairs."""\nX = "28 pairs"\n') == (
+        "The zoo's 29 pairs."
+    )
+
+
+# -- A Setup command's extras, held to the package -------------------------
+#
+# `ENVIRONMENT.md`'s Setup line and the README's Development block both say
+# `uv sync --extra dev --extra otlp`, and an extra spelled `otlpx` in either
+# left the suite green (cold review of 2026-10-17, R-17): `uv sync` with an
+# extra the package does not declare fails for the first person who pastes
+# it. Every `--extra` a `uv sync` line names is read from the code a reader
+# would run and held to `pyproject.toml`'s `[project.optional-dependencies]`.
+
+#: The documents whose `uv sync` lines a reader pastes.
+SYNC_DOCUMENTS = ("ENVIRONMENT.md", "README.md")
+
+
+def declared_extras() -> set[str]:
+    import tomllib
+
+    metadata = tomllib.loads(read("pyproject.toml"))
+    return set(metadata["project"]["optional-dependencies"])
+
+
+def sync_extras(markdown: str) -> list[str]:
+    """Every extra a `uv sync` command in the document's code names."""
+    extras: list[str] = []
+    for span in code_spans(markdown):
+        for command in re.findall(r"\buv sync\b[^#`;|&]*", span):
+            words = shlex.split(command)
+            extras += [
+                words[i + 1] for i, word in enumerate(words[:-1]) if word == "--extra"
+            ]
+            extras += [
+                word.split("=", 1)[1] for word in words if word.startswith("--extra=")
+            ]
+    return extras
+
+
+@pytest.mark.parametrize("relative", SYNC_DOCUMENTS)
+def test_every_extra_a_uv_sync_line_names_is_one_the_package_declares(relative):
+    named = sync_extras(read(relative))
+    assert named, f"{relative}: no `uv sync --extra` line was read"
+    undeclared = sorted(set(named) - declared_extras())
+    assert not undeclared, (
+        f"{relative} tells a reader to `uv sync` an extra `pyproject.toml` "
+        f"does not declare: {undeclared}"
+    )
+
+
+def test_the_sync_scan_reads_fenced_and_inline_commands():
+    text = (
+        "- Setup: `uv sync --extra dev --extra=otlpx`\n"
+        "```bash\n"
+        "uv sync --extra dev --extra otlpy   # a comment --extra not\n"
+        "```\n"
+    )
+    assert sync_extras(text) == ["dev", "otlpy", "dev", "otlpx"]
 
 
 # -- `CONTRACTS.md` against `SPEC.md` --------------------------------------
