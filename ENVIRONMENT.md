@@ -50,7 +50,10 @@ fix one deliberately, don't let them drift.
   protobuf wire format only (`spanweave.read_protobuf`, `SPEC.md` §7). Imported
   by one module, `spanweave/otlp_protobuf.py`, and only inside the function —
   the zero-dependencies gate allows exactly that and nothing more
-  (`tests/gates.py`, `OPTIONAL_EXTRA_MODULE`). Core must work fully without it.
+  (`tests/gates.py`, `OPTIONAL_EXTRA_MODULE`): the modules the extra provides,
+  `google.protobuf` and `opentelemetry.proto` and what is under them, not
+  anything else under `google` or `opentelemetry`. Core must work fully
+  without it.
   The dev install includes the extra (`uv sync --extra dev --extra otlp`), so
   local `make check` runs the protobuf tests (`tests/test_protobuf.py`); they
   skip, saying why, only in an environment installed without the extra. CI's

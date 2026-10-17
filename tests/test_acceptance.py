@@ -425,7 +425,9 @@ def test_the_dependency_gate_fails_on_a_planted_import(source):
 
 # The one exception, and its shape (batch W1): `spanweave/otlp_protobuf.py`
 # may import the `otlp` extra's packages, and only inside a function -- a
-# module-level import would make `import spanweave` need the extra.
+# module-level import would make `import spanweave` need the extra. The
+# packages are what the extra declares, `google.protobuf` and
+# `opentelemetry.proto`, as module prefixes (R-3), not their top-level names.
 
 LAZY_PROTO = """
 def read(data):
@@ -439,6 +441,42 @@ def test_the_extra_s_module_may_import_the_extra_inside_a_function():
         gates.OPTIONAL_EXTRA_MODULE, LAZY_PROTO, [gates.zero_dependencies]
     )
     assert found == []
+
+
+@pytest.mark.parametrize("imported", ["google.protobuf", "opentelemetry.proto"])
+def test_the_extra_s_allowance_includes_the_prefix_itself(imported):
+    source = f"def read(data):\n    import {imported}\n"
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "import google.cloud",
+        "import opentelemetry.sdk.trace",
+        "from google.cloud import storage",
+        "import google.protobufx",
+        "from opentelemetry.protocol import wire",
+        "from google import protobuf",
+    ],
+    ids=[
+        "google-outside-protobuf",
+        "opentelemetry-outside-proto",
+        "from-google-outside-protobuf",
+        "protobuf-prefix-without-the-dot",
+        "proto-prefix-without-the-dot",
+        "the-google-namespace-itself",
+    ],
+)
+def test_the_extra_s_allowance_is_the_extra_not_its_top_level_name(statement):
+    source = f"def read(data):\n    {statement}\n"
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies"]
 
 
 @pytest.mark.parametrize(

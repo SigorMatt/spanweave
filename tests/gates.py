@@ -60,7 +60,18 @@ NETWORK_MODULES = (
 # Trace payloads are hostile input (SECURITY.md). Nothing in them is ever
 # executed, imported, or deserialized into objects.
 UNSAFE_MODULES = ("pickle", "marshal", "subprocess")
-UNSAFE_CALLS = ("eval", "exec", "__import__", "os.system", "yaml.load")
+UNSAFE_CALLS = ("eval", "exec", "os.system", "yaml.load")
+
+# An import by a computed name is an import, and the gates that read import
+# statements -- zero-dependencies above all -- cannot see one. So both ways of
+# making one are banned as calls, matched on the called name's LAST part so
+# that the receiver does not matter (`__import__`, `builtins.__import__`,
+# `importlib.import_module`, `il.import_module` after `import importlib as
+# il`, a bare `import_module` after `from importlib import import_module`);
+# and taking `import_module` out of `importlib` is banned as an import, so an
+# alias (`from importlib import import_module as load`) cannot hide the call.
+DYNAMIC_IMPORT_CALLS = ("__import__", "import_module")
+DYNAMIC_IMPORT_MEMBERS = ("importlib.import_module", "builtins.__import__")
 
 
 def _dotted_name(node: ast.expr) -> str | None:
@@ -122,11 +133,40 @@ def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
                         f"deserialized into objects or executed (SECURITY.md)",
                     )
                 )
+    for imported, line in _imported_modules(tree):
+        if imported in DYNAMIC_IMPORT_MEMBERS:
+            found.append(
+                Violation(
+                    "no-unsafe",
+                    path,
+                    line,
+                    f"imports {imported!r}; an import by a computed name is "
+                    f"one no import gate can read (SECURITY.md)",
+                )
+            )
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         name = _dotted_name(node.func)
-        if name in UNSAFE_CALLS:
+        last = (
+            node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else node.func.id
+            if isinstance(node.func, ast.Name)
+            else None
+        )
+        if last in DYNAMIC_IMPORT_CALLS:
+            found.append(
+                Violation(
+                    "no-unsafe",
+                    path,
+                    node.lineno,
+                    f"calls {name or last}(); an import by a computed name is "
+                    f"one no import gate can read, and trace content is never "
+                    f"imported (SECURITY.md)",
+                )
+            )
+        elif name in UNSAFE_CALLS:
             found.append(
                 Violation(
                     "no-unsafe",
@@ -369,9 +409,15 @@ NEUTRALITY_RULES = (
 #: packages (batch W1): the `otlp` extra's protobuf runtime and OTLP schema,
 #: read by `spanweave.read_protobuf`. Only **inside a function** -- an import
 #: at module level would make `import spanweave` need the extra, which is a
-#: runtime dependency by another name -- and only these two top-level names.
+#: runtime dependency by another name -- and only what the extra declares:
+#: `protobuf` provides `google.protobuf`, `opentelemetry-proto` provides
+#: `opentelemetry.proto`. They are module prefixes, matched on the dot (the
+#: name itself, or the name followed by `.`), so `google.cloud`,
+#: `opentelemetry.sdk` and `google.protobufx` are each a dependency the extra
+#: does not install. `from google import protobuf` names `google` itself and is
+#: refused too: write `from google.protobuf import ...`.
 OPTIONAL_EXTRA_MODULE = "spanweave/otlp_protobuf.py"
-OPTIONAL_EXTRA_PACKAGES = ("google", "opentelemetry")
+OPTIONAL_EXTRA_PACKAGES = ("google.protobuf", "opentelemetry.proto")
 
 
 def _imports_inside_functions(tree: ast.AST) -> set[int]:
@@ -406,14 +452,16 @@ def zero_dependencies(path: str, source: str, tree: ast.AST) -> list[Violation]:
         top = imported.split(".")[0]
         if top in ("spanweave", "__future__") or top in sys.stdlib_module_names:
             continue
-        if top in OPTIONAL_EXTRA_PACKAGES and line in lazy:
+        if line in lazy and any(
+            _matches_module(imported, extra) for extra in OPTIONAL_EXTRA_PACKAGES
+        ):
             continue
         found.append(
             Violation(
                 "zero-dependencies",
                 path,
                 line,
-                f"imports {top!r}, which is neither the standard library nor "
+                f"imports {imported!r}, which is neither the standard library nor "
                 f"spanweave itself; core has zero runtime dependencies and "
                 f"adding one is a halt point (ENVIRONMENT.md)",
             )

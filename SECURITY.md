@@ -29,8 +29,8 @@ directly from that.
 
 - **No execution.** Trace content is never evaluated, imported, deserialized
   into objects, or used to construct code paths. No `eval`, `exec`,
-  `__import__`, `pickle`, `marshal`, or `yaml.load` — anywhere. CI gate
-  (`TASKS.md` 0.4).
+  `__import__`, `importlib.import_module`, `pickle`, `marshal`, or
+  `yaml.load` — anywhere. CI gate (`TASKS.md` 0.4).
 - **No network.** Core opens no sockets, fetches no URLs, resolves no hostnames,
   and listens on nothing. It cannot exfiltrate a trace it parses, and it cannot
   be pointed at a remote URL to fetch one. CI gate.

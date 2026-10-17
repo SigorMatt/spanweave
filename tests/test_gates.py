@@ -32,6 +32,15 @@ PLANTED_UNSAFE = [
     ("value = eval(payload)", "eval"),
     ("exec(payload)", "exec"),
     ("mod = __import__(name)", "__import__"),
+    ("mod = builtins.__import__(name)", "builtins.__import__"),
+    ("from builtins import __import__", "builtins.__import__"),
+    # An import by a computed name is an import (R-3): every way to reach
+    # `importlib.import_module`, the receiver and the alias notwithstanding.
+    ("mod = importlib.import_module(name)", "importlib.import_module"),
+    ("mod = il.import_module(name)", "il.import_module"),
+    ("mod = import_module(name)", "import_module"),
+    ("from importlib import import_module", "importlib.import_module"),
+    ("from importlib import import_module as load", "importlib.import_module"),
     ("os.system(payload)", "os.system"),
     ("value = yaml.load(payload)", "yaml.load"),
 ]
@@ -73,6 +82,11 @@ def test_safety_gates_pass_on_things_that_merely_look_alike():
             "def hash_free_ordering(nodes):",
             "    return sorted(nodes, key=lambda n: n.id)",
             "digest = sha256(data).hexdigest()",
+            # `importlib` itself is the standard library; only its dynamic
+            # import is banned.
+            "import importlib.metadata",
+            'version = importlib.metadata.version("pytest")',
+            "import_modules = sorted(names)",
         ]
     )
     assert gates.check_source("innocent.py", innocent, gates.SAFETY_RULES) == []
