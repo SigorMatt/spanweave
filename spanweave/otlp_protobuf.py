@@ -32,7 +32,9 @@ and carried through that would be a silent discard (`CLAUDE.md` 2). The
 runtime puts a field the schema *does* define there too when it arrives with
 another wire type, so each is reported as the one or the other: a malformed
 body is not blamed on the schema's age. A
-``doubleValue`` is ``MessageToDict``'s float, which no pair checks.
+finite ``doubleValue`` is ``MessageToDict``'s float, and a non-finite one the
+string proto3 JSON spells it (``"NaN"``), as on the JSON path; no pair checks
+either.
 
 **The extra is optional because nothing imports it until it is used.** This is
 the one module allowed the ``otlp`` extra's packages, and only inside the

@@ -12,7 +12,8 @@ Where the pairs are silent the container's own rules decide (`OPEN_QUESTIONS.md`
 §23): a body that will not parse is one `malformed_record` with `source`
 `null`; a message carrying fields the schema does not define, or defines with
 another wire type, is read, and reported as `unknown_fields`, which says of each
-field which it is; a `doubleValue` is a float, which no pair checks.
+field which it is; a finite `doubleValue` is a float and a non-finite one the
+string proto3 JSON spells it, which no pair checks.
 
 The tests that need the proto runtime skip without the `otlp` extra, saying
 so; CI's `check` matrix and `otlp` job (the latter at the extra's floors) install
@@ -449,6 +450,59 @@ def test_a_double_value_reads_as_a_float(number):
     value = record["attributes"]["k"]
     assert type(value) is float
     assert value == number
+
+
+#: Each non-finite double, and the string proto3 JSON spells it as -- which is
+#: what the Collector writes too.
+NON_FINITE = {
+    "NaN": float("nan"),
+    "Infinity": float("inf"),
+    "-Infinity": float("-inf"),
+}
+
+
+@pytest.mark.parametrize("spelling", list(NON_FINITE))
+def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(spelling):
+    """Qodo's review of PR #6, finding 5, pinned (`SPEC.md` §7): a non-finite
+    `doubleValue` is the string proto3 JSON spells it, on both paths, with no
+    diagnostic. A graph cannot carry a float NaN (`allow_nan=False`), and the
+    JSON path reads the string as a string, so the protobuf body and its JSON
+    spelling -- written here, not rendered -- yield equal records and the same
+    graph bytes. Whether it should draw a diagnostic is an open thread
+    (`TASKS.md`); this holds what it reads as until that is decided."""
+    pb2 = _pb2()
+    from opentelemetry.proto.common.v1 import common_pb2
+
+    from spanweave.otlp_protobuf import _rendered
+
+    def request(**value: Any) -> Any:
+        built = _root(pb2)
+        built.resource_spans[0].scope_spans[0].spans[0].attributes.append(
+            common_pb2.KeyValue(key="k", value=common_pb2.AnyValue(**value))
+        )
+        return built
+
+    body = request(double_value=NON_FINITE[spelling]).SerializeToString()
+    document = _rendered(_root(pb2))
+    _spans(document)[0]["attributes"].append(
+        {"key": "k", "value": {"doubleValue": spelling}}
+    )
+    text = json.dumps(document, sort_keys=True, allow_nan=False).encode()
+
+    from_protobuf = spanweave.read_protobuf(body)
+    from_json = spanweave.read_records(text)
+    assert from_protobuf == from_json
+    assert _built(from_protobuf) == _built(from_json)
+    for read in (from_protobuf, from_json):
+        (record,) = read.records
+        value = record["attributes"]["k"]
+        assert type(value) is str
+        assert value == spelling
+        assert read.diagnostics == ()
+        assert read.skipped_records == 0
+    # Nothing in the graph is about the number: it draws what a finite one does.
+    finite = spanweave.read_protobuf(request(double_value=1.5).SerializeToString())
+    assert _codes(from_protobuf) == _codes(finite)
 
 
 def _keys(value: Any) -> set[str]:

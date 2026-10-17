@@ -14500,6 +14500,19 @@ decisions log D15, D16, D17, D18 and D19.
   a `doubleValue`, captured in `SigorMatt/spanweave-zoo` and re-encoded by
   the Collector — a capture, not a guess. A thread for the zoo, not a batch
   here.
+- **A non-finite `doubleValue` becomes a string with no diagnostic, on both
+  paths** (Qodo's review of PR #6, finding 5, accepted as a pin and a
+  thread). Proto3 JSON spells NaN and the infinities as the strings
+  `"NaN"`, `"Infinity"` and `"-Infinity"`, the Collector writes the same,
+  and the JSON reader reads them as strings; a graph cannot carry a float
+  NaN (`allow_nan=False`), so the type change happens on the JSON path too,
+  and changing it would change the graph a JSON export yields — outside
+  this series by its own rule. `tests/test_protobuf.py`'s
+  `test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths`
+  pins that the two paths agree on all three, and `SPEC.md` §7 states the
+  reading. Open, for the next spanweave series: decide whether it draws a
+  diagnostic (`non_finite_number`, `warning`) or is read some other way. A
+  thread for the next series, not a batch here.
 - **The "spec, not pair" set, for the zoo.** A span with no `Status` on the
   wire, `doubleValue`, `bytesValue`, `arrayValue`, `kvlistValue` and links
   are each spec, not pair: no zoo export carries one. So is an id whose

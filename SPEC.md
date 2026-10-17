@@ -2186,6 +2186,7 @@ declares reaches `0.5`.
     | a field the schema does not define | none | a hand-made request (below) |
     | a field the schema defines, with another wire type | none | a hand-made request (below) |
     | `doubleValue` | none | a hand-made request (below) — spec, not pair |
+    | a non-finite `doubleValue` — NaN, `Infinity`, `-Infinity` — as the string proto3 JSON spells it, on both paths | none | a hand-made request (below) — spec, not pair |
 
     The `status` row is the one whose JSON twin would read differently if a
     Collector wrote it otherwise: `"status": {}` reads as `UNSET`, and no
@@ -2236,13 +2237,27 @@ declares reaches `0.5`.
     both is still one `unknown_fields`, whose message gives the count of each,
     the defined first; the code is the same one, because what is reported is
     the same — fields the message was read without.
-  - **A `doubleValue` is a float** — `MessageToDict`'s, so a `1.0` reads as
-    `1.0` and never as the integer `1`. **This is the one rendering the pairs
-    did not check**: no export in the zoo carries a `doubleValue`
+  - **A finite `doubleValue` is a float** — `MessageToDict`'s, so a `1.0`
+    reads as `1.0` and never as the integer `1`. **This is the one rendering
+    the pairs did not check**: no export in the zoo carries a `doubleValue`
     (`tests/test_protobuf.py` asserts it, so the day one does the claim
     becomes checkable), and OTLP/JSON lets a Collector write `1` or `1.0`,
     which the JSON reader reads as an integer and a float respectively. A
     capture of one, re-encoded by a Collector, would settle it (§23, 3C).
+    - **A non-finite one is a string on both paths, with no diagnostic.**
+      Proto3's JSON mapping spells NaN and the infinities as the strings
+      `"NaN"`, `"Infinity"` and `"-Infinity"`; `MessageToDict` writes them
+      so, and so does the Collector. The JSON reader unwraps a `doubleValue`
+      to the value the document states, so on both paths the attribute is
+      that string, with no diagnostic: a protobuf body carrying one and its
+      proto3 JSON spelling yield equal records and build the same bytes
+      (`tests/test_protobuf.py`, all three values). It is not read back as a
+      float because a graph cannot carry one: the encoder runs with
+      `allow_nan=False` (*What it writes is RFC 8259 JSON*, above). Reading
+      it some other way on the protobuf path alone would break the rule the
+      oracle holds, and on both would change the graph a JSON export yields.
+      Whether it should draw a diagnostic, or be read some other way, is a
+      thread for the next series (`TASKS.md`, the wire series).
 
 ### Outputs
 
