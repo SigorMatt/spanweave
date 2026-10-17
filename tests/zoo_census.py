@@ -1251,8 +1251,9 @@ def pairs(capture: Capture) -> list[tuple[pathlib.Path, pathlib.Path]]:
     pairing and the file names agree on every capture rather than assuming
     it, and -- since on every capture `forwards` is in file-name order --
     holds the reading of `forwards` itself on synthetic captures: one whose
-    `forwards` order is not the names', one with a forward not answered 200,
-    and one whose `forwards` count is not the bodies'. That each pair is one
+    `forwards` order is not the names', one with a forward answered anything
+    but 200 or stating no status, one with a forward outside `raw/`, and one
+    whose `forwards` count is not the bodies'. That each pair is one
     export is the wire series' oracle, not this.
     """
     forwards = manifest(capture)["forwards"]

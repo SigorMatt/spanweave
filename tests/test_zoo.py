@@ -190,14 +190,37 @@ def test_pairs_follows_forwards_and_not_the_file_names(tmp_path, monkeypatch):
     ]
 
 
+@pytest.mark.parametrize("status", [502, 404, 204])
 def test_pairs_refuses_a_forward_the_collector_did_not_answer_200(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, status
 ):
     """A forward the Collector refused has no JSON body: the `k`-th no longer
-    lines up, so `pairs` refuses the capture rather than shift the pairing."""
-    forwards = [_forward("0001.body"), _forward("0002.body", status=502)]
+    lines up, so `pairs` refuses the capture rather than shift the pairing.
+    Every status but 200 is refused: a 5xx, a 4xx, and a 2xx that is not 200
+    (the review's R-5: a 502 alone let `status < 500` pass)."""
+    forwards = [_forward("0001.body"), _forward("0002.body", status=status)]
     capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
-    with pytest.raises(AssertionError, match="502"):
+    with pytest.raises(AssertionError, match=f"'status': {status}"):
+        zoo_census.pairs(capture)
+
+
+def test_pairs_refuses_a_forward_that_states_no_status(tmp_path, monkeypatch):
+    """A forward with no `status` is not one the Collector answered 200: no
+    default stands in for the missing field (the review's R-5)."""
+    unstated = {"file": f"{ZOO_RAW_DIR}/0002.body"}
+    forwards = [_forward("0001.body"), unstated]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match=re.escape(repr(unstated))):
+        zoo_census.pairs(capture)
+
+
+@pytest.mark.parametrize("file", ["json/0002.body", "0002.body", "raws/0002.body"])
+def test_pairs_refuses_a_forward_outside_the_raw_directory(tmp_path, monkeypatch, file):
+    """A forward names its body as `raw/NNNN.body`; one in another directory,
+    or in none, is refused, not read from `raw/` by its last part."""
+    forwards = [_forward("0001.body"), {"file": file, "status": 200}]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match=re.escape(file)):
         zoo_census.pairs(capture)
 
 
