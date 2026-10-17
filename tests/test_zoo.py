@@ -136,7 +136,10 @@ def test_every_json_body_pairs_with_one_raw_body_by_the_forwards_list(capture):
     holds it to the bodies the manifest lists -- every JSON body paired, every
     raw body paired exactly once -- and to the shared ordinal the zoo names
     both forms of one export by (its `SPEC.md` §2.4), which §4.7 does not
-    promise and so is asserted here rather than assumed.
+    promise and so is asserted here rather than assumed. On every capture the
+    `forwards` order is the names' order, so this alone cannot tell a pairing
+    read from `forwards` from one read from the names; the synthetic captures
+    below can.
     """
     paired = zoo_census.pairs(capture)
     json_names = [json_body.name for json_body, _ in paired]
@@ -147,6 +150,69 @@ def test_every_json_body_pairs_with_one_raw_body_by_the_forwards_list(capture):
     for json_body, raw_body in paired:
         assert json_body.stem == raw_body.stem, (json_body, raw_body)
         assert raw_body.is_file(), raw_body
+
+
+def _synthetic(tmp_path, monkeypatch, forwards, json_count, raw_count):
+    """A capture under a synthetic `ZOO`, for `pairs` alone; never the zoo.
+
+    On every real capture the `forwards` order is the file-name order, so the
+    test above cannot tell a pairing read from `forwards` from one read from
+    the names (the review's R-8). This writes `json_count` JSON bodies,
+    `raw_count` raw bodies and a manifest whose only claim is `forwards`, in
+    `tmp_path`, and points `zoo_census.ZOO` there.
+    """
+    capture = CAPTURES[0]
+    directory = tmp_path / capture.run
+    (directory / ZOO_RAW_DIR).mkdir(parents=True)
+    for k in range(1, json_count + 1):
+        (directory / f"{k:04d}.json").write_bytes(b"{}")
+    for k in range(1, raw_count + 1):
+        (directory / ZOO_RAW_DIR / f"{k:04d}.body").write_bytes(b"")
+    manifest = {"forwards": forwards}
+    (directory / "MANIFEST.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(zoo_census, "ZOO", tmp_path)
+    return capture, directory
+
+
+def _forward(name, status=200):
+    return {"file": f"{ZOO_RAW_DIR}/{name}", "status": status}
+
+
+def test_pairs_follows_forwards_and_not_the_file_names(tmp_path, monkeypatch):
+    """The `k`-th JSON body pairs with the `k`-th forward, whatever its name."""
+    forwards = [_forward("0002.body"), _forward("0003.body"), _forward("0001.body")]
+    capture, directory = _synthetic(tmp_path, monkeypatch, forwards, 3, 3)
+    raw = directory / ZOO_RAW_DIR
+    assert zoo_census.pairs(capture) == [
+        (directory / "0001.json", raw / "0002.body"),
+        (directory / "0002.json", raw / "0003.body"),
+        (directory / "0003.json", raw / "0001.body"),
+    ]
+
+
+def test_pairs_refuses_a_forward_the_collector_did_not_answer_200(
+    tmp_path, monkeypatch
+):
+    """A forward the Collector refused has no JSON body: the `k`-th no longer
+    lines up, so `pairs` refuses the capture rather than shift the pairing."""
+    forwards = [_forward("0001.body"), _forward("0002.body", status=502)]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match="502"):
+        zoo_census.pairs(capture)
+
+
+def test_pairs_refuses_a_count_of_forwards_unlike_the_json_bodies(
+    tmp_path, monkeypatch
+):
+    """Two forwards, three JSON bodies and three raw bodies: the raw bodies'
+    count agrees with the JSON bodies', `forwards` does not, and `forwards`
+    is what `pairs` counts."""
+    forwards = [_forward("0001.body"), _forward("0002.body")]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 3, 3)
+    assert len(zoo_census.bodies(capture)) == 3
+    assert len(zoo_census.raw_bodies(capture)) == 3
+    with pytest.raises(AssertionError, match=capture.run):
+        zoo_census.pairs(capture)
 
 
 def test_git_treats_every_raw_body_as_binary():

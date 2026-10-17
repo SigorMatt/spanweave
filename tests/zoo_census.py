@@ -1249,7 +1249,11 @@ def pairs(capture: Capture) -> list[tuple[pathlib.Path, pathlib.Path]]:
     every forward and makes one POST of each, and this refuses a capture where
     the counts or a status say otherwise. `tests/test_zoo.py` asserts the
     pairing and the file names agree on every capture rather than assuming
-    it; that each pair is one export is the wire series' oracle, not this.
+    it, and -- since on every capture `forwards` is in file-name order --
+    holds the reading of `forwards` itself on synthetic captures: one whose
+    `forwards` order is not the names', one with a forward not answered 200,
+    and one whose `forwards` count is not the bodies'. That each pair is one
+    export is the wire series' oracle, not this.
     """
     forwards = manifest(capture)["forwards"]
     assert isinstance(forwards, list)
