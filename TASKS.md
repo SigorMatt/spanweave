@@ -14498,6 +14498,12 @@ decisions log D15, D16, D17, D18 and D19.
   a `doubleValue`, captured in `SigorMatt/spanweave-zoo` and re-encoded by
   the Collector — a capture, not a guess. A thread for the zoo, not a batch
   here.
+- **The "spec, not pair" set, for the zoo.** A span with no `Status` on the
+  wire, `doubleValue`, `bytesValue`, `arrayValue`, `kvlistValue` and links
+  are each spec, not pair: no zoo export carries one. One hand-made export
+  sent through the zoo's Collector harness would settle every one.
+  `SigorMatt/spanweave-zoo`'s series 3 owns it; a thread for the zoo, not a
+  batch here.
 - **`ROADMAP.md`'s announcement section still lists OTLP protobuf among
   "Phase 4 wants"** (*What it must not claim*: "No dialect it does not
   read"). The close edited `ROADMAP.md` only where its row said, the

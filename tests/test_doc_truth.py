@@ -62,6 +62,7 @@ from tests.corpus_census import (
     render,
     report,
 )
+from tests.markdown_fences import fence_kinds
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -93,16 +94,12 @@ def section(markdown: str, heading: str) -> str:
 
 
 def fenced_lines(markdown: str) -> list[str]:
-    """Lines inside ``` fences: the commands a reader would actually run."""
-    lines: list[str] = []
-    inside = False
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            inside = not inside
-            continue
-        if inside:
-            lines.append(line)
-    return lines
+    """Lines inside ``` fences: the commands a reader would actually run.
+
+    A fence opens and closes as `tests/markdown_fences.py` has it, the rule
+    every fence reader here shares.
+    """
+    return [line for line, kind in fence_kinds(markdown.splitlines()) if kind == "code"]
 
 
 def code_spans(markdown: str) -> list[str]:
@@ -123,14 +120,66 @@ def code_spans(markdown: str) -> list[str]:
     precise because the candidates are enumerable.
     """
     spans = fenced_lines(markdown)
-    inside = False
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            inside = not inside
-            continue
-        if not inside:
+    for line, kind in fence_kinds(markdown.splitlines()):
+        if kind == "prose":
             spans.extend(re.findall(r"`([^`]+)`", line))
     return spans
+
+
+#: Every fence reader is held to this document. A three-backtick fence; a
+#: five-backtick fence holding a three-backtick line, a prose-shaped line and
+#: shas; a prose line that *opens* with five backticks, as `TASKS.md`'s does;
+#: inline spans before and after.
+FENCE_DOCUMENT = (
+    "Before: `uv run pytest`.\n"
+    "```bash\n"
+    "make check\n"
+    "```\n"
+    "`````text\n"
+    "```\n"
+    "quoted `inline` line, `abc1234` and 1a2b3c4\n"
+    "`````\n"
+    "````` ```` ````` line, less the line break\n"
+    "After: `make golden` at `fed4321`\n"
+)
+
+#: What the fence readers read of it: the five-backtick fence holds both of
+#: the lines under it, and the prose line after it is prose.
+FENCE_DOCUMENT_FENCED = [
+    "make check",
+    "```",
+    "quoted `inline` line, `abc1234` and 1a2b3c4",
+]
+# The five-backtick prose line's two `" "` are the single-backtick pairing
+# inline spans have always had; what matters is that what follows it is
+# read as inline, and not as fenced lines.
+FENCE_DOCUMENT_SPANS = [
+    *FENCE_DOCUMENT_FENCED,
+    "uv run pytest",
+    " ",
+    " ",
+    "make golden",
+    "fed4321",
+]
+
+
+def test_a_fence_opens_and_closes_as_commonmark_has_it():
+    assert fenced_lines(FENCE_DOCUMENT) == FENCE_DOCUMENT_FENCED
+    assert code_spans(FENCE_DOCUMENT) == FENCE_DOCUMENT_SPANS
+
+
+def test_the_install_check_reads_fences_by_the_same_rule():
+    from tests import install_check
+
+    # The same spans, in document order: this reader yields as it goes.
+    assert list(install_check._code_spans(FENCE_DOCUMENT)) == [
+        "uv run pytest",
+        *FENCE_DOCUMENT_FENCED,
+        " ",
+        " ",
+        "make golden",
+        "fed4321",
+    ]
 
 
 # -- The install line that must not exist yet ------------------------------
@@ -1132,11 +1181,6 @@ GIT_COMMAND_SHA = re.compile(r"(?<![\w./-])[0-9a-f]{7,40}(?![\w/-])")
 PROSE_SHA = re.compile(
     r"(?<![\w./`-])(?=[0-9a-f]{0,6}[0-9])(?=[0-9a-f]{0,6}[a-f])[0-9a-f]{7}(?![\w/`-])"
 )
-#: A fence line, as CommonMark has it: a run of three or more backticks and
-#: no backtick after it. `TASKS.md` has a prose line that *opens* with five
-#: backticks (an inline span of a fence), which a `startswith` test reads as
-#: a fence and so reads the rest of the file as code.
-FENCE = re.compile(r" {0,3}`{3,}[^`]*$")
 #: An inline code span, matched within one line as `code_spans` matches it.
 INLINE_SPAN = re.compile(r"`([^`\n]+)`")
 #: An `owner/repo` span ending the text before a sha's span ("beside").
@@ -1154,20 +1198,17 @@ class ShaCitation:
 def sha_citations(text: str) -> list[ShaCitation]:
     """Every sha `text` cites, in the three shapes above, in text order."""
     found: list[tuple[int, str, str | None]] = []
-    inside = False
     offset = 0
     prose_lines: list[tuple[int, str]] = []
-    for line in text.splitlines(keepends=True):
-        if FENCE.match(line):
-            inside = not inside
-        elif inside:
+    for line, kind in fence_kinds(text.splitlines(keepends=True)):
+        if kind == "code":
             span = line.strip()
             if span.startswith("git "):
                 found += [
                     (offset + m.start(), m.group(0), None)
                     for m in GIT_COMMAND_SHA.finditer(span)
                 ]
-        else:
+        elif kind == "prose":
             prose_lines.append((offset, line))
         offset += len(line)
     for start, line in prose_lines:
@@ -1190,6 +1231,12 @@ def sha_citations(text: str) -> list[ShaCitation]:
         ShaCitation(sha, text.count("\n", 0, at) + 1, repository)
         for at, sha, repository in sorted(found)
     ]
+
+
+def test_the_sha_scan_reads_fences_by_the_same_rule():
+    # The shas inside the five-backtick fence are under a three-backtick
+    # line, which does not close it; the one after the fence closes is read.
+    assert sha_citations(FENCE_DOCUMENT) == [ShaCitation("fed4321", 10, None)]
 
 
 def unresolved_commits(shas: set[str]) -> set[str]:

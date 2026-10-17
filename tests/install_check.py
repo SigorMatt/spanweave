@@ -111,6 +111,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
 from tests import gates
+from tests.markdown_fences import fence_kinds
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = "spanweave"
@@ -311,15 +312,14 @@ def _code_spans(markdown: str) -> Iterator[str]:
     call for the same reason. A path written without backticks cannot be told
     from a sentence, and a scanner that has to be loosened to stay quiet is a
     scanner on its way to being switched off.
+
+    A fence opens and closes as `tests/markdown_fences.py` has it, the rule
+    `tests/test_doc_truth.py`'s readers share.
     """
-    inside = False
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            inside = not inside
-            continue
-        if inside:
+    for line, kind in fence_kinds(markdown.splitlines()):
+        if kind == "code":
             yield line
-        else:
+        elif kind == "prose":
             yield from re.findall(r"`([^`]+)`", line)
 
 
