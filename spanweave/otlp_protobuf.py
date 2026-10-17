@@ -28,7 +28,10 @@ because the Collector treats it as empty -- its rule, and not a pair's either.
 precedent -- and it never raises. A message carrying fields the installed
 schema does not define is read without them and reported, one
 ``unknown_fields`` per message: ``MessageToDict`` drops them without a word,
-and carried through that would be a silent discard (`CLAUDE.md` 2). A
+and carried through that would be a silent discard (`CLAUDE.md` 2). The
+runtime puts a field the schema *does* define there too when it arrives with
+another wire type, so each is reported as the one or the other: a malformed
+body is not blamed on the schema's age. A
 ``doubleValue`` is ``MessageToDict``'s float, which no pair checks.
 
 **The extra is optional because nothing imports it until it is used.** This is
@@ -56,6 +59,32 @@ from spanweave.read import Records, _as_bytes, read_records
 _SPAN_IDS = ("traceId", "spanId", "parentSpanId")
 _LINK_IDS = ("traceId", "spanId")
 
+#: The wire type each field type is written with, by the protobuf encoding's
+#: rules, keyed by ``FieldDescriptor.type`` -- the numbers of
+#: ``FieldDescriptorProto.Type``, which are part of the descriptor format and do
+#: not move. What ``unknown_fields`` says the installed schema expects of a
+#: number it defines (`SPEC.md` §3.7).
+_WIRE_TYPE_OF_FIELD_TYPE = {
+    1: 1,  # double: 64-bit
+    2: 5,  # float: 32-bit
+    3: 0,  # int64: varint
+    4: 0,  # uint64
+    5: 0,  # int32
+    6: 1,  # fixed64: 64-bit
+    7: 5,  # fixed32: 32-bit
+    8: 0,  # bool: varint
+    9: 2,  # string: length-delimited
+    10: 3,  # group: start-group
+    11: 2,  # message: length-delimited
+    12: 2,  # bytes: length-delimited
+    13: 0,  # uint32: varint
+    14: 0,  # enum: varint
+    15: 5,  # sfixed32: 32-bit
+    16: 1,  # sfixed64: 64-bit
+    17: 0,  # sint32: varint
+    18: 0,  # sint64: varint
+}
+
 
 def read_protobuf(data: bytes | bytearray | memoryview) -> Records:
     """Read the records of one OTLP protobuf export, and build nothing.
@@ -66,7 +95,8 @@ def read_protobuf(data: bytes | bytearray | memoryview) -> Records:
     `Records` `read_records` returns for the same export written as OTLP/JSON:
     the same records, marked as unpacked, the same diagnostics, the same
     ``skipped_records`` (`SPEC.md` §7) -- plus one ``unknown_fields`` for each
-    message that carried fields the installed schema does not define.
+    message that carried fields the installed schema does not define, or
+    defines with another wire type than the one they arrived with.
 
     It raises nothing an unreadable body can cause: a body that is not a
     protobuf ``ExportTraceServiceRequest`` is one ``malformed_record``. It
@@ -104,11 +134,7 @@ def read_protobuf(data: bytes | bytearray | memoryview) -> Records:
     for path, fields in _unknown_fields(request, ""):
         collector.add(
             codes.UNKNOWN_FIELDS,
-            f"the message at {path or 'the root of the request'} carries "
-            f"{len(fields)} field(s) the OTLP schema this reader was installed "
-            f"with does not define; it was read without them. Their numbers "
-            f"and wire types are here and their bytes are not -- they have no "
-            f"name and no type to write them by (`SPEC.md` §3.7)",
+            _unknown_fields_message(path, fields),
             source={"path": path, "fields": fields},
         )
 
@@ -179,6 +205,36 @@ def _base64_bytes(value: str) -> bytes:
         raise AssertionError(f"MessageToDict wrote {value!r} as bytes") from failure
 
 
+def _unknown_fields_message(path: str, fields: list[JsonValue]) -> str:
+    """What one ``unknown_fields`` says: how many of each kind, the defined first.
+
+    A message carrying both kinds is one diagnostic still, and its message
+    counts each; one carrying a single kind names only that one.
+    """
+    defined = sum(1 for field in fields if isinstance(field, dict) and field["defined"])
+    kinds = []
+    if defined:
+        kinds.append(
+            f"{defined} not readable as the installed schema defines it (a "
+            f"number it defines on this message, with a wire type other than "
+            f"the one it expects -- a malformed body)"
+        )
+    if len(fields) - defined:
+        kinds.append(
+            f"{len(fields) - defined} not defined by the installed schema (a "
+            f"newer OTLP, or an extension)"
+        )
+    return (
+        f"the message at {path or 'the root of the request'} carries "
+        f"{len(fields)} field(s) not read into it by the OTLP schema this "
+        f"reader was installed with: {', and '.join(kinds)}; it was read without "
+        f"them. Their numbers and wire types are here, with the wire type the "
+        f"schema expects where it defines the number, and their bytes are not "
+        f"-- a field it does not define has no name and no type to write it "
+        f"by, and one it does was not written in its type (`SPEC.md` §3.7)"
+    )
+
+
 def _unknown_fields(
     # A protobuf message. `Any` because its type lives in the extra, which this
     # module may not import at module level -- not even for a type checker.
@@ -191,15 +247,27 @@ def _unknown_fields(
     names (``resourceSpans[0].scopeSpans[0].spans[3]``; ``""`` is the request
     itself). ``fields`` is each unknown field's number and wire type, in the
     order the runtime reports them -- the order they arrived -- one entry per
-    occurrence. Visited in field-number order, so the walk is the schema's
-    order and not the input's.
+    occurrence, with whether this message's schema defines the number and, if
+    it does, the wire type it expects (``null`` if not): the runtime keeps a
+    defined field that arrived with another wire type here too. Visited in
+    field-number order, so the walk is the schema's order and not the input's.
     """
     from google.protobuf import unknown_fields
     from google.protobuf.message import Message
 
+    defined = message.DESCRIPTOR.fields_by_number
     found: list[tuple[str, list[JsonValue]]] = []
     unknown = [
-        {"number": field.field_number, "wire_type": field.wire_type}
+        {
+            "number": field.field_number,
+            "wire_type": field.wire_type,
+            "defined": field.field_number in defined,
+            "expected_wire_type": (
+                _WIRE_TYPE_OF_FIELD_TYPE[defined[field.field_number].type]
+                if field.field_number in defined
+                else None
+            ),
+        }
         for field in unknown_fields.UnknownFieldSet(message)
     ]
     if unknown:

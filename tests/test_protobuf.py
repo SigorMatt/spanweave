@@ -10,8 +10,9 @@ the graph each builds.
 
 Where the pairs are silent the container's own rules decide (`OPEN_QUESTIONS.md`
 §23): a body that will not parse is one `malformed_record` with `source`
-`null`; a message carrying fields the schema does not define is read, and
-reported as `unknown_fields`; a `doubleValue` is a float, which no pair checks.
+`null`; a message carrying fields the schema does not define, or defines with
+another wire type, is read, and reported as `unknown_fields`, which says of each
+field which it is; a `doubleValue` is a float, which no pair checks.
 
 The tests that need the proto runtime skip without the `otlp` extra, saying
 so; CI's `check` matrix and `otlp` job (the latter at the extra's floors) install
@@ -191,6 +192,16 @@ def test_an_empty_body_is_an_empty_request_and_reads_as_its_json_does():
 UNKNOWN_VARINT = bytes([0x98, 0x06, 0x2A])
 
 
+def _undefined(number: int, wire_type: int = 0) -> dict[str, Any]:
+    """An `unknown_fields` entry for a number the installed schema does not define."""
+    return {
+        "number": number,
+        "wire_type": wire_type,
+        "defined": False,
+        "expected_wire_type": None,
+    }
+
+
 def _with_an_unknown_field_on_span(raw: bytes, resource: int, scope: int, span: int):
     pb2 = _pb2()
     request = pb2.ExportTraceServiceRequest.FromString(raw)
@@ -214,8 +225,11 @@ def test_an_unknown_field_is_read_and_reported_never_dropped():
     assert diagnostic.node_id is None and diagnostic.adapter is None
     assert diagnostic.source == {
         "path": "resourceSpans[0].scopeSpans[0].spans[1]",
-        "fields": [{"number": 99, "wire_type": 0}],
+        "fields": [_undefined(99)],
     }
+    assert "99" not in diagnostic.message  # the numbers are in `source`
+    assert "1 not defined by the installed schema" in diagnostic.message
+    assert "not readable" not in diagnostic.message
 
     # The graph differs from the pair's by that diagnostic and nothing else.
     with_it = json.loads(_built(from_raw))
@@ -242,15 +256,122 @@ def test_each_message_carrying_unknown_fields_is_one_report():
         key=json.dumps,
     )
     assert sources == [
-        {"path": "", "fields": [{"number": 100, "wire_type": 0}]},
-        {
-            "path": "resourceSpans[0]",
-            "fields": [
-                {"number": 99, "wire_type": 0},
-                {"number": 99, "wire_type": 0},
-            ],
-        },
+        {"path": "", "fields": [_undefined(100)]},
+        {"path": "resourceSpans[0]", "fields": [_undefined(99), _undefined(99)]},
     ]
+
+
+def _span_with_tail(pb2: ModuleType, tail: bytes) -> bytes:
+    """A one-span request whose span ends in ``tail``, as bytes on the wire."""
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    span = trace_pb2.Span(trace_id=bytes([1] * 16), span_id=bytes([2] * 8))
+    request = _request(pb2, span)
+    target = request.resource_spans[0].scope_spans[0].spans[0]
+    target.ParseFromString(target.SerializeToString() + tail)
+    return request.SerializeToString()
+
+
+#: A span field the schema defines, sent with a wire type other than its own:
+#: ``(name, number, tail on the wire, wire type sent, wire type expected)``.
+#: One for each wire type the schema expects of a `Span` field, so the table
+#: each is looked up in is held on every row a span uses.
+_MISTYPED_SPAN_FIELDS = [
+    # `name` (5, a string) as the varint 5.
+    ("name", 5, bytes([5 << 3 | 0, 0x05]), 0, 2),
+    # `kind` (6, an enum) as a length-delimited "\x02".
+    ("kind", 6, bytes([6 << 3 | 2, 0x01, 0x02]), 2, 0),
+    # `start_time_unix_nano` (7, fixed64) as the varint 1.
+    ("start_time_unix_nano", 7, bytes([7 << 3 | 0, 0x01]), 0, 1),
+    # `flags` (16, fixed32) as the varint 1: a two-byte tag.
+    ("flags", 16, bytes([0x80, 0x01, 0x01]), 0, 5),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "number", "tail", "sent", "expected"),
+    _MISTYPED_SPAN_FIELDS,
+    ids=[row[0] for row in _MISTYPED_SPAN_FIELDS],
+)
+def test_a_defined_field_with_another_wire_type_is_reported_as_defined(
+    name, number, tail, sent, expected
+):
+    """Qodo's review of PR #6, finding 7: the runtime keeps a known number
+    that arrived with the wrong wire type with the unknown ones, and leaves the
+    field at its default. The report names it as defined, with the wire type
+    the schema expects, and does not blame the schema's age."""
+    pb2 = _pb2()
+    raw = _span_with_tail(pb2, tail)
+    request = pb2.ExportTraceServiceRequest.FromString(raw)
+    span = request.resource_spans[0].scope_spans[0].spans[0]
+    assert not getattr(span, name)  # left at its default
+
+    read = spanweave.read_protobuf(raw)
+    (diagnostic,) = (d for d in read.diagnostics if d.code == "unknown_fields")
+    assert diagnostic.level is spanweave.DiagnosticLevel.WARNING
+    assert diagnostic.source == {
+        "path": "resourceSpans[0].scopeSpans[0].spans[0]",
+        "fields": [
+            {
+                "number": number,
+                "wire_type": sent,
+                "defined": True,
+                "expected_wire_type": expected,
+            }
+        ],
+    }
+    assert "1 not readable as the installed schema defines it" in diagnostic.message
+    assert "not defined by the installed schema" not in diagnostic.message
+
+
+def test_defined_is_looked_up_on_the_message_that_carries_the_field():
+    """Field 2 is `spanId` on a `Span` and `scopeSpans` on a `ResourceSpans`,
+    and field 5 is defined on a `Span` and on no message above it: each is
+    judged by its own message's schema, not by the request's or the span's."""
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    span = trace_pb2.Span(trace_id=bytes([1] * 16), span_id=bytes([2] * 8))
+    request = _request(pb2, span)
+    resource = request.resource_spans[0]
+    # On the resource: field 5 (undefined there) and field 2 (`scopeSpans`) as
+    # a varint, after the resource's own bytes.
+    resource.ParseFromString(
+        resource.SerializeToString() + bytes([5 << 3 | 0, 0x01, 2 << 3 | 0, 0x01])
+    )
+    read = spanweave.read_protobuf(request.SerializeToString())
+    (diagnostic,) = (d for d in read.diagnostics if d.code == "unknown_fields")
+    assert diagnostic.source == {
+        "path": "resourceSpans[0]",
+        "fields": [
+            _undefined(5),
+            {"number": 2, "wire_type": 0, "defined": True, "expected_wire_type": 2},
+        ],
+    }
+
+
+def test_a_message_carrying_both_kinds_is_one_report_counting_each():
+    """One diagnostic per message stays; its message counts the defined
+    fields and the undefined ones, the defined first, and the entries keep the
+    order the fields arrived in."""
+    pb2 = _pb2()
+    # Field 99 (undefined) twice, then `name` (5) as a varint.
+    raw = _span_with_tail(pb2, UNKNOWN_VARINT + UNKNOWN_VARINT + bytes([0x28, 0x05]))
+    read = spanweave.read_protobuf(raw)
+    (diagnostic,) = (d for d in read.diagnostics if d.code == "unknown_fields")
+    assert diagnostic.source == {
+        "path": "resourceSpans[0].scopeSpans[0].spans[0]",
+        "fields": [
+            _undefined(99),
+            _undefined(99),
+            {"number": 5, "wire_type": 0, "defined": True, "expected_wire_type": 2},
+        ],
+    }
+    message = diagnostic.message
+    assert "carries 3 field(s)" in message
+    readable = message.index("1 not readable as the installed schema defines it")
+    undefined = message.index("2 not defined by the installed schema")
+    assert readable < undefined
 
 
 def _attribute(pb2: ModuleType, **value: Any) -> bytes:
@@ -713,7 +834,7 @@ def test_distinct_unknown_fields_are_reported_in_the_order_they_arrived(order):
     (diagnostic,) = read.diagnostics
     assert diagnostic.source == {
         "path": "resourceSpans[0].scopeSpans[0].spans[0]",
-        "fields": [{"number": n, "wire_type": 0} for n in order],
+        "fields": [_undefined(n) for n in order],
     }
 
 

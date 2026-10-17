@@ -669,7 +669,7 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here. Also a body `spanweave.read_protobuf` could not parse as an `ExportTraceServiceRequest`, whose bytes JSON cannot write (§7) |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
-| `unknown_fields` | a message in an OTLP protobuf body carries fields the schema the reader was installed with does not define — a newer OTLP, or an extension (§7). The message is read without them, and this is the report that they were there: one per message, never a discard and never a refusal. Level **`warning`**: the library could not map them. Made by the reader, so it names no node and no adapter. Batch W1 (`OPEN_QUESTIONS.md` §23, 2B) |
+| `unknown_fields` | a message in an OTLP protobuf body carries fields the protobuf runtime could not read into it: numbers the schema the reader was installed with does not define — a newer OTLP, or an extension — or numbers it does define, arriving with a wire type other than the one it expects — a malformed body (§7). The message is read without them, and this is the report that they were there, saying of each which it is: one per message, whichever they are, never a discard and never a refusal. Level **`warning`**: the library could not map them. Made by the reader, so it names no node and no adapter. Batch W1 (`OPEN_QUESTIONS.md` §23, 2B) |
 | `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Level **`warning`** (`Diagnostic`'s default): unlike an event, it says the record holds less than the span did. Batch T3 |
 | `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
 | `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
@@ -817,7 +817,7 @@ this sentence.
 | `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
 | `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
 | `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
-| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. **Not** the field's bytes: a field with no definition has no name and no type, so there is no representation of it the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
+| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int, "defined": bool, "expected_wire_type": int \| null}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. `defined` says whether the installed schema defines that number **on that message**, and `expected_wire_type` is, where it does, the wire type the schema's type for it is written with (`2` for a string, bytes or message; `0` for an integer, bool or enum; `1` for a 64-bit fixed or double; `5` for a 32-bit fixed or float), and `null` where it does not. **Not** the field's bytes: a field with no definition has no name and no type, and one with a definition arrived in a form its type cannot be read from, so there is no representation of either the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -2184,6 +2184,7 @@ declares reaches `0.5`.
     | `kind` 0, no `status` on the wire, `flags` 0: all three omitted | none | a hand-made request — spec, not pair |
     | a `traceId`, `spanId` or `parentSpanId`, a span's or a link's, whose bytes are all zero: omitted, as an empty one is | none | a hand-made request (below) — the Collector's rule, not a pair |
     | a field the schema does not define | none | a hand-made request (below) |
+    | a field the schema defines, with another wire type | none | a hand-made request (below) |
     | `doubleValue` | none | a hand-made request (below) — spec, not pair |
 
     The `status` row is the one whose JSON twin would read differently if a
@@ -2224,6 +2225,17 @@ declares reaches `0.5`.
     refusing the body would lose every readable span to report one number
     (§23, 2B). A graph built from such a body differs from its JSON twin's by
     those diagnostics and nothing else.
+  - **So is a field the schema defines that arrives with another wire type.**
+    The runtime keeps a span's `name` (field 5, a string) sent as a varint in
+    the same place as a number it has never heard of, and leaves `name` at its
+    default; blaming the schema's age for it would misreport a malformed body.
+    So each entry says whether the installed schema defines its number on that
+    message and, where it does, the wire type it expects (§3.7), and the
+    message says "not readable as the installed schema defines it" of those
+    and "not defined by the installed schema" of the rest. A message carrying
+    both is still one `unknown_fields`, whose message gives the count of each,
+    the defined first; the code is the same one, because what is reported is
+    the same — fields the message was read without.
   - **A `doubleValue` is a float** — `MessageToDict`'s, so a `1.0` reads as
     `1.0` and never as the integer `1`. **This is the one rendering the pairs
     did not check**: no export in the zoo carries a `doubleValue`

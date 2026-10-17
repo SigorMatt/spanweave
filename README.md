@@ -251,8 +251,8 @@ encodings (`SPEC.md` §7). It needs the optional `otlp` extra
 (`pip install spanweave[otlp]`); without it, it raises `SpanweaveError` with
 the code `otlp_extra_not_installed`, and nothing else in the library needs it.
 A body that will not parse is a `malformed_record`, and a field the installed
-OTLP schema does not define is reported as `unknown_fields` rather than
-dropped.
+OTLP schema does not define, or defines with another wire type, is reported as
+`unknown_fields` rather than dropped.
 
 **`envelope(record)` is what the transport stated about one span**, for a
 record the reader unpacked from an OTLP export: its trace id, span id, parent,

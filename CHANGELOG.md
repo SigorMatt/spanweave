@@ -2364,6 +2364,20 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   so does the rendering now (`SPEC.md` §7, the Collector's rule, not a
   pair). The JSON path is unchanged: a JSON record stating
   `"0000000000000000"` still states an id. No pair moves.
+- **`unknown_fields` says when the number is one the schema defines**
+  (Qodo's review of PR #6, finding 7). The protobuf runtime keeps a field
+  the schema defines that arrives with another wire type -- a span's `name`
+  sent as a varint -- with the numbers it has never heard of, and the
+  diagnostic blamed every one on the schema's age. Each entry in its
+  `source` now carries `defined` (whether the installed schema defines that
+  number on that message) and `expected_wire_type` (the wire type the
+  schema expects, `null` where it defines none), and the message says "not
+  readable as the installed schema defines it" of the first kind and "not
+  defined by the installed schema" of the second, counting each where a
+  message carries both. Still one `unknown_fields` per message and no new
+  code; `diagnostic_source` in `tests/serialized_shape.json` is regenerated
+  for the two keys (`SPEC.md` §3.7, §7), `schema_version` unchanged. No pair
+  moves.
 - **L25's dedup test no longer states the premise its own failure disproves.**
   A docstring; no assertion, no source and no document behaviour moves (from
   the run-5 scoped cold review, finding L25-1). The test explained itself with

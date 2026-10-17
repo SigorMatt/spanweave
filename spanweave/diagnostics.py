@@ -103,10 +103,12 @@ EXCEPTION_EVENT = "exception_event"
 SPAN_EVENT = "span_event"
 
 # A message in an OTLP protobuf body carries fields the schema the reader was
-# installed with does not define -- a newer OTLP, or an extension. The message
+# installed with does not define -- a newer OTLP, or an extension -- or defines
+# with another wire type than they arrived with -- a malformed body. The message
 # is read without them, and this is the report that they were there: `source`
 # names the message's path in the request and each field's number and wire
-# type, never its bytes, which have no representation the input ever had.
+# type, whether the schema defines the number and, if so, the wire type it
+# expects; never its bytes, which have no representation the input ever had.
 # Level `warning`: the library could not map them (`SPEC.md` §3.7, §7; batch
 # W1, `OPEN_QUESTIONS.md` §23).
 UNKNOWN_FIELDS = "unknown_fields"
