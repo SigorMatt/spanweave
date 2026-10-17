@@ -298,6 +298,208 @@ def test_the_zoo_holds_no_double_value_so_no_pair_checks_one():
         assert "doubleValue" not in _keys(json.loads(json_body.read_bytes()))
 
 
+# --- What the pairs do not cover, a hand-made request does (`SPEC.md` §7) -----
+#
+# The OTLP/JSON specification's rule is proto3's JSON mapping with three
+# exceptions: lowerCamelCase keys, trace and span ids as hex rather than base64,
+# and enums as integers. So a `bytes` field other than an id is standard
+# base64, a message is an object of its set fields, a repeated field is an
+# array, and a field at its default -- a zero enum, a zero integer, a message
+# absent from the wire -- is omitted. Each test below holds the rendering to
+# that rule where no pair can; each is **spec, not pair**, as `doubleValue` is,
+# and the guard after them fails the day a zoo body carries one.
+
+
+def _spans(document: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        span
+        for resource_entry in document.get("resourceSpans", [])
+        for scope_entry in resource_entry.get("scopeSpans", [])
+        for span in scope_entry.get("spans", [])
+    ]
+
+
+def _request(pb2: ModuleType, *spans: Any) -> Any:
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    return pb2.ExportTraceServiceRequest(
+        resource_spans=[
+            trace_pb2.ResourceSpans(scope_spans=[trace_pb2.ScopeSpans(spans=spans)])
+        ]
+    )
+
+
+def test_a_link_s_ids_render_as_lowercase_hex():
+    """Spec, not pair: no zoo span has a link. Two links, so each is rendered
+    and not only the first; bytes above 0x9 in each id, so uppercase shows."""
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    from spanweave.otlp_protobuf import _rendered
+
+    links = [
+        trace_pb2.Span.Link(trace_id=bytes([0xAB] * 16), span_id=bytes([0xC0] * 8)),
+        trace_pb2.Span.Link(trace_id=bytes(range(16)), span_id=bytes([0xFE] * 8)),
+    ]
+    span = trace_pb2.Span(
+        trace_id=bytes([0x0D] * 16), span_id=bytes([0xE1] * 8), name="s", links=links
+    )
+    request = _request(pb2, span)
+    (rendered,) = _spans(_rendered(request))
+    assert rendered["links"] == [
+        {"traceId": "ab" * 16, "spanId": "c0" * 8},
+        {"traceId": "000102030405060708090a0b0c0d0e0f", "spanId": "fe" * 8},
+    ]
+
+    (record,) = spanweave.read_protobuf(request.SerializeToString()).records
+    assert record["links"] == [
+        {"trace_id": "ab" * 16, "span_id": "c0" * 8},
+        {"trace_id": "000102030405060708090a0b0c0d0e0f", "span_id": "fe" * 8},
+    ]
+    # ... which is what the same span written as OTLP/JSON reads as.
+    twin = spanweave.read_records(json.dumps(_rendered(request)).encode())
+    assert spanweave.read_protobuf(request.SerializeToString()) == twin
+
+
+#: `bytesValue` is proto3 JSON's `bytes`: standard base64, padded. The bytes
+#: are chosen so base64 and hex differ and the alphabet's `+` and `/` appear.
+BYTES = bytes([0x00, 0xFB, 0xFF, 0x10])
+
+
+def test_bytes_array_and_kvlist_values_render_as_the_otlp_json_spec_writes_them():
+    """Spec, not pair: the zoo's AnyValues are `stringValue`, `intValue` and
+    `boolValue` only (the guard below)."""
+    pb2 = _pb2()
+    from opentelemetry.proto.common.v1 import common_pb2
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    from spanweave.otlp_protobuf import _rendered
+
+    value = common_pb2.AnyValue
+    nested = common_pb2.KeyValue(key="b", value=value(bytes_value=BYTES))
+    attributes = [
+        common_pb2.KeyValue(key="bytes", value=value(bytes_value=BYTES)),
+        common_pb2.KeyValue(
+            key="array",
+            value=value(
+                array_value=common_pb2.ArrayValue(
+                    values=[value(string_value="x"), value(int_value=3), value()]
+                )
+            ),
+        ),
+        common_pb2.KeyValue(
+            key="kvlist",
+            value=value(
+                kvlist_value=common_pb2.KeyValueList(
+                    values=[
+                        common_pb2.KeyValue(key="t", value=value(bool_value=True)),
+                        nested,
+                    ]
+                )
+            ),
+        ),
+    ]
+    span = trace_pb2.Span(
+        trace_id=bytes(16), span_id=bytes(8), name="s", attributes=attributes
+    )
+    request = _request(pb2, span)
+    (rendered,) = _spans(_rendered(request))
+    assert rendered["attributes"] == [
+        {"key": "bytes", "value": {"bytesValue": "APv/EA=="}},
+        {
+            "key": "array",
+            "value": {
+                "arrayValue": {"values": [{"stringValue": "x"}, {"intValue": "3"}, {}]}
+            },
+        },
+        {
+            "key": "kvlist",
+            "value": {
+                "kvlistValue": {
+                    "values": [
+                        {"key": "t", "value": {"boolValue": True}},
+                        {"key": "b", "value": {"bytesValue": "APv/EA=="}},
+                    ]
+                }
+            },
+        },
+    ]
+    twin = spanweave.read_records(json.dumps(_rendered(request)).encode())
+    assert spanweave.read_protobuf(request.SerializeToString()) == twin
+
+
+def test_kind_zero_no_status_and_flags_zero_render_omitted():
+    """Spec, not pair: every zoo span states `kind`, `status` and `flags`.
+
+    Proto3's JSON mapping omits a zero enum, a zero integer and a message
+    absent from the wire, and so does the rendering. Whether a Collector
+    writes an absent `status` as `{}` -- which its JSON twin would read as
+    `UNSET` -- no pair shows (`SPEC.md` §7).
+    """
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    from spanweave.otlp_protobuf import _rendered
+
+    span = trace_pb2.Span(
+        trace_id=bytes(16), span_id=bytes(8), name="s", kind=0, flags=0
+    )
+    assert not span.HasField("status")
+    request = _request(pb2, span)
+    (rendered,) = _spans(_rendered(request))
+    assert rendered == {"traceId": "00" * 16, "spanId": "00" * 8, "name": "s"}
+
+    (record,) = spanweave.read_protobuf(request.SerializeToString()).records
+    assert not {"kind", "status", "flags"} & set(record)
+
+
+def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
+    """The day a pair carries one, this fails, and that row of `SPEC.md` §7's
+    table becomes the pairs' to check."""
+    kinds: set[str] = set()
+    for run, json_body, raw_body in PAIRS:
+        document = json.loads(json_body.read_bytes())
+        # Every span is looked at, not a subset: as many as the reader reads.
+        records = spanweave.read_records(json_body.read_bytes()).records
+        assert len(_spans(document)) == len(records), run
+        for span in _spans(document):
+            assert "links" not in span, run
+            assert {"kind", "status", "flags"} <= set(span), run
+            for attribute in span.get("attributes", []):
+                kinds.update(attribute["value"])
+        request = _pb2().ExportTraceServiceRequest.FromString(raw_body.read_bytes())
+        for resource_entry in request.resource_spans:
+            for scope_entry in resource_entry.scope_spans:
+                for span in scope_entry.spans:
+                    # A `status` stated in the JSON was a message on the wire.
+                    assert span.HasField("status"), run
+    assert kinds == {"stringValue", "intValue", "boolValue"}
+
+
+@pytest.mark.parametrize(
+    "order", [(99, 100), (100, 99)], ids=["ascending", "descending"]
+)
+def test_distinct_unknown_fields_are_reported_in_the_order_they_arrived(order):
+    """Not in field-number order, and not reversed: both orders, so neither a
+    sort nor a reversal can pass."""
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    span = trace_pb2.Span(trace_id=bytes(16), span_id=bytes(8), name="s")
+    # Field n, wire type 0, value 1: a two-byte tag for 16 <= n < 2048.
+    tail = b"".join(bytes([((n << 3) & 0x7F) | 0x80, n >> 4, 0x01]) for n in order)
+    raw = _request(pb2, span).SerializeToString()
+    target = pb2.ExportTraceServiceRequest.FromString(raw)
+    message = target.resource_spans[0].scope_spans[0].spans[0]
+    message.ParseFromString(message.SerializeToString() + tail)
+    read = spanweave.read_protobuf(target.SerializeToString())
+    (diagnostic,) = read.diagnostics
+    assert diagnostic.source == {
+        "path": "resourceSpans[0].scopeSpans[0].spans[0]",
+        "fields": [{"number": n, "wire_type": 0} for n in order],
+    }
+
+
 def test_two_resources_and_two_scopes_unpack_in_document_order():
     pb2 = _pb2()
     from opentelemetry.proto.common.v1 import common_pb2
@@ -365,9 +567,29 @@ def test_without_the_extra_it_raises_a_code_that_names_the_extra(monkeypatch):
     assert "spanweave[otlp]" in str(raised.value)
 
 
-def test_it_refuses_a_str_as_read_records_does():
-    with pytest.raises(TypeError):
-        spanweave.read_protobuf("trace.bin")  # type: ignore[arg-type]
+#: What `_as_bytes` refuses: a path-like `str`, any other type, a memoryview of
+#: items wider than a byte, and a strided one.
+REFUSED = {
+    "str": "trace.bin",
+    "int": 4,
+    "list": [1, 2],
+    "wide-memoryview": memoryview(bytes(8)).cast("I"),
+    "strided-memoryview": memoryview(bytes(8))[::2],
+}
+
+
+@pytest.mark.parametrize("data", list(REFUSED.values()), ids=list(REFUSED))
+def test_it_refuses_what_read_records_refuses_by_the_same_error(data):
+    """Needs no extra: the refusal comes before the runtime is imported."""
+    with pytest.raises(TypeError) as by_records:
+        spanweave.read_records(data)
+    with pytest.raises(TypeError) as by_protobuf:
+        spanweave.read_protobuf(data)
+    # The reader's name leads the message; the rest is the same words.
+    assert str(by_protobuf.value) == str(by_records.value).replace(
+        "read_records", "read_protobuf", 1
+    )
+    assert str(by_protobuf.value).startswith("read_protobuf reads ")
 
 
 def test_importing_spanweave_imports_no_proto_package():

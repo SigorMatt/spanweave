@@ -13,10 +13,12 @@ export, and handed to `read_records` -- the one reader every graph this
 library has built went through -- so nothing about unpacking an export is
 written twice. Where the Collector's rendering differs from the runtime's
 ``MessageToDict`` default, the Collector's is used, because the zoo's 29 pairs
-say it is the JSON (`SPEC.md` §7 lists each place): span and link ids are
-lowercase hex rather than base64, and enums (`kind`, `status.code`) are their
-numbers rather than their names. Everything else already agrees: 64-bit
-integers as decimal strings, defaults omitted.
+say it is the JSON (`SPEC.md` §7 lists each place): span ids are lowercase hex
+rather than base64, and enums (`kind`, `status.code`) are their numbers rather
+than their names. Everything else already agrees: 64-bit integers as decimal
+strings, defaults omitted. A link's ids are hex by the same rule, which is the
+OTLP/JSON specification's and not a pair's -- no pair carries a link (`SPEC.md`
+§7 lists what the pairs do not cover, and what holds each instead).
 
 **Where the pairs are silent, the container's rules decide** (`OPEN_QUESTIONS.md`
 §23). A body that will not parse is one ``malformed_record`` with no

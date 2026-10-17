@@ -2150,19 +2150,44 @@ declares reaches `0.5`.
 
     | Field | Collector (used) | `MessageToDict` default |
     |---|---|---|
-    | a span's `traceId`, `spanId`, `parentSpanId`; a link's `traceId`, `spanId` | lowercase hex | base64 |
+    | a span's `traceId`, `spanId`, `parentSpanId` | lowercase hex | base64 |
     | `kind`, `status.code` (enums) | the number | the enum's name |
 
     Everything else already agrees on every pair: `*UnixNano` and `intValue`
     as decimal strings (proto3 JSON's `int64`/`fixed64`), `flags` and
-    `droppedAttributesCount` as numbers, `bytesValue` as base64, and a
-    default omitted — an empty `parentSpanId` on a root span, an unset
-    `status` written `{}`. On every pair the records are equal record by
-    record, mark included, and the graph each builds is equal byte for byte;
-    `tests/test_protobuf.py` holds both, and the zoo census runs every capture
-    from its protobuf bodies as well as its JSON ones and holds every count,
-    node and edge equal. An empty body is an empty request, as its JSON
-    `{"resourceSpans": []}` is: no records, no diagnostics.
+    `droppedAttributesCount` as numbers, and a default omitted — an empty
+    `parentSpanId` on a root span; a `status` the exporter sent with nothing
+    in it is written `{}` by both. On every pair the records are equal record
+    by record, mark included, and the graph each builds is equal byte for
+    byte; `tests/test_protobuf.py` holds both, and the zoo census runs every
+    capture from its protobuf bodies as well as its JSON ones and holds every
+    count, node and edge equal. An empty body is an empty request, as its
+    JSON `{"resourceSpans": []}` is: no records, no diagnostics.
+  - **What the pairs cover, and what a hand-made request holds instead.** The
+    pairs prove only what they contain. Where they contain nothing, the
+    rendering follows the OTLP/JSON specification's rule — proto3's JSON
+    mapping with lowerCamelCase keys, trace and span ids as hex rather than
+    base64, enums as integers — and a hand-made `ExportTraceServiceRequest`
+    in `tests/test_protobuf.py` holds the rendering to that rule. Those rows
+    are **the spec's, not a pair's**: no Collector re-encoding checked them,
+    and a guard test fails the day a zoo body carries one, so the claim
+    becomes checkable.
+
+    | What | In the 29 pairs | Held by |
+    |---|---|---|
+    | AnyValue `stringValue`, `intValue`, `boolValue` | yes, and no other kind | the pairs |
+    | a span stating `kind`, `status` and `flags` | every span | the pairs |
+    | a link's `traceId`, `spanId` as lowercase hex | no span has a link | a hand-made request — spec, not pair |
+    | `bytesValue` as standard base64; `arrayValue` as `{"values": [AnyValue…]}`; `kvlistValue` as `{"values": [{"key", "value"}…]}` | none | a hand-made request — spec, not pair |
+    | `kind` 0, no `status` on the wire, `flags` 0: all three omitted | none | a hand-made request — spec, not pair |
+    | a field the schema does not define | none | a hand-made request (below) |
+    | `doubleValue` | none | a hand-made request (below) — spec, not pair |
+
+    The `status` row is the one whose JSON twin would read differently if a
+    Collector wrote it otherwise: `"status": {}` reads as `UNSET`, and no
+    `status` reads as none. Every unset `status` in the zoo was sent as an
+    empty message, so what a Collector writes for one absent from the wire is
+    not shown by any pair.
   - **A body that will not parse is one `malformed_record`**, `skipped_records`
     1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
     (§3.7): JSON has no way to write the bytes, and carrying them in some
