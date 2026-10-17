@@ -14460,9 +14460,8 @@ decisions log D15, D16, D17, D18 and D19.
   extra and sets `SPANWEAVE_REQUIRE_OTLP=1`, and the `otlp` job is a matrix
   over the same Pythons.
 - **The extra's `protobuf>=4.25` floor is untested.** `pyproject.toml`'s
-  `otlp` extra states it; W1 built and tested against `protobuf` 7.36.0, and
-  `UnknownFieldSet`, which the `unknown_fields` report reads, needs about
-  4.24. No job installs the floor. Open: either a job that does, or a floor
+  `otlp` extra states it; W1 built and tested against `protobuf` 7.36.0. No
+  job installs the floor. Open: either a job that does, or a floor
   the record can cite. **Closed** by the 2026-10-17 cold review's fixes
   (R-18): the `otlp` job installs the floors and runs the suite on them.
   Measured first, 4.25 with `opentelemetry-proto` 1.27 passed on 3.11–3.13
@@ -14486,7 +14485,8 @@ decisions log D15, D16, D17, D18 and D19.
   "Phase 4 wants"** (*What it must not claim*: "No dialect it does not
   read"). The close edited `ROADMAP.md` only where its row said, the
   Phase 4 line it marks done, and left that sentence as it is. Open, for
-  the maintainer.
+  the maintainer. **Closed** by `4689670`, which rewrote that sentence
+  (2026-10-17 cold review, R-15).
 
 The wire series let the reader unpack the OTLP **protobuf** wire format into
 the same records it unpacks from OTLP/JSON. It answers the spanweave half of
@@ -14501,10 +14501,8 @@ graph. The series ran on branch `wire` from `main` at `88c7339` in one run,
 W0 → W1 → W2, one batch per commit, and W1 halted once for a maintainer
 decision (`OPEN_QUESTIONS.md` §23).
 
-`WORKPLAN.md` was the series' execution state, and this close deletes it.
-That is the seventh deletion, after four in the September 2026 audit-fix
-series, one at the live-graphs close and one at the stranger's-trace close.
-Everything of it that outlives the series is in this section: the batch
+`WORKPLAN.md` was the series' execution state, and this close deletes it,
+as earlier closes deleted theirs. Everything of it that outlives the series is in this section: the batch
 registry, the decisions log and resume note in full, and L1's disposition.
 §0, the operating protocol, is not carried. A future series reads it at
 `git show 028e645:WORKPLAN.md`, the file's last state.
@@ -14577,7 +14575,8 @@ opened the series.
 
 ### The resume note  *(the plan file's §4, folded in full)*
 
-Every dated entry, verbatim and in order. The batches recorded their
+Every dated entry, verbatim and in order, except one clause removed after
+the close and marked where it stood. The batches recorded their
 corrections, measurements and open items here, and only here; the open items
 in the last entry are registered above, under *Still open after the close*.
 
@@ -14610,8 +14609,36 @@ in the last entry are registered above, under *Still open after the close*.
   `otlp` job (`SPANWEAVE_REQUIRE_OTLP=1`: a missing proto runtime fails,
   not skips). Open for the close: the job runs one interpreter, not the
   matrix; the extra's `protobuf>=4.25` floor is untested (built against
-  7.36.0; `UnknownFieldSet` needs ~4.24); the missing-extra error is a plain
+  7.36.0; [a protobuf version claim, never verified, removed after the
+  close: see *Corrections after the close*]); the missing-extra error is a plain
   `SpanweaveError` with code `otlp_extra_not_installed`, not a subclass.
+
+### Corrections after the close  *(the 2026-10-17 cold review)*
+
+What the 2026-10-17 cold review of `wire` found untrue or unbound in the
+series' record, set right here rather than by rewriting the record above.
+`R-<n>` is that review's finding.
+
+- **`285902e`'s counts were measured with the extra hidden.** Its message
+  gives `make check` 3555 passed / 111 skipped, `make conformance` 1156
+  passed / 14 skipped, and `make install-check` 36 checks, 5 plants. Those
+  were true only without the `otlp` extra installed, which the message does
+  not say. With the extra, `make check` is 3664 passed / 2 skipped and
+  `make conformance` 1168 passed / 2 skipped (R-13).
+- **The `UnknownFieldSet` version claim is removed.** W1's resume entry and
+  the floor's open item said `UnknownFieldSet` needs about protobuf 4.24;
+  nothing cited or tested it (R-13). The floor is not stated from it: it is
+  what `e709afa` measured, in its message and `pyproject.toml`'s comment,
+  `protobuf>=5.27` with `opentelemetry-proto>=1.28` (the floor's item above,
+  R-18).
+- **`7b4b606`'s "No other doc-truth guard was weakened" was false.** Its
+  by-name `WORKPLAN.md` exclusion took the plan out of every guard that
+  iterates `durable_documents()`, when only the scratch-path guard needed
+  it (R-10). `00e55dd` retires the mechanism: the plan is scanned by every
+  guard but the two it cannot pass.
+- **`7b4b606`'s README row was premature.** It said "Items are registered
+  in TASKS.md", in the present tense, when no W0–W2 entry was yet (R-12).
+  The row was deleted at the close (`285902e`).
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

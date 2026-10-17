@@ -46,7 +46,10 @@ fixtures/
   zoo/
     README.md                     # the pin, the briefs, each capture's seal
     <project>/<run-id>/
-      NNNN.json                   # one exporter body, byte for byte
+      NNNN.json                   # the Collector's OTLP/JSON re-encoding
+                                  #   of one exporter body, byte for byte
+      raw/NNNN.body               # the exporter's own OTLP protobuf body,
+                                  #   as it was sent, byte for byte
       MANIFEST.json               # that capture's sealed manifest, unchanged
 ```
 
@@ -55,9 +58,11 @@ It is a byte-for-byte copy of the sealed captures of `SigorMatt/spanweave-zoo`
 at the pin `fixtures/zoo/README.md` names, and its bodies and manifests are
 the record and are **never edited here**: a body or a manifest changed in
 this repository is a broken copy, not a correction, and `tests/test_zoo.py`
-fails on it (every body's sha256 against its manifest, every seal against its
-manifest and against the value the README pins, and no file the manifests do
-not name). The README is not the record: it is ours, edited like any other
+fails on it (every body's sha256 against its manifest, JSON and raw alike;
+every JSON body paired with exactly one raw body, read from the manifest's
+`forwards` list, the pair sharing its `NNNN`; every raw body marked `binary`
+by `.gitattributes`; every seal against its manifest and against the value
+the README pins; and no file the manifests do not name). The README is not the record: it is ours, edited like any other
 document this repository writes (decisions log D26), and held by
 `tests/test_zoo.py` (its seals, instrumentation, Collector and census
 paragraph). Its provenance is the
