@@ -2142,6 +2142,11 @@ declares reaches `0.5`.
   - **The JSON is the Collector's, and the oracle decides it.** The body is
     parsed by the protobuf runtime, rendered as OTLP/JSON, and read by the
     JSON reader above, so nothing about unpacking an export is written twice.
+    A record's `raw.source` is therefore its OTLP/JSON rendering, not the wire
+    bytes: the records are the ones the JSON path reads for the same export,
+    which is what the oracle holds (decisions log D29); nothing is lost but
+    what `unknown_fields` reports (below), and the body's bytes are the
+    caller's to keep.
     The rendering is the OTLP/JSON specification's as the Collector writes it,
     not `MessageToDict`'s where the two differ; on the zoo's 29 pairs — every
     export in it sealed both as the exporter's protobuf body and as the

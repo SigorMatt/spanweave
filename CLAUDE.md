@@ -72,6 +72,10 @@ of them is wrong even if it passes tests.
   timestamps omit temporal edges and say so. Unmapped kinds become `unknown`
   plus a diagnostic. Never paper over a gap.
 - **Zero runtime dependencies in core.** Extras never affect core behavior.
+  The one exception is the `otlp` extra, which `spanweave.read_protobuf` alone
+  needs (decisions log D28): it is imported only when that is called, only in
+  `spanweave/otlp_protobuf.py`, and only as `google.protobuf` and
+  `opentelemetry.proto` — a CI gate holds all three.
 
 ## Working agreement
 
