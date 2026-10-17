@@ -169,7 +169,7 @@ def _synthetic(tmp_path, monkeypatch, forwards, json_count, raw_count):
     for k in range(1, raw_count + 1):
         (directory / ZOO_RAW_DIR / f"{k:04d}.body").write_bytes(b"")
     manifest = {"forwards": forwards}
-    (directory / "MANIFEST.json").write_text(json.dumps(manifest))
+    (directory / "MANIFEST.json").write_text(json.dumps(manifest, sort_keys=True))
     monkeypatch.setattr(zoo_census, "ZOO", tmp_path)
     return capture, directory
 

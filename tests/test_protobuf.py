@@ -154,6 +154,45 @@ def test_the_collector_differs_from_message_to_dict_in_exactly_two_places():
         assert _message_to_dict(raw, use_integers_for_enums=True) != want, run
 
 
+def _objects(value: Any) -> list[dict[str, Any]]:
+    """Every object in a parsed document, outermost first."""
+    if isinstance(value, dict):
+        return [value, *(o for v in value.values() for o in _objects(v))]
+    if isinstance(value, list):
+        return [o for v in value for o in _objects(v)]
+    return []
+
+
+def test_the_document_read_back_is_written_with_sorted_keys(monkeypatch):
+    """The text `read_protobuf` hands `read_records` is written with sorted
+    keys at every level, as the graph and the record digest are, and not in
+    the order the runtime writes a message's fields in (Qodo's review of
+    PR #6, finding 4). Nothing reads that order, so no other test can see it."""
+    pb2 = _pb2()
+    from spanweave import otlp_protobuf
+    from spanweave.otlp_protobuf import _rendered
+
+    texts: list[bytes] = []
+
+    def read_back(data: bytes) -> spanweave.Records:
+        texts.append(bytes(data))
+        return spanweave.read_records(data)
+
+    monkeypatch.setattr(otlp_protobuf, "read_records", read_back)
+    for run, _, raw_body in PAIRS:
+        texts.clear()
+        spanweave.read_protobuf(raw_body.read_bytes())
+        (text,) = texts
+        # `json.loads` keeps the order the text wrote the keys in.
+        for entry in _objects(json.loads(text)):
+            assert list(entry) == sorted(entry), run
+    # ... which is the writer's doing: the runtime writes a span's fields in
+    # field-number order, and that is not sorted.
+    request = pb2.ExportTraceServiceRequest.FromString(_zoo_raw())
+    span = _spans(_rendered(request))[0]
+    assert list(span) != sorted(span)
+
+
 # --- Where no pair can show anything (`OPEN_QUESTIONS.md` §23) -----------------
 
 
@@ -480,7 +519,9 @@ def test_a_link_s_ids_render_as_lowercase_hex():
         {"trace_id": "000102030405060708090a0b0c0d0e0f", "span_id": "fe" * 8},
     ]
     # ... which is what the same span written as OTLP/JSON reads as.
-    twin = spanweave.read_records(json.dumps(_rendered(request)).encode())
+    twin = spanweave.read_records(
+        json.dumps(_rendered(request), sort_keys=True).encode()
+    )
     assert spanweave.read_protobuf(request.SerializeToString()) == twin
 
 
@@ -552,7 +593,9 @@ def test_bytes_array_and_kvlist_values_render_as_the_otlp_json_spec_writes_them(
             },
         },
     ]
-    twin = spanweave.read_records(json.dumps(_rendered(request)).encode())
+    twin = spanweave.read_records(
+        json.dumps(_rendered(request), sort_keys=True).encode()
+    )
     assert spanweave.read_protobuf(request.SerializeToString()) == twin
 
 
@@ -662,7 +705,7 @@ def test_an_all_zero_trace_id_is_no_trace_id():
     # ... as the same span's JSON with the id omitted reads.
     document = _rendered(_root(pb2))
     del _spans(document)[0]["traceId"]
-    assert spanweave.read_records(json.dumps(document).encode()) == zero
+    assert spanweave.read_records(json.dumps(document, sort_keys=True).encode()) == zero
 
 
 ID_FIELDS = {

@@ -143,7 +143,12 @@ def read_protobuf(data: bytes | bytearray | memoryview) -> Records:
     # JSON reader, and an escape reads back as the character it stands for.
     # `MessageToDict` writes a non-finite double as the string the OTLP/JSON
     # mapping gives it ("NaN"), so `allow_nan=False` refuses nothing it makes.
-    text = json.dumps(document, ensure_ascii=True, allow_nan=False)
+    # `sort_keys`, as the graph and the record digest are written: the order
+    # the runtime happens to write a message's fields in is then not the order
+    # a record's keys are read in. Nothing downstream reads that order -- key
+    # order never reaches a node (`SPEC.md` §7) -- so the graph is the same
+    # bytes either way.
+    text = json.dumps(document, sort_keys=True, ensure_ascii=True, allow_nan=False)
     read = read_records(text.encode("ascii"))
     collector.extend(read.diagnostics)
     return Records(
