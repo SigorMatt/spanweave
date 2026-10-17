@@ -50,15 +50,25 @@ PAIR_IDS = [f"{run}/{json_body.stem}" for run, json_body, _ in PAIRS]
 REQUIRE = "SPANWEAVE_REQUIRE_OTLP"
 
 
+#: The skip's reason, where the runtime is missing and nothing requires it.
+NO_EXTRA = "the `otlp` extra is not installed: pip install spanweave[otlp]"
+
+
 def _pb2() -> ModuleType:
-    """The `ExportTraceServiceRequest` module, or a skip naming the extra."""
-    name = "opentelemetry.proto.collector.trace.v1.trace_service_pb2"
-    if os.environ.get(REQUIRE):
-        __import__(name)
-        return sys.modules[name]
-    return pytest.importorskip(
-        name, reason="the `otlp` extra is not installed: pip install spanweave[otlp]"
-    )
+    """The `ExportTraceServiceRequest` module, or a skip naming the extra.
+
+    The module is imported by name, not by a computed one: `tests/gates.py`
+    bans the latter under `spanweave/`, and the tests keep the same rule. What
+    is caught is what `pytest.importorskip` catches from pytest 9.1 on,
+    `ModuleNotFoundError`.
+    """
+    try:
+        from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+    except ModuleNotFoundError:
+        if os.environ.get(REQUIRE):
+            raise
+        pytest.skip(NO_EXTRA)
+    return trace_service_pb2
 
 
 def _built(read: spanweave.Records) -> bytes:
@@ -946,6 +956,40 @@ def test_without_the_extra_it_raises_a_code_that_names_the_extra(monkeypatch):
         spanweave.read_protobuf(b"")
     assert raised.value.code == "otlp_extra_not_installed"
     assert "spanweave[otlp]" in str(raised.value)
+
+
+def _hide_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every package on the way to the module reads as not installed."""
+    for name in (
+        "opentelemetry",
+        "opentelemetry.proto",
+        "opentelemetry.proto.collector",
+        "opentelemetry.proto.collector.trace",
+        "opentelemetry.proto.collector.trace.v1",
+        "opentelemetry.proto.collector.trace.v1.trace_service_pb2",
+    ):
+        monkeypatch.setitem(sys.modules, name, None)
+
+
+def test_where_the_runtime_is_required_a_missing_one_is_a_failure(monkeypatch):
+    """What CI's `check` and `otlp` jobs rely on: `_pb2` raises, never skips."""
+    _hide_the_runtime(monkeypatch)
+    monkeypatch.setenv(REQUIRE, "1")
+    with pytest.raises(ModuleNotFoundError):
+        # A skip is not an exception `pytest.raises` catches: uncaught, it
+        # would skip this test, the very outcome it is here to forbid.
+        try:
+            _pb2()
+        except pytest.skip.Exception as skipped:
+            pytest.fail(f"skipped where the runtime is required: {skipped}")
+
+
+def test_where_it_is_not_a_missing_runtime_is_a_skip_naming_the_extra(monkeypatch):
+    _hide_the_runtime(monkeypatch)
+    monkeypatch.delenv(REQUIRE, raising=False)
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        _pb2()
+    assert str(skipped.value) == NO_EXTRA
 
 
 #: What `_as_bytes` refuses: a path-like `str`, any other type, a memoryview of
