@@ -1666,9 +1666,12 @@ def test_the_sha_tests_skip_outside_the_top_of_a_repository(tmp_path, monkeypatc
 # each one of the zoo's exports (decisions log D29). **What is not:** a figure
 # after `other` (a subset: "the other eight captures"), and a sentence that
 # records a correction ("the row's 24 bodies were 29, corrected at ..."),
-# which states the old figure on purpose. Out of reach, said rather than
-# carried: a figure in a paragraph that does not name the zoo, and the other
-# documents.
+# which states the old figure on purpose. The skip is that sentence, not its
+# paragraph: skipping the whole paragraph left the suite green while TASKS.md
+# fell from 10 figures read to 3 (cold review of 2026-10-17, scoped, R-11,
+# mutation G7), so TASKS.md's count is pinned at its measured value. Out of
+# reach, said rather than carried: a figure in a paragraph that does not name
+# the zoo, and the other documents.
 
 #: The files the counts are read from, and how each one's prose is reached.
 ZOO_COUNT_SOURCES = (
@@ -1794,8 +1797,8 @@ def test_the_zoo_count_scan_reads_the_spellings_and_skips_what_it_says():
         "\n"
         "| D | Twenty-eight exports, sealed by the zoo |\n"
         "\n"
-        "In the zoo, the other eight captures keep theirs. The row's 24 bodies\n"
-        "were 29, corrected at T0.\n"
+        "In the zoo, the other eight captures keep theirs; its 31 pairs are correct.\n"
+        "The row's 24 bodies were 29, corrected at T0. Its 14 captures stand.\n"
         "\n"
         "Elsewhere, three pairs of something else entirely.\n"
     )
@@ -1806,14 +1809,32 @@ def test_the_zoo_count_scan_reads_the_spellings_and_skips_what_it_says():
         ("bodies", 30),
         ("pairs", 27),
         ("exports", 28),
+        ("pairs", 31),
+        ("captures", 14),
     ]
-    assert len(zoo_count_faults(text, counts)) == 6
+    assert len(zoo_count_faults(text, counts)) == 8
     # The workflow's comments and the module's docstring are what is read.
     assert prose_of("ci.yml", "  # the zoo's 29 pairs\n  run: 28 pairs\n").strip() == (
         "the zoo's 29 pairs"
     )
     assert prose_of("m.py", '"""The zoo\'s 29 pairs."""\nX = "28 pairs"\n') == (
         "The zoo's 29 pairs."
+    )
+
+
+#: How many zoo figures TASKS.md states, measured. Its record carries
+#: corrections beside live figures, so it is where a skip that reaches past
+#: the correcting sentence drops figures without a fault.
+TASKS_ZOO_FIGURES = 10
+
+
+def test_tasks_md_zoo_figure_count_is_the_measured_one():
+    figures = zoo_count_figures(prose_of("TASKS.md", read("TASKS.md")))
+    assert len(figures) == TASKS_ZOO_FIGURES, (
+        f"TASKS.md: {len(figures)} zoo figures read, {TASKS_ZOO_FIGURES} measured. "
+        "If TASKS.md gained or lost a figure, re-measure and move the pin; if it "
+        "did not, the scan is skipping more than the sentence that says "
+        "'corrected':\n  " + "\n  ".join(f"{v} {n}: {s[:100]!r}" for n, v, s in figures)
     )
 
 
