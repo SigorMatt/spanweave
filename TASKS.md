@@ -14450,7 +14450,12 @@ decisions log D15, D16, D17, D18 and D19.
   Qodo's review of it (first fetch archived; post-push diff), and the merge
   as a merge commit. Each review is archived into `reviews/` and
   dispositioned here, as the earlier series did. At the close **this series
-  has no review archive**: no review of it has been run.
+  has no review archive**: no review of it has been run. Since then, the
+  cold review of 2026-10-17, a read of `88c7339..4689670`, is archived and
+  every finding dispositioned (*Cold review of the series — 2026-10-17*
+  below). The PR is not open yet: the push and CI on the pushed tip, the
+  scoped review of the fix commits, the PR, Qodo's review of it and the
+  merge remain.
 - **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
   job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
   extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
@@ -14560,9 +14565,11 @@ the review archives, verbatim, name one. Each reaches its rows by this map:
 | Relay file | Rows |
 |---|---|
 | `decisions-spanweave-2026-10-17` | D31, D32, D33 |
+| `decisions-spanweave-2026-10-17b` | D34 |
 
 D28–D30 came from no relay file: the plan file held them when `7b4b606`
-opened the series.
+opened the series. D34 was decided after the close, on the cold review of
+2026-10-17. It is a new row, not an edit.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14572,6 +14579,55 @@ opened the series.
 | D31 | 2026-10-17 | W1 | **1A.** A body that is not a protobuf message is one `malformed_record`, `skipped_records` 1, no records, `source` `null` — the `undecodable_bytes` precedent: JSON has no way to write the bytes, and inventing one (1B) would put in the record a representation the input never had. §3.7's source table gains the row. 1C declined: the reader never raises on malformed input, and the other encoding of the same container does not get a different rule. | maintainer |
 | D32 | 2026-10-17 | W1 | **2B.** Unknown fields are reported, never dropped and never fatal: the records are yielded, and each message that carries unknown fields draws one diagnostic under a new code, `unknown_fields` (level `warning`: the library could not map them — a gap, exactly what the level is for), `source` naming the message's path in the request and the field numbers and wire types as the proto runtime reports them. 2D is what the oracle rule says literally and what CLAUDE.md 2 forbids; where the two disagree, invariant 2 wins and the record says where the oracle was silent. 2A declined: refusing a whole body for one field a newer OTLP added would throw away every readable span to report one number. 2C declined for now: the bytes of a field with no definition have no representation the record ever had, and a consumer who needs them has the raw body; if one asks, it is a thread, not a guess. The code joins §3.7's vocabulary and the shape artifact is regenerated, as the series' standing rules permit. | maintainer |
 | D33 | 2026-10-17 | W1 | **3C.** `doubleValue` is `MessageToDict`'s float, stated in SPEC §7 as the one place the pairs could not check, with a test that the zoo holds no `doubleValue` (so the day one appears, the test says the claim is now checkable); and a thread at W2 for the zoo: one export carrying a `doubleValue` re-encoded by the Collector would settle `1` against `1.0` — a capture, not a guess (3B declined for being one). | maintainer |
+| D34 | 2026-10-17 | review | The cold review of 2026-10-17 of `88c7339..4689670` (R-1…R-18), dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-7, R-8, R-9, R-10, R-13 (the sha test and the record lines; the ordinal is removed, not bound), R-14, R-15, R-16, R-17, R-18. Read, recorded: R-12, the README row that said "are registered" before any was, deleted at the close. Declined with a reason: R-11 beyond what R-10's fix gives. A plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where the sha and corpus-count guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters. With R-10's fix the retired-figure guards do scan the plan, which is the part of R-11 worth having. Applied as eight commits on `wire`, one concern each; where a commit answers several findings they share one mechanism and the subject says so. If the extra's declared floors failed, they were to be raised to the lowest pair that passes, and said so in `pyproject.toml` and the CHANGELOG. Nothing is amended or force-pushed. | maintainer |
+
+### Cold review of the series — 2026-10-17
+
+`reviews/2026-10-17-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-17.md`: `cmp` silent,
+and `sha256`
+`db5fe6caa4452f9d07a30b977e90ec52b34b30009fbd7c95d3344ae0effe7c61` on both
+sides. It takes the dated name the earlier archives carry. As for them, the
+scratch name and the whole digest are written here and not in the archive,
+which is kept byte-for-byte; the scratch name is provenance and not a path to
+open.
+
+A cold read of `88c7339..4689670`, ten commits: one sub-agent per commit
+touching `spanweave/`, `tests/` or `fixtures/` (four: `7b4b606`, `09245d9`,
+`4ecf414`, `285902e`; the last one's agent also read `4689670`), a fifth that
+re-derived the oracle without the test helpers, and the five plan and
+question commits read directly, every parent derived as `<sha>^` and the
+extra driven installed, hidden, and hidden with `SPANWEAVE_REQUIRE_OTLP=1`.
+It found `fixtures/zoo/` byte-identical to the zoo at its pin, the oracle
+holding when re-derived independently, no clock, randomness or network
+added, and `schema_version` unchanged; it raised eighteen findings,
+R-1…R-18. The maintainer's dispositions are decisions log D34, above. The
+accepted findings were applied on `wire` as eight commits, one concern each;
+where a commit answers several findings they share one mechanism and the
+subject says so (decisions log D24). This archive is the last of those
+commits. What the review found untrue in the series' record is set right
+under *Corrections after the close*, below.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `4ecf414`, link ids credited to the pairs, which carry no links | **accepted**, `118f0d4` (with R-2, R-4, R-5, R-6; one mechanism, a hand-made `ExportTraceServiceRequest` for each thing the zoo's bodies lack). SPEC §7 says what the pairs cover and what a hand-made request holds instead; a span with two links holds the ids' lowercase hex |
+| R-2 — `4ecf414`, `bytesValue` said to agree "on every pair", which hold none | **accepted**, `118f0d4` (with R-1). `bytesValue`, `arrayValue` and `kvlistValue` are stated from the OTLP/JSON spec and marked "spec, not pair", as `doubleValue` is |
+| R-3 — `4ecf414`, the gate's allowance is wider than the extra | **accepted**, `723515a`: the allowance is the prefixes `google.protobuf` and `opentelemetry.proto`, and the gate bans `importlib.import_module` as it bans `__import__` |
+| R-4 — `4ecf414`, omitted `kind`, `status` and `flags` not exercised | **accepted**, `118f0d4` (with R-1): a span with `kind` 0, `status` unset and `flags` 0 renders with all three omitted |
+| R-5 — `4ecf414`, "refuses what `read_records` refuses" tested on `str` only | **accepted**, `118f0d4` (with R-1): `read_protobuf` refuses a wide-item `memoryview` and whatever else `_as_bytes` refuses, by the same error |
+| R-6 — `4ecf414`, the arrival order of unknown fields untested | **accepted**, `118f0d4` (with R-1): two distinct unknown fields are reported in arrival order |
+| R-7 — `4ecf414`, the prose pair count bound to nothing | **accepted**, `21b106d` (with R-13's sha test, R-14, R-17; one mechanism, citations are held): the corpus counts are read from SPEC, CHANGELOG, this file, `ci.yml` and `otlp_protobuf.py`'s docstring and held to the census |
+| R-8 — `09245d9`, pairing by file name instead of `forwards` survives | **accepted**, `5c020c6`: a unit test of `pairs()` on a synthetic manifest whose `forwards` disagree with name order, with a non-200 forward and a count mismatch |
+| R-9 — `09245d9`, `FIXTURES.md` not updated for the raw bodies | **accepted**, `4521cc2`: the layout gains `raw/NNNN.body`, `NNNN.json` is the Collector's re-encoding, and the list of what `tests/test_zoo.py` checks gains the raw sha256, the pairing and the binary attribute |
+| R-10 — `7b4b606`, "No other doc-truth guard was weakened" is false | **accepted**, `00e55dd` (with R-11 in part): `durable_documents()` keeps `WORKPLAN.md` in, and only the scratch-path and README Documents-table guards skip it, by name, with the reason. The record line is `4521cc2`'s, under *Corrections after the close* |
+| R-11 — `7b4b606`, no test touches `WORKPLAN.md`'s numbers | **accepted in part**, `00e55dd`: the retired-figure guards scan the plan. **Declined beyond that** (decisions log D34): a plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where `21b106d`'s guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters |
+| R-12 — `7b4b606`, the README row's present tense came before the entries | **read, recorded** (decisions log D34). The row was deleted at the close (`285902e`); noted by `4521cc2` under *Corrections after the close* |
+| R-13 — `285902e`, numbers and shas in this file and ROADMAP tied to nothing | **accepted.** The sha test is `21b106d` (with R-7): every sha a durable document cites resolves as a commit. The record lines are `4521cc2`: the ordinal is removed, not bound; `285902e`'s counts are recorded as measured with the extra hidden, beside the with-extra counts; the unverified `UnknownFieldSet` version claim is removed. `ba8a6f0`, a citation that resolved only from a local reflog, resolves for any clone since the maintainer pushed the tag `rejected/ba8a6f0` |
+| R-14 — `285902e`, a decisions citation under `spanweave/` outside the resolver | **accepted**, `21b106d` (with R-7): the resolver reads `spanweave/**/*.py` |
+| R-15 — `4689670`, an item it closed still listed as open | **accepted**, `4521cc2`: the item is marked closed by `4689670` |
+| R-16 — `4689670`, two voices on whether `make check` runs the protobuf tests | **accepted**, `e709afa` (with R-18; one mechanism, CI installs what the documents say): the `check` matrix syncs `--extra dev --extra otlp` with `SPANWEAVE_REQUIRE_OTLP=1`, and the "never installs it" comments say what is now true |
+| R-17 — `4689670`, none of its changed lines held | **accepted**, `21b106d` (with R-7): a `uv sync` line's extras exist in `pyproject.toml`, and the ROADMAP sentence's sha resolves |
+| R-18 — `4ecf414`, the extra's floors never installed | **accepted**, `e709afa` (with R-16): the `otlp` job is a matrix that installs the floors. Measured first, `protobuf` 4.25 with `opentelemetry-proto` 1.27 does not import on Python 3.14 (protobuf before 5.27 does not), so the floors are raised to `protobuf>=5.27` and `opentelemetry-proto>=1.28`, the lowest pair that passes on every interpreter CI runs |
 
 ### The resume note  *(the plan file's §4, folded in full)*
 

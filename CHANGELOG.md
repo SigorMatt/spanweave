@@ -15,6 +15,11 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The cold review of 2026-10-17 is archived, and every finding has a
+  disposition** (decisions log D34). No behaviour change.
+  `reviews/2026-10-17-wire.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-18: the commit that
+  answered it, or the reading it was read, recorded or declined with.
 - **`spanweave.read_protobuf` reads the OTLP protobuf wire format** (wire
   series, W1; the zoo's `PROBES.md` L1). It takes the bytes of one
   `ExportTraceServiceRequest` -- the `application/x-protobuf` body the stock
