@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import re
 import shlex
 import shutil
 import subprocess
@@ -39,6 +38,8 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+
+from tests.markdown_fences import fenced_blocks
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
@@ -65,10 +66,12 @@ def _checkout_steps() -> list[str]:
     """The README's `From a checkout` block, read rather than restated."""
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     start = readme.index("From a checkout:")
-    block = re.search(r"```\n(.*?)```", readme[start:], re.S)
+    block = next(
+        (block for block in fenced_blocks(readme[start:]) if not block.info), None
+    )
     if block is None:
         raise SystemExit("README's `From a checkout:` block has no fenced commands")
-    return [line[2:] for line in block.group(1).splitlines() if line.startswith("$ ")]
+    return [line[2:] for line in block.body.splitlines() if line.startswith("$ ")]
 
 
 def _first_quickstart_command() -> str:

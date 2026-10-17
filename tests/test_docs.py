@@ -14,20 +14,19 @@ pattern for quoted fixture content.
 
 import json
 import pathlib
-import re
 
 import spanweave
 from tests.conformance import CORPUS
+from tests.markdown_fences import fenced_blocks
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FIXTURES_MD = (ROOT / "FIXTURES.md").read_text(encoding="utf-8")
 WORKED = CORPUS / "llm_tool_llm/dialects/openinference.jsonl"
 
-BLOCK = re.compile(r"```jsonl\n(.*?)```", re.S)
-
 
 def quoted_blocks(text: str) -> list[str]:
-    return [match.group(1) for match in BLOCK.finditer(text)]
+    """The body of each ```jsonl fence, read as `tests/markdown_fences.py` has it."""
+    return [block.body for block in fenced_blocks(text) if block.info == "jsonl"]
 
 
 def test_the_worked_example_is_the_fixture_verbatim():

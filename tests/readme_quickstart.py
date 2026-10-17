@@ -31,9 +31,10 @@ same transcript drives two very different harnesses.
 from __future__ import annotations
 
 import pathlib
-import re
 import shlex
 from dataclasses import dataclass
+
+from tests.markdown_fences import fenced_blocks
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -41,8 +42,6 @@ README = ROOT / "README.md"
 #: The quickstart is everything above the Install heading: what a reader meets
 #: before they have decided anything.
 QUICKSTART_ENDS_AT = "\n## Install"
-
-FENCE = re.compile(r"^```(\w*)\n(.*?)^```", re.M | re.S)
 
 
 @dataclass(frozen=True)
@@ -71,7 +70,8 @@ def quickstart_text(readme: str | None = None) -> str:
 
 
 def _fences(text: str) -> list[tuple[str, str]]:
-    return [(match.group(1), match.group(2)) for match in FENCE.finditer(text)]
+    """(info string, body) of each fence, read as `tests/markdown_fences.py` has it."""
+    return [(block.info, block.body) for block in fenced_blocks(text)]
 
 
 def _is_transcript(body: str) -> bool:

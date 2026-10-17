@@ -62,7 +62,7 @@ from tests.corpus_census import (
     render,
     report,
 )
-from tests.markdown_fences import fence_kinds
+from tests.markdown_fences import FencedBlock, fence_kinds, fenced_blocks
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -126,10 +126,12 @@ def code_spans(markdown: str) -> list[str]:
     return spans
 
 
-#: Every fence reader is held to this document. A three-backtick fence; a
-#: five-backtick fence holding a three-backtick line, a prose-shaped line and
-#: shas; a prose line that *opens* with five backticks, as `TASKS.md`'s does;
-#: inline spans before and after.
+#: The three readers that split prose from code are held to this document;
+#: the rule they and every other fence reader share is held line by line
+#: below it. A three-backtick fence; a five-backtick fence holding a
+#: three-backtick line, a prose-shaped line and shas; a prose line that
+#: *opens* with five backticks, as `TASKS.md`'s does; inline spans before and
+#: after.
 FENCE_DOCUMENT = (
     "Before: `uv run pytest`.\n"
     "```bash\n"
@@ -179,6 +181,67 @@ def test_the_install_check_reads_fences_by_the_same_rule():
         " ",
         "make golden",
         "fed4321",
+    ]
+
+
+def kinds(*lines: str) -> list[str]:
+    return [kind for _, kind in fence_kinds(lines)]
+
+
+def test_a_fence_closes_on_a_run_of_its_own_length_or_longer_only():
+    # A run one shorter than the opener is a line of code, not a close.
+    assert kinds("````", "```", "````", "after") == [
+        "fence",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("```", "a", "`````", "after") == ["fence", "code", "fence", "prose"]
+
+
+def test_a_fence_has_at_most_three_spaces_of_indent():
+    # Four spaces is an indented line, whether opening or closing.
+    assert kinds("   ```", "a", "   ```", "after") == [
+        "fence",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("    ```", "a", "    ```") == ["prose", "prose", "prose"]
+    assert kinds("```", "    ```", "a", "```") == ["fence", "code", "code", "fence"]
+
+
+def test_a_tilde_fence_is_a_fence_and_only_its_own_character_closes_it():
+    # A tilde info string may hold a backtick; a backtick one may not.
+    assert kinds("~~~", "```", "a", "~~~", "after") == [
+        "fence",
+        "code",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("```", "~~~", "```") == ["fence", "code", "fence"]
+    assert kinds("~~~ `x`", "a", "~~~") == ["fence", "code", "fence"]
+
+
+def test_a_closing_fence_carries_no_info_string():
+    # CommonMark 0.31, example 143: ``` aaa inside a fence is code. Trailing
+    # blanks are no info string.
+    assert kinds("```", "aaa", "``` aaa", "```") == ["fence", "code", "code", "fence"]
+    assert kinds("```", "a", "```  \t", "after") == ["fence", "code", "fence", "prose"]
+
+
+def test_a_fenced_block_is_its_stripped_info_and_its_lines():
+    """`fenced_blocks`, which the readers of a block's language and body use.
+
+    The info string is stripped; the body keeps its line breaks and the
+    fences' own lines are not in it; prose is in no block; a fence left open
+    is a block to the end of the text.
+    """
+    text = "prose\n```python  \nx = 1\n\n```\nprose\n~~~\nopen\n"
+    assert fenced_blocks(text) == [
+        FencedBlock("python", "x = 1\n\n"),
+        FencedBlock("", "open\n"),
     ]
 
 
@@ -2627,8 +2690,10 @@ def documented_example_paths(
     # The Python block is the same paste by another route.
     for path in scanned:
         text = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S):
-            for literal in re.findall(r"""["']([^"'\n]+)["']""", match.group(1)):
+        for block in fenced_blocks(text):
+            if block.info != "python":
+                continue
+            for literal in re.findall(r"""["']([^"'\n]+)["']""", block.body):
                 if "/" in literal and (ROOT / literal).is_file():
                     found.setdefault(literal, set()).add(path.name)
     return found
@@ -4605,7 +4670,7 @@ def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, cap
     from spanweave.cli import main
 
     body = section(read("README.md"), "\n## Exit codes")
-    fences = re.findall(r"^```\n(.*?)^```", body, re.M | re.S)
+    fences = [block.body for block in fenced_blocks(body) if not block.info]
     transcripts = [fence for fence in fences if fence.lstrip().startswith("$ ")]
     assert len(transcripts) == 1, (
         "the README's Exit codes section no longer shows exactly one "

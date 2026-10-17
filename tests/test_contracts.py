@@ -50,6 +50,7 @@ from spanweave import annotate, model
 from spanweave.graph import Graph
 from spanweave.serialize import to_document
 from tests.conformance import CORPUS
+from tests.markdown_fences import fenced_blocks
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACTS = (ROOT / "CONTRACTS.md").read_text(encoding="utf-8")
@@ -460,8 +461,10 @@ def test_the_relies_on_list_names_nothing_that_is_not_a_row():
 
 def unasserted_block() -> set[str]:
     start = CONTRACTS.index("### The eleven fields nothing asserts")
-    block = CONTRACTS[CONTRACTS.index("```text", start) + len("```text") :]
-    return set(block[: block.index("```")].split())
+    block = next(
+        block for block in fenced_blocks(CONTRACTS[start:]) if block.info == "text"
+    )
+    return set(block.body.split())
 
 
 def test_the_reported_unasserted_fields_are_the_rows_with_no_assertion():

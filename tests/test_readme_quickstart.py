@@ -27,6 +27,7 @@ import sys
 
 import pytest
 
+from tests.markdown_fences import fenced_blocks
 from tests.readme_quickstart import (
     README,
     ROOT,
@@ -135,12 +136,8 @@ def test_the_checkout_path_matches_the_projects_own_metadata():
     import tomllib
 
     readme = README.read_text(encoding="utf-8")
-    block = readme[readme.index("From a checkout:") :]
-    commands = [
-        line[2:]
-        for line in block[: block.index("```", block.index("```") + 3)].splitlines()
-        if line.startswith("$ ")
-    ]
+    block = fenced_blocks(readme[readme.index("From a checkout:") :])[0]
+    commands = [line[2:] for line in block.body.splitlines() if line.startswith("$ ")]
     assert len(commands) == 3, f"the checkout path is no longer three steps: {commands}"
 
     clone, change, install = commands
