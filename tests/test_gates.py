@@ -34,13 +34,26 @@ PLANTED_UNSAFE = [
     ("mod = __import__(name)", "__import__"),
     ("mod = builtins.__import__(name)", "builtins.__import__"),
     ("from builtins import __import__", "builtins.__import__"),
-    # An import by a computed name is an import (R-3): every way to reach
-    # `importlib.import_module`, the receiver and the alias notwithstanding.
+    # An import by a computed name is an import (R-3): every way the gate
+    # sees to reach `importlib.import_module`, `importlib.__import__` or
+    # `builtins.__import__` -- called, referred to, imported under an alias,
+    # or taken by `getattr` -- whatever the receiver. Not every way there is:
+    # a name bound by assignment is not chased (the limit is pinned below,
+    # test_the_dynamic_import_ban_does_not_chase_a_name_bound_by_assignment).
     ("mod = importlib.import_module(name)", "importlib.import_module"),
     ("mod = il.import_module(name)", "il.import_module"),
     ("mod = import_module(name)", "import_module"),
     ("from importlib import import_module", "importlib.import_module"),
     ("from importlib import import_module as load", "importlib.import_module"),
+    # The scoped review's probes (2026-10-17b, R-3).
+    ("load = importlib.import_module", "importlib.import_module"),
+    ("load = __import__", "__import__"),
+    ('mod = getattr(importlib, "import_module")(name)', "getattr(importlib"),
+    ("mod = getattr(builtins, member)(name)", "getattr(builtins"),
+    ("import importlib as il\nload = getattr(il, member)", "getattr(il"),
+    ('load = getattr(module, "__import__")', "'__import__'"),
+    ("from importlib import __import__ as imp", "importlib.__import__"),
+    ("mod = importlib.__import__(name)", "importlib.__import__"),
     ("os.system(payload)", "os.system"),
     ("value = yaml.load(payload)", "yaml.load"),
 ]
@@ -87,9 +100,22 @@ def test_safety_gates_pass_on_things_that_merely_look_alike():
             "import importlib.metadata",
             'version = importlib.metadata.version("pytest")',
             "import_modules = sorted(names)",
+            'name = getattr(node, "attr", None)',
+            'meta = getattr(importlib.metadata, "version")',
         ]
     )
     assert gates.check_source("innocent.py", innocent, gates.SAFETY_RULES) == []
+
+
+def test_the_dynamic_import_ban_does_not_chase_a_name_bound_by_assignment():
+    # The gate is syntactic: it reads names, not values. A module bound to a
+    # new name by assignment, then searched by a computed member, spells no
+    # banned name, and the gate cannot see it. This pins the limit that
+    # `tests/gates.py` states, so that the claim and the gate move together:
+    # if a change closes it, this test goes red and the comment changes with
+    # it (cold review of 2026-10-17b, R-3).
+    unchased = "m = importlib\nload = getattr(m, member)\nmod = load(name)"
+    assert gates.check_source("unchased.py", unchased, [gates.no_unsafe]) == []
 
 
 def test_package_has_no_network_no_unsafe_and_no_hash():

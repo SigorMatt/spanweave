@@ -592,6 +592,36 @@ def test_the_extra_s_module_may_import_the_extra_inside_a_function():
     assert found == []
 
 
+# The module prefix each `[otlp]` distribution provides. A distribution's
+# name is not its import name, so this one step is written down rather than
+# derived; everything else is read from `pyproject.toml`.
+OTLP_IMPORT_PREFIX = {
+    "protobuf": "google.protobuf",
+    "opentelemetry-proto": "opentelemetry.proto",
+}
+
+
+def test_the_extra_s_allowance_is_exactly_what_pyproject_declares():
+    """The allowance is the `[otlp]` extra's two prefixes, and nothing more.
+
+    The other allowance tests name the prefixes they refuse, so any prefix
+    they do not name could be added to `OPTIONAL_EXTRA_PACKAGES` with the
+    suite green -- `google._upb` among them, which the installed `protobuf`
+    also ships and the reader does not import (cold review of 2026-10-17b,
+    R-4). Held to the declaration, the allowance cannot grow without the
+    extra growing first.
+    """
+    declared = sorted(_otlp_floors())
+    assert declared == sorted(OTLP_IMPORT_PREFIX), (
+        f"[otlp] declares {declared}; give each its import prefix here"
+    )
+    derived = sorted(OTLP_IMPORT_PREFIX[name] for name in declared)
+    assert sorted(gates.OPTIONAL_EXTRA_PACKAGES) == derived
+    assert len(gates.OPTIONAL_EXTRA_PACKAGES) == len(derived)
+    assert derived == ["google.protobuf", "opentelemetry.proto"]
+    assert "google._upb" not in gates.OPTIONAL_EXTRA_PACKAGES
+
+
 @pytest.mark.parametrize("imported", ["google.protobuf", "opentelemetry.proto"])
 def test_the_extra_s_allowance_includes_the_prefix_itself(imported):
     source = f"def read(data):\n    import {imported}\n"
@@ -610,6 +640,7 @@ def test_the_extra_s_allowance_includes_the_prefix_itself(imported):
         "import google.protobufx",
         "from opentelemetry.protocol import wire",
         "from google import protobuf",
+        "from google._upb import _message",
     ],
     ids=[
         "google-outside-protobuf",
@@ -618,6 +649,7 @@ def test_the_extra_s_allowance_includes_the_prefix_itself(imported):
         "protobuf-prefix-without-the-dot",
         "proto-prefix-without-the-dot",
         "the-google-namespace-itself",
+        "protobuf-s-upb-backend",
     ],
 )
 def test_the_extra_s_allowance_is_the_extra_not_its_top_level_name(statement):

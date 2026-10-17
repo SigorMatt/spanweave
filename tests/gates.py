@@ -64,14 +64,30 @@ UNSAFE_CALLS = ("eval", "exec", "os.system", "yaml.load")
 
 # An import by a computed name is an import, and the gates that read import
 # statements -- zero-dependencies above all -- cannot see one. So both ways of
-# making one are banned as calls, matched on the called name's LAST part so
-# that the receiver does not matter (`__import__`, `builtins.__import__`,
-# `importlib.import_module`, `il.import_module` after `import importlib as
-# il`, a bare `import_module` after `from importlib import import_module`);
-# and taking `import_module` out of `importlib` is banned as an import, so an
-# alias (`from importlib import import_module as load`) cannot hide the call.
+# making one are banned, matched on the name's LAST part so that the receiver
+# does not matter:
+# - as a call (`__import__`, `builtins.__import__`, `importlib.import_module`,
+#   `il.import_module` after `import importlib as il`, a bare `import_module`
+#   after `from importlib import import_module`);
+# - as a reference, called or not (`load = importlib.import_module`, `f =
+#   __import__`), since a reference is how a call gets a new name;
+# - as an import of the member (`from importlib import import_module as
+#   load`, `from importlib import __import__`), so an alias cannot hide it;
+# - through `getattr` on `importlib` or `builtins` (or an `import ... as`
+#   alias of either), or with a member's name as a literal string, whatever
+#   the receiver.
+# The gate is syntactic, and this is its limit, stated rather than claimed
+# away: a name bound by assignment is not chased. `m = importlib` and then
+# `getattr(m, name)` gets past it, as does any indirection that never spells
+# a member's name (`vars(importlib)[name]`). Closing that needs data flow,
+# which an AST walk does not have (cold review of 2026-10-17b, R-3).
 DYNAMIC_IMPORT_CALLS = ("__import__", "import_module")
-DYNAMIC_IMPORT_MEMBERS = ("importlib.import_module", "builtins.__import__")
+DYNAMIC_IMPORT_MEMBERS = (
+    "importlib.import_module",
+    "importlib.__import__",
+    "builtins.__import__",
+)
+DYNAMIC_IMPORT_MODULES = ("importlib", "builtins")
 
 
 def _dotted_name(node: ast.expr) -> str | None:
@@ -119,6 +135,69 @@ def no_network(path: str, source: str, tree: ast.AST) -> list[Violation]:
     return found
 
 
+def _dynamic_import_references(path: str, tree: ast.AST) -> list[Violation]:
+    """A dynamic-import member named but not called, or taken by `getattr`.
+
+    Calls are `no_unsafe`'s own loop; this is everything else that spells the
+    member (see `DYNAMIC_IMPORT_CALLS`). A name bound by assignment is not
+    chased: the check reads names, not values.
+    """
+    modules = set(DYNAMIC_IMPORT_MODULES)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in DYNAMIC_IMPORT_MODULES and alias.asname:
+                    modules.add(alias.asname)
+    called = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    found = []
+    for node in ast.walk(tree):
+        if id(node) in called:
+            continue
+        if isinstance(node, ast.Attribute) and node.attr in DYNAMIC_IMPORT_CALLS:
+            spelled = _dotted_name(node) or node.attr
+        elif isinstance(node, ast.Name) and node.id == "__import__":
+            spelled = node.id
+        else:
+            continue
+        found.append(
+            Violation(
+                "no-unsafe",
+                path,
+                node.lineno,
+                f"refers to {spelled}; a reference is how an import by a "
+                f"computed name gets a new name (SECURITY.md)",
+            )
+        )
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and node.args
+        ):
+            continue
+        receiver = _dotted_name(node.args[0])
+        member = node.args[1] if len(node.args) > 1 else None
+        literal = (
+            member.value
+            if isinstance(member, ast.Constant) and isinstance(member.value, str)
+            else None
+        )
+        if receiver in modules or literal in DYNAMIC_IMPORT_CALLS:
+            shown = repr(literal) if literal is not None else "..."
+            found.append(
+                Violation(
+                    "no-unsafe",
+                    path,
+                    node.lineno,
+                    f"calls getattr({receiver or '...'}, {shown}); an import by a "
+                    f"computed name is one no import gate can read "
+                    f"(SECURITY.md)",
+                )
+            )
+    return found
+
+
 def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
     found = []
     for imported, line in _imported_modules(tree):
@@ -144,6 +223,7 @@ def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
                     f"one no import gate can read (SECURITY.md)",
                 )
             )
+    found.extend(_dynamic_import_references(path, tree))
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
