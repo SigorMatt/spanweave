@@ -646,6 +646,8 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
     assert listed, "the README's Documents table parsed to nothing"
     # A plan is deleted at its series' close, so the table -- a durable map
     # -- does not list it: it is skipped on disk, and a row for it is a ghost.
+    # The skip is the one name, case-sensitive, and no pattern
+    # (`test_the_documents_table_skip_is_the_plan_at_the_root_and_nothing_else`).
     on_disk = {path.name for path in ROOT.glob("*.md")} - {"README.md", PLAN_FILE}
     assert listed == on_disk, (
         "the README's Documents table has drifted from the repository root.\n"
@@ -682,8 +684,8 @@ def durable_documents() -> list[pathlib.Path]:
     `WORKPLAN.md`, a series' execution state, is **in** whenever it exists.
     Until 2026-10-17 it was excluded here by name -- re-added by each series'
     opener, removed at each close -- and that took it out of every guard that
-    iterates this list (make targets, review and decision citations, retired
-    figures) when only two could not hold it (cold review of 2026-10-17,
+    iterates this list (make targets, review, decision and sha citations,
+    retired figures) when only two could not hold it (cold review of 2026-10-17,
     R-10). Those two skip `PLAN_FILE` themselves, with the reason beside the
     skip; every other guard reads the plan as it reads `SPEC.md`. A series'
     opener needs no accommodation here.
@@ -707,6 +709,8 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
         # A plan cites `patches/` by design -- it is the series' scratch drop,
         # where its cold reviews land -- and the plan is deleted at close, so
         # nothing durable is left depending on what it points at there.
+        # Exactly `WORKPLAN.md` at the root, case-sensitive; a near name is read
+        # (`test_the_scratch_path_skip_is_the_plan_at_the_root_and_nothing_else`).
         if path.relative_to(ROOT) == pathlib.Path(PLAN_FILE):
             continue
         for span in code_spans(path.read_text(encoding="utf-8")):
@@ -727,6 +731,18 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
 # The repository carries no `WORKPLAN.md` between series, so these tests plant
 # one under a redirected `ROOT` -- a scratch root holding the plan beside what
 # the guard reads -- and never in the checkout.
+#
+# Every guard that iterates `durable_documents()` has a planted plan here that
+# it must turn red: make targets, review citations, decision citations, shas,
+# and the three retired-figure guards (the working-tree census, the corpus
+# figures, a retired figure asserted live). Until the cold review of
+# 2026-10-17 (scoped, R-6) only the make-target guard had one, so a by-name
+# skip of the plan in any of the others left the suite green. The two skips
+# are pinned the other way: each matches exactly `WORKPLAN.md` at the root,
+# case-sensitive, and a near name -- another case, a suffix, a subdirectory,
+# a glob -- is still read. Guards that iterate `documents()` instead (an
+# index install, a CLI subcommand, an example path) read the plan through a
+# list that names no plan, and are not pinned here.
 
 
 def plant_plan(tmp_path, monkeypatch, plan: str, *copied: str) -> None:
@@ -777,6 +793,103 @@ def test_a_plan_at_the_root_is_not_owed_a_documents_row(tmp_path, monkeypatch):
     )
     with pytest.raises(AssertionError, match=r"listed but absent: \['WORKPLAN\.md'\]"):
         test_the_readme_document_table_lists_every_document_and_no_ghosts()
+
+
+def plant_near_plan(tmp_path, monkeypatch, relative: str, text: str) -> None:
+    """A scratch `ROOT` holding one file at `relative`, a near name of the
+    plan, and no plan: on a case-insensitive filesystem `workplan.md` and
+    `WORKPLAN.md` would be one file, so the near name is planted alone."""
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+
+#: Names a by-name skip of the plan could be loosened to match: another case,
+#: a suffix, a subdirectory, a glob's `*PLAN*`. Each is a document, not the plan.
+NEAR_PLAN_NAMES = ["workplan.md", "OLD-WORKPLAN.md", "docs/WORKPLAN.md", "PLANNING.md"]
+
+
+@pytest.mark.parametrize("relative", NEAR_PLAN_NAMES)
+def test_the_scratch_path_skip_is_the_plan_at_the_root_and_nothing_else(
+    relative, tmp_path, monkeypatch
+):
+    plant_near_plan(
+        tmp_path, monkeypatch, relative, "The review lands at `patches/REVIEW-x.md`.\n"
+    )
+    with pytest.raises(
+        AssertionError, match=rf"'patches/REVIEW-x\.md': \{{'{re.escape(relative)}'\}}"
+    ):
+        test_a_durable_document_cites_no_untracked_scratch_path()
+
+
+@pytest.mark.parametrize("name", [name for name in NEAR_PLAN_NAMES if "/" not in name])
+def test_the_documents_table_skip_is_the_plan_at_the_root_and_nothing_else(
+    name, tmp_path, monkeypatch
+):
+    # The table reads the root only, so a subdirectory is no near name here.
+    listed = sorted(path.name for path in ROOT.glob("*.md"))
+    for copied in listed:
+        (tmp_path / copied).write_bytes((ROOT / copied).read_bytes())
+    plant_near_plan(tmp_path, monkeypatch, name, "# not the plan\n")
+    with pytest.raises(
+        AssertionError, match=rf"present but unlisted: \['{re.escape(name)}'\]"
+    ):
+        test_the_readme_document_table_lists_every_document_and_no_ghosts()
+
+
+def test_a_plan_citing_a_review_that_is_not_in_the_tree_is_red(tmp_path, monkeypatch):
+    plant_plan(tmp_path, monkeypatch, "The review is `reviews/2099-01-01-x.md`.\n")
+    with pytest.raises(
+        AssertionError, match=r"'reviews/2099-01-01-x\.md': \['WORKPLAN\.md'\]"
+    ):
+        test_every_review_a_document_cites_is_in_the_repository()
+
+
+def test_a_plan_citing_a_decision_that_is_no_row_is_red(tmp_path, monkeypatch):
+    # Split, so that this file, which the resolver reads, does not carry it.
+    plant_plan(tmp_path, monkeypatch, "As (decisions log " + "D99) says.\n", "TASKS.md")
+    assert tmp_path / PLAN_FILE in citing_files()
+    with pytest.raises(
+        AssertionError, match=r"\{'WORKPLAN\.md': \[\"'decisions log D\d+' cites"
+    ):
+        test_every_decision_citation_names_a_row_by_its_id()
+
+
+def test_a_plan_citing_a_sha_that_is_no_commit_is_red(tmp_path, monkeypatch):
+    # The scratch root is an empty repository, so no sha resolves in it; the
+    # guard's floor (more than 100 citations) is met by the plan alone.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    sha = "e" * 39 + "1"
+    plant_plan(tmp_path, monkeypatch, "".join(f"Commit `{sha}`.\n" for _ in range(101)))
+    with pytest.raises(AssertionError, match=rf"'WORKPLAN\.md': \['line 1: {sha}'"):
+        test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository()
+
+
+def test_a_plan_stating_the_working_tree_census_is_red(tmp_path, monkeypatch):
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 57 files / 177 records.\n")
+    with pytest.raises(AssertionError, match=r"WORKPLAN\.md: The corpus holds 57"):
+        test_no_durable_document_states_the_working_tree_census_as_a_fact()
+
+
+def test_a_plan_stating_a_corpus_figure_the_census_does_not_count_is_red(
+    tmp_path, monkeypatch
+):
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 99 files, 999 records.\n")
+    with pytest.raises(
+        AssertionError, match=r"WORKPLAN\.md states corpus files / records as 99, 999"
+    ):
+        test_every_corpus_figure_a_durable_document_asserts_is_the_census()
+
+
+def test_a_plan_asserting_a_retired_figure_live_is_red(tmp_path, monkeypatch):
+    assert (52, 151) in RETIRED_CENSUS_FIGURES["corpus files / records"]
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 52 files, 151 records.\n")
+    with pytest.raises(
+        AssertionError,
+        match=r"WORKPLAN\.md states corpus files / records as 52, 151, a retired",
+    ):
+        test_no_durable_document_asserts_a_retired_figure_in_a_live_sentence()
 
 
 def test_every_review_a_document_cites_is_in_the_repository():
