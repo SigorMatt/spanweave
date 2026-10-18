@@ -167,23 +167,149 @@ def test_the_collector_differs_from_message_to_dict_in_exactly_two_places():
         assert _message_to_dict(raw, use_integers_for_enums=True) != want, run
 
 
-def _objects(value: Any) -> list[dict[str, Any]]:
-    """Every object in a parsed document, outermost first."""
+def _levels(value: Any, at: str = "") -> list[tuple[str, dict[str, Any]]]:
+    """Every object in a parsed document, outermost first, each with its
+    level: the keys on the way to it, a list's items one level whatever their
+    index (``resourceSpans[].scopeSpans[].spans[]``). The document's is ``""``."""
     if isinstance(value, dict):
-        return [value, *(o for v in value.values() for o in _objects(v))]
+        inner = [
+            found
+            for key, item in value.items()
+            for found in _levels(item, f"{at}.{key}" if at else key)
+        ]
+        return [(at, value), *inner]
     if isinstance(value, list):
-        return [o for v in value for o in _objects(v)]
+        return [found for item in value for found in _levels(item, f"{at}[]")]
     return []
+
+
+def _what_no_pair_carries(pb2: ModuleType) -> Any:
+    """One span carrying, beside what some pairs do -- an event, a status with
+    a message, a scope entry's `schemaUrl` -- what none does (the scoped
+    review of 2026-10-18, R-9): a link with a `traceState` and attributes, a
+    resource entry's `schemaUrl`, and attributes on the scope; and an array
+    and a kvlist among its attributes, which no pair carries either (the zoo
+    guard below)."""
+    from opentelemetry.proto.common.v1 import common_pb2
+    from opentelemetry.proto.resource.v1 import resource_pb2
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    def attribute(key: str, **value: Any) -> Any:
+        return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(**value))
+
+    array = common_pb2.ArrayValue(values=[common_pb2.AnyValue(int_value=1)])
+    kvlist = common_pb2.KeyValueList(values=[attribute("t", bool_value=True)])
+    span = trace_pb2.Span(
+        trace_id=TRACE,
+        span_id=SPAN,
+        parent_span_id=bytes([0xC0] * 8),
+        name="s",
+        kind=3,
+        start_time_unix_nano=1,
+        end_time_unix_nano=2,
+        attributes=[
+            attribute("s", string_value="v"),
+            attribute("a", array_value=array),
+            attribute("k", kvlist_value=kvlist),
+        ],
+        events=[
+            trace_pb2.Span.Event(
+                time_unix_nano=1, name="e", attributes=[attribute("e", int_value=2)]
+            )
+        ],
+        links=[
+            trace_pb2.Span.Link(
+                trace_id=bytes([0xAB] * 16),
+                span_id=bytes([0xC1] * 8),
+                trace_state="k=v",
+                attributes=[attribute("l", bool_value=True)],
+            )
+        ],
+        status=trace_pb2.Status(message="m", code=2),
+    )
+    scope = common_pb2.InstrumentationScope(
+        name="x", version="1", attributes=[attribute("c", string_value="v")]
+    )
+    return pb2.ExportTraceServiceRequest(
+        resource_spans=[
+            trace_pb2.ResourceSpans(
+                resource=resource_pb2.Resource(
+                    attributes=[attribute("service.name", string_value="r")]
+                ),
+                scope_spans=[
+                    trace_pb2.ScopeSpans(
+                        scope=scope, spans=[span], schema_url="https://example/s"
+                    )
+                ],
+                schema_url="https://example/r",
+            )
+        ]
+    )
+
+
+_SPAN_LEVEL = "resourceSpans[].scopeSpans[].spans[]"
+
+#: Every level of `_what_no_pair_carries`'s request, and whether
+#: `MessageToDict` -- the runtime, not the library -- writes some object's keys
+#: there out of sorted order. Where it does, field-number order is not
+#: alphabetical: `resource`, `scopeSpans`, `schemaUrl`; `scope`, `spans`,
+#: `schemaUrl`; `name`, `version`, `attributes`; a span's `traceId` before its
+#: `spanId`; `timeUnixNano`, `name`; `traceId`, `spanId`, `traceState`;
+#: `message`, `code`. Where it does not, the runtime's order is sorted already
+#: -- the document's one key, a resource's `attributes`, each attribute's
+#: `key` and `value`, each AnyValue's one key (a oneof), an array's or a
+#: kvlist's `values` -- so sorting there changes nothing, and the request
+#: cannot show whether the writer sorts that level. Nor could any other
+#: request at the document, a resource, an AnyValue, an array or a kvlist:
+#: there field-number order is alphabetical, or the object has one key. An
+#: attribute could be written unsorted only by stating a `keyStrindex` (after
+#: `value`), which the extra's floor, opentelemetry-proto 1.28, does not define.
+EVERY_LEVEL = {
+    "": False,
+    "resourceSpans[]": True,
+    "resourceSpans[].resource": False,
+    "resourceSpans[].resource.attributes[]": False,
+    "resourceSpans[].resource.attributes[].value": False,
+    "resourceSpans[].scopeSpans[]": True,
+    "resourceSpans[].scopeSpans[].scope": True,
+    "resourceSpans[].scopeSpans[].scope.attributes[]": False,
+    "resourceSpans[].scopeSpans[].scope.attributes[].value": False,
+    _SPAN_LEVEL: True,
+    f"{_SPAN_LEVEL}.attributes[]": False,
+    f"{_SPAN_LEVEL}.attributes[].value": False,
+    f"{_SPAN_LEVEL}.attributes[].value.arrayValue": False,
+    f"{_SPAN_LEVEL}.attributes[].value.arrayValue.values[]": False,
+    f"{_SPAN_LEVEL}.attributes[].value.kvlistValue": False,
+    f"{_SPAN_LEVEL}.attributes[].value.kvlistValue.values[]": False,
+    f"{_SPAN_LEVEL}.attributes[].value.kvlistValue.values[].value": False,
+    f"{_SPAN_LEVEL}.events[]": True,
+    f"{_SPAN_LEVEL}.events[].attributes[]": False,
+    f"{_SPAN_LEVEL}.events[].attributes[].value": False,
+    f"{_SPAN_LEVEL}.links[]": True,
+    f"{_SPAN_LEVEL}.links[].attributes[]": False,
+    f"{_SPAN_LEVEL}.links[].attributes[].value": False,
+    f"{_SPAN_LEVEL}.status": True,
+}
 
 
 def test_the_document_read_back_is_written_with_sorted_keys(monkeypatch):
     """The text `read_protobuf` hands `read_records` is written with sorted
     keys at every level, as the graph and the record digest are, and not in
     the order the runtime writes a message's fields in (Qodo's review of
-    PR #6, finding 4). Nothing reads that order, so no other test can see it."""
+    PR #6, finding 4). Nothing reads that order, so no other test can see it.
+
+    Every object in the text is walked -- the document, each `resourceSpans[]`
+    entry and its resource, each scope entry and its scope, each span, its
+    events, links and status, and every attribute and AnyValue -- on the 29
+    pairs and on a request carrying the levels the pairs lack (the scoped
+    review of 2026-10-18, R-9). Where the runtime's own order is not sorted
+    is read from `MessageToDict` on that request, level by level, and not from
+    the library: the test cannot pass by accident of the input, and holds
+    wherever in the library the sorting is done."""
     pb2 = _pb2()
+    from google.protobuf import json_format
+
     from spanweave import otlp_protobuf
-    from spanweave.otlp_protobuf import _rendered
 
     texts: list[bytes] = []
 
@@ -191,19 +317,35 @@ def test_the_document_read_back_is_written_with_sorted_keys(monkeypatch):
         texts.append(bytes(data))
         return spanweave.read_records(data)
 
-    monkeypatch.setattr(otlp_protobuf, "read_records", read_back)
-    for run, _, raw_body in PAIRS:
+    def read_back_by(body: bytes) -> Any:
         texts.clear()
-        spanweave.read_protobuf(raw_body.read_bytes())
+        spanweave.read_protobuf(body)
         (text,) = texts
         # `json.loads` keeps the order the text wrote the keys in.
-        for entry in _objects(json.loads(text)):
-            assert list(entry) == sorted(entry), run
-    # ... which is the writer's doing: the runtime writes a span's fields in
-    # field-number order, and that is not sorted.
-    request = pb2.ExportTraceServiceRequest.FromString(_zoo_raw())
-    span = _spans(_rendered(request))[0]
-    assert list(span) != sorted(span)
+        return json.loads(text)
+
+    monkeypatch.setattr(otlp_protobuf, "read_records", read_back)
+    request = _what_no_pair_carries(pb2)
+    documents = [
+        (run, read_back_by(raw_body.read_bytes())) for run, _, raw_body in PAIRS
+    ]
+    documents.append(
+        ("the hand-made request", read_back_by(request.SerializeToString()))
+    )
+    for run, document in documents:
+        for level, entry in _levels(document):
+            assert list(entry) == sorted(entry), f"{run}: {level or 'the document'}"
+
+    # The hand-made request's text has every level the table names; the
+    # runtime writes the same levels, and at each the table marks, and only
+    # there, its own order is not sorted.
+    _, hand_made = documents[-1]
+    assert {level for level, _ in _levels(hand_made)} == set(EVERY_LEVEL)
+    runtime = json_format.MessageToDict(request, use_integers_for_enums=True)
+    unsorted: dict[str, bool] = {}
+    for level, entry in _levels(runtime):
+        unsorted[level] = unsorted.get(level, False) or list(entry) != sorted(entry)
+    assert unsorted == EVERY_LEVEL
 
 
 # --- Where no pair can show anything (`OPEN_QUESTIONS.md` §23) -----------------
