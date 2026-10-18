@@ -2367,6 +2367,18 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **`read_protobuf` omits an all-zero id only at the length the schema gives
+  it** (the scoped review of 2026-10-18, R-1, R-2). The rule added for Qodo's
+  finding 6 omitted an id whose bytes were all zero at any length, so an
+  all-zero id of 4 or 17 bytes, a 16-byte span id or an 8-byte trace id was
+  dropped with no diagnostic, while a non-zero id of the same length was
+  carried. The Collector's rule is for the lengths it holds ids at. An id is
+  now omitted only when it has its length -- 16 bytes for a `traceId`, 8 for
+  a `spanId` or `parentSpanId`, a span's or a link's -- **and** every byte is
+  zero; an id of any other length, all zero or not, is hex as stated, as the
+  JSON path carries a hex string of any length (`SPEC.md` §7). The tests now
+  hold the one non-zero byte at every position of both widths. No pair
+  moves: no zoo body carries an all-zero id or one of another length.
 - **A structured payload's text is written with sorted keys** (the scoped
   review of 2026-10-18, R-8). An exporter that carries nested attributes
   hands an adapter a payload that was never a string, and both adapters

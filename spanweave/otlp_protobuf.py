@@ -18,9 +18,12 @@ rather than base64, and enums (`kind`, `status.code`) are their numbers rather
 than their names. Everything else already agrees: 64-bit integers as decimal
 strings, defaults omitted. A link's ids are hex by the same rule, which is the
 OTLP/JSON specification's and not a pair's -- no pair carries a link (`SPEC.md`
-§7 lists what the pairs do not cover, and what holds each instead). An id
+§7 lists what the pairs do not cover, and what holds each instead). An id of
+the length the schema gives it -- 16 bytes for a trace id, 8 for a span id --
 whose bytes are all zero, a span's or a link's, is omitted as an empty one is,
 because the Collector treats it as empty -- its rule, and not a pair's either.
+An id of any other length is hex as stated, all zero or not: the Collector
+holds no such id, and the JSON path carries a hex string of any length.
 
 **Where the pairs are silent, the container's rules decide** (`OPEN_QUESTIONS.md`
 §23). A body that will not parse is one ``malformed_record`` with no
@@ -60,6 +63,11 @@ from spanweave.read import Records, _as_bytes, read_records
 #: runtime writes base64 (`SPEC.md` §7) -- a span's, and a link's.
 _SPAN_IDS = ("traceId", "spanId", "parentSpanId")
 _LINK_IDS = ("traceId", "spanId")
+
+#: The length in bytes the schema gives each of those ids, a span's or a
+#: link's alike: a trace id is 16 bytes, a span id 8 (`trace.proto`). Only an
+#: id of its own length can be the Collector's empty one (`_hex`).
+_ID_LENGTH = {"traceId": 16, "spanId": 8, "parentSpanId": 8}
 
 #: The wire type each field type is written with, by the protobuf encoding's
 #: rules, keyed by ``FieldDescriptor.type`` -- the numbers of
@@ -189,20 +197,26 @@ def _hex(entry: dict[str, Any], keys: tuple[str, ...]) -> None:
     """Each id ``MessageToDict`` wrote in base64, as the hex the Collector writes.
 
     Proto3 omits an empty ``bytes`` field, so an id the span does not state
-    stays absent, as it does in the Collector's JSON. **An id whose bytes are
-    all zero is omitted too**: the Collector holds ids as fixed-size arrays
-    and treats the all-zero one as empty, so its JSON leaves it out, and a
-    root span whose exporter wrote eight zero bytes for its parent is a root
-    there (`SPEC.md` §7 -- the Collector's rule, not a pair). An id with any
-    byte not zero is hex, as every other.
+    stays absent, as it does in the Collector's JSON. **An id of its own
+    length whose bytes are all zero is omitted too**: the Collector holds a
+    trace id as a 16-byte array and a span id as an 8-byte one, and treats
+    the all-zero one as empty, so its JSON leaves it out, and a root span
+    whose exporter wrote eight zero bytes for its parent is a root there
+    (`SPEC.md` §7 -- the Collector's rule, not a pair). It takes both: an id
+    with any byte not zero is hex, as every other, wherever that byte is;
+    and an id of any other length is hex as stated, all zero or not, as the
+    JSON path carries a hex string of any length. The Collector would refuse
+    a request carrying one rather than write JSON for it (not verified --
+    spec, not pair), so it has no rule here to follow, and the reader refuses
+    no body for one id.
     """
     for key in keys:
         if key in entry:
             raw = _base64_bytes(entry[key])
-            if any(raw):
-                entry[key] = raw.hex()
-            else:
+            if len(raw) == _ID_LENGTH[key] and not any(raw):
                 del entry[key]
+            else:
+                entry[key] = raw.hex()
 
 
 def _base64_bytes(value: str) -> bytes:

@@ -2195,7 +2195,7 @@ declares reaches `0.5`.
     | a link's `traceId`, `spanId` as lowercase hex | no span has a link | a hand-made request — spec, not pair |
     | `bytesValue` as standard base64; `arrayValue` as `{"values": [AnyValue…]}`; `kvlistValue` as `{"values": [{"key", "value"}…]}` | none | a hand-made request — spec, not pair |
     | `kind` 0, no `status` on the wire, `flags` 0: all three omitted | none | a hand-made request — spec, not pair |
-    | a `traceId`, `spanId` or `parentSpanId`, a span's or a link's, whose bytes are all zero: omitted, as an empty one is | none | a hand-made request (below) — the Collector's rule, not a pair |
+    | a `traceId` of 16 bytes, or a `spanId` or `parentSpanId` of 8 — the length the schema gives it — a span's or a link's, whose bytes are all zero: omitted, as an empty one is; an id of any other length, all zero or not, is hex as stated | none | a hand-made request (below) — the Collector's rule, not a pair; at another length, spec, not pair |
     | a field the schema does not define | none | a hand-made request (below) |
     | a field the schema defines, with another wire type | none | a hand-made request (below) |
     | `doubleValue` | none | a hand-made request (below) — spec, not pair |
@@ -2206,22 +2206,33 @@ declares reaches `0.5`.
     `status` reads as none. Every unset `status` in the zoo was sent as an
     empty message, so what a Collector writes for one absent from the wire is
     not shown by any pair.
-  - **An all-zero id is no id, as the Collector has it.** The Collector holds
-    trace and span ids as fixed-size arrays and treats the all-zero value as
-    empty, so its JSON for a body whose `parentSpanId` is eight zero bytes
-    omits the field, exactly as it omits an empty one. The rendering does the
-    same for every `traceId`, `spanId` and `parentSpanId`, a span's or a
-    link's, because the protobuf path yields what the JSON path yields for the
-    Collector's JSON of the same export: a root span whose exporter wrote zero
-    bytes for its parent is a root, with no `orphan_parent`, and its records
-    are those of the same request with the field unset; an all-zero `traceId`
-    reads as an unset one, which is no trace id (`missing_trace_id`, §3.7).
-    An id with any byte not zero is hex, as every other. No pair shows it —
-    the zoo's exporter leaves an unset id unset — so the row is the
-    Collector's rule, not a pair's. **The JSON path is untouched:** a JSON
-    record that *states* `"0000000000000000"` states an id there (§4.0;
-    `spanweave.seam`), and the two encodings differ on this only because the
-    Collector never writes one.
+  - **An all-zero id of the right length is no id, as the Collector has
+    it.** The Collector holds a trace id as a 16-byte array and a span id as
+    an 8-byte one, and treats the all-zero value as empty, so its JSON for a
+    body whose `parentSpanId` is eight zero bytes omits the field, exactly as
+    it omits an empty one. The rendering does the same for every `traceId` of
+    16 bytes and every `spanId` and `parentSpanId` of 8, a span's or a
+    link's, because the protobuf path yields what the JSON path yields for
+    the Collector's JSON of the same export: a root span whose exporter wrote
+    zero bytes for its parent is a root, with no `orphan_parent`, and its
+    records are those of the same request with the field unset; an all-zero
+    `traceId` reads as an unset one, which is no trace id
+    (`missing_trace_id`, §3.7). **An id is omitted only when both hold: it
+    has the length the schema gives it, and every byte is zero.** An id with
+    any byte not zero is hex, as every other, wherever in the id that byte
+    is. An id of any other length is carried as stated, all zero or not:
+    hex, as the JSON path carries a hex string of any length. The schema
+    calls such an id invalid, and the Collector would refuse the request
+    rather than write JSON for it (not verified here — spec, not pair), so
+    there is no Collector JSON for the rendering to match; omitting the id
+    would be a rule of the reader's own and a silent discard (`CLAUDE.md` 2),
+    and the reader does not refuse a body for one id. No pair shows any of
+    it — the zoo's exporter leaves an unset id unset, and states every id at
+    its length — so the row is the Collector's rule at the schema's lengths
+    and the spec's at any other, and not a pair's. **The JSON path is
+    untouched:** a JSON record that *states* `"0000000000000000"` states an
+    id there (§4.0; `spanweave.seam`), and the two encodings differ on this
+    only because the Collector never writes one.
   - **A body that will not parse is one `malformed_record`**, `skipped_records`
     1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
     (§3.7): JSON has no way to write the bytes, and carrying them in some

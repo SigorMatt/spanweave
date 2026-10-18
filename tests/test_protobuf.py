@@ -772,6 +772,7 @@ def test_an_all_zero_trace_id_is_no_trace_id():
     assert spanweave.read_records(json.dumps(document, sort_keys=True).encode()) == zero
 
 
+#: Each id the rendering hexes, with the length in bytes the schema gives it.
 ID_FIELDS = {
     "span.trace_id": ("traceId", 16),
     "span.span_id": ("spanId", 8),
@@ -780,11 +781,28 @@ ID_FIELDS = {
     "link.span_id": ("spanId", 8),
 }
 
+#: Where the JSON reader puts each id in a record (`SPEC.md` §7).
+RECORD_KEYS = {"traceId": "trace_id", "spanId": "span_id", "parentSpanId": "parent_id"}
+
+
+def _owner(entry: dict[str, Any], field: str) -> dict[str, Any]:
+    """The span, or its one link, that ``field`` is on: in a rendered span or
+    in a record, which nest a link alike."""
+    return entry["links"][0] if field.startswith("link.") else entry
+
+
+def _stated(read: spanweave.Records, field: str) -> Any:
+    """The id ``field`` names, as the one record ``read`` holds states it."""
+    key, _ = ID_FIELDS[field]
+    (record,) = read.records
+    return _owner(record, field).get(RECORD_KEYS[key])
+
 
 @pytest.mark.parametrize("field", list(ID_FIELDS))
 def test_an_all_zero_id_reads_as_an_unset_one(field):
-    """Every id the rendering hexes, a span's and a link's: all zero is omitted,
-    as an empty one is, and nothing else in the request moves."""
+    """Every id the rendering hexes, a span's and a link's: all zero at the
+    length the schema gives it is omitted, as an empty one is, and nothing
+    else in the request moves."""
     pb2 = _pb2()
     from spanweave.otlp_protobuf import _rendered
 
@@ -793,29 +811,81 @@ def test_an_all_zero_id_reads_as_an_unset_one(field):
     unset = _root(pb2, **{field: None})
     assert _rendered(zero) == _rendered(unset)
     (rendered,) = _spans(_rendered(zero))
-    owner = rendered["links"][0] if field.startswith("link.") else rendered
-    assert key not in owner
+    assert key not in _owner(rendered, field)
     assert spanweave.read_protobuf(zero.SerializeToString()) == spanweave.read_protobuf(
         unset.SerializeToString()
     )
 
 
-@pytest.mark.parametrize("field", list(ID_FIELDS))
-def test_an_id_with_one_byte_not_zero_is_hex(field):
-    """All zero, not any zero: the last byte 1 and the rest zero is an id."""
+#: Each id, with its one byte not zero at every position the id has.
+ONE_BYTE_NOT_ZERO = [
+    (field, at) for field, (_, width) in ID_FIELDS.items() for at in range(width)
+]
+
+
+@pytest.mark.parametrize(
+    ("field", "at"),
+    ONE_BYTE_NOT_ZERO,
+    ids=[f"{field}-{at}" for field, at in ONE_BYTE_NOT_ZERO],
+)
+def test_an_id_with_one_byte_not_zero_is_hex(field, at):
+    """All zero, not any zero, and every byte counts: one byte 1 and the rest
+    zero is an id wherever that byte is -- the first, the last, either half
+    of a trace id -- so a rule that reads only part of the id is caught."""
     pb2 = _pb2()
     from spanweave.otlp_protobuf import _rendered
 
     key, width = ID_FIELDS[field]
-    request = _root(pb2, **{field: bytes(width - 1) + b"\x01"})
+    raw = bytes(at) + b"\x01" + bytes(width - 1 - at)
+    request = _root(pb2, **{field: raw})
     (rendered,) = _spans(_rendered(request))
-    owner = rendered["links"][0] if field.startswith("link.") else rendered
-    assert owner[key] == "00" * (width - 1) + "01"
+    assert _owner(rendered, field)[key] == raw.hex()
+    read = spanweave.read_protobuf(request.SerializeToString())
+    assert _stated(read, field) == raw.hex()
     if field == "span.parent_span_id":
         # A stated parent no input contains: the root is an orphan, as the
         # Collector's JSON of this body would make it.
-        read = spanweave.read_protobuf(request.SerializeToString())
         assert "orphan_parent" in _codes(read)
+
+
+#: For each id, lengths the schema does not give it: shorter than any id,
+#: longer than any, and the other id's own -- so the length is the key's, not
+#: "8 or 16".
+OTHER_LENGTHS = {16: (4, 8, 17), 8: (4, 16, 17)}
+WRONG_LENGTH = [
+    (field, length)
+    for field, (_, width) in ID_FIELDS.items()
+    for length in OTHER_LENGTHS[width]
+]
+
+
+@pytest.mark.parametrize(
+    ("field", "length"),
+    WRONG_LENGTH,
+    ids=[f"{field}-{length}" for field, length in WRONG_LENGTH],
+)
+def test_an_all_zero_id_of_another_length_is_carried_as_stated(field, length):
+    """The Collector's rule is for an id of the length the schema gives it
+    (`SPEC.md` §7). At any other length the Collector writes no JSON to match
+    -- it would refuse the request -- so the id is hex, all zero too, as the
+    JSON path carries a hex string of any length, and it is a stated id."""
+    pb2 = _pb2()
+    from spanweave.otlp_protobuf import _rendered
+
+    key, _ = ID_FIELDS[field]
+    request = _root(pb2, **{field: bytes(length)})
+    (rendered,) = _spans(_rendered(request))
+    assert _owner(rendered, field)[key] == "00" * length
+    read = spanweave.read_protobuf(request.SerializeToString())
+    assert _stated(read, field) == "00" * length
+    # ... as the same span's JSON stating the id, written by the test, reads.
+    document = _rendered(_root(pb2))
+    _owner(_spans(document)[0], field)[key] = "00" * length
+    assert spanweave.read_records(json.dumps(document, sort_keys=True).encode()) == read
+    if field == "span.parent_span_id":
+        assert "orphan_parent" in _codes(read)
+    if field == "span.trace_id":
+        assert "missing_trace_id" not in _codes(read)
 
 
 def _attribute_lists(document: dict[str, Any]) -> list[tuple[str, list[Any]]]:
@@ -914,10 +984,17 @@ def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
                 for span in scope_entry.spans:
                     # A `status` stated in the JSON was a message on the wire.
                     assert span.HasField("status"), run
-                    # No id on the wire is all zero bytes: an unset one is
-                    # empty, and the Collector's omission is never shown.
-                    for value in (span.trace_id, span.span_id, span.parent_span_id):
-                        assert value == b"" or any(value), run
+                    # No id on the wire is all zero bytes, nor of a length
+                    # the schema does not give it: an unset one is empty, and
+                    # neither the Collector's omission nor an id carried as
+                    # stated at another length is ever shown.
+                    for value, length in (
+                        (span.trace_id, 16),
+                        (span.span_id, 8),
+                        (span.parent_span_id, 8),
+                    ):
+                        if value:
+                            assert len(value) == length and any(value), run
     assert kinds == {"stringValue", "intValue", "boolValue"}
 
 
