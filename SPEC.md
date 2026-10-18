@@ -2187,6 +2187,9 @@ declares reaches `0.5`.
     becomes checkable. The guard reads every AnyValue in every JSON body:
     the resource's, the scope's, the span's, each event's and each link's
     attributes, and the values nested in an `arrayValue` or a `kvlistValue`.
+    It reads every id on the wire too, in every raw body, a span's and each
+    of its links': each one stated has the length the schema gives it and a
+    byte not zero.
 
     | What | In the 29 pairs | Held by |
     |---|---|---|
@@ -2231,8 +2234,10 @@ declares reaches `0.5`.
     its length — so the row is the Collector's rule at the schema's lengths
     and the spec's at any other, and not a pair's. **The JSON path is
     untouched:** a JSON record that *states* `"0000000000000000"` states an
-    id there (§4.0; `spanweave.seam`), and the two encodings differ on this
-    only because the Collector never writes one.
+    id there (§4.0; `spanweave.seam`), and so does an OTLP/JSON export that
+    states it, a span's or a link's: the reader renames the key and carries
+    the hex as stated. The two encodings differ on this only because the
+    Collector never writes one.
   - **A body that will not parse is one `malformed_record`**, `skipped_records`
     1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
     (§3.7): JSON has no way to write the bytes, and carrying them in some

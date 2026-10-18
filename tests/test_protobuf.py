@@ -962,12 +962,85 @@ def test_the_any_value_census_reads_every_attribute_list_and_every_nested_value(
     ]
 
 
+def _wire_ids(request: Any) -> list[tuple[str, bytes, int]]:
+    """Every id a request carries on the wire, by path, with the length in
+    bytes the schema gives it: each span's `traceId`, `spanId` and
+    `parentSpanId`, and each of its links' `traceId` and `spanId`. An unset
+    one is there too, as the empty bytes proto3 reads it as."""
+    ids: list[tuple[str, bytes, int]] = []
+    for r, resource_entry in enumerate(request.resource_spans):
+        for s, scope_entry in enumerate(resource_entry.scope_spans):
+            for n, span in enumerate(scope_entry.spans):
+                at = f"resourceSpans[{r}].scopeSpans[{s}].spans[{n}]"
+                ids.append((f"{at}.traceId", span.trace_id, 16))
+                ids.append((f"{at}.spanId", span.span_id, 8))
+                ids.append((f"{at}.parentSpanId", span.parent_span_id, 8))
+                for k, link in enumerate(span.links):
+                    ids.append((f"{at}.links[{k}].traceId", link.trace_id, 16))
+                    ids.append((f"{at}.links[{k}].spanId", link.span_id, 8))
+    return ids
+
+
+def test_the_wire_id_census_reads_every_span_s_ids_and_every_link_s():
+    """The guard below reads ids on the wire only as widely as this walk: an
+    id planted in each place one can sit is found there, with its length,
+    and nowhere else -- a link's two as well as a span's three, each link of
+    a span and each span, scope and resource, not the first only."""
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    root = trace_pb2.Span(trace_id=bytes([1] * 16), span_id=bytes([2] * 8))
+    child = trace_pb2.Span(
+        trace_id=bytes([3] * 16),
+        span_id=bytes([4] * 8),
+        parent_span_id=bytes([2] * 8),
+        links=[
+            trace_pb2.Span.Link(trace_id=bytes([5] * 16), span_id=bytes([6] * 8)),
+            trace_pb2.Span.Link(trace_id=bytes([7] * 4), span_id=bytes(8)),
+        ],
+    )
+    other = trace_pb2.Span(trace_id=bytes([8] * 16), span_id=bytes([9] * 8))
+    request = pb2.ExportTraceServiceRequest(
+        resource_spans=[
+            trace_pb2.ResourceSpans(
+                scope_spans=[trace_pb2.ScopeSpans(spans=[root, child])]
+            ),
+            trace_pb2.ResourceSpans(
+                scope_spans=[
+                    trace_pb2.ScopeSpans(),
+                    trace_pb2.ScopeSpans(spans=[other]),
+                ]
+            ),
+        ]
+    )
+    first = "resourceSpans[0].scopeSpans[0].spans[0]"
+    second = "resourceSpans[0].scopeSpans[0].spans[1]"
+    third = "resourceSpans[1].scopeSpans[1].spans[0]"
+    assert _wire_ids(request) == [
+        (f"{first}.traceId", bytes([1] * 16), 16),
+        (f"{first}.spanId", bytes([2] * 8), 8),
+        (f"{first}.parentSpanId", b"", 8),
+        (f"{second}.traceId", bytes([3] * 16), 16),
+        (f"{second}.spanId", bytes([4] * 8), 8),
+        (f"{second}.parentSpanId", bytes([2] * 8), 8),
+        (f"{second}.links[0].traceId", bytes([5] * 16), 16),
+        (f"{second}.links[0].spanId", bytes([6] * 8), 8),
+        (f"{second}.links[1].traceId", bytes([7] * 4), 16),
+        (f"{second}.links[1].spanId", bytes(8), 8),
+        (f"{third}.traceId", bytes([8] * 16), 16),
+        (f"{third}.spanId", bytes([9] * 8), 8),
+        (f"{third}.parentSpanId", b"", 8),
+    ]
+
+
 def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
     """The day a pair carries one, this fails, and that row of `SPEC.md` §7's
     table becomes the pairs' to check. Every AnyValue is read: the resource's,
     the scope's, the span's, each event's and each link's attributes, and the
     values nested in an `arrayValue` or a `kvlistValue` (the walk's own test
-    above)."""
+    above). Every id on the wire is read too, each span's and each of its
+    links' (that walk's own test above): no JSON body has a link, but the
+    wire is what the rendering reads."""
     kinds: set[str] = set()
     for run, json_body, raw_body in PAIRS:
         document = json.loads(json_body.read_bytes())
@@ -984,17 +1057,15 @@ def test_the_zoo_holds_none_of_what_the_hand_made_requests_hold():
                 for span in scope_entry.spans:
                     # A `status` stated in the JSON was a message on the wire.
                     assert span.HasField("status"), run
-                    # No id on the wire is all zero bytes, nor of a length
-                    # the schema does not give it: an unset one is empty, and
-                    # neither the Collector's omission nor an id carried as
-                    # stated at another length is ever shown.
-                    for value, length in (
-                        (span.trace_id, 16),
-                        (span.span_id, 8),
-                        (span.parent_span_id, 8),
-                    ):
-                        if value:
-                            assert len(value) == length and any(value), run
+        # No id on the wire, a span's or a link's, is all zero bytes, nor of
+        # a length the schema does not give it: an unset one is empty, and
+        # neither the Collector's omission nor an id carried as stated at
+        # another length is ever shown.
+        for path, value, length in _wire_ids(request):
+            if value:
+                assert len(value) == length and any(value), (
+                    f"{run}: {path} is {value.hex()!r} on the wire"
+                )
     assert kinds == {"stringValue", "intValue", "boolValue"}
 
 

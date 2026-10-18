@@ -1130,6 +1130,80 @@ def test_an_empty_link_target_is_no_link_in_the_export_container_too():
     assert node.raw.source["links"] == [{"trace_id": "t1", "span_id": ""}]
 
 
+#: Each id an OTLP/JSON span states, its own or its link's: the key the reader
+#: renames it to, and its width in hex digits, the length the schema gives it.
+EXPORT_IDS = {
+    "span.traceId": ("trace_id", 32),
+    "span.spanId": ("span_id", 16),
+    "span.parentSpanId": ("parent_id", 16),
+    "link.traceId": ("trace_id", 32),
+    "link.spanId": ("span_id", 16),
+}
+
+
+def stating(field, value):
+    """An export of one root span with one link, every id hex of its width
+    and none zero, but ``field``, which states ``value``."""
+    span = dict(
+        OTLP_SPAN,
+        traceId="0d" * 16,
+        spanId="e1" * 8,
+        links=[{"traceId": "ab" * 16, "spanId": "c0" * 8}],
+    )
+    owner, key = field.split(".")
+    (span["links"][0] if owner == "link" else span)[key] = value
+    return json.dumps(envelope(span)).encode("utf-8")
+
+
+def holder(record, field):
+    """The record, or its one link, that ``field`` is on."""
+    return record["links"][0] if field.startswith("link.") else record
+
+
+@pytest.mark.parametrize("field", list(EXPORT_IDS))
+def test_an_all_zero_id_an_export_states_is_a_stated_id(field):
+    """`SPEC.md` §7: **the JSON path is untouched** by the zero rule.
+
+    `read_protobuf` omits an id of its schema length whose bytes are all zero,
+    because the Collector writes none for it. An OTLP/JSON export that
+    *states* the zero hex states an id, a span's or a link's, as a flat
+    record stating one does at the seam (§4.0): this reader is the protobuf
+    path's own twin, so the sentence is held here too. The record carries
+    the hex as stated, and the graph reads it as a stated id.
+    """
+    import spanweave
+
+    key, width = EXPORT_IDS[field]
+    zero = "0" * width
+    data = stating(field, zero)
+    record = only(data)
+    assert holder(record, field).get(key) == zero
+    # ... read as any other hex is: the record the same export stating a
+    # non-zero id reads as, but for the id.
+    other = only(stating(field, "f" * width))
+    holder(other, field)[key] = zero
+    assert record == other
+
+    graph = spanweave.build(data)
+    (node,) = graph.nodes()
+    # Losslessness (`CLAUDE.md` 2): the node's record states it too.
+    assert holder(node.raw.source, field).get(key) == zero
+    # A stated parent no input contains is an orphan; a stated trace id draws
+    # no `missing_trace_id`; nothing else draws a diagnostic.
+    reported = [(d.code, d.source) for d in graph.diagnostics]
+    if field == "span.parentSpanId":
+        assert reported == [(codes.ORPHAN_PARENT, zero)]
+    else:
+        assert reported == []
+    if field == "span.traceId":
+        assert graph.trace_id == zero
+    if field == "span.spanId":
+        assert node.id == zero
+    if field == "link.spanId":
+        links = [(e.src, e.dst) for e in graph.edges() if e.kind is EdgeKind.LINK]
+        assert links == [(node.id, zero)]
+
+
 def test_no_trace_in_the_tree_reaches_the_otlp_branches():
     """The durable form of "no existing input changed" (`SPEC.md` §7).
 
