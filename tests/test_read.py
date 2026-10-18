@@ -976,6 +976,12 @@ HEAD_SCANS = {
     "over several lines": (b'{\n  "a": 1,\n  "resourceSpans": []\n}\n', True),
     "a key one level down": (b'{"a": {"b": 1, "resourceSpans": []}}', False),
     "a key inside an array": (b'{"a": [{"b": 1, "resourceSpans": []}]}', False),
+    # No object wraps it, so only the array's own bracket keeps it below the
+    # members (the scoped review of 2026-10-18b, R-7).
+    "an element of an array value": (
+        b'{\n "a": ["x","resourceSpans"],\n "b": 1\n}\n',
+        False,
+    ),
     "a string value": (b'{"a": "resourceSpans", "b": 1}', False),
     "inside a string value": (b'{"a": "x, \\"resourceSpans\\": [", "b": 1}', False),
     "in the second object only": (b'{"a": 1}\n{"resourceSpans": []}\n', False),
@@ -1001,6 +1007,28 @@ def test_the_head_scan_finds_resource_spans_by_presence_not_position(case):
     )
     assert opens is bool(verdict)
     assert data.startswith(head)
+    # And with an empty chunk before each byte, a call with no byte new.
+    head, opens = _opens_an_export(
+        data[:1],
+        iter(piece for i in range(1, len(data)) for piece in (b"", data[i : i + 1])),
+    )
+    assert opens is bool(verdict)
+    assert data.startswith(head)
+
+
+def test_an_empty_chunk_after_an_escape_leaves_the_scan_past_it():
+    # A backslash that ends a chunk leaves the scan one past the buffer, the
+    # escaped byte not yet arrived. A chunk with no byte in it must leave it
+    # there, or that byte -- a quote, here -- is read as the string's end
+    # (the scoped review of 2026-10-18b, R-10). No input reaches it today, as
+    # the library's chunk sources yield no empty chunk after the first; the
+    # scan does not rely on that.
+    from spanweave.read import _opens_an_export, _scan_for_export_key
+
+    data = b'{"a\\"x": 1, "resourceSpans": []}'
+    assert _scan_for_export_key(data) is True
+    assert _opens_an_export(data[:4], iter([data[4:]])) == (data, True)
+    assert _opens_an_export(data[:4], iter([b"", data[4:]])) == (data, True)
 
 
 def test_a_first_record_that_only_mentions_resource_spans_still_streams():

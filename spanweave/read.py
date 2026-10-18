@@ -291,13 +291,13 @@ class RecordStream:
         input, so being wrong is expected rather than exceptional: a file of
         one export per line begins with exactly these bytes, and a JSONL file
         whose first record states ``resourceSpans`` beside other members gets
-        here too, as does one whose first record never closes. When the
-        buffered input is not a single document it is read line by line, which
-        is byte for byte what this input did before this branch existed --
-        including its diagnostics, which is why the fallback below emits none
-        of its own. That fallback is the safety net the scan relies on: what
-        the scan says of an input that is not one JSON document decides only
-        how much is buffered, never what is read.
+        here too, as does one whose first record states it and never closes.
+        When the buffered input is not a single document it is read line by
+        line, which is byte for byte what this input did before this branch
+        existed -- including its diagnostics, which is why the fallback below
+        emits none of its own. That fallback is the safety net the scan relies
+        on: what the scan says of an input that is not one JSON document
+        decides only how much is buffered, never what is read.
         """
         text, undecodable = _decoded(data)
         try:
@@ -556,10 +556,11 @@ def _opens_an_export(head: bytes, chunks: Iterator[bytes]) -> tuple[bytes, bool]
     or at the object's close, so where that member stands among the others --
     member order, which never reaches a graph -- does not decide how the input
     is read. That bounds it by the input's first record, which the line reader
-    buffers anyway; a first record that never closes is scanned to the end,
-    and giving up there is free, because the caller then reads lines, which is
-    what it would have done anyway. Pulls only as many chunks as that takes,
-    and reads each byte once however many there are.
+    buffers anyway. As `SPEC.md` §7 says, a first record that does not
+    close -- truncated, or not JSON -- is scanned, and buffered, to the end of
+    the input, and is then read line by line exactly as it would have been, so
+    what is read does not change. Pulls only as many chunks as that takes, and
+    reads each byte once however many there are.
     """
     scan = _ExportScan()
     while True:
@@ -627,7 +628,10 @@ class _ExportScan:
             if self._string_from is not None:
                 found = _SCAN_INSIDE_A_STRING.search(data, at)
                 if found is None:
-                    self._at = len(data)
+                    # Past an escape that ended the buffer, `at` is one beyond
+                    # it, and stays there until a byte is new: set back to the
+                    # end, it would read the escaped byte as the closing quote.
+                    self._at = max(at, len(data))
                     return None
                 at = found.start()
                 if data[at] == ord("\\"):
