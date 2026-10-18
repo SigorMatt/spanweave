@@ -1142,6 +1142,13 @@ def test_records_are_reordered_with_their_types_kept():
 # `kvlistValue` in the order the list gives its entries, which is a list's
 # order, not a member's, so no reordering of an object reached it. Each is
 # held here by one pair, both orders, and the content each must keep.
+#
+# And one the gate did not feed: an `exception.type` stated as an `AnyValue`
+# tag holding an object, `{"stringValue": {...}}`, folds to that object in
+# the order its members are written, so before D39's sort two member orders
+# gave two messages. The sort reads the folded value, not its tag, and
+# nothing held that for this shape (the scoped review of 2026-10-18b, R-8);
+# it is held here through the gate's own text path.
 
 
 #: The span inside the export the object states.
@@ -1220,15 +1227,18 @@ def _kvlists_reversed(value):
     return copy
 
 
-def _exception_export(stated_type=STRUCTURED):
+def _exception_export(stated_type=STRUCTURED, tag=None):
     """An export whose span records an exception, its `exception.type` the
-    structured value as the nested `kvlistValue` OTLP/JSON writes it."""
+    structured value as the nested `kvlistValue` OTLP/JSON writes it -- or,
+    given a ``tag``, the value as it is, under that one `AnyValue` tag."""
+    stated = _any_value(stated_type) if tag is None else {tag: stated_type}
     event = {
         "timeUnixNano": "1700000000500000000",
         "name": "exception",
-        "attributes": _key_values(
-            {"exception.type": stated_type, "exception.message": "boom"}
-        ),
+        "attributes": [
+            {"value": stated, "key": "exception.type"},
+            *_key_values({"exception.message": "boom"}),
+        ],
     }
     span = {
         "traceId": "5b8efff798038103d269b633813fc60c",
@@ -1239,6 +1249,19 @@ def _exception_export(stated_type=STRUCTURED):
         "events": [event],
     }
     return {"resourceSpans": [{"scopeSpans": [{"spans": [span]}]}]}
+
+
+#: The `exception_event` message for an `exception.type` that is `STRUCTURED`,
+#: however it is stated: `repr`'s text of the map, its keys sorted at every
+#: level, by code point.
+STRUCTURED_EXCEPTION_MESSAGE = (
+    "the span states event 0, an exception recorded by the OpenTelemetry "
+    "API ({'alpha': {'beta': True, 'mu': [{'xx': 1, 'yy': 2}]}, "
+    "'case': {'Ab': 2, 'ab': 1}, 'eta': [3, {'p': 's', 'q': None}], "
+    "'nu': [[{'jj': 1, 'kk': 2}, 4]], 'zeta': 1}); the graph has no "
+    "field for it, so it is reported here, its stacktrace kept verbatim "
+    "in raw with the whole event. Whether the span failed is its status"
+)
 
 
 def test_a_kvlist_rendered_to_text_is_rendered_as_a_map():
@@ -1259,14 +1282,7 @@ def test_a_kvlist_rendered_to_text_is_rendered_as_a_map():
     for data in (first, other):
         graph = spanweave.build(data)
         (event,) = [d for d in graph.diagnostics if d.code == "exception_event"]
-        assert event.message == (
-            "the span states event 0, an exception recorded by the OpenTelemetry "
-            "API ({'alpha': {'beta': True, 'mu': [{'xx': 1, 'yy': 2}]}, "
-            "'case': {'Ab': 2, 'ab': 1}, 'eta': [3, {'p': 's', 'q': None}], "
-            "'nu': [[{'jj': 1, 'kk': 2}, 4]], 'zeta': 1}); the graph has no "
-            "field for it, so it is reported here, its stacktrace kept verbatim "
-            "in raw with the whole event. Whether the span failed is its status"
-        )
+        assert event.message == STRUCTURED_EXCEPTION_MESSAGE
         assert event.source == {
             "type": STRUCTURED,
             "message": "boom",
@@ -1284,6 +1300,45 @@ def test_a_kvlist_rendered_to_text_is_rendered_as_a_map():
             + "\n  ".join(_differences(_parsed(one), _parsed(again)))
         )
     assert digest_two != digest
+
+
+@pytest.mark.parametrize("order", sorted(ORDERS))
+def test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map(order):
+    """An `exception.type` stated as an `AnyValue` tag holding an object --
+    `{"stringValue": {...}}`, the object written as JSON, not as a
+    `kvlistValue` -- folds to that object in the order its members are
+    written. The `exception_event` message is still the map's, its keys
+    sorted at every level, the text the same map stated as a `kvlistValue`
+    gives; so the export, and the same export with every object's members
+    reordered at every depth by the gate's text path, build one graph by the
+    gate's comparator. Before decisions log D39's sort they built two, and
+    the gate, which states the type as a `kvlistValue` only, was green (the
+    scoped review of 2026-10-18b, R-8)."""
+    data = json.dumps(_exception_export(tag="stringValue")).encode("utf-8")
+    reordered, unread = key_order.input_reordered(
+        data, ORDERS[order](), key_order.Tally()
+    )
+    assert unread == []
+    stated = []
+    for each in (data, reordered):
+        graph = spanweave.build(each)
+        (event,) = [d for d in graph.diagnostics if d.code == "exception_event"]
+        assert event.message == STRUCTURED_EXCEPTION_MESSAGE
+        assert event.source["type"] == STRUCTURED
+        stated.append(event.source["type"])
+    # The object reached the message in another member order at every depth
+    # it holds one, so `repr` of the value as folded would give two texts.
+    movable, moved = _member_orders(*stated)
+    assert movable and moved == movable
+    written, digest = _outcome(data)
+    again, digest_again = _outcome(reordered)
+    assert isinstance(written, bytes) and isinstance(again, bytes)
+    if written != again:
+        pytest.fail(
+            f"the object under stringValue, members {order}: the graph changed --\n  "
+            + "\n  ".join(_differences(_parsed(written), _parsed(again)))
+        )
+    assert digest_again != digest
 
 
 #: An `exception.type` that is not a map, and its text in the message:

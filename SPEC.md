@@ -1823,7 +1823,11 @@ declares reaches `0.5`.
     `resourceSpans` stands among a document's members (*OTLP JSON*, below),
     and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map` the
     `exception_event` message, the one text rendered from an OTLP map
-    outside the adapters (decisions log D39).
+    outside the adapters (decisions log D39), with
+    `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map`
+    for an object stated under another `AnyValue` tag, its members
+    reordered by the gate's text path (the scoped review of 2026-10-18b,
+    R-8).
     **A member stated twice is outside that claim.** What follows is how it is
     read today, as measured, not a rule: it is registered for the next
     spanweave series (`TASKS.md`, *the reader's malformed input*). Where an

@@ -15114,12 +15114,13 @@ in the last entry are registered above, under *Still open after the close*.
   close: see *Corrections after the close*]); the missing-extra error is a plain
   `SpanweaveError` with code `otlp_extra_not_installed`, not a subclass.
 
-### Corrections after the close  *(the 2026-10-17 reviews, and the scoped review of 2026-10-18)*
+### Corrections after the close  *(the 2026-10-17 reviews, and the scoped reviews of 2026-10-18 and 2026-10-18b)*
 
 What the 2026-10-17 cold review of `wire`, the scoped review of its fixes,
-and the scoped review of 2026-10-18 of Qodo's fixes found untrue or unbound
-in the series' record, and what decisions log D39 found of D38's commit.
-Each is set right here rather than by rewriting the
+the scoped review of 2026-10-18 of Qodo's fixes, and the scoped review of
+2026-10-18b of `5ef4502`, `cf1afff`, `2f63a90` and `743d027` found untrue
+or unbound in the series' record, and what decisions log D39 found of
+D38's commit. Each is set right here rather than by rewriting the
 record above, except two lines `4521cc2` edited in place: the close
 summary's "seventh deletion" ordinal, removed because a count no test holds
 is not stated; and the `UnknownFieldSet` version clause in W1's resume
@@ -15127,9 +15128,12 @@ entry, removed and marked where it stood (the resume note's opening says
 so), because an unverified claim kept verbatim would still read as true.
 One line gained a pointer in place and kept its words: Qodo 1's
 disposition, whose bracket points here. The items under *Still open after
-the close* are status, not record, and are edited in place. `R-<n>` alone
-is the cold review's finding; *scoped review, R-<n>* is the scoped
-review's; *scoped review of 2026-10-18, R-<n>* is the last one's.
+the close* are status, not record, and are edited in place; one sentence of
+a thread there that is closed is set right here instead, as the scoped
+review of 2026-10-18b asked, and keeps its words. `R-<n>` alone is the cold
+review's finding; *scoped review, R-<n>* is the scoped review's; *scoped
+review of 2026-10-18, R-<n>* is the third's; *scoped review of 2026-10-18b,
+R-<n>* is the last one's.
 
 - **`285902e`'s counts were measured with the extra hidden.** Its message
   gives `make check` 3555 passed / 111 skipped, `make conformance` 1156
@@ -15253,6 +15257,65 @@ review's; *scoped review of 2026-10-18, R-<n>* is the last one's.
   gate, as `2f63a90`'s own message says, until decisions log D39. §7 claims
   what the gate holds, and the subject stays as written (decisions log
   D39).
+- **`2f63a90`'s message missed a way into the `exception_event` message.**
+  Under "Listed, not reached by key order" it gives seam.py:780, "the
+  exception_event message's {source['type']!r} -- an exception.type stated
+  as a kvlistValue folds to a dict in the kvlist's list order, which no
+  member reordering changes on the text path". Of a `kvlistValue` that is
+  true, but the site was reached by member order through another tag. An
+  `exception.type` stated as an `AnyValue` tag holding an object, such as
+  `{"stringValue": {"b": 1, "a": 2}}`, folds to that object in the order
+  its members are written, and `repr` wrote it so: at `2f63a90` the same
+  export with the object's members in two orders built two graphs, less
+  `meta.source_digest`, and likewise under `intValue`, `boolValue`,
+  `doubleValue` and `bytesValue` (re-measured for this record, at
+  `9a856e0` and `5ef4502` too). The gate states the type as a
+  `kvlistValue` only, so it stayed green. Since `743d027` the two orders
+  build one graph, because decisions log D39's sort reads the folded
+  value, not the tag that stated it; `tests/test_determinism.py`'s
+  `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map` now
+  holds it under `stringValue`, both orders, through the gate's text path
+  (scoped review of 2026-10-18b, R-8).
+- **The thread on orders outside the gate put its third out of the gate's
+  reach.** Its item under *Still open after the close*, "Where an order
+  the input wrote still decides the graph, outside the gate", written by
+  `2f63a90`, says the `exception_event` message writes an `exception.type`
+  stated as a `kvlistValue` "in the order the list gives the map's
+  entries, which no reordering of an object's members changes (the gate's
+  hand-made export states one, and stays green)". Of a `kvlistValue` that
+  is true, but a reordering of an object's members did change the message,
+  through an `AnyValue` tag holding an object (the line on `2f63a90`'s
+  message, above); the gate stayed green because it states no such tag,
+  not because the site was out of its reach. The third is closed by
+  decisions log D39, whose sort closes this shape too, and the sentence
+  keeps its words (scoped review of 2026-10-18b, R-8).
+- **`743d027`'s `CHANGELOG.md` entry says too little changed.** Its entry
+  "A `kvlistValue` in an `exception_event` message is written as a map"
+  says the keys of one so stated are now sorted at every level, and "any
+  other type is written as before". The sort reads the folded value, not
+  the tag that stated it, so a map is sorted wherever the value holds one:
+  under another `AnyValue` tag, `{"stringValue": {"d": 1, "c": 2}}` was
+  written `{'d': 1, 'c': 2}` at `2f63a90` and is `{'c': 2, 'd': 1}` since
+  `743d027`; and a map inside a list is sorted too, as `743d027`'s own
+  `test_an_exception_type_is_written_in_repr_s_spelling` asserts. A value
+  holding no map is written as before. Re-measured at both commits for
+  this record (scoped review of 2026-10-18b, R-8).
+- **`5ef4502`'s message named one place where there were three.** It says
+  the premise `8b68608`'s comment rests on, "key order never reaches a
+  node (`SPEC.md` §7)", "is still false in one place this commit does not
+  touch: a span kind (`openinference.span.kind`) or operation
+  (`gen_ai.operation.name`) stated as an object". At `5ef4502`, among
+  members stated once, there were three: that one, closed by decisions
+  log D38; the head scan, which found an export by its first member key,
+  so a document written over several lines stating `resourceSpans` beside
+  another member was one record with it first and every line
+  `malformed_record` with it after, registered by `2f63a90` and closed by
+  decisions log D39; and an `exception.type` stated as an `AnyValue` tag
+  holding an object (the line on `2f63a90`'s message, above), closed by
+  D39's sort. Each re-measured at `5ef4502` for this record. A member
+  stated twice reached a graph there too, and still does: `SPEC.md` §7 now
+  leaves it outside its claim, and *the reader's malformed input*, above,
+  registers it (scoped review of 2026-10-18b, R-8).
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
