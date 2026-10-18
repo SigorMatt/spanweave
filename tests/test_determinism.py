@@ -1329,3 +1329,60 @@ def test_the_guarantee_holds_past_the_digit_limit_in_process():
     determinism.assert_repeatable(
         lambda: spanweave.dumps(spanweave.build(_digit_limit_trace()))
     )
+
+
+#: Per dialect, for `KEY_ORDER_TWINS`' record written as text: the member
+#: stating the span kind or operation, the payload's key, and whether the
+#: adapter's `value` is the text (OpenInference, with no JSON mime) or the
+#: value as reported (OTel GenAI's already-structured branch).
+_LONG_INTEGER_PAYLOADS = {
+    "openinference": ('"openinference.span.kind":"TOOL"', "input.value", True),
+    "otel_genai": ('"gen_ai.operation.name":"chat"', "gen_ai.input.messages", False),
+}
+
+
+@pytest.mark.parametrize("dialect", sorted(_LONG_INTEGER_PAYLOADS))
+def test_a_payload_holding_a_long_integer_is_written_sorted_under_the_lowest_setting(
+    tmp_path, dialect
+):
+    # The pair `KEY_ORDER_TWINS` holds, its payload holding an integer the
+    # lowest setting will not write. There `json.dumps` raises, and `encode`'s
+    # retry writes the integer whole (`SPEC.md` §5.3) -- of the same sorted
+    # value, so the order the kept line wrote is not in the text there either
+    # (§3.3). A retry of the value as written passed every test, all of them
+    # run at this process's setting, and built two graphs here (the scoped
+    # review of 2026-10-18b, R-1). Written as text, as `_digit_limit_trace`
+    # is, and for its reason.
+    from tests import digit_limit
+
+    long = digit_limit.above_the_floor()
+    member, key, value_is_text = _LONG_INTEGER_PAYLOADS[dialect]
+    first, second = (
+        f'{{"trace_id":"t1","span_id":"s1","name":"op",'
+        f'"attributes":{{{member},"{key}":{payload}}}}}'
+        for payload in (f'{{"a":"x","b":{long}}}', f'{{"b":{long},"a":"x"}}')
+    )
+    text = f'{{"a": "x", "b": {long}}}'
+    documents = []
+    for name, lines in (("forwards", (first, second)), ("backwards", (second, first))):
+        path = tmp_path / f"{name}.jsonl"
+        path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+        # `parse_int=str`, as above: reading the graph back cannot meet the
+        # limit this process may be running under.
+        document = json.loads(_built_under(str(digit_limit.FLOOR), path), parse_int=str)
+        found = [item["code"] for item in document["diagnostics"]]
+        assert found.count("duplicate_record") == 1
+        (node,) = document["nodes"]
+        assert node["provenance"]["adapter_id"] == dialect
+        assert node["inputs"]["raw"] == text
+        assert node["inputs"]["value"] == (
+            text if value_is_text else {"a": "x", "b": long}
+        )
+        documents.append(document)
+    # The same graph, less `meta.source_digest`, which the swap changes by
+    # definition -- and does, so the exclusion hides nothing.
+    forwards, backwards = (
+        document["meta"].pop("source_digest") for document in documents
+    )
+    assert forwards != backwards
+    assert documents[0] == documents[1]

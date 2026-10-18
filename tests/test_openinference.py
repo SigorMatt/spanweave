@@ -5,11 +5,13 @@ of these assert a `None`, an `absent`, or a diagnostic.
 """
 
 import json
+import math
 import pathlib
 from collections import Counter
 
 import pytest
 
+import spanweave
 from spanweave import diagnostics as codes
 from spanweave.adapters.openinference import OpenInferenceAdapter
 from spanweave.build import (
@@ -279,6 +281,66 @@ def test_a_structured_value_is_rendered_with_its_keys_sorted(reported, text, mim
     # Without a JSON mime the text is the value too.
     assert span.inputs.value == (reported if mime else text)
     assert codes_of(span) == []
+
+
+# The spelling past key order. The text is `json.dumps` at its default
+# arguments (`SPEC.md` §3.3), and nothing held that: with either default below
+# moved, every test passed (the scoped review of 2026-10-18b, R-1). The two
+# tests below hold those two. The third case, a long integer written whole and
+# sorted under the interpreter's lowest digit limit, needs that limit set, and
+# a test sets it only in a subprocess, so it is in `tests/test_determinism.py`,
+# beside the pair that holds the payload's key order.
+
+
+@pytest.mark.parametrize("mime", [None, "application/json"])
+def test_a_structured_value_s_text_writes_a_character_past_ascii_escaped(mime):
+    # `ensure_ascii` at its default: `é` is the six characters `\u00e9`. The
+    # graph's writer and the record digest's text pass `ensure_ascii=False`,
+    # which is what makes the other spelling plausible here; the payload's
+    # text is neither's.
+    attributes = {"openinference.span.kind": "TOOL", "input.value": {"b": "é", "a": 1}}
+    if mime is not None:
+        attributes["input.mime_type"] = mime
+    span = span_of(attributes)
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.raw == '{"a": 1, "b": "\\u00e9"}'
+    # Without a JSON mime the text is the value too; with one, the value is
+    # that text read back, where the escape is the character again.
+    assert span.inputs.value == ({"a": 1, "b": "é"} if mime else span.inputs.raw)
+    assert codes_of(span) == []
+
+
+@pytest.mark.parametrize("mime", [None, "application/json"])
+def test_a_structured_value_holding_nan_builds_and_its_graph_is_refused_at_dumps(
+    mime,
+):
+    # `allow_nan` at its default: the reader reads a bare `NaN` as Python's
+    # parser does (`SPEC.md` §3.1), and the payload's text spells it `NaN`, as
+    # `json.dumps` writes it. So the record builds -- with `allow_nan=False`
+    # `build` raised the encoder's bare `ValueError`, which is no
+    # `SpanweaveError` (§3.10) -- and the graph, holding the float in
+    # `raw.source`, is refused where it is written, by name.
+    mime_member = '"input.mime_type":"application/json",' if mime else ""
+    graph = spanweave.build(
+        (
+            '{"trace_id":"t1","span_id":"s1","name":"op","attributes":'
+            '{"openinference.span.kind":"TOOL",' + mime_member + '"input.value":'
+            '{"b":NaN,"a":"é"}}}\n'
+        ).encode()
+    )
+    (node,) = graph.nodes()
+    assert node.provenance.adapter_id == "openinference"
+    assert node.inputs.state is PayloadState.PRESENT
+    assert node.inputs.raw == '{"a": "\\u00e9", "b": NaN}'
+    if mime is None:
+        assert node.inputs.value == node.inputs.raw
+    else:
+        assert node.inputs.value["a"] == "é"
+        assert math.isnan(node.inputs.value["b"])
+    assert codes.PAYLOAD_PARSE_FAILED not in [d.code for d in graph.diagnostics]
+    with pytest.raises(spanweave.SpanweaveError) as refused:
+        spanweave.dumps(graph)
+    assert refused.value.code == "graph_not_serializable"
 
 
 def test_a_non_json_mime_keeps_the_text_as_the_value():
