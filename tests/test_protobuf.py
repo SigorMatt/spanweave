@@ -26,6 +26,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 from types import ModuleType
@@ -37,6 +38,7 @@ import spanweave
 from spanweave.api import graph_from_records
 from spanweave.diagnostics import DiagnosticCollector
 from tests import zoo_census
+from tests.schema_shape import diagnostic_source_shapes
 from tests.zoo_census import CAPTURES, ROOT
 
 PAIRS = [
@@ -324,8 +326,12 @@ def _span_with_tail(pb2: ModuleType, tail: bytes) -> bytes:
 
 #: A span field the schema defines, sent with a wire type other than its own:
 #: ``(name, number, tail on the wire, wire type sent, wire type expected)``.
-#: One for each wire type the schema expects of a `Span` field, so the table
-#: each is looked up in is held on every row a span uses.
+#: One for each wire type the schema expects of a `Span` field -- one per wire
+#: type, not one per row of the table, which is keyed by field type: a span's
+#: ids (`bytes`), its `dropped_*_count`s (`uint32`) and its message fields
+#: (`message`) are looked up in rows these do not reach. Every row a field
+#: reachable from the request uses is held further down, by
+#: test_every_reachable_field_is_expected_with_the_wire_type_the_runtime_writes.
 _MISTYPED_SPAN_FIELDS = [
     # `name` (5, a string) as the varint 5.
     ("name", 5, bytes([5 << 3 | 0, 0x05]), 0, 2),
@@ -403,7 +409,8 @@ def test_defined_is_looked_up_on_the_message_that_carries_the_field():
 def test_a_message_carrying_both_kinds_is_one_report_counting_each():
     """One diagnostic per message stays; its message counts the defined
     fields and the undefined ones, the defined first, and the entries keep the
-    order the fields arrived in."""
+    order the fields arrived in. The message is held whole, so how the two
+    counts are joined is held too (the scoped review of 2026-10-18, R-6)."""
     pb2 = _pb2()
     # Field 99 (undefined) twice, then `name` (5) as a varint.
     raw = _span_with_tail(pb2, UNKNOWN_VARINT + UNKNOWN_VARINT + bytes([0x28, 0x05]))
@@ -417,11 +424,174 @@ def test_a_message_carrying_both_kinds_is_one_report_counting_each():
             {"number": 5, "wire_type": 0, "defined": True, "expected_wire_type": 2},
         ],
     }
-    message = diagnostic.message
-    assert "carries 3 field(s)" in message
-    readable = message.index("1 not readable as the installed schema defines it")
-    undefined = message.index("2 not defined by the installed schema")
-    assert readable < undefined
+    assert diagnostic.message == (
+        "the message at resourceSpans[0].scopeSpans[0].spans[0] carries 3 "
+        "field(s) not read into it by the OTLP schema this reader was installed "
+        "with: 1 not readable as the installed schema defines it (a number it "
+        "defines on this message, with a wire type other than the one it "
+        "expects -- a malformed body), and 2 not defined by the installed "
+        "schema (a newer OTLP, or an extension); it was read without them. "
+        "Their numbers and wire types are here, with the wire type the schema "
+        "expects where it defines the number, and their bytes are not -- a "
+        "field it does not define has no name and no type to write it by, and "
+        "one it does was not written in its type (`SPEC.md` §3.7)"
+    )
+
+
+def _source_keys(shape: str) -> tuple[list[str], list[str]]:
+    """The keys a `source` shape names: its own, and its per-field entry's
+    (the object in ``[{...}, ...]``)."""
+    entry = re.search(r"\[\{(.*)\}, \.\.\.\]", shape)
+    assert entry, f"no per-field entry in {shape!r}"
+    key = re.compile(r'"(\w+)":')
+    return key.findall(shape.replace(entry[0], "")), key.findall(entry[1])
+
+
+def test_unknown_fields_source_carries_the_keys_the_spec_s_row_names():
+    """The scoped review of 2026-10-18, R-6: `SPEC.md` §3.7's `source` row
+    for `unknown_fields`, read as `make shape` reads it into the shape
+    artifact (`tests/schema_shape.py`), names the keys the reader's diagnostic
+    carries -- the source's own, and each field entry's, a defined field's and
+    an undefined one's. A key renamed in the row and the artifact regenerated
+    is red here, where nothing else reads the row against the code."""
+    pb2 = _pb2()
+    top, per_field = _source_keys(diagnostic_source_shapes()["unknown_fields"])
+    # Field 99 (undefined), then `name` (5) as a varint.
+    raw = _span_with_tail(pb2, UNKNOWN_VARINT + bytes([0x28, 0x05]))
+    read = spanweave.read_protobuf(raw)
+    (source,) = (d.source for d in read.diagnostics if d.code == "unknown_fields")
+    assert isinstance(source, dict)
+    assert sorted(source) == sorted(top)
+    assert [entry["defined"] for entry in source["fields"]] == [False, True]
+    for entry in source["fields"]:
+        assert sorted(entry) == sorted(per_field)
+
+
+def _varint(value: int) -> bytes:
+    """``value`` as a protobuf varint: seven bits a byte, the low ones first."""
+    out = bytearray()
+    while True:
+        low, value = value & 0x7F, value >> 7
+        out.append(low | 0x80 if value else low)
+        if not value:
+            return bytes(out)
+
+
+def _tag(data: bytes) -> tuple[int, int]:
+    """The field number and the wire type of the tag ``data`` starts with."""
+    tag = shift = 0
+    for byte in data:
+        tag |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return tag >> 3, tag & 7
+    raise AssertionError(f"no tag in {data.hex()}")
+
+
+def _reachable(root: Any) -> dict[str, Any]:
+    """Every message type reachable from ``root`` through its message fields,
+    singular or repeated, at any depth: an empty instance of each, by its full
+    name, ``root`` first."""
+    from google.protobuf.message import Message
+
+    found: dict[str, Any] = {}
+    todo = [root]
+    while todo:
+        message = todo.pop(0)
+        if message.DESCRIPTOR.full_name in found:
+            continue
+        found[message.DESCRIPTOR.full_name] = message
+        for field in message.DESCRIPTOR.fields:
+            if field.type == field.TYPE_MESSAGE:
+                held = getattr(type(message)(), field.name)
+                todo.append(held if isinstance(held, Message) else held.add())
+    return found
+
+
+def _written(message_type: Any, field: Any) -> int:
+    """The wire type the runtime writes ``field`` with: the field set alone on
+    an empty message, the message serialized, and its one tag read back."""
+    from google.protobuf.message import Message
+
+    message = message_type()
+    held = getattr(message, field.name)
+    if isinstance(held, Message):
+        held.SetInParent()
+    elif field.type == field.TYPE_MESSAGE:
+        held.add()
+    else:
+        # A value of the Python kind the field takes; an integer, but for these.
+        value = {
+            field.TYPE_STRING: "a",
+            field.TYPE_BYTES: b"a",
+            field.TYPE_BOOL: True,
+            field.TYPE_DOUBLE: 0.5,
+            field.TYPE_FLOAT: 0.5,
+        }.get(field.type, 1)
+        if isinstance(held, int | float | str | bytes):
+            setattr(message, field.name, value)
+        else:  # a repeated scalar
+            held.append(value)
+    number, wire_type = _tag(message.SerializeToString())
+    assert number == field.number, field.full_name
+    return wire_type
+
+
+def test_every_reachable_field_is_expected_with_the_wire_type_the_runtime_writes():
+    """The scoped review of 2026-10-18, R-5: for a number the schema defines,
+    `unknown_fields` names the wire type the field's type is written with
+    (`SPEC.md` §3.7), from the reader's table of field type to wire type. The
+    runtime is the oracle here: for every field of every message reachable
+    from the request, the wire type it writes that field with, against the
+    `expected_wire_type` the reader reports when the same number arrives with
+    another one. So every row of the table a reachable field uses is held,
+    whichever message uses it.
+
+    What the runtime writes, and not `type_checkers.FIELD_TYPE_TO_WIRE_TYPE`:
+    that is the pure-Python implementation's table, in an internal module,
+    while the backend the runtime runs on (upb) writes by its own; and what the
+    spec's row says is how the field is written. A repeated number field would
+    be written packed (2), where the table names its type's unpacked wire type
+    (2066828's judgement): none is reachable, and the day one is, this fails
+    on it."""
+    pb2 = _pb2()
+    from opentelemetry.proto.trace.v1 import trace_pb2
+
+    from spanweave.otlp_protobuf import _unknown_fields
+
+    reachable = _reachable(pb2.ExportTraceServiceRequest())
+    written: dict[str, Any] = {}
+    reported: dict[str, Any] = {}
+    for instance in reachable.values():
+        for field in instance.DESCRIPTOR.fields:
+            where = f"{field.full_name} (field type {field.type})"
+            wire_type = _written(type(instance), field)
+            # The same number with another wire type: a varint 1 for a field
+            # written otherwise, an empty length-delimited one for a varint.
+            sent = 2 if wire_type == 0 else 0
+            mistyped = type(instance)()
+            mistyped.ParseFromString(
+                _varint(field.number << 3 | sent) + bytes([0 if sent else 1])
+            )
+            entry = {
+                "number": field.number,
+                "wire_type": sent,
+                "defined": True,
+                "expected_wire_type": wire_type,
+            }
+            written[where] = [("", [entry])]
+            reported[where] = _unknown_fields(mistyped, "")
+    assert reported == written
+
+    # The walk is whole: every message a walked field holds was walked too, so
+    # it stopped short of none; and it reached a span, every field of it.
+    for instance in reachable.values():
+        for field in instance.DESCRIPTOR.fields:
+            if field.type == field.TYPE_MESSAGE:
+                assert field.message_type.full_name in reachable, field.full_name
+    span = trace_pb2.Span.DESCRIPTOR
+    assert span.full_name in reachable
+    assert {f"{f.full_name} (field type {f.type})" for f in span.fields} <= set(written)
 
 
 def _attribute(pb2: ModuleType, **value: Any) -> bytes:
