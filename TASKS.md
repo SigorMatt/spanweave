@@ -14481,11 +14481,15 @@ decisions log D15, D16, D17, D18 and D19.
   below). The scoped review of those fixes, a read of `f38c193..4e52f08`,
   is archived and every finding dispositioned too (*Scoped review of
   Qodo's fixes — 2026-10-18* below), and its dispositions, decisions log
-  D37, are applied. What remains: the push and CI on the pushed tip; the
-  scoped review of D37's two commits that change behaviour under
-  `spanweave/`, `5ef4502` and `cf1afff`, together with Qodo's diff since
-  its first fetch, which covers both pushes; the checks on the PR head;
-  and the merge.
+  D37, are applied; decisions log D38 and D39 followed, each applied as one
+  commit (`2f63a90`, `743d027`). The scoped review of 2026-10-18b, a read
+  of the four commits that change behaviour, `5ef4502`, `cf1afff`,
+  `2f63a90` and `743d027`, is archived and every finding dispositioned
+  (*Scoped review of the four behaviour changes — 2026-10-18b* below), and
+  its dispositions, decisions log D40, are applied as seven commits. What
+  remains: the push and CI on the pushed tip; the bounded fix review of
+  D40's seven commits (decisions log D40); Qodo's diff since its first
+  fetch; the checks on the PR head; and the merge.
 - **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
   job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
   extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
@@ -14630,10 +14634,24 @@ decisions log D15, D16, D17, D18 and D19.
   below, for the next spanweave series: it is a member stated twice, which
   `SPEC.md` §7 now leaves outside its claim and describes as measured.
 - **The reader's malformed input** (registered by decisions log D39, for the
-  next spanweave series). What the OTLP/JSON reader does with input that
-  states one member twice, or states what its fold does not read: nothing
-  here is refused or reported, and each is a rule to decide. Measured at
-  D39's commit; lines are `spanweave/read.py`'s there.
+  next spanweave series; since decisions log D40 it also holds the threads of
+  the scoped review of 2026-10-18b). What the OTLP/JSON reader does with
+  input that states one member twice, or states what its fold does not read:
+  nothing here is refused or reported, and each is a rule to decide. Measured
+  at D39's commit; lines are `spanweave/read.py`'s there. The review's seven
+  threads follow, R-15 first, the one whose natural home this item is, the
+  review says; the other six are kept here with it, for the same series,
+  though not every one is malformed input. Each is a thread because it
+  predates the four commits the review read (R-13 as a pattern), or, R-17,
+  because it is the gate's reach by design; none blocks the merge (decisions
+  log D39's narrowed merge rule). Their line numbers are the review's,
+  `743d027`'s unless a commit is named, each with its file; where `b5d9572`
+  moved a line of `read.py`, its line at `67e469b` is given too. Their
+  measurements are the review's: its lead reproduced every blocking finding,
+  and of these threads it marks some measurements agent-measured, as each
+  line says, and none reproduced. Where a line says "re-measured at
+  `67e469b`", this record measured it again, by a scratch probe under
+  `python -I`, `spanweave.__file__` in the checkout.
   - *A member stated twice, by a repeated name.* `jsoncodec.loads` is
     `json.loads` (read.py:264, :304, :350), so in any object the later value
     wins, silently, and the earlier is gone from `raw.source`: member order
@@ -14732,6 +14750,140 @@ decisions log D15, D16, D17, D18 and D19.
     says. Measured at D39's parent and at its commit, under
     `-X int_max_str_digits=640`. Not fixed: the type's text would need the
     digit-safe `repr` `jsoncodec` keeps private.
+  - *A key an attributes list states twice* (the scoped review of
+    2026-10-18b, R-15; older than the series, the attribute fold). The fold
+    makes a span's OTLP attributes list a map, and a repeated key keeps the
+    last (`SPEC.md` *OTLP JSON*, :2097 at `743d027`), so the list's order
+    decides node fields: `openinference.span.kind` stated `LLM` then `TOOL`
+    builds a `tool` node, and reversed an `llm` node, both copies kept under
+    `attributes_unfolded`, as SPEC says. Agent-measured, the review says;
+    re-measured at `67e469b`, on an OTLP/JSON export, in both orders. The
+    same holds of `attributes.model` and of the operation, and an event
+    list's order likewise changes the `span_event` messages and sources (the
+    review's, not re-measured). The rule it touches: determinism
+    (`CLAUDE.md` 4) for what OTLP calls a map, and the scope of `SPEC.md`
+    §7's "member stated twice" paragraph. This item, as decisions log D39
+    registered it, covered an object's members, the two spellings and the
+    fold's c2–c6, not a key repeated across a list's entries. The review
+    names no fix.
+  - *An empty structured payload has two states* (the scoped review of
+    2026-10-18b, R-12; older than the series: `openinference.py`:441, since
+    `d8e2c375`, and `otel_genai.py`:519, since `bc21e7da`, both under
+    `spanweave/adapters/` and the same at `67e469b`). A structured `{}` or
+    `[]` with no JSON mime is `present` on OpenInference and `empty` on OTel
+    GenAI's text branch: OpenInference judges the rendered text
+    (`_state_of(text)`, and `"{}"` is not empty), OTel GenAI the value
+    (`_state_of(reported)`). The rule it touches: `SPEC.md` §3.3's `empty`,
+    "a payload was reported and is genuinely empty (`""`, `{}`, `[]`)", and
+    cross-dialect equivalence (`FIXTURES.md` §4). No conformance scenario
+    carries a structured payload, so the cross-dialect suite cannot see it.
+    Marked neither way in the review; re-measured at `67e469b`, `input.value`
+    under a `TOOL` kind and `gen_ai.retrieval.query.text` under `retrieval`,
+    each `{}` and `[]`: `present` and `empty`, the raw `{}` or `[]` on both.
+    The review names no fix.
+  - *A test's JSON twin is the code under test's own rendering* (the scoped
+    review of 2026-10-18b, R-13; `cf1afff`'s new test, the pattern older:
+    `5f9db88`, `tests/test_protobuf.py`:770, and `97231d7`, :486). In
+    `test_an_all_zero_id_of_another_length_is_carried_as_stated`
+    (:1244–1245), "reads equal to the same span's JSON stating it (written by
+    the test)" is `_rendered(_root(pb2))` with the id patched in, so the
+    assertion follows from the rendering assertion before it. The rule it
+    touches: no test green because of a choice it made about its own fixture
+    (`CONTRIBUTING.md`). Nothing false rests on it: an independent
+    hand-written OTLP/JSON agrees in all 50 cases (the review's *What held*,
+    marked neither way). `512d18e` renamed the test
+    `test_an_id_of_another_length_is_hex_as_stated_whether_zero_or_not` and
+    kept that assertion as it was, saying so; its mutations are red at the
+    rendering assertion before it. The review names no fix.
+  - *JSONL lines are read out of one buffer, which is quadratic* (the scoped
+    review of 2026-10-18b, R-14; older than the series, its reach widened by
+    `743d027`). `_read_lines` (read.py:330–331, the same at `67e469b`) takes
+    each line by `buffered.split(b"\n", 1)`, which copies the rest of the
+    buffer for every line, and every in-memory read takes that path:
+    `read_records(bytes)` and `build(bytes)` hand the reader one chunk. The
+    review's figures, marked neither way: on 20k, 40k and 80k lines, 1.36 s,
+    7.98 s and 34.75 s at `4e52f08`, and 1.49 s, 7.51 s and 34.71 s at
+    `743d027`; the same 40k lines read from a file in chunks, 1.6 s.
+    Agent-measured, the review says: `buffered += next(chunks)`
+    (read.py:335), and the head scan's `head += next(chunks)` (:570, :571 at
+    `67e469b`), are quadratic in one long line too, 0.14 s, 0.58 s and 2.72 s
+    for 6.25, 12.5 and 25 MB. Since `743d027`, two JSONL shapes buffer the
+    whole input before the first record is yielded, and are then read line by
+    line out of that one buffer: a first record that never closes, and one
+    that states `resourceSpans` other than first. The review's R-9 measured
+    them, a blocking finding, so reproduced by its lead, on 40,000 small
+    records read through `read_trace(path)` in 64 KiB chunks: a first line
+    `{"x":{`, 1.53 s at `2f63a90`, its first record after 0.001 s, and 9.44 s
+    at `743d027`, its first record after 0.78 s; a first line
+    `{"x":1,"resourceSpans":[]}`, 1.59 s and 8.00 s; plain JSONL, 1.63 s and
+    1.60 s; the results identical at both commits. No rule is broken in
+    behaviour: the thread records a cost. `SPEC.md` §7's "Its cost" names the
+    buffering, and since `b5d9572` `_opens_an_export`'s docstring says what
+    §7 says (R-9). None of it is re-measured here. Whether the cost is
+    accepted is this thread's, as R-9's fix says; for the next spanweave
+    series.
+  - *Nothing holds the head scan's refusal of `resource_spans`* (the scoped
+    review of 2026-10-18b, R-16; older than the series, the head scan's key
+    at `2f63a90` and at `743d027`: the parent's scan had the same gap, and no
+    claim of the four commits depends on it). Accepting the token
+    `"resource_spans"` too, in `_states_the_export_key` (read.py:675, :683;
+    :679, :687 at `67e469b`), survives the full suite, and under it a
+    pretty-printed `{"resource_spans": […]}` reads as 1 record instead of 3
+    `malformed_record`. Marked neither way in the review; re-measured at
+    `67e469b`, `read.py` copied aside, mutated at both lines and restored
+    from the copy (`cmp` silent): the full suite under
+    `SPANWEAVE_REQUIRE_OTLP=1` is 4226 passed, 2 skipped, and
+    `b'{\n "resource_spans": []\n}\n'` reads as 1 record, where unmutated it
+    is 3 `malformed_record` and no record. The rule it touches: a plausible
+    mutation must be caught. The refusal itself is what OTLP/JSON asks for,
+    keys in lowerCamelCase: the OTLP specification's rule as the review
+    recalled it, not re-read offline, nor here. The review names no fix.
+  - *What the key-order gate feeds nothing of, and its comparator* (the
+    scoped review of 2026-10-18b, R-17; `2f63a90`'s gate, by design). The
+    gate feeds what `SPEC.md` §7 says it feeds, decisions log D38's scope
+    ("every input the repository holds", and hand-made inputs at every key an
+    adapter reads), and no real leak was found in these classes at `2f63a90`
+    or `743d027`. But six input classes the reader accepts are fed nothing: a
+    JSON array document; a BOM; CRLF line endings; JSONL of one export per
+    line (and an array of exports); a forced dialect (`build(adapter=…)`,
+    `--adapter`); and `Builder.feed` and its deltas. For each, a leak planted
+    in code only that class reaches stays green in the gate, and the same
+    comparison fed that class differs in 108/180, 108/180, 108/180, 62/64,
+    108/180 and 180/180 cases (agent-measured, the review says). Unfed
+    elsewhere: in an export the kind and the operation are stated as
+    `kvlistValue` only, so on the text path no member reordering reaches
+    them, and only the records half holds those sites for exports. The
+    comparator is held by nothing (agent-measured): comparing nodes only
+    (x4), exempting all of `meta` (x6) and comparing a refusal by type only
+    (x7) survive, and none of the 90 inputs is refused, so the refusal arm
+    never runs; the comparator is correct as written. The rule it touches:
+    D38's scope, and a plausible mutation must be caught. For the next
+    series, the review says: feed the six classes from the repository's own
+    inputs (rewrapped as an array, BOM'd, CRLF'd, per-line exports,
+    `adapter=`, `Builder`), and plant one leak to prove the comparator.
+  - *A protobuf body's unknown fields reach the graph in wire order* (the
+    scoped review of 2026-10-18b, R-18; older than the series: `2066828`,
+    decisions log D36, and `SPEC.md` §3.7's `unknown_fields` row, which
+    states them "in the order they arrived"). A body whose span carries
+    unknown fields 100 and 101, each stated once, builds two graphs in the
+    two wire orders; the difference is `unknown_fields`'s `source.fields`, a
+    list in arrival order. The review measured it at `4e52f08` and `743d027`
+    alike, graph digests `e9d94e00…` against `8abf1b3f…`, and known fields
+    reordered on the wire build one graph; it marks it neither way, and
+    `2f63a90`'s agent found it independently. The gate feeds no hand-made
+    protobuf body, and this is the one code path only such a body reaches.
+    The rule it touches: determinism (`CLAUDE.md` 4), since the protobuf wire
+    encoding does not make field order significant. No claim of the four
+    commits depends on it: §7's key-order sentence is scoped to an object's
+    members, and the *Corrections after the close* line on `2f63a90`'s
+    subject does not list it. Re-measured at `67e469b` on a one-span body of
+    this record's own, so with digests of its own: fields 100 then 101, and
+    101 then 100, build two graphs (`490bd08c…` and `85fc403e…`), unequal at
+    the diagnostics only, each listing the fields in its wire order; the
+    span's known fields written in reverse build the first graph's bytes. For
+    the next series, the review says: sort the entries by number (keeping
+    each occurrence), or say in §7 that this is the one order of the input a
+    graph keeps.
 - **The wire-type table's `int32` row is held at the lock, not at the floor**
   (the scoped review of 2026-10-18, R-5; registered by decisions log D38).
   `b6cc68d`'s
@@ -14845,6 +14997,11 @@ before the scoped review, on the thread the ninth registered. D39 came the
 same way, after D38's commit, on the thread that commit registered; as first
 given it stopped, and the maintainer narrowed it in the session. Its row is
 the narrowed decision, and records the first.
+D40, like D38 and D39, came from no relay file: the maintainer gave it in
+the session, on the scoped review of 2026-10-18b; the commits that applied
+it before its row was written cite it by finding, as "the scoped review of
+2026-10-18b, R-<n>". The review's `b` is its own: the 2026-10-18b relay
+file in the map is D37's.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14860,6 +15017,7 @@ the narrowed decision, and records the first.
 | D37 | 2026-10-18 | review | The scoped review of 2026-10-18 of `f38c193..4e52f08` (R-1…R-20), the fixes of D36, dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-8, R-9, R-11, R-12, R-14, R-15, R-17, R-18. Read, recorded: R-7, R-10, R-13, R-16, R-19, R-20. R-8 is an invariant broken since before the series (`CLAUDE.md` 4): the adapters are fixed to match the spec, a structured payload's text written with sorted keys; a graph it moves is regenerated only if every difference is key order inside a payload's text, and any other difference is a stop. The zero rule is the Collector's: an id is omitted only at the length the schema gives it with every byte zero, and an id of any other length is carried as stated. Applied as nine commits on `wire`. No `plan:` commits; nothing is amended or force-pushed. The loop ends here: one more scoped review, of commits 1 and 2 only (`5ef4502`, `cf1afff`), the two that change behaviour under `spanweave/`, runs after the push together with Qodo's post-push diff; commit 8 (`42225e0`) touches `spanweave/` too, by a docstring only, and is not in it. From that pass only a broken invariant or a wrong behaviour is fixed before the merge; everything else is a thread for the next spanweave series, and the PR merges. | maintainer |
 | D38 | 2026-10-18 | review | A span kind or operation stated as an object reaching the graph in the record's key order is a broken invariant (`CLAUDE.md` 4), so it is fixed before the merge; and the class is closed by a property gate, not the one site. The gate takes every input the repository holds — every conformance rendering, the captured traces, the zoo's JSON bodies, and the records `read_protobuf` reads out of the zoo's raw bodies — and hand-made inputs stating a structured value wherever an adapter reads one (payloads, `openinference.span.kind`, `gen_ai.operation.name`, and any other attribute the adapters render to text), and re-feeds each with every object's keys reordered at every depth, once reversed and once by a fixed-seed shuffle; each must build a graph byte-identical to the original's. Every site it finds is fixed through one sorted encoder the adapters share and listed in the commit. `SPEC.md` §7's "key order never reaches a node" cites the gate. If a conformance graph, the census or a reading moves, D37's rule for commit 1 applies: proceed only if every difference is key order inside a value's text, list each file, and stop on anything else. The gate is the holder: `tests/test_determinism.py`'s `test_no_key_order_reaches_a_graph` and `test_no_key_order_reaches_a_graph_built_from_records`. The key-order thread the ninth commit of D37 registered is closed, and the `int32`-at-the-floor limit is registered as a thread. Applied as one commit. | maintainer |
 | D39 | 2026-10-18 | review | The three orders D38's commit registered, outside its gate. As first given, D39 fixed all three before the merge: a span stating a field twice, under both proto3 JSON spellings or under a name the reader writes, refused per span by the reader's existing mechanism; `resourceSpans` found by presence, not position; a `kvlistValue` rendered to text as a map. Its commit stopped, rightly: the reader has no per-span refusal. It refuses a line, an array that will not parse or is not one, and a protobuf body, each one `malformed_record`, and keeps a span that is not an object verbatim. **The correction**: the first rule's premise, that `json_format` and protojson both refuse a span stating `traceId` and `trace_id`, was wrong for `json_format`. Measured, Python's `json_format.Parse` accepts `traceId` beside `trace_id`, `parentSpanId` beside `parent_span_id` and `startTimeUnixNano` beside `start_time_unix_nano`, in either order, the later member winning, at `protobuf` 7.36.0 (the lock) and 5.27.0 (the floor); it refuses a key written twice, two members of `AnyValue`'s `oneof`, an `AnyValue` member under both spellings (`stringValue` beside `string_value`, which it reports as two members of the `oneof`) and an unknown field. protojson was not measured: there is no Go toolchain here. **Narrowed** to the second and third rules, applied as one commit: whether the reader reads a document whole is decided by `resourceSpans`'s presence among the first object's members, not its position, the other members staying in the one record verbatim as they do when it comes first; and the `exception_event` message writes an `exception.type` stated as a `kvlistValue` with its keys sorted, by `jsoncodec.keys_sorted`. `SPEC.md` §7 claims exactly what the gate holds, that an object's member order never reaches a graph when each member is stated once; says, as measured, how a member stated twice is read today; and says that a list's order is the input's and reaches `raw.source` verbatim. The holders, beside D38's two: `tests/test_determinism.py`'s `test_an_export_is_found_wherever_resource_spans_stands` and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map`. A member stated twice, the options for a per-span refusal and the silent losses the first commit's sweep found are one item for the next spanweave series, *the reader's malformed input*. **The narrowed merge rule**: from here only a defect this PR introduces, or one a claim this PR makes depends on, blocks the merge; older defects are registered for the next spanweave series. | maintainer |
+| D40 | 2026-10-18 | review | The scoped review of 2026-10-18b of the four commits `5ef4502`, `cf1afff`, `2f63a90` and `743d027` (R-1…R-18), dispositioned. Accepted: the eleven blocking findings, R-1…R-11, each answered by the fix that finding names under "The fix", with the maintainer's narrowings: R-5, the gate measures the change it made at each depth, against the deepest object each input holds, with that depth as the floor instead of 3; R-6, the not-UTF-8 list asserted empty for the repository's inputs and the docstring corrected, rather than such a line reordered; R-9, the docstring says what SPEC §7 says about the cost, and the cost itself is R-14's thread. Registered as threads for the next spanweave series, under *the reader's malformed input*: R-15, whose natural home it is, and R-12, R-13, R-14, R-16, R-17 and R-18 there too, each with its measurements. Applied as seven commits on `wire`, in the order given, one sub-agent per commit. No `plan:` commits; nothing is amended or force-pushed. The oracle stays green (88), and the moved-files rule of D38 applies. **The bounded fix-review rule**: From D40 on, a review of fix commits is bounded. It reads only the fixing commits and applies the standard per-commit rules: the new test red on the derived parent, the commit's mutation caught plus two more plausible ones, one concern. It re-runs the previous review's own survivors and probes, and opens no new search. Only a defect the fixing commits introduce, or one a claim they make depends on, blocks the merge; anything else is a thread for the next series. If the pass finds a blocking defect, the fix is made with its own red test and caught mutation, and goes to the merge on green CI without a further review: the loop ends at that pass. For PR #6, the pass covers all seven of D40's commits, not only commit 4, because the tests and sentences make claims too. | maintainer |
 
 ### Cold review of the series — 2026-10-17
 
@@ -15074,6 +15232,84 @@ after the close*, above.
 | R-19 — `568adc2`, two findings under one subject | **read, recorded** (decisions log D37): the grouping was the decisions'; under *Corrections after the close* |
 | R-20 — `4e52f08`, the record names three commits that touch `spanweave/`, and there are four | **read, recorded** (decisions log D37): `97231d7`'s docstring is the fourth; set right under *Corrections after the close*. The row of decisions log D37 names every commit of its own round the path rule catches: `5ef4502` and `cf1afff`, which change behaviour, and `42225e0`, a docstring only |
 
+### Scoped review of the four behaviour changes — 2026-10-18b
+
+`reviews/2026-10-18b-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-18b.md`: `cmp` silent,
+and `sha256`
+`3f981f764b297a7ff9f526a91ffd8486078884f9be90429e7333c25fcac1187c` on both
+sides, 38,653 bytes. It takes the dated name the earlier archives carry,
+with the `b` of its scratch name, since the scoped review of 2026-10-18
+holds the date's plain name. As for the earlier archives, the scratch name
+and the whole digest are written here and not in the archive, which is kept
+byte-for-byte; the scratch name is provenance and not a path to open. Its
+own title calls it a cold review; it is the scoped review decisions log D37
+called for, of `5ef4502` and `cf1afff`, made of those two and the commits of
+decisions log D38 and D39, `2f63a90` and `743d027`: the four that change
+behaviour, the last before the merge.
+
+A scoped read of exactly those four commits, with decisions log D37's, D38's
+and D39's rows and the items they touch as context. One sub-agent per
+commit, all four on the same written brief, the briefs for `2f63a90` and
+`743d027` naming five probes besides: a site whose sort is removed, a
+reordering only at the top level, an input class the gate does not feed,
+export detection by first key restored, and a kvlist rendered in entry
+order. Each commit's tests ran on its derived parent, `<sha>^` with only the
+commit's `tests/` checked out, and its mutations on its tip, one at a time,
+each file restored from a copy with `cmp` silent, in worktrees created by
+absolute path, `spanweave.__file__` and `tests.__file__` proved inside each,
+all removed after; tools ran straight from the venv with `PYTHONPATH` unset
+and `SPANWEAVE_REQUIRE_OTLP=1`, and scripts under `python -I`. The lead, not
+an agent, re-derived the oracle without the test helpers, by a script that
+imports nothing from `tests/`; read `SPEC.md` §7's key-order sentence
+against the gate; took the counts at the tip; ran install-check offline; and
+reproduced every blocking finding but the measurements a finding marks
+agent-measured. It found the oracle holding on every pair at `4e52f08` and
+at each of the four commits, records and `dumps` bytes, with no digest moved
+from `4e52f08`'s on either path; every count at the tip as `743d027`'s
+message gives it; each derived parent red as its commit's message says, for
+the right reason (at `2f63a90`, its `keys_sorted` unit tests red only
+because the function is absent, which pins no behaviour); each commit's own
+mutations reproducing with their stated counts where re-run (three of
+`743d027`'s eight); and §7's key-order sentence holding, clause by clause,
+but where its findings say. It disclosed two slips of its own: the `5ef4502`
+agent's first probes ran without `-B` and wrote `__pycache__` into its own
+worktrees, which are git-ignored files, and it deleted them; and
+install-check wrote `dist/` and caches into the lead's worktree at the tip,
+ignored files removed with it. What it did not re-derive: everything it says
+of the Collector, protojson, and `json_format` at `protobuf` 5.27.0 for
+D39's correction. It raised eighteen findings, R-1…R-18, graded by decisions
+log D39's narrowed merge rule: eleven blocking, R-1…R-11, each a defect one
+of the four introduced or one a claim they make depends on; and seven
+threads, R-12…R-18, older than them or by design. The maintainer's
+dispositions are decisions log D40, above. They were applied on `wire` as
+seven commits, in the order D40 gives, one sub-agent per commit. This
+archive is the seventh, with the threads under *the reader's malformed
+input* and the PR's status under *Still open after the close*, above, and
+one record line under *Corrections after the close*, below; the six before
+it wrote R-8's four.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `5ef4502`, a structured payload's spelling, beyond key order, held by no test | **accepted**, `e40b4a7` (tests only): R-1's three cases on each dialect. A non-ASCII value, whose text is the six-character escape (`ensure_ascii` at its default), and a NaN, which builds and whose graph `dumps` refuses, `graph_not_serializable` (`allow_nan` at its default), sit beside each adapter's key-order rendering test; the long integer, written whole and sorted under the lowest digit limit, is in `tests/test_determinism.py`, run in a subprocess under `PYTHONINTMAXSTRDIGITS`, because a guard fails any test file that sets the limit in-process. R-1's three mutations are red on both dialects. The review calls the reader's intermediate one of the encoders that pass `ensure_ascii=False`; the commit found that `otlp_protobuf.py`'s intermediate passes `ensure_ascii=True`, and that the two passing `False` are `canonical_dump` and the record digest's text. Its message's slip is under *Corrections after the close* (decisions log D40) |
+| R-2 — `cf1afff`, "all zero or not" held for all-zero ids only | **accepted**, `512d18e` (with R-3; one mechanism, an id of another length): the test, renamed `test_an_id_of_another_length_is_hex_as_stated_whether_zero_or_not`, runs each of its fifteen cases with one byte not zero too, the last byte 1, R-2's own `00000001` among them: thirty cases. R-2's XOR, count and base64 survivors are red, and so is a truncation probe past the review's; uppercase hex, which the review found surviving at `cf1afff` only, is red already (decisions log D40) |
+| R-3 — `cf1afff`, SPEC §7 calls every id of another length invalid | **accepted**, `512d18e` (with R-2): `SPEC.md` §7's bullet says the schema gives each id its length and calls a span's own `traceId` or `spanId` of another length invalid, and of a `parentSpanId`, or a link's ids, gives the length only, as the installed `trace_pb2.pyi` says (`opentelemetry-proto` 1.45.1, and the floor's 1.28.0 alike). `cf1afff`'s message says the same thing SPEC said, "the schema calls an id of another length invalid"; it is history and stands, and SPEC is what is corrected (decisions log D40) |
+| R-4 — `2f63a90`, two `keys_sorted` mutations survive, the gate's value holding neither shape | **accepted**, `914cdd5` (with R-5, R-6; tests only; one mechanism, the key-order gate): `STRUCTURED` gains an object inside an array inside an array and two keys differing only by case, and feeds both halves of the gate; R-4's x1 and x2 are red (decisions log D40) |
+| R-5 — `2f63a90`, the gate's reach held by its own tally, to depth 3 | **accepted, narrowed**, `914cdd5` (with R-4): the two depth tests measure the change the gate made, per input and per order, each reordered object's member order against the written one, and assert it changed at every depth where the input holds an object of two or more members (some depths hold only arrays or one-member objects), inside an array too, the floor each input's own deepest object instead of 3; `tally.deepest >= 3` is gone, and a test of its own holds the walker. R-5's b8, b3, b7 and b16 (b6) are red (decisions log D40) |
+| R-6 — `2f63a90`, a line that is not UTF-8 fed unchanged, for a false reason, its list dropped | **accepted, narrowed**, `914cdd5` (with R-4): `test_no_key_order_reaches_a_graph` asserts the list `input_reordered` returns is empty for every input it feeds, rather than such a line being reordered, and `input_reordered`'s docstring, which gave the false reason, gives the two reasons apart (the module docstring had no such sentence). `2f63a90`'s message gives the same false reason; the docstring it describes is the one corrected. R-6's planted byte and the review's span-kind probe are red (decisions log D40) |
+| R-7 — `743d027`, the scan's bracket depth held for `{` only | **accepted**, `b5d9572` (with R-9, R-10; one mechanism, the export scan): `HEAD_SCANS` gains R-7's input, a key-shaped string as an element of an array that is a member's value, verdict `False`; R-7's mutant is red (decisions log D40) |
+| R-8 — `2f63a90`, `743d027`, and `5ef4502`'s record: an `exception.type` stated as an `AnyValue` tag holding an object | **accepted**, `60918ee`: `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map`, beside the kvlist test, states the object under `stringValue` in two member orders through the gate's text path, and the two build one graph; `SPEC.md` §7 names it among the holders, in one clause. Four lines under *Corrections after the close*, one per false sentence: `2f63a90`'s message, the thread on orders outside the gate, `743d027`'s `CHANGELOG.md` entry and `5ef4502`'s message. The review's seam mutation is red, and so is one past it that survived at `b5d9572` (decisions log D40) |
+| R-9 — `743d027`, `_opens_an_export`'s docstring calls giving up free | **accepted, narrowed**, `b5d9572` (with R-7): the docstring says what `SPEC.md` §7 says, a first record that does not close is scanned, and buffered, to the end of the input and then read line by line, without §7's lead-in "Its cost:", since the neutrality gate refuses the word under `spanweave/`; `_read_document`'s docstring is corrected too. `SPEC.md` is unchanged: no sentence of §7 was false, its "Its cost" naming the first record that never closes and its buffering rule covering the second shape R-9 names. The cost itself is R-14's thread (decisions log D40) |
+| R-10 — `743d027`, an empty chunk after an escape loses the escape | **accepted**, `b5d9572` (with R-7): the scan keeps its place when no byte is new, `self._at = max(at, len(data))`; a test feeds R-10's input with an empty chunk, and the head-scan test feeds every case a third way, an empty chunk before each byte; red on the derived parent, 2. No `CHANGELOG.md` line: no chunk source the library has yields an empty chunk after the head. One mutation of the commit's own survives, `self._at = at`, which changes no verdict and only reads bytes again (decisions log D40) |
+| R-11 — `743d027`, "a list's order … reaches `raw.source` verbatim", false where the reader folds the list | **accepted**, `67e469b` (documents only): `SPEC.md` §7 and `743d027`'s `CHANGELOG.md` entry give the finding's wording, which lists the reader carries as written and which it folds to a map, and one clause past it, because "their order is not carried" is false for the entries the fold cannot take, which `attributes_unfolded` keeps in list order. R-11's table is re-derived and agrees (decisions log D40) |
+| R-12 — the adapters since `d8e2c375` and `bc21e7da`, an empty structured payload `present` on one dialect and `empty` on the other | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-13 — `cf1afff`'s new test, and the pattern older: a JSON twin rendered by the code under test | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-14 — `_read_lines`, older than the series: JSONL lines read out of one buffer, quadratic | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-15 — the attribute fold, older than the series: a key an attributes list states twice decides node fields | **registered as a thread** (decisions log D40): under *the reader's malformed input*, its natural home, for the next spanweave series |
+| R-16 — the head scan, older than the series: nothing holds its refusal of `resource_spans` | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-17 — `2f63a90`'s gate, by design: six input classes fed nothing, and a comparator nothing tests | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-18 — `2066828`, older than the series: a protobuf body's unknown fields reach the graph in wire order | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+
 ### The resume note  *(the plan file's §4, folded in full)*
 
 Every dated entry, verbatim and in order, except one clause removed after
@@ -15119,8 +15355,9 @@ in the last entry are registered above, under *Still open after the close*.
 What the 2026-10-17 cold review of `wire`, the scoped review of its fixes,
 the scoped review of 2026-10-18 of Qodo's fixes, and the scoped review of
 2026-10-18b of `5ef4502`, `cf1afff`, `2f63a90` and `743d027` found untrue
-or unbound in the series' record, and what decisions log D39 found of
-D38's commit. Each is set right here rather than by rewriting the
+or unbound in the series' record, what decisions log D39 found of D38's
+commit, and one slip found while making the seventh commit of decisions
+log D40. Each is set right here rather than by rewriting the
 record above, except two lines `4521cc2` edited in place: the close
 summary's "seventh deletion" ordinal, removed because a count no test holds
 is not stated; and the `UnknownFieldSet` version clause in W1's resume
@@ -15316,6 +15553,20 @@ R-<n>* is the last one's.
   stated twice reached a graph there too, and still does: `SPEC.md` §7 now
   leaves it outside its claim, and *the reader's malformed input*, above,
   registers it (scoped review of 2026-10-18b, R-8).
+- **`e40b4a7`'s message writes the escape as the character.** Where it gives
+  the text the non-ASCII and NaN tests assert as `raw`, it writes `é` for the
+  six characters `\u00e9`:
+  `raw '{"a": 1, "b": "é"}', the six-character escape` and
+  `raw '{"a": "é", "b": NaN}'`. The tests assert the escape,
+  `{"a": 1, "b": "\u00e9"}` and `{"a": "\u00e9", "b": NaN}`, in
+  `tests/test_openinference.py` and `tests/test_otel_genai.py` alike. The
+  message writes `é` eight times, each the two bytes `303 251` under `od -c`,
+  and `\u00e9` nowhere: those two; five where the character is right, three
+  in the value the tests state (R-1's record among them) and two in the value
+  read back; and the Y4 mutation's `(raw '{"a": 1, "b": "é"}')`, which is the
+  text that mutation, `ensure_ascii=False`, writes, so it reads true there.
+  Recorded here, not by amending (found while making the seventh commit of
+  decisions log D40).
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

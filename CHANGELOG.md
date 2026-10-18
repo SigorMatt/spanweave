@@ -15,6 +15,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The scoped review of 2026-10-18b is archived, and every finding has a
+  disposition** (decisions log D40). No behaviour change.
+  `reviews/2026-10-18b-wire.md` is the review of the four commits that
+  changed behaviour last before the merge, `5ef4502`, `cf1afff`, `2f63a90`
+  and `743d027`, byte for byte, its `sha256` in `TASKS.md`, which gains a
+  line per finding, R-1…R-18. The eleven blocking findings were answered by
+  the six commits before this one, each by the fix the review names, three
+  of them as the maintainer narrowed it; those commits add tests, set right
+  sentences in `SPEC.md`, this file, `TASKS.md` and docstrings, and change
+  the export scan, and none adds an entry under Fixed: the scan's change
+  alters no reading the library's chunk sources can reach. Seven threads are
+  registered for the next spanweave series, under the reader's malformed
+  input. And a review of fix commits is bounded from here: it reads only the
+  fixing commits, and only a defect they introduce, or one a claim they make
+  depends on, blocks the merge.
 - **The scoped review of 2026-10-18 is archived, and every finding has a
   disposition** (decisions log D37). No behaviour change.
   `reviews/2026-10-18-wire.md` is the review of the fixes for Qodo's review
