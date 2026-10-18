@@ -778,17 +778,29 @@ NON_FINITE = {
 
 
 @pytest.mark.parametrize("spelling", list(NON_FINITE))
-def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(spelling):
+def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(
+    spelling, monkeypatch
+):
     """Qodo's review of PR #6, finding 5, pinned (`SPEC.md` §7): a non-finite
     `doubleValue` is the string proto3 JSON spells it, on both paths, with no
     diagnostic. A graph cannot carry a float NaN (`allow_nan=False`), and the
     JSON path reads the string as a string, so the protobuf body and its JSON
     spelling -- written here, not rendered -- yield equal records and the same
     graph bytes. Whether it should draw a diagnostic is an open thread
-    (`TASKS.md`); this holds what it reads as until that is decided."""
+    (`TASKS.md`); this holds what it reads as until that is decided.
+
+    The records cannot show the rendering: a record keeps no AnyValue tag, so
+    a `stringValue` of the same text reads as the same record. So the
+    rendering is held where it is made, `_rendered`, and where it is read, the
+    text `read_protobuf` hands `read_records`, intercepted as
+    `test_the_document_read_back_is_written_with_sorted_keys` intercepts it;
+    the node's `raw.source` is held to the record, so the value is carried
+    verbatim; and the graph's diagnostics, whole, to those a finite 1.5 draws
+    (the scoped review of 2026-10-18, R-14)."""
     pb2 = _pb2()
     from opentelemetry.proto.common.v1 import common_pb2
 
+    from spanweave import otlp_protobuf
     from spanweave.otlp_protobuf import _rendered
 
     def request(**value: Any) -> Any:
@@ -798,7 +810,15 @@ def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(spel
         )
         return built
 
-    body = request(double_value=NON_FINITE[spelling]).SerializeToString()
+    texts: list[bytes] = []
+
+    def read_back(data: bytes) -> spanweave.Records:
+        texts.append(bytes(data))
+        return spanweave.read_records(data)
+
+    monkeypatch.setattr(otlp_protobuf, "read_records", read_back)
+    stated = request(double_value=NON_FINITE[spelling])
+    body = stated.SerializeToString()
     document = _rendered(_root(pb2))
     _spans(document)[0]["attributes"].append(
         {"key": "k", "value": {"doubleValue": spelling}}
@@ -806,6 +826,7 @@ def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(spel
     text = json.dumps(document, sort_keys=True, allow_nan=False).encode()
 
     from_protobuf = spanweave.read_protobuf(body)
+    (read_back_text,) = texts
     from_json = spanweave.read_records(text)
     assert from_protobuf == from_json
     assert _built(from_protobuf) == _built(from_json)
@@ -816,9 +837,32 @@ def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(spel
         assert value == spelling
         assert read.diagnostics == ()
         assert read.skipped_records == 0
+
+    # The rendering is a `doubleValue` of the spelling, where it is made and in
+    # the text read back -- not a `stringValue`, which would read the same.
+    spelled = [{"key": "k", "value": {"doubleValue": spelling}}]
+    for where, rendering in (
+        ("_rendered", _rendered(stated)),
+        ("the text read back", json.loads(read_back_text)),
+    ):
+        (span,) = _spans(rendering)
+        assert [entry for entry in span["attributes"] if entry["key"] == "k"] == (
+            spelled
+        ), where
+
+    # The node carries the record verbatim: the spelling, as read.
+    (record,) = from_protobuf.records
+    graph = json.loads(_built(from_protobuf))
+    (node,) = graph["nodes"]
+    assert node["raw"]["source"] == record
+
     # Nothing in the graph is about the number: it draws what a finite one does.
     finite = spanweave.read_protobuf(request(double_value=1.5).SerializeToString())
     assert _codes(from_protobuf) == _codes(finite)
+    # Whole: each code, level, message and source. None carries the value
+    # (`unmapped_attributes` names the key only, `SPEC.md` §3.7), so "but for
+    # the value" is all of it, and they are equal outright.
+    assert graph["diagnostics"] == json.loads(_built(finite))["diagnostics"]
 
 
 def _keys(value: Any) -> set[str]:
