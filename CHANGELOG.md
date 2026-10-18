@@ -2408,10 +2408,13 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   any other type is written as before. `SPEC.md` §7's key-order sentence now
   claims what the gate holds, that an object's member order never reaches a
   graph when each member is stated once, says how a member stated twice is
-  read today, as measured, and says that a list's order, a `kvlistValue`'s
-  among them, is the input's and reaches `raw.source` verbatim. No graph in
-  the repository changes: no conformance rendering, captured trace or zoo
-  body states an `exception.type` as a `kvlistValue`.
+  read today, as measured, and says that where the reader carries a list as
+  written (an event's, a resource's and a scope's attributes, an
+  `arrayValue`), its order is the input's and reaches `raw.source`, and that a
+  span's or a link's attributes, and a `kvlistValue` inside one, are folded to
+  a map whose order is not carried, but for the entries the fold cannot take.
+  No graph in the repository changes: no conformance rendering, captured trace
+  or zoo body states an `exception.type` as a `kvlistValue`.
 - **A span kind or operation stated as an object is rendered with sorted
   keys** (decisions log D38). An exporter that carries nested attributes can
   state `openinference.span.kind` or `gen_ai.operation.name` as an object, and

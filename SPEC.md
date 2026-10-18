@@ -1849,9 +1849,14 @@ declares reaches `0.5`.
     the tags the fold reads, is folded by the first of those tags in a fixed
     order (`stringValue`, `boolValue`, `intValue`, `doubleValue`,
     `bytesValue`, `arrayValue`, `kvlistValue`), in either order, and the other
-    is lost. **A list's order is the input's**, and reaches `raw.source`
-    verbatim: an OTLP `kvlistValue` is a list of entries, and the order it
-    lists them in is in the record. **Where a `kvlistValue` is rendered to
+    is lost. **Where the reader carries a list as written** (an event's, a
+    resource's and a scope's attributes, an `arrayValue`), **its order is the
+    input's** and reaches `raw.source`; a span's or a link's attributes, and a
+    `kvlistValue` inside one, are folded to a map, and their order is not
+    carried, but for the entries the fold cannot take, which it keeps under
+    `attributes_unfolded` in the order the list gives them: among them are both
+    copies of a key the attributes state twice, whose last value the map keeps
+    (*OTLP JSON*, below). **Where a `kvlistValue` is rendered to
     text, it is rendered as the map it stands for, its keys sorted** (§3.3).
     A bytes-level rule would also have nothing to say about the JSON array
     form, where a record has no bytes of its own. Records are compared
