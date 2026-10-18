@@ -14580,7 +14580,59 @@ decisions log D15, D16, D17, D18 and D19.
   §7's "key order never reaches a node" false there. Re-derived at
   `42225e0` on both dialects. Not fixed by D37, because no decision gives
   the rule. Open, for the maintainer: fixed before the merge, as the loop
-  rule's broken invariant, or in the next spanweave series.
+  rule's broken invariant, or in the next spanweave series. **Closed** by
+  decisions log D38, before the merge: both adapters render a kind or an
+  operation stated as an object with its keys sorted at every level, by
+  `jsoncodec.keys_sorted`, the one sorting a payload's text goes through too,
+  and in `str()`'s spelling as before (`SPEC.md` §3.3). The class is held,
+  not the site: `tests/test_determinism.py`'s
+  `test_no_key_order_reaches_a_graph` and
+  `test_no_key_order_reaches_a_graph_built_from_records` re-feed every input
+  the repository holds, and hand-made ones stating a structured value
+  wherever an adapter reads a value, with every object's keys reordered at
+  every depth, and each builds the graph it built as written. `SPEC.md`
+  §7's "key order never reaches a node" cites them.
+- **Where an order the input wrote still decides the graph, outside the
+  gate** (found while making D38's commit; a thread decisions log D38 did not
+  list). The gate does not hold these three: the first two are not a text an
+  adapter renders, so no hand-made input states them, and the third is not
+  an object's member order. First, `spanweave/read.py`'s `_flattened` and
+  `_flattened_links` write each key they rename, and the
+  status and attribute folds' `status_message` and `attributes_unfolded`,
+  into the record that carries every other key under its own name, in the
+  order the span writes them: a span stating both `traceId` and `trace_id`,
+  a `status` with a `message` and a `status_message`, or `attributes` and
+  `attributes_unfolded` — a link likewise — keeps whichever comes last, and
+  the other is gone from `raw.source` too (`CLAUDE.md` 2 and 4). Second, the
+  head scan that tells an OTLP export from JSONL reads the input's first
+  member key (`SPEC.md` §7): a document written over several lines whose
+  object carries `resourceSpans` beside another key is read whole, as one
+  record, with that key first, and line by line, every line malformed, with
+  it second. `SPEC.md` §7's "key order never reaches a node" is not true of
+  either, and each fix needs a rule the spec does not state. Third, not a
+  member order: the `exception_event` message (`spanweave/seam.py`) writes
+  an `exception.type` stated as a `kvlistValue` with `repr`, in the order
+  the list gives the map's entries, which no reordering of an object's
+  members changes (the gate's hand-made export states one, and stays
+  green); the same map listed in another order gives another message. Open,
+  for the maintainer: a rule for each — which key wins, or where the other
+  goes; whether such a document is read whole; whether a `kvlistValue`'s
+  entry order is key order — before the merge or in the next spanweave
+  series.
+- **The wire-type table's `int32` row is held at the lock, not at the floor**
+  (the scoped review of 2026-10-18, R-5; registered by decisions log D38).
+  `b6cc68d`'s
+  `test_every_reachable_field_is_expected_with_the_wire_type_the_runtime_writes`
+  holds each row of the reader's field-type-to-wire-type table that a field
+  reachable from the request uses. At the locked `opentelemetry-proto`
+  1.45.1, `KeyValue.key_strindex` and `AnyValue.string_value_strindex` are
+  reachable and are `int32` (field type 5), so the row is held there, on
+  the `check` matrix. At the declared floor, which CI's `otlp` job installs
+  — `protobuf` 5.27.0 and `opentelemetry-proto` 1.28.0, on the same
+  Pythons — neither field exists and no reachable field is `int32`, so
+  there the row's mutation, `5: 0` → `5`, survives. Open, for the next
+  spanweave series: whether the floor job should hold that row too, and by
+  what. A thread for the next series, not a batch here.
 - **`ROADMAP.md`'s announcement section still lists OTLP protobuf among
   "Phase 4 wants"** (*What it must not claim*: "No dialect it does not
   read"). The close edited `ROADMAP.md` only where its row said, the
@@ -14674,7 +14726,9 @@ commits that applied it before its row was written cite the review by
 finding. D37 is the scoped review of 2026-10-18, a read of D36's fixes,
 dispositioned; the 2026-10-18b file is its dispositions, and the commits
 that applied it before its row was written cite it by finding, as "the
-scoped review of 2026-10-18, R-<n>".
+scoped review of 2026-10-18, R-<n>". D38, like D28–D30, came from no relay
+file: the maintainer gave it in the session, after D37's nine commits and
+before the scoped review, on the thread the ninth registered.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14688,6 +14742,7 @@ scoped review of 2026-10-18, R-<n>".
 | D35 | 2026-10-17 | review | The scoped review of 2026-10-17 of `4689670..c4018b4` (R-1…R-21), dispositioned. Accepted: R-1, R-2, R-3 (with its limit stated: the gate is syntactic, and a name bound by assignment is not chased), R-4, R-5, R-6, R-7, R-9, R-10, R-11 (the G7 branch), R-12 (the worst three; the rest recorded as the limit of a text-shape test), R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-20, R-21. Read, recorded: R-8, `21b106d`'s four guards under one subject, which were the grouping the maintainer gave. Declined with a reason: R-11's second bullet (`D33` changed to `D32`, a real but wrong row, stays green): a resolver holds that a citation exists, not that it is the right one; the only guard for meaning is a reader. Applied as ten commits on `wire`, one concern each; where several findings share one mechanism the subject says so. No `plan:` commits; nothing is amended or force-pushed. The loop is bounded: no third cold review unless a commit of this round touches `spanweave/` (none did); the PR, Qodo's review of it and the merge follow, and anything a further pass would find is a thread, registered at the next series' open. | maintainer |
 | D36 | 2026-10-18 | review | Qodo's review of pull request #6 at `f38c193` (seven findings), dispositioned. Accepted: finding 6, a bug: an id whose bytes are all zero is omitted, as the Collector omits it, so a root span whose exporter wrote zero bytes for its parent is a root and not an orphan; finding 7, a bug: `unknown_fields` says, per field, whether the installed schema defines the number and the wire type it expects, so a known field with the wrong wire type is not blamed on a newer schema; finding 4, a rule violation: the rendered document is written with sorted keys; finding 3, a rule violation: the tests import the proto modules by name, not by `__import__`. Accepted as a pin and a thread: finding 5, a bug: a non-finite `doubleValue` reads as its proto3 JSON spelling, a string, on both paths, and a test pins that the two agree; changing it would change the graph a JSON export yields, so whether it draws a diagnostic is a thread for the next spanweave series. Declined as a design change, answered in the record: finding 1, a rule violation: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, because the records are the JSON path's records for the same export (D29), and SPEC §7 says so; finding 2, a rule violation: the `otlp` extra is the decided exception to the zero-dependency rule (D28), held by the gate to a lazy import, one module and the extra's two prefixes, and `CLAUDE.md`'s rule says so. Applied as seven commits on `wire`, one concern each. No `plan:` commits; nothing is amended or force-pushed. Commits 1–3 (`5f9db88`, `2066828`, `8b68608`) touch `spanweave/`, so they get their own scoped cold review before the merge, together with Qodo's diff after the push. The comment and its seven inline comments are archived as first fetched; the PR summary comment carries no findings and is not. | maintainer |
 | D37 | 2026-10-18 | review | The scoped review of 2026-10-18 of `f38c193..4e52f08` (R-1…R-20), the fixes of D36, dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-8, R-9, R-11, R-12, R-14, R-15, R-17, R-18. Read, recorded: R-7, R-10, R-13, R-16, R-19, R-20. R-8 is an invariant broken since before the series (`CLAUDE.md` 4): the adapters are fixed to match the spec, a structured payload's text written with sorted keys; a graph it moves is regenerated only if every difference is key order inside a payload's text, and any other difference is a stop. The zero rule is the Collector's: an id is omitted only at the length the schema gives it with every byte zero, and an id of any other length is carried as stated. Applied as nine commits on `wire`. No `plan:` commits; nothing is amended or force-pushed. The loop ends here: one more scoped review, of commits 1 and 2 only (`5ef4502`, `cf1afff`), the two that change behaviour under `spanweave/`, runs after the push together with Qodo's post-push diff; commit 8 (`42225e0`) touches `spanweave/` too, by a docstring only, and is not in it. From that pass only a broken invariant or a wrong behaviour is fixed before the merge; everything else is a thread for the next spanweave series, and the PR merges. | maintainer |
+| D38 | 2026-10-18 | review | A span kind or operation stated as an object reaching the graph in the record's key order is a broken invariant (`CLAUDE.md` 4), so it is fixed before the merge; and the class is closed by a property gate, not the one site. The gate takes every input the repository holds — every conformance rendering, the captured traces, the zoo's JSON bodies, and the records `read_protobuf` reads out of the zoo's raw bodies — and hand-made inputs stating a structured value wherever an adapter reads one (payloads, `openinference.span.kind`, `gen_ai.operation.name`, and any other attribute the adapters render to text), and re-feeds each with every object's keys reordered at every depth, once reversed and once by a fixed-seed shuffle; each must build a graph byte-identical to the original's. Every site it finds is fixed through one sorted encoder the adapters share and listed in the commit. `SPEC.md` §7's "key order never reaches a node" cites the gate. If a conformance graph, the census or a reading moves, D37's rule for commit 1 applies: proceed only if every difference is key order inside a value's text, list each file, and stop on anything else. The gate is the holder: `tests/test_determinism.py`'s `test_no_key_order_reaches_a_graph` and `test_no_key_order_reaches_a_graph_built_from_records`. The key-order thread the ninth commit of D37 registered is closed, and the `int32`-at-the-floor limit is registered as a thread. Applied as one commit. | maintainer |
 
 ### Cold review of the series — 2026-10-17
 

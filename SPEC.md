@@ -358,13 +358,20 @@ string, and a diagnostic is emitted. Never raise on a malformed payload.
 The mirror case: an exporter that carries **nested attributes** hands the
 adapter a value that was never a string, and the adapter renders it back to
 text for `raw`. That text is the library's, not the exporter's: it is written
-with **sorted keys**, at every level of nesting — `json.dumps` with
-`sort_keys=True` and its other arguments at their defaults. Where the
-payload has no JSON mime, that text is its `value` too; where it has one,
-`value` is a JSON value, whose keys the writer sorts (§5.2). So the order an
-exporter wrote a payload's keys in reaches neither, and two records that
-parse equal give one payload: which copy §7 keeps of a record that appears
-twice does not change it.
+with **sorted keys**, at every level of nesting and inside lists — `json.dumps`
+at its default arguments, of the value with every object's keys sorted, which
+is `json.dumps` with `sort_keys=True`. Where the payload has no JSON mime,
+that text is its `value` too; where it has one, `value` is a JSON value, whose
+keys the writer sorts (§5.2). **The sorting is one rule the adapters share,
+for every text an adapter renders from a structured value a record states**;
+only the spelling differs. A payload's is JSON's, above. A span kind
+(`openinference.span.kind`) or operation (`gen_ai.operation.name`) stated as
+anything but a string is rendered with `str()`, Python's spelling, of the
+value with its keys sorted the same way, and that text is the node's
+`attributes.reported_kind` and the `unknown_span_kind` diagnostic's message
+and source (§3.2, §3.7). So the order an exporter wrote an object's keys in
+reaches none of them, and two records that parse equal give one node: which
+copy §7 keeps of a record that appears twice does not change it.
 Rendering has the same limit parsing does — `json.dumps`
 refuses nesting it will not descend — so when there is no text form, `state`
 stays `present`, `value` and `raw` are both `None`, and the same
@@ -789,8 +796,9 @@ cases are worth naming because each looks like an exception and is not:
   reported. So is a mime stated beside **no value at all** — an `absent`
   payload carries no mime either, so that key was never read.
 - **A key whose only unreadable rendering is `null`.** A span kind is rendered
-  with `str()`, so every value but `null` is read and is preserved verbatim as
-  `attributes.reported_kind`; `null` alone leaves nothing, and is reported.
+  with `str()`, an object's keys sorted first (§3.3), so every value but `null`
+  is read and is preserved verbatim as `attributes.reported_kind`; `null` alone
+  leaves nothing, and is reported.
   The `unknown_span_kind` diagnostic must also say **which** of the two
   happened: a message that says "no attribute" of a key the span carried is
   untrue in the one place a reader would look to find out.
@@ -1800,8 +1808,14 @@ declares reaches `0.5`.
     What the library preserves is the parsed value (`RawRecord.source`, §3.5);
     whitespace and key order never reach a node, so two lines that parse equal
     are indistinguishable everywhere downstream and collapsing them loses
-    nothing. A bytes-level rule would also have nothing to say about the JSON
-    array form, where a record has no bytes of its own. Records are compared
+    nothing. Key order is held by `tests/test_determinism.py`'s
+    `test_no_key_order_reaches_a_graph` and
+    `test_no_key_order_reaches_a_graph_built_from_records`: every input the
+    repository holds, and hand-made ones stating a structured value wherever
+    an adapter reads a value, each built again with every object's members
+    reordered at every depth, builds the same graph (§3.3). A bytes-level
+    rule would also have nothing to say about the JSON array form, where a
+    record has no bytes of its own. Records are compared
     by their **canonical digest** (§3.6): the SHA-256 of
     `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
     encoded UTF-8. §3.6 states the arguments exactly and why.

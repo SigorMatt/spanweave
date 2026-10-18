@@ -133,6 +133,50 @@ def python_text(value: object) -> str:
         return _repr_of(value)
 
 
+def keys_sorted(value: JsonValue) -> JsonValue:
+    """``value`` with every object's keys in sorted order, at every depth.
+
+    The one sorting the adapters share (`SPEC.md` §3.3). Every text an adapter
+    renders from a structured value a record stated is rendered from this --
+    a payload's in JSON's spelling, a span kind's or an operation's in
+    ``str``'s -- so the order the record wrote an object's keys in is in none
+    of them, and two records that parse equal render one text. It sorts and
+    does nothing else: each spelling still writes every value itself, so
+    ``json.dumps`` of the result is ``json.dumps`` with ``sort_keys=True``,
+    and ``str`` of it is ``str`` with the keys in that order. Keys sort as
+    ``sort_keys`` sorts them, by code point; anything not an object or a list
+    is returned as it is.
+
+    A copy: the value is part of a record, and the record is the node's
+    verbatim source (`SPEC.md` §3.5), in the order it was written. Iterative,
+    like ``_swap_long_integers``, so that it meets no depth ceiling the
+    encoder would not; and a container met twice is copied once, so a value
+    that refers back to itself still does, and each spelling answers it as it
+    would have.
+    """
+    copies: dict[int, JsonValue] = {}
+    pending: list[JsonValue] = []
+
+    def copy_of(item: JsonValue) -> JsonValue:
+        if isinstance(item, dict | list):
+            if id(item) not in copies:
+                copies[id(item)] = {} if isinstance(item, dict) else []
+                pending.append(item)
+            return copies[id(item)]
+        return item
+
+    root = copy_of(value)
+    while pending:
+        original = pending.pop()
+        copy = copies[id(original)]
+        if isinstance(original, dict):
+            for key in sorted(original):
+                copy[key] = copy_of(original[key])
+        else:
+            copy.extend(copy_of(item) for item in original)
+    return root
+
+
 def _repr_of(value: object) -> str:
     """``repr`` of a parsed JSON value, integers written whole."""
     if isinstance(value, bool) or value is None or isinstance(value, float | str):

@@ -427,6 +427,570 @@ def test_two_lines_differing_only_in_a_payload_s_key_order_build_one_graph(diale
 
 
 # --------------------------------------------------------------------------
+# No key order reaches a graph (decisions log D38)
+# --------------------------------------------------------------------------
+#
+# The pair above holds one site with one input. The class is wider: wherever
+# an adapter turns a value a record states into text, the order the record
+# wrote an object's keys in is in that text unless something sorts it -- and
+# a span kind (`openinference.span.kind`) or operation
+# (`gen_ai.operation.name`) stated as an object was such a site after the pair
+# above was fixed. So the gate is a property over inputs, not a pair: every
+# input the repository holds, and hand-made ones stating a structured value
+# wherever an adapter reads a value, each re-fed with every object's members
+# reordered at every depth (`tests/key_order.py`), once reversed and once by a
+# fixed-seed shuffle. Each must build the graph the input as written builds.
+
+from dataclasses import replace  # noqa: E402
+
+from spanweave.errors import SpanweaveError  # noqa: E402
+from tests import key_order  # noqa: E402
+from tests.test_protobuf import PAIRS, _built, _pb2  # noqa: E402
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+#: The shuffle's seed. Any constant: the reordering is arbitrary, the test is
+#: not.
+KEY_ORDER_SEED = 20261018
+
+#: Each reordering, made fresh for each input, so every input is reordered
+#: the same way whichever others run.
+ORDERS = {
+    "reversed": lambda: key_order.reversal,
+    "shuffled": lambda: key_order.shuffle(KEY_ORDER_SEED),
+}
+
+#: A structured value: keys out of sorted order, an object inside an object,
+#: and objects inside arrays.
+STRUCTURED = {
+    "zeta": 1,
+    "alpha": {"mu": [{"yy": 2, "xx": 1}], "beta": True},
+    "eta": [3, {"q": None, "p": "s"}],
+}
+
+
+def _lines(*records):
+    return b"".join(json.dumps(record).encode("utf-8") + b"\n" for record in records)
+
+
+def _openinference_everywhere():
+    """One span stating the structured value at every key the adapter reads,
+    the span kind among them."""
+    value = STRUCTURED
+    return {
+        "trace_id": "t1",
+        "span_id": "s1",
+        "parent_id": value,
+        "name": value,
+        "start_time": value,
+        "end_time": value,
+        "status": value,
+        "status_message": value,
+        "links": [{"span_id": "s2", "trace_id": "t1", "attributes": value}, value],
+        "attributes": {
+            "openinference.span.kind": value,
+            "input.value": value,
+            "input.mime_type": value,
+            "output.value": value,
+            "output.mime_type": "application/json",
+            "tool.name": value,
+            "llm.model_name": value,
+            "embedding.model_name": value,
+            "tool_call.id": value,
+            "llm.token_count.prompt": value,
+            "llm.output_messages.0.message.tool_calls.0.tool_call.id": value,
+            "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": (
+                value
+            ),
+            "llm.input_messages.0.message.role": value,
+            "llm.input_messages.0.message.tool_call_id": value,
+            "x.unmapped": value,
+        },
+        "x_unmapped": value,
+    }
+
+
+def _otel_genai_everywhere():
+    """The same for OTel GenAI, the operation among them."""
+    value = STRUCTURED
+    return {
+        "trace_id": "t1",
+        "span_id": "g1",
+        "parent_id": value,
+        "name": value,
+        "start_time": value,
+        "end_time": value,
+        "status": value,
+        "status_message": value,
+        "links": [{"span_id": "g2", "attributes": value}, value],
+        "attributes": {
+            "gen_ai.operation.name": value,
+            "gen_ai.input.messages": value,
+            "gen_ai.output.messages": value,
+            "gen_ai.tool.call.arguments": value,
+            "gen_ai.tool.call.result": value,
+            "gen_ai.retrieval.query.text": value,
+            "gen_ai.retrieval.documents": value,
+            "gen_ai.tool.name": value,
+            "gen_ai.tool.call.id": value,
+            "gen_ai.request.model": value,
+            "gen_ai.usage.input_tokens": value,
+            "gen_ai.agent.name": value,
+        },
+        "x_unmapped": value,
+    }
+
+
+def _span(span_id, attributes, **fields):
+    return {
+        "trace_id": "t1",
+        "span_id": span_id,
+        "parent_id": "s1",
+        "name": span_id,
+        "start_time": 1700000001,
+        "end_time": 1700000002,
+        **fields,
+        "attributes": attributes,
+    }
+
+
+def _any_value(value):
+    """``value`` as OTLP/JSON writes an attribute's `AnyValue`."""
+    if isinstance(value, dict):
+        return {"kvlistValue": {"values": _key_values(value)}}
+    if isinstance(value, list):
+        return {"arrayValue": {"values": [_any_value(item) for item in value]}}
+    if isinstance(value, bool):
+        return {"boolValue": value}
+    if isinstance(value, int):
+        return {"intValue": str(value)}
+    if isinstance(value, str):
+        return {"stringValue": value}
+    return {}
+
+
+def _key_values(attributes):
+    return [{"value": _any_value(v), "key": k} for k, v in attributes.items()]
+
+
+def _otlp_export():
+    """An OTLP/JSON export stating the structured value where each dialect
+    reads one, as the `kvlistValue` it is on the wire -- a kind, an operation,
+    payloads, a link's and an event's attributes -- beside a status, a resource
+    and a scope, each an object of more than one member."""
+    value = STRUCTURED
+    times = {"startTimeUnixNano": "1700000000000000000"}
+    spans = [
+        {
+            "traceId": "5b8efff798038103d269b633813fc60c",
+            "spanId": "eee19b7ec3c1b174",
+            "name": "oi",
+            **times,
+            "attributes": _key_values(
+                {"openinference.span.kind": value, "input.value": value, "x.y": value}
+            ),
+            "status": {"message": "m", "code": "STATUS_CODE_ERROR"},
+            "links": [
+                {
+                    "traceId": "5b8efff798038103d269b633813fc60c",
+                    "spanId": "eee19b7ec3c1b175",
+                    "attributes": _key_values({"x": value}),
+                }
+            ],
+            "events": [
+                {
+                    "timeUnixNano": "1700000000500000000",
+                    "name": "exception",
+                    "attributes": _key_values(
+                        {"exception.type": value, "exception.message": "boom"}
+                    ),
+                },
+                {"timeUnixNano": "1700000000600000000", "name": "note"},
+            ],
+            "kind": 1,
+            "droppedAttributesCount": 2,
+        },
+        {
+            "traceId": "5b8efff798038103d269b633813fc60c",
+            "spanId": "eee19b7ec3c1b175",
+            "parentSpanId": "eee19b7ec3c1b174",
+            "name": "ge",
+            **times,
+            "attributes": _key_values(
+                {"gen_ai.operation.name": value, "gen_ai.input.messages": value}
+            ),
+        },
+        {
+            "traceId": "5b8efff798038103d269b633813fc60c",
+            "spanId": "eee19b7ec3c1b176",
+            "parentSpanId": "eee19b7ec3c1b174",
+            "name": "retrieval",
+            **times,
+            "attributes": _key_values(
+                {
+                    "gen_ai.retrieval.query.text": value,
+                    "gen_ai.operation.name": "retrieval",
+                    "gen_ai.retrieval.documents": value,
+                }
+            ),
+        },
+    ]
+    export = {
+        "resourceSpans": [
+            {
+                "scopeSpans": [
+                    {"spans": spans, "scope": {"version": "1", "name": "hand"}}
+                ],
+                "resource": {"attributes": _key_values({"service.name": value})},
+            }
+        ]
+    }
+    return json.dumps(export).encode("utf-8")
+
+
+#: Inputs made by hand, one per dialect and one OTLP export, each stating a
+#: structured value wherever an adapter reads a value: every payload key of
+#: each dialect under a kind that maps, and the ones read under a kind that
+#: does not; the span kind and the operation; and every other key either
+#: adapter reads, the record's own fields among them. The span stating it
+#: everywhere is in its file twice, so a reordering that writes the two copies
+#: differently is a file holding one record twice in two key orders -- the
+#: pair above, at every site.
+HAND_MADE = {
+    "openinference": _lines(
+        _openinference_everywhere(),
+        _span(
+            "s2",
+            {
+                "openinference.span.kind": "LLM",
+                "input.value": STRUCTURED,
+                "output.value": STRUCTURED,
+                "output.mime_type": "application/json",
+                "llm.model_name": "m",
+            },
+            status={"message": "m", "code": "ERROR"},
+        ),
+        _span(
+            "s3",
+            {
+                "openinference.span.kind": "TOOL",
+                "input.value": [STRUCTURED, STRUCTURED],
+                "output.value": STRUCTURED,
+                "output.mime_type": "text/plain",
+                "tool.name": "f",
+            },
+        ),
+        _openinference_everywhere(),
+    ),
+    "otel_genai": _lines(
+        _otel_genai_everywhere(),
+        _span(
+            "g2",
+            {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.input.messages": [
+                    {"role": "user", "parts": [{"type": "text", "content": "q"}]},
+                    {
+                        "role": "tool",
+                        "parts": [
+                            {
+                                "type": "tool_call_response",
+                                "id": "c0",
+                                "response": STRUCTURED,
+                            }
+                        ],
+                    },
+                ],
+                "gen_ai.output.messages": [
+                    {
+                        "role": "assistant",
+                        "parts": [
+                            {
+                                "type": "tool_call",
+                                "id": "c1",
+                                "name": "f",
+                                "arguments": STRUCTURED,
+                            }
+                        ],
+                    }
+                ],
+                "gen_ai.request.model": "m",
+            },
+        ),
+        _span(
+            "g3",
+            {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.call.arguments": STRUCTURED,
+                "gen_ai.tool.call.result": STRUCTURED,
+                "gen_ai.tool.name": "f",
+                "gen_ai.tool.call.id": "c1",
+            },
+        ),
+        _span(
+            "g4",
+            {
+                "gen_ai.operation.name": "retrieval",
+                "gen_ai.retrieval.query.text": STRUCTURED,
+                "gen_ai.retrieval.documents": STRUCTURED,
+            },
+        ),
+        _otel_genai_everywhere(),
+    ),
+    "otlp_export": _otlp_export(),
+}
+
+#: Every trace file the repository holds -- every conformance rendering, the
+#: captured traces, and the zoo's JSON bodies, found as the oracle finds them
+#: -- and the hand-made inputs, as (id, path or bytes).
+KEY_ORDER_TEXTS = [
+    *(
+        (f"conformance/{path.parent.parent.name}/{path.name}", path)
+        for path in sorted(ROOT.glob("fixtures/conformance/*/dialects/*"))
+    ),
+    *(
+        (f"captured/{path.name}", path)
+        for path in sorted(ROOT.glob("fixtures/captured/*.jsonl"))
+    ),
+    *((f"zoo/{run}/{json_body.name}", json_body) for run, json_body, _ in PAIRS),
+    *((f"hand-made/{name}", data) for name, data in HAND_MADE.items()),
+]
+
+
+def _protobuf_read(raw_body):
+    _pb2()
+    return spanweave.read_protobuf(raw_body.read_bytes())
+
+
+#: The records `read_protobuf` reads out of the zoo's raw bodies, and the
+#: records the hand-made inputs read as, as (id, a function reading them).
+KEY_ORDER_RECORDS = [
+    *(
+        (f"zoo/{run}/{raw_body.name}", lambda body=raw_body: _protobuf_read(body))
+        for run, _, raw_body in PAIRS
+    ),
+    *(
+        (f"hand-made/{name}", lambda data=data: spanweave.read_records(data))
+        for name, data in HAND_MADE.items()
+    ),
+]
+
+
+def _bytes(source):
+    return source.read_bytes() if isinstance(source, pathlib.Path) else source
+
+
+def _outcome(data):
+    """What ``data`` builds: its document less `meta.source_digest`, as the
+    writer writes it, and that digest -- or, where it is refused, the refusal."""
+    try:
+        graph = spanweave.build(data)
+    except SpanweaveError as refusal:
+        return (type(refusal).__name__, refusal.code, str(refusal)), None
+    document = spanweave.to_document(graph)
+    digest = document["meta"].pop("source_digest")
+    return canonical_bytes(document), digest
+
+
+def _differences(written, again, path="", found=None):
+    """Where two parsed documents differ, as `path: one | other`, at most six."""
+    found = [] if found is None else found
+    if len(found) >= 6:
+        return found
+    if isinstance(written, dict) and isinstance(again, dict):
+        for key in sorted(set(written) | set(again)):
+            _differences(written.get(key), again.get(key), f"{path}/{key}", found)
+    elif isinstance(written, list) and isinstance(again, list):
+        if len(written) != len(again):
+            found.append(f"{path}: {len(written)} items | {len(again)} items")
+        for index, pair in enumerate(zip(written, again, strict=False)):
+            _differences(*pair, f"{path}/{index}", found)
+    elif written != again:
+        found.append(f"{path}: {written!r} | {again!r}")
+    return found
+
+
+def _parsed(text):
+    # `parse_int=str`: whatever the digit limit this process runs under.
+    return json.loads(text, parse_int=str)
+
+
+@pytest.mark.parametrize("order", sorted(ORDERS))
+@pytest.mark.parametrize(
+    ("name", "source"), KEY_ORDER_TEXTS, ids=[name for name, _ in KEY_ORDER_TEXTS]
+)
+def test_no_key_order_reaches_a_graph(name, source, order):
+    """Decisions log D38, on the text path: every input, every object's
+    members reordered at every depth, builds the graph the input as written
+    builds, or the same refusal.
+
+    `dumps` less `meta.source_digest`, the one field §5.2 exempts: it
+    fingerprints the input **bytes** (`SPEC.md` §3.9), which a reordering
+    changes by definition. That it does change is asserted wherever the bytes
+    did, so the exclusion hides nothing; every other byte is compared. A line
+    the reader would not read as JSON is fed unchanged (`tests/key_order.py`
+    says why), and an input with any object of two or more members is
+    asserted to have changed, so no input passes by being left as it was."""
+    data = _bytes(source)
+    tally = key_order.Tally()
+    reordered, _ = key_order.input_reordered(data, ORDERS[order](), tally)
+    if tally.permuted:
+        assert reordered != data, name
+    written, digest = _outcome(data)
+    again, digest_again = _outcome(reordered)
+    if isinstance(written, bytes) and isinstance(again, bytes) and written != again:
+        pytest.fail(
+            f"{name}, members {order}: the graph changed --\n  "
+            + "\n  ".join(_differences(_parsed(written), _parsed(again)))
+        )
+    assert again == written, name
+    if digest is not None and reordered != data:
+        assert digest_again != digest, name
+
+
+@pytest.mark.parametrize("order", sorted(ORDERS))
+@pytest.mark.parametrize(
+    ("name", "read"), KEY_ORDER_RECORDS, ids=[name for name, _ in KEY_ORDER_RECORDS]
+)
+def test_no_key_order_reaches_a_graph_built_from_records(name, read, order):
+    """Decisions log D38, on the records path: the records `read_protobuf`
+    reads -- which have no text of their own to reorder -- and the hand-made
+    inputs' records, every object's keys reordered at every depth, each
+    container's type kept, build the bytes the records as read build, through
+    the build the oracle uses (`tests/test_protobuf.py`'s `_built`). A record
+    read from an export is folded, so here a structured attribute is an object
+    whose keys are reordered, where in the text it is a list that is not.
+    Built from records, a graph has no digest, so nothing is exempt."""
+    records = read()
+    tally = key_order.Tally()
+    reorder = ORDERS[order]()
+    reordered = tuple(
+        key_order.records_reordered(record, reorder, tally)
+        for record in records.records
+    )
+    assert reordered == records.records, name
+    assert [type(record) for record in reordered] == [
+        type(record) for record in records.records
+    ]
+    if tally.permuted:
+        assert [json.dumps(record) for record in reordered] != [
+            json.dumps(record) for record in records.records
+        ], name
+    written = _built(records)
+    again = _built(replace(records, records=reordered))
+    if written != again:
+        pytest.fail(
+            f"{name}, keys {order}: the graph changed --\n  "
+            + "\n  ".join(_differences(_parsed(written), _parsed(again)))
+        )
+
+
+def _from_the_repository(inputs):
+    return [(name, source) for name, source in inputs if not name.startswith("hand-")]
+
+
+def test_the_key_order_gate_reorders_objects_at_every_depth():
+    """Decisions log D38's inputs as the repository holds them are reordered
+    where the sites are -- inside objects and inside arrays, not only at the
+    top of a record -- and the hand-made ones are not what makes it so."""
+    groups = {name.split("/")[0] for name, _ in KEY_ORDER_TEXTS}
+    assert groups == {"conformance", "captured", "zoo", "hand-made"}
+    for order in ORDERS.values():
+        tally = key_order.Tally()
+        for _, source in _from_the_repository(KEY_ORDER_TEXTS):
+            key_order.input_reordered(_bytes(source), order(), tally)
+        assert tally.nested and tally.in_arrays and tally.deepest >= 3, tally
+
+
+def test_the_key_order_gate_reorders_records_at_every_depth():
+    """The same, for the records `read_protobuf` reads out of the zoo."""
+    for order in ORDERS.values():
+        tally = key_order.Tally()
+        for _, read in _from_the_repository(KEY_ORDER_RECORDS):
+            reorder = order()
+            for record in read().records:
+                key_order.records_reordered(record, reorder, tally)
+        assert tally.nested and tally.in_arrays and tally.deepest >= 3, tally
+
+
+# The reordering itself, held to what `tests/key_order.py` says it does.
+
+
+def test_the_reordering_moves_each_member_whole_and_keeps_every_token():
+    # Numbers a JSON round trip would respell (`1.50`, `1e5`, `-0`) and one
+    # longer than a float holds, a string that holds JSON, an escape, and
+    # whitespace inside and between members: each kept as it is written.
+    text = (
+        '{ "b" : 1.50 ,"a":[{"d":1e5,"c":-0}, "x\\"y"] , '
+        '"e": {"g": "{\\"k\\": 1, \\"j\\": 2}", "f": 123456789012345678901234567890}}'
+    )
+    tally = key_order.Tally()
+    assert key_order.reordered(text, key_order.reversal, tally) == (
+        '{ "e": {"f": 123456789012345678901234567890, "g": "{\\"k\\": 1, \\"j\\": 2}"} '
+        ',"a":[{"c":-0,"d":1e5}, "x\\"y"] , "b" : 1.50}'
+    )
+    assert tally == key_order.Tally(
+        objects=3, permuted=3, deepest=3, nested=2, in_arrays=1
+    )
+
+
+def test_the_reordering_reversed_twice_is_the_input():
+    for _, source in KEY_ORDER_TEXTS:
+        data = _bytes(source)
+        tally = key_order.Tally()
+        once, _ = key_order.input_reordered(data, key_order.reversal, tally)
+        twice, _ = key_order.input_reordered(once, key_order.reversal, tally)
+        assert twice == data
+
+
+def test_an_object_stating_a_key_twice_is_left_as_written():
+    # Which copy a parser keeps depends on the order, so this object is not
+    # reordered; the object inside it is.
+    tally = key_order.Tally()
+    text = '{"a": 1, "b": {"y": 1, "x": 2}, "a": 2}'
+    assert key_order.reordered(text, key_order.reversal, tally) == (
+        '{"a": 1, "b": {"x": 2, "y": 1}, "a": 2}'
+    )
+    assert (tally.duplicated, tally.permuted) == (1, 1)
+
+
+def test_an_input_is_split_as_the_reader_splits_it():
+    tally = key_order.Tally()
+    lines = b'{"b":1,"a":2}\n{not json\n\n\xff\xfe\r\n  {"d":1,"c":2}  \r\n'
+    assert key_order.input_reordered(lines, key_order.reversal, tally) == (
+        b'{"a":2,"b":1}\n{not json\n\n\xff\xfe\r\n  {"c":2,"d":1}  \r\n',
+        ["line 2: JSONDecodeError", "line 4: not UTF-8"],
+    )
+    bom = b"\xef\xbb\xbf"
+    assert key_order.input_reordered(
+        bom + b'[{"b":1,"a":2},\n{"d":1,"c":2}]', key_order.reversal, tally
+    ) == (bom + b'[{"a":2,"b":1},\n{"c":2,"d":1}]', [])
+    export = b'{"resourceSpans": [{"b": 1,\n "a": 2}]}\n'
+    assert key_order.input_reordered(export, key_order.reversal, tally) == (
+        b'{"resourceSpans": [{"a": 2,\n "b": 1}]}\n',
+        [],
+    )
+
+
+def test_the_shuffle_is_seeded_and_never_the_written_order():
+    first, second = key_order.shuffle(1), key_order.shuffle(1)
+    for count in [2, 3, 2, 5, 2, 4] * 20:
+        drawn = first(count)
+        assert drawn == second(count)
+        assert sorted(drawn) == list(range(count)) != drawn
+
+
+def test_records_are_reordered_with_their_types_kept():
+    (record,) = spanweave.read_records(_otlp_export()).records[:1]
+    tally = key_order.Tally()
+    reordered = key_order.records_reordered(record, key_order.reversal, tally)
+    assert type(reordered) is type(record) is not dict
+    assert reordered == record
+    assert list(reordered) == list(reversed(record))
+    assert tally.nested and tally.in_arrays
+
+
+# --------------------------------------------------------------------------
 # The digit limit is the library's, not the interpreter's (batch S8)
 # --------------------------------------------------------------------------
 #

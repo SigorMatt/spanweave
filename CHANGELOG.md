@@ -2382,6 +2382,22 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A span kind or operation stated as an object is rendered with sorted
+  keys** (decisions log D38). An exporter that carries nested attributes can
+  state `openinference.span.kind` or `gen_ai.operation.name` as an object, and
+  both adapters rendered it with `str()` in the key order the record wrote,
+  into the node's `attributes.reported_kind` and the `unknown_span_kind`
+  diagnostic's message and source -- so a file holding one span twice, its
+  kind's keys in two orders, built a different graph with its lines swapped.
+  Its keys are now sorted at every level first, by `jsoncodec.keys_sorted`,
+  the one sorting a structured payload's text goes through too; the spelling
+  is still `str()`'s (`SPEC.md` §3.3). The class is held by a gate rather
+  than the site: `tests/test_determinism.py` re-feeds every input the
+  repository holds, and hand-made ones stating a structured value wherever an
+  adapter reads a value, with every object's keys reordered at every depth,
+  and each builds the graph it built as written. No graph in the repository
+  changes: no input here states a kind or an operation as an object, so no
+  expected graph, census count or reading moves.
 - **`read_protobuf` omits an all-zero id only at the length the schema gives
   it** (the scoped review of 2026-10-18, R-1, R-2). The rule added for Qodo's
   finding 6 omitted an id whose bytes were all zero at any length, so an

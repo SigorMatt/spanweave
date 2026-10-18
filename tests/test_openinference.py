@@ -998,6 +998,22 @@ def test_a_span_kind_that_is_not_a_string_is_still_read_and_still_consumed(value
     assert span.unmapped == ()
 
 
+def test_a_span_kind_stated_as_an_object_is_rendered_with_its_keys_sorted():
+    # Still `str()`'s spelling -- Python's, not JSON's -- of the value with
+    # every object's keys sorted, at every level and inside a list, as a
+    # payload's text is (`SPEC.md` §3.3): the order the record wrote the keys
+    # in reaches neither `reported_kind` nor the diagnostic (decisions log D38).
+    value = {"b": None, "a": {"d": [{"f": True, "e": 5}], "c": 3}}
+    text = "{'a': {'c': 3, 'd': [{'e': 5, 'f': True}]}, 'b': None}"
+    span = span_of({"openinference.span.kind": value})
+    assert span.attributes["reported_kind"] == text
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert kind_diagnostic.source == text
+    assert f"openinference.span.kind={text!r} does not map" in kind_diagnostic.message
+
+
 def _echo_loop(turns):
     """The agent loop of `tests/audit/probe2.py` case B, in miniature.
 

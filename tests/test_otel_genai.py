@@ -589,6 +589,22 @@ def test_an_operation_name_that_is_not_a_string_is_still_read_and_consumed(value
     assert span.unmapped == ()
 
 
+def test_an_operation_name_stated_as_an_object_is_rendered_with_its_keys_sorted():
+    # Still `str()`'s spelling -- Python's, not JSON's -- of the value with
+    # every object's keys sorted, at every level and inside a list, as a
+    # payload's text is (`SPEC.md` §3.3): the order the record wrote the keys
+    # in reaches neither `reported_kind` nor the diagnostic (decisions log D38).
+    value = {"b": None, "a": {"d": [{"f": True, "e": 5}], "c": 3}}
+    text = "{'a': {'c': 3, 'd': [{'e': 5, 'f': True}]}, 'b': None}"
+    span = span_of({"gen_ai.operation.name": value})
+    assert span.attributes["reported_kind"] == text
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert kind_diagnostic.source == text
+    assert f"gen_ai.operation.name={text!r} does not map" in kind_diagnostic.message
+
+
 # --------------------------------------------------------------------------
 # Against the captured trace, not only against hand-written spans
 # --------------------------------------------------------------------------
