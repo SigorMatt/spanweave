@@ -15,6 +15,21 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The scoped review of 2026-10-18 is archived, and every finding has a
+  disposition** (decisions log D37). No behaviour change.
+  `reviews/2026-10-18-wire.md` is the review of the fixes for Qodo's review
+  of PR #6 byte for byte, its `sha256` in `TASKS.md`, which gains a line
+  per finding, R-1…R-20: the commit that answered it, or the reading it was
+  read and recorded with. The record lines it found are set right in
+  `TASKS.md`, and the entry below for Qodo's review now says findings 4
+  and 3 were fixed with no value or graph-bytes change, where it said the
+  two commits "change no behaviour": `8b68608` changed the key order of
+  the protobuf records. Two threads are registered: a field the wire
+  states twice, merged with no diagnostic, for the next spanweave series;
+  and a span kind stated as an object, whose key order reaches the graph,
+  for the maintainer to fix before the merge or in that series. The zoo's
+  thread for a hand-made capture now also covers an id of another length,
+  a field stated twice and a non-finite `doubleValue`.
 - **Qodo's review of PR #6 is archived, and all seven findings have a
   disposition** (decisions log D36). No behaviour change.
   `reviews/2026-10-18-qodo-pr6.md` holds the "Code Review by Qodo" comment
@@ -22,11 +37,11 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   their `sha256`s in `TASKS.md`, which gains a line per finding: findings
   6 and 7 accepted and fixed by the all-zero-id and `unknown_fields`
   entries under Fixed; findings 4 and 3 accepted and fixed by two commits
-  that change no behaviour, sorted keys in the rendered document and the
-  proto modules imported by name in the tests; finding 5 accepted as a pin
-  and a thread; findings 1 and 2 declined as design changes and answered
-  in `SPEC.md` §7 and `CLAUDE.md`. The PR summary comment carries no
-  findings and is not archived.
+  with no value or graph-bytes change, sorted keys in the rendered
+  document and the proto modules imported by name in the tests; finding 5
+  accepted as a pin and a thread; findings 1 and 2 declined as design
+  changes and answered in `SPEC.md` §7 and `CLAUDE.md`. The PR summary
+  comment carries no findings and is not archived.
 - **The scoped review of 2026-10-17 is archived, and every finding has a
   disposition** (decisions log D35). No behaviour change.
   `reviews/2026-10-17b-wire.md` is the review of the fixes byte for byte,
