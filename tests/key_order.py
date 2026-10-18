@@ -118,11 +118,18 @@ def input_reordered(data: bytes, order: Order, tally: Tally) -> tuple[bytes, lis
     leading BOM is kept; an array, or a document whose first object states
     `resourceSpans`, is one value and is reordered whole; anything else is
     read line by line, an LF ending each, whatever `str.strip` removes kept
-    around it. What the reader would not read as JSON -- not UTF-8, or refused
-    by the library's own parser -- is kept as it is and named: the reader
-    reports it with its text as `source`, so reordering that text would change
-    what the input *is*, and the graph with it. A blank line is kept as it is
-    and not named: it is not a record.
+    around it. What this cannot reorder is kept as it is and named, for one of
+    two reasons. Text the library's own parser refuses is not read: the reader
+    reports it as `malformed_record`, its text the `source` (`SPEC.md` §3.7),
+    so reordering that text would change what the input *is*, and the graph
+    with it. Bytes that are not UTF-8 are another matter: the reader does read
+    such a line, or such a document, with U+FFFD where each sequence would not
+    decode, and its `undecodable_bytes` carries no source. This is kept as it
+    is only because a permuter of text cannot tokenize what does not decode,
+    so its objects would reach the build in their written order; the gate
+    asserts that the inputs it feeds hold none (`tests/test_determinism.py`,
+    the scoped review of 2026-10-18b, R-6). A blank line is kept as it is and
+    not named: it is not a record.
     """
     bom = b"\xef\xbb\xbf" if data.startswith(b"\xef\xbb\xbf") else b""
     body = data[len(bom) :]

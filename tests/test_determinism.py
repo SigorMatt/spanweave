@@ -461,11 +461,17 @@ ORDERS = {
 }
 
 #: A structured value: keys out of sorted order, an object inside an object,
-#: and objects inside arrays.
+#: objects inside arrays, an object inside an array inside an array, and two
+#: keys that differ only by case, the lowercase written first. By code point,
+#: as `sort_keys` sorts, `"Ab"` comes before `"ab"`; a sort that folded case
+#: would keep whichever the input wrote first, so its two orders would read
+#: as two texts (the scoped review of 2026-10-18b, R-4).
 STRUCTURED = {
     "zeta": 1,
     "alpha": {"mu": [{"yy": 2, "xx": 1}], "beta": True},
     "eta": [3, {"q": None, "p": "s"}],
+    "nu": [[{"kk": 2, "jj": 1}, 4]],
+    "case": {"ab": 1, "Ab": 2},
 }
 
 
@@ -827,13 +833,21 @@ def test_no_key_order_reaches_a_graph(name, source, order):
     `dumps` less `meta.source_digest`, the one field §5.2 exempts: it
     fingerprints the input **bytes** (`SPEC.md` §3.9), which a reordering
     changes by definition. That it does change is asserted wherever the bytes
-    did, so the exclusion hides nothing; every other byte is compared. A line
-    the reader would not read as JSON is fed unchanged (`tests/key_order.py`
-    says why), and an input with any object of two or more members is
-    asserted to have changed, so no input passes by being left as it was."""
+    did, so the exclusion hides nothing; every other byte is compared.
+
+    The permuter feeds unchanged, and names, what it cannot reorder
+    (`tests/key_order.py` says why): a line the library's parser refuses, and
+    a line that is not UTF-8. The reader does read the second, so its objects
+    would reach the build in their written order and the case would hold
+    nothing of them; each case asserts it was named none, so the inputs hold
+    no such line (the scoped review of 2026-10-18b, R-6). And an input with
+    any object of two or more members is asserted to have changed, so no input
+    passes by being left as it was; how far down it changed is held by
+    `test_the_key_order_gate_reorders_objects_at_every_depth`."""
     data = _bytes(source)
     tally = key_order.Tally()
-    reordered, _ = key_order.input_reordered(data, ORDERS[order](), tally)
+    reordered, unread = key_order.input_reordered(data, ORDERS[order](), tally)
+    assert unread == [], f"{name}: fed unchanged, {unread}"
     if tally.permuted:
         assert reordered != data, name
     written, digest = _outcome(data)
@@ -885,32 +899,157 @@ def test_no_key_order_reaches_a_graph_built_from_records(name, read, order):
         )
 
 
-def _from_the_repository(inputs):
-    return [(name, source) for name, source in inputs if not name.startswith("hand-")]
+# How far down the gate reordered, measured on what it made: each input as
+# written and as reordered, walked in step, not the tally `tests/key_order.py`
+# keeps about itself, which a reordering that stopped short could still fill
+# in. Its floor is each input's own deepest object, not a depth fixed for all
+# (the scoped review of 2026-10-18b, R-5).
+
+
+class _Members(tuple):
+    """An object as `json.loads` read it: its ``(key, value)`` pairs in the
+    order the text writes them, a key stated twice kept twice."""
+
+
+def _values_written(data):
+    """The JSON values an input's text holds, each object a `_Members`: the
+    input as one document, or failing that one per line that holds one. Read
+    here rather than by the permuter's own split, and strictly: the gate
+    asserts no input holds a line that is not UTF-8."""
+    text = data.decode("utf-8").removeprefix("\ufeff")
+    options = {"object_pairs_hook": _Members, "parse_int": str}
+    try:
+        return [json.loads(text, **options)]
+    except ValueError:
+        return [
+            json.loads(line, **options) for line in text.split("\n") if line.strip()
+        ]
+
+
+def _member_orders(written, again, depth=1, in_array=False, found=None):
+    """``(movable, moved)``: where ``written`` holds an object a reordering
+    can move -- two or more members, no key stated twice -- and where
+    ``again``, the same value with its objects' members reordered, lists an
+    object's members in another order. Each a set of ``(depth, in_array)``,
+    a top-level value at depth 1 and each object or array one deeper than
+    its container; ``in_array`` is whether that container is an array. An
+    object is a dict (a record) or a `_Members` (a text read here)."""
+    movable, moved = (set(), set()) if found is None else found
+    if isinstance(written, list):
+        assert isinstance(again, list) and len(again) == len(written)
+        for item, item_again in zip(written, again, strict=True):
+            _member_orders(item, item_again, depth + 1, True, (movable, moved))
+        return movable, moved
+    if not isinstance(written, dict | _Members):
+        return movable, moved
+    assert isinstance(again, dict | _Members)
+    pairs = list(written.items() if isinstance(written, dict) else written)
+    pairs_again = list(again.items() if isinstance(again, dict) else again)
+    keys = [key for key, _ in pairs]
+    keys_again = [key for key, _ in pairs_again]
+    assert sorted(keys_again) == sorted(keys), f"members lost at depth {depth}"
+    if keys_again != keys:
+        moved.add((depth, in_array))
+    if len(set(keys)) < len(keys):
+        # Its copies have no key of their own to pair them by. Left as
+        # written, each is the one at the same position; moved, which is
+        # already recorded above, its values are walked for what they hold.
+        own = [value for _, value in pairs]
+        stated = [value for _, value in pairs_again] if keys_again == keys else own
+        values = zip(own, stated, strict=True)
+    else:
+        if len(keys) >= 2:
+            movable.add((depth, in_array))
+        stated = dict(pairs_again)
+        values = ((value, stated[key]) for key, value in pairs)
+    for value, value_again in values:
+        _member_orders(value, value_again, depth + 1, False, (movable, moved))
+    return movable, moved
+
+
+def _short_of_every_depth(name, order, movable, moved):
+    """Why one input's reordering fell short, or None where it did not."""
+    if not movable:
+        return f"{name}: no object of two or more members to move"
+    if moved != movable:
+        return (
+            f"{name}, {order}: objects to move at {sorted(movable)}, "
+            f"moved at {sorted(moved)}"
+        )
+    return None
 
 
 def test_the_key_order_gate_reorders_objects_at_every_depth():
-    """Decisions log D38's inputs as the repository holds them are reordered
-    where the sites are -- inside objects and inside arrays, not only at the
-    top of a record -- and the hand-made ones are not what makes it so."""
+    """Decisions log D38's text half, in each input, changes the member order
+    of an object at every depth the input holds one a reordering can move --
+    two or more members, no key stated twice -- down to the deepest it holds,
+    and of one inside an array at every depth it holds one there: measured on
+    the input as written and as reordered, by `_member_orders`. The floor is
+    each input's own deepest object, and each input must hold one. Each is
+    held alone, so the hand-made inputs are not what makes it so for the
+    repository's, and no input is what makes it so for another."""
     groups = {name.split("/")[0] for name, _ in KEY_ORDER_TEXTS}
     assert groups == {"conformance", "captured", "zoo", "hand-made"}
-    for order in ORDERS.values():
-        tally = key_order.Tally()
-        for _, source in _from_the_repository(KEY_ORDER_TEXTS):
-            key_order.input_reordered(_bytes(source), order(), tally)
-        assert tally.nested and tally.in_arrays and tally.deepest >= 3, tally
+    short = []
+    for name, source in KEY_ORDER_TEXTS:
+        data = _bytes(source)
+        for order, make in sorted(ORDERS.items()):
+            reordered, _ = key_order.input_reordered(data, make(), key_order.Tally())
+            found = (set(), set())
+            for pair in zip(
+                _values_written(data), _values_written(reordered), strict=True
+            ):
+                _member_orders(*pair, found=found)
+            short.append(_short_of_every_depth(name, order, *found))
+    assert [why for why in short if why] == []
 
 
 def test_the_key_order_gate_reorders_records_at_every_depth():
-    """The same, for the records `read_protobuf` reads out of the zoo."""
-    for order in ORDERS.values():
-        tally = key_order.Tally()
-        for _, read in _from_the_repository(KEY_ORDER_RECORDS):
-            reorder = order()
-            for record in read().records:
-                key_order.records_reordered(record, reorder, tally)
-        assert tally.nested and tally.in_arrays and tally.deepest >= 3, tally
+    """The same for the records half: the records `read_protobuf` reads out
+    of the zoo, and the hand-made inputs' records, each record as read
+    against reordered."""
+    short = []
+    for name, read in KEY_ORDER_RECORDS:
+        records = read().records
+        for order, make in sorted(ORDERS.items()):
+            reorder = make()
+            found = (set(), set())
+            for record in records:
+                again = key_order.records_reordered(record, reorder, key_order.Tally())
+                _member_orders(record, again, found=found)
+            short.append(_short_of_every_depth(name, order, *found))
+    assert [why for why in short if why] == []
+
+
+def test_the_reach_is_measured_where_member_order_changed():
+    # `_member_orders` against reorderings made by hand: every object moved,
+    # the top one alone, the deepest alone, and an object stating a key twice,
+    # which is never one to move and is seen if it moves.
+    text = '{"b": 1, "a": [{"d": 1, "c": [{"f": 1, "e": 2}]}], "g": {"i": 1, "h": 2}}'
+    every = {(1, False), (2, False), (3, True), (5, True)}
+    (written,) = _values_written(text.encode("utf-8"))
+    for again, moved in [
+        (
+            '{"g": {"h": 2, "i": 1}, "a": [{"c": [{"e": 2, "f": 1}], "d": 1}], "b": 1}',
+            every,
+        ),
+        (
+            '{"g": {"i": 1, "h": 2}, "a": [{"d": 1, "c": [{"f": 1, "e": 2}]}], "b": 1}',
+            {(1, False)},
+        ),
+        (
+            '{"b": 1, "a": [{"d": 1, "c": [{"e": 2, "f": 1}]}], "g": {"i": 1, "h": 2}}',
+            {(5, True)},
+        ),
+        (text, set()),
+    ]:
+        (reordered,) = _values_written(again.encode("utf-8"))
+        assert _member_orders(written, reordered) == (every, moved), again
+    (twice,) = _values_written(b'{"a": 1, "b": {"y": 1, "x": 2}, "a": 2}')
+    (left,) = _values_written(b'{"a": 1, "b": {"x": 2, "y": 1}, "a": 2}')
+    (moved_too,) = _values_written(b'{"b": {"y": 1, "x": 2}, "a": 1, "a": 2}')
+    assert _member_orders(twice, left) == ({(2, False)}, {(2, False)})
+    assert _member_orders(twice, moved_too) == ({(2, False)}, {(1, False)})
 
 
 # The reordering itself, held to what `tests/key_order.py` says it does.
@@ -1123,7 +1262,8 @@ def test_a_kvlist_rendered_to_text_is_rendered_as_a_map():
         assert event.message == (
             "the span states event 0, an exception recorded by the OpenTelemetry "
             "API ({'alpha': {'beta': True, 'mu': [{'xx': 1, 'yy': 2}]}, "
-            "'eta': [3, {'p': 's', 'q': None}], 'zeta': 1}); the graph has no "
+            "'case': {'Ab': 2, 'ab': 1}, 'eta': [3, {'p': 's', 'q': None}], "
+            "'nu': [[{'jj': 1, 'kk': 2}, 4]], 'zeta': 1}); the graph has no "
             "field for it, so it is reported here, its stacktrace kept verbatim "
             "in raw with the whole event. Whether the span failed is its status"
         )
