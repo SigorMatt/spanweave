@@ -230,7 +230,10 @@ def _unknown_fields_message(path: str, fields: list[JsonValue]) -> str:
     """What one ``unknown_fields`` says: how many of each kind, the defined first.
 
     A message carrying both kinds is one diagnostic still, and its message
-    counts each; one carrying a single kind names only that one.
+    counts each; one carrying a single kind counts only that one. What
+    follows the counts is the same whatever the message carries: its closing
+    sentences, on the wire type the schema expects and on why no field's
+    bytes are carried, speak of both kinds.
     """
     defined = sum(1 for field in fields if isinstance(field, dict) and field["defined"])
     kinds = []

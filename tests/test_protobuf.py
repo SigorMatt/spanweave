@@ -760,7 +760,7 @@ def _attribute(pb2: ModuleType, **value: Any) -> bytes:
 
 @pytest.mark.parametrize("number", [1.0, 1.5, -0.0])
 def test_a_double_value_reads_as_a_float(number):
-    """3C: `MessageToDict`'s float -- the one place no pair checks."""
+    """3C: `MessageToDict`'s float -- no pair checks it (`SPEC.md` §7)."""
     read = spanweave.read_protobuf(_attribute(_pb2(), double_value=number))
     (record,) = read.records
     value = record["attributes"]["k"]
@@ -769,7 +769,8 @@ def test_a_double_value_reads_as_a_float(number):
 
 
 #: Each non-finite double, and the string proto3 JSON spells it as -- which is
-#: what the Collector writes too.
+#: what `MessageToDict` writes. What the Collector writes is not shown: no pair
+#: carries a `doubleValue` (spec, not pair).
 NON_FINITE = {
     "NaN": float("nan"),
     "Infinity": float("inf"),
@@ -783,11 +784,12 @@ def test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths(
 ):
     """Qodo's review of PR #6, finding 5, pinned (`SPEC.md` §7): a non-finite
     `doubleValue` is the string proto3 JSON spells it, on both paths, with no
-    diagnostic. A graph cannot carry a float NaN (`allow_nan=False`), and the
-    JSON path reads the string as a string, so the protobuf body and its JSON
-    spelling -- written here, not rendered -- yield equal records and the same
-    graph bytes. Whether it should draw a diagnostic is an open thread
-    (`TASKS.md`); this holds what it reads as until that is decided.
+    diagnostic. A graph holding a float NaN builds and `dumps` refuses it
+    (`allow_nan=False`), and the JSON path reads the string as a string, so
+    the protobuf body and its JSON spelling -- written here, not rendered --
+    yield equal records and the same graph bytes. Whether it should draw a
+    diagnostic is an open thread (`TASKS.md`); this holds what it reads as
+    until that is decided.
 
     The records cannot show the rendering: a record keeps no AnyValue tag, so
     a `stringValue` of the same text reads as the same record. So the

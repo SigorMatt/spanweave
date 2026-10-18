@@ -178,7 +178,11 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
   (`SPEC.md` §5.3).
 - **Lossless.** Every node keeps its verbatim source record. Anything that can't
   be mapped becomes a **diagnostic**, never a silent discard.
-- **Zero runtime dependencies.** Core is stdlib-pure and readable in one sitting.
+- **Zero runtime dependencies.** Core imports only the standard library, and
+  is readable in one sitting. The one exception is the optional `otlp` extra,
+  which `read_protobuf` alone needs: it is confined to one module, which
+  imports none of it until `read_protobuf` is called, so `import spanweave`
+  needs nothing (`TASKS.md`, decisions log D28).
 - **Dialect-agnostic core.** Adding a dialect is a new *adapter*, never a change
   to the graph model.
 

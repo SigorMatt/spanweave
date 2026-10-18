@@ -825,7 +825,7 @@ this sentence.
 | `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
 | `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
 | `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
-| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int, "defined": bool, "expected_wire_type": int \| null}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. `defined` says whether the installed schema defines that number **on that message**, and `expected_wire_type` is, where it does, the wire type the schema's type for it is written with (`2` for a string, bytes or message; `0` for an integer, bool or enum; `1` for a 64-bit fixed or double; `5` for a 32-bit fixed or float), and `null` where it does not. **Not** the field's bytes: a field with no definition has no name and no type, and one with a definition arrived in a form its type cannot be read from, so there is no representation of either the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
+| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int, "defined": bool, "expected_wire_type": int \| null}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. `defined` says whether the installed schema defines that number **on that message**, and `expected_wire_type` is, where it does, the wire type the schema's type for it is written with (`2` for a string, bytes or message; `0` for an integer, bool or enum; `1` for a 64-bit fixed or double; `5` for a 32-bit fixed or float; `3` for a group, which no OTLP message has), and `null` where it does not. **Not** the field's bytes: a field with no definition has no name and no type, and one with a definition arrived in a form its type cannot be read from, so there is no representation of either the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -2029,6 +2029,17 @@ declares reaches `0.5`.
     and read by §3.1's rule for a numeric string — the rule written for this
     encoding — and the unit its name declares is honoured there, by the time
     reader, not here (§3.1, *Declared nanoseconds*).
+    **The principle's one exception is a non-finite `doubleValue`**, a value
+    its stated type admits and the reader does not read as that type.
+    Proto3's JSON mapping spells NaN and the infinities as the strings
+    `"NaN"`, `"Infinity"` and `"-Infinity"`, and the fold unwraps a
+    `doubleValue` to the value the document states, so the attribute is that
+    string, not the float it names (the protobuf reader's
+    *A non-finite one is a string on both paths*, below). Read as the float,
+    it would leave a graph that builds and cannot be written: a graph holding
+    a float NaN builds, as one holding an unquoted `NaN` does (§3.1), and
+    `dumps` refuses the whole graph (*What it writes is RFC 8259 JSON*,
+    above).
     A repeated key keeps the last, and every entry the fold could not take —
     a non-object entry, a missing or non-string `key`, an unrecognized `value`
     tag, and **both** copies of a repeated key — is kept in a list under
@@ -2152,9 +2163,27 @@ declares reaches `0.5`.
     JSON reader above, so nothing about unpacking an export is written twice.
     A record's `raw.source` is therefore its OTLP/JSON rendering, not the wire
     bytes: the records are the ones the JSON path reads for the same export,
-    which is what the oracle holds (decisions log D29); nothing is lost but
-    what `unknown_fields` reports (below), and the body's bytes are the
-    caller's to keep.
+    which is what the oracle holds (decisions log D29), and the body's bytes
+    are the caller's to keep. Nothing the body states is lost but what
+    `unknown_fields` reports (below) and what the rendering does not carry,
+    none of which draws a diagnostic:
+    - **An all-zero id of the length the schema gives it.** It is no id, as
+      the Collector has it (below): the records are those of the same request
+      with the field unset.
+    - **All but the last of a singular field, or of a `oneof`, the wire
+      states more than once.** Protobuf's merge keeps the last value of a
+      scalar, and of a `oneof` the last member stated, before the reader sees
+      the message; a message field stated more than once is merged field by
+      field by the same rule. So a span whose `name` arrives as `"first"` and
+      then as `"second"` reads as `"second"`, one whose `spanId` arrives not
+      zero and then as eight zero bytes has no span id, and an `AnyValue`
+      stating a `stringValue` and then an `intValue` reads as the integer. The
+      rule is the protobuf encoding's, so the Collector's runtime is expected
+      to do the same (not verified here — spec, not pair).
+    - **A non-finite `doubleValue`'s type.** It is the string proto3 JSON
+      spells it (below), so its record is the one a `stringValue` of that
+      spelling reads as.
+
     The rendering is the OTLP/JSON specification's as the Collector writes it,
     not `MessageToDict`'s where the two differ; on the zoo's 29 pairs — every
     export in it sealed both as the exporter's protobuf body and as the
@@ -2257,8 +2286,11 @@ declares reaches `0.5`.
     those diagnostics and nothing else.
   - **So is a field the schema defines that arrives with another wire type.**
     The runtime keeps a span's `name` (field 5, a string) sent as a varint in
-    the same place as a number it has never heard of, and leaves `name` at its
-    default; blaming the schema's age for it would misreport a malformed body.
+    the same place as a number it has never heard of, and does not read it
+    into `name`: the record's `name` is what a correctly typed `name` in the
+    same span says, if one also arrived; if none did, `name` is left at its
+    default and the record has none. Blaming the schema's age for it would
+    misreport a malformed body.
     So each entry says whether the installed schema defines its number on that
     message and, where it does, the wire type it expects (§3.7), and the
     message says "not readable as the installed schema defines it" of those
@@ -2267,26 +2299,32 @@ declares reaches `0.5`.
     the defined first; the code is the same one, because what is reported is
     the same — fields the message was read without.
   - **A finite `doubleValue` is a float** — `MessageToDict`'s, so a `1.0`
-    reads as `1.0` and never as the integer `1`. **This is the one rendering
-    the pairs did not check**: no export in the zoo carries a `doubleValue`
-    (`tests/test_protobuf.py` asserts it, so the day one does the claim
-    becomes checkable), and OTLP/JSON lets a Collector write `1` or `1.0`,
-    which the JSON reader reads as an integer and a float respectively. A
-    capture of one, re-encoded by a Collector, would settle it (§23, 3C).
+    reads as `1.0` and never as the integer `1`. **No pair checks it**, as no
+    pair checks any row the table above marks "none": no export in the zoo
+    carries a `doubleValue` (`tests/test_protobuf.py` asserts it, so the day
+    one does the claim becomes checkable), and OTLP/JSON lets a Collector
+    write `1` or `1.0`, which the JSON reader reads as an integer and a float
+    respectively. A capture of one, re-encoded by a Collector, would settle
+    it (§23, 3C).
     - **A non-finite one is a string on both paths, with no diagnostic.**
       Proto3's JSON mapping spells NaN and the infinities as the strings
-      `"NaN"`, `"Infinity"` and `"-Infinity"`; `MessageToDict` writes them
-      so, and so does the Collector. The JSON reader unwraps a `doubleValue`
-      to the value the document states, so on both paths the attribute is
-      that string, with no diagnostic: a protobuf body carrying one and its
-      proto3 JSON spelling yield equal records and build the same bytes
-      (`tests/test_protobuf.py`, all three values). It is not read back as a
-      float because a graph cannot carry one: the encoder runs with
-      `allow_nan=False` (*What it writes is RFC 8259 JSON*, above). Reading
-      it some other way on the protobuf path alone would break the rule the
-      oracle holds, and on both would change the graph a JSON export yields.
-      Whether it should draw a diagnostic, or be read some other way, is a
-      thread for the next series (`TASKS.md`, the wire series).
+      `"NaN"`, `"Infinity"` and `"-Infinity"`, and `MessageToDict` writes them
+      so. What the Collector writes for one is not shown — no pair carries a
+      `doubleValue` — so the table's row for it is the proto3 JSON spelling's:
+      spec, not pair. The JSON reader unwraps a `doubleValue` to the value the
+      document states, so on both paths the attribute is that string, with no
+      diagnostic: a protobuf body carrying one and its proto3 JSON spelling
+      yield equal records and build the same bytes (`tests/test_protobuf.py`,
+      all three values). The type is not carried: the record is the one a
+      `stringValue` of the same spelling reads as (above). It is not read back
+      as a float because a graph holding a float NaN could not be written: it
+      builds, as a graph holding an unquoted `NaN` does (§3.1), and `dumps`
+      refuses the whole graph, because the encoder runs with `allow_nan=False`
+      (*What it writes is RFC 8259 JSON*, above). Reading it some other way on
+      the protobuf path alone would break the rule the oracle holds, and on
+      both would change the graph a JSON export yields. Whether it should draw
+      a diagnostic, or be read some other way, is a thread for the next series
+      (`TASKS.md`, the wire series).
 
 ### Outputs
 

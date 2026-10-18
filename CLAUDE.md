@@ -71,11 +71,15 @@ of them is wrong even if it passes tests.
 - **Degrade honestly.** Missing payloads are `absent`, not empty. Missing
   timestamps omit temporal edges and say so. Unmapped kinds become `unknown`
   plus a diagnostic. Never paper over a gap.
-- **Zero runtime dependencies in core.** Extras never affect core behavior.
-  The one exception is the `otlp` extra, which `spanweave.read_protobuf` alone
-  needs (decisions log D28): it is imported only when that is called, only in
-  `spanweave/otlp_protobuf.py`, and only as `google.protobuf` and
-  `opentelemetry.proto` — a CI gate holds all three.
+- **Zero runtime dependencies in core.** The one exception is the optional
+  `otlp` extra, which `spanweave.read_protobuf` alone needs (decisions log
+  D28): it is confined to one module, `spanweave/otlp_protobuf.py`, which
+  imports none of it until `read_protobuf` is called, and then only
+  `google.protobuf` and `opentelemetry.proto` — a CI gate holds all three.
+  Beyond that one function, extras never affect core behavior: without
+  `otlp`, `read_protobuf` raises `SpanweaveError`
+  (`otlp_extra_not_installed`), and nothing else reads protobuf or behaves
+  differently.
 
 ## Working agreement
 
