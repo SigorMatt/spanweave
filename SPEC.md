@@ -2323,11 +2323,13 @@ declares reaches `0.5`.
     any byte not zero is hex, as every other, wherever in the id that byte
     is. An id of any other length is carried as stated, all zero or not:
     hex, as the JSON path carries a hex string of any length. The schema
-    calls such an id invalid, and the Collector would refuse the request
-    rather than write JSON for it (not verified here — spec, not pair), so
-    there is no Collector JSON for the rendering to match; omitting the id
-    would be a rule of the reader's own and a silent discard (`CLAUDE.md` 2),
-    and the reader does not refuse a body for one id. No pair shows any of
+    gives each id its length, and calls a span's own `traceId` or `spanId`
+    of another length invalid; of a `parentSpanId`, or a link's ids, it
+    gives the length only. The Collector would refuse the request rather
+    than write JSON for it (not verified here — spec, not pair), so there
+    is no Collector JSON for the rendering to match; omitting the id would
+    be a rule of the reader's own and a silent discard (`CLAUDE.md` 2), and
+    the reader does not refuse a body for one id. No pair shows any of
     it — the zoo's exporter leaves an unset id unset, and states every id at
     its length — so the row is the Collector's rule at the schema's lengths
     and the spec's at any other, and not a pair's. **The JSON path is

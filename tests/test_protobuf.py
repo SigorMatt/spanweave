@@ -1222,27 +1222,42 @@ WRONG_LENGTH = [
 
 
 @pytest.mark.parametrize(
+    "last_byte",
+    # Each id all zero, and with its last byte 1 and the rest zero, so a
+    # 4-byte `parentSpanId` is `00000001` (the scoped review of 2026-10-18b,
+    # R-2): a rule that drops an id not all zero at another length, or leaves
+    # it in base64, is caught; and a 17-byte trace id then has 16 zero bytes,
+    # a trace id's length of them, so a rule counting zero bytes is caught
+    # too.
+    [0x00, 0x01],
+    ids=["all_zero", "last_byte_1"],
+)
+@pytest.mark.parametrize(
     ("field", "length"),
     WRONG_LENGTH,
     ids=[f"{field}-{length}" for field, length in WRONG_LENGTH],
 )
-def test_an_all_zero_id_of_another_length_is_carried_as_stated(field, length):
+def test_an_id_of_another_length_is_hex_as_stated_whether_zero_or_not(
+    field, length, last_byte
+):
     """The Collector's rule is for an id of the length the schema gives it
     (`SPEC.md` §7). At any other length the Collector writes no JSON to match
-    -- it would refuse the request -- so the id is hex, all zero too, as the
-    JSON path carries a hex string of any length, and it is a stated id."""
+    -- it would refuse the request -- so the id is hex, all zero or not, as
+    the JSON path carries a hex string of any length, and it is a stated id:
+    neither dropped nor left in the runtime's base64."""
     pb2 = _pb2()
     from spanweave.otlp_protobuf import _rendered
 
     key, _ = ID_FIELDS[field]
-    request = _root(pb2, **{field: bytes(length)})
+    raw = bytes(length - 1) + bytes([last_byte])
+    request = _root(pb2, **{field: raw})
     (rendered,) = _spans(_rendered(request))
-    assert _owner(rendered, field)[key] == "00" * length
+    assert _owner(rendered, field)[key] == raw.hex()
     read = spanweave.read_protobuf(request.SerializeToString())
-    assert _stated(read, field) == "00" * length
+    assert _stated(read, field) == raw.hex()
     # ... as the same span's JSON stating the id, written by the test, reads.
     document = _rendered(_root(pb2))
-    _owner(_spans(document)[0], field)[key] = "00" * length
+    _owner(_spans(document)[0], field)[key] = raw.hex()
     assert spanweave.read_records(json.dumps(document, sort_keys=True).encode()) == read
     if field == "span.parent_span_id":
         assert "orphan_parent" in _codes(read)
