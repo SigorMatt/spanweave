@@ -2367,6 +2367,19 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **A structured payload's text is written with sorted keys** (the scoped
+  review of 2026-10-18, R-8). An exporter that carries nested attributes
+  hands an adapter a payload that was never a string, and both adapters
+  rendered it back to text for `raw` -- and for `value`, where the payload
+  has no JSON mime -- in the key order the record wrote. Two lines that
+  parse equal are one record and the reader keeps the first, so a file
+  holding one span twice, its payload's keys in two orders, built a
+  different graph with its lines swapped. The text is now `json.dumps` with
+  `sort_keys=True` at every level, on both adapters (`SPEC.md` §3.3), and
+  the swapped file builds the same bytes but for `meta.source_digest`. No
+  graph in the repository changes: no conformance rendering, captured
+  trace or zoo body (on either path) carries a structured payload, so no
+  expected graph, census count or reading moves.
 - **`read_protobuf` omits an all-zero id, as the Collector does** (Qodo's
   review of PR #6, finding 6). A `traceId`, `spanId` or `parentSpanId`, a
   span's or a link's, whose bytes are all zero was rendered as zero hex,

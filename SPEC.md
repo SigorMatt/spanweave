@@ -357,7 +357,15 @@ string, and a diagnostic is emitted. Never raise on a malformed payload.
 
 The mirror case: an exporter that carries **nested attributes** hands the
 adapter a value that was never a string, and the adapter renders it back to
-text for `raw`. Rendering has the same limit parsing does — `json.dumps`
+text for `raw`. That text is the library's, not the exporter's: it is written
+with **sorted keys**, at every level of nesting — `json.dumps` with
+`sort_keys=True` and its other arguments at their defaults. Where the
+payload has no JSON mime, that text is its `value` too; where it has one,
+`value` is a JSON value, whose keys the writer sorts (§5.2). So the order an
+exporter wrote a payload's keys in reaches neither, and two records that
+parse equal give one payload: which copy §7 keeps of a record that appears
+twice does not change it.
+Rendering has the same limit parsing does — `json.dumps`
 refuses nesting it will not descend — so when there is no text form, `state`
 stays `present`, `value` and `raw` are both `None`, and the same
 `payload_parse_failed` diagnostic says so. Nothing is lost: the value is in

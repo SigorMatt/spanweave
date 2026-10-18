@@ -249,6 +249,38 @@ def test_a_structured_value_too_deep_to_render_is_diagnosed_not_raised():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
+#: A structured value in the key order an exporter wrote it, and its text. The
+#: nested one sorts an object inside an object and one inside a list, so a
+#: rendering that sorted the top level only would not pass.
+STRUCTURED_RENDERINGS = [
+    ({"b": 1, "a": 2}, '{"a": 2, "b": 1}'),
+    (
+        {"b": 1, "a": {"d": [{"f": 6, "e": 5}], "c": 3}},
+        '{"a": {"c": 3, "d": [{"e": 5, "f": 6}]}, "b": 1}',
+    ),
+]
+
+
+@pytest.mark.parametrize("mime", [None, "application/json"])
+@pytest.mark.parametrize(
+    ("reported", "text"), STRUCTURED_RENDERINGS, ids=["flat", "nested"]
+)
+def test_a_structured_value_is_rendered_with_its_keys_sorted(reported, text, mime):
+    # The text is the library's rendering, not the exporter's, so the order
+    # the exporter wrote the keys in is not in it (`SPEC.md` §3.3). Were it,
+    # two lines that parse equal could build two graphs, depending on which
+    # came first (the scoped review of 2026-10-18, R-8).
+    attributes = {"openinference.span.kind": "TOOL", "input.value": reported}
+    if mime is not None:
+        attributes["input.mime_type"] = mime
+    span = span_of(attributes)
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.raw == text
+    # Without a JSON mime the text is the value too.
+    assert span.inputs.value == (reported if mime else text)
+    assert codes_of(span) == []
+
+
 def test_a_non_json_mime_keeps_the_text_as_the_value():
     span = span_of(
         {

@@ -358,6 +358,75 @@ def test_a_record_no_adapter_claims_is_accounted_for_too():
 
 
 # --------------------------------------------------------------------------
+# Two lines that parse equal, and a payload's key order
+# --------------------------------------------------------------------------
+#
+# Two lines that parse equal are one record, and the reader keeps the first
+# (`SPEC.md` §7). Which line is first is file order, so that rule is only
+# order-free if nothing the two lines spell differently reaches a node. A
+# structured payload's text did: both adapters rendered it in the key order
+# the line wrote, so swapping the lines swapped the payload's text (the
+# scoped review of 2026-10-18, R-8). Its text is written with sorted keys
+# (`SPEC.md` §3.3), and these pairs hold that the graph is the same either
+# way round.
+
+#: Per dialect, one span's record twice, differing only in the key order of
+#: one structured payload -- `{"a": 2, "b": 1}` against `{"b": 1, "a": 2}`.
+KEY_ORDER_TWINS = {
+    "openinference": [
+        {
+            "trace_id": "t1",
+            "span_id": "s1",
+            "name": "op",
+            "attributes": {"openinference.span.kind": "TOOL", "input.value": value},
+        }
+        for value in ({"a": 2, "b": 1}, {"b": 1, "a": 2})
+    ],
+    "otel_genai": [
+        {
+            "trace_id": "t1",
+            "span_id": "s1",
+            "name": "op",
+            "attributes": {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.input.messages": value,
+            },
+        }
+        for value in ({"a": 2, "b": 1}, {"b": 1, "a": 2})
+    ],
+}
+
+
+@pytest.mark.parametrize("dialect", sorted(KEY_ORDER_TWINS))
+def test_two_lines_differing_only_in_a_payload_s_key_order_build_one_graph(dialect):
+    first, second = KEY_ORDER_TWINS[dialect]
+    # One record, as far as the reader is concerned -- and two lines, as far as
+    # the bytes are.
+    assert first == second
+    assert _bytes_of([first, second]) != _bytes_of([second, first])
+
+    forwards = spanweave.build(_bytes_of([first, second]))
+    backwards = spanweave.build(_bytes_of([second, first]))
+    for graph in (forwards, backwards):
+        assert [d.code for d in graph.diagnostics].count("duplicate_record") == 1
+        (node,) = graph.nodes()
+        assert node.provenance.adapter_id == dialect
+
+    # `dumps`, less `meta.source_digest`: the one field §5.2 exempts, because
+    # it fingerprints the input bytes, which the swap changes by definition.
+    # That it does change is asserted too, so the exclusion hides nothing.
+    assert canonical_bytes(_document_of([first, second])) == canonical_bytes(
+        _document_of([second, first])
+    )
+    assert forwards.meta.source_digest != backwards.meta.source_digest
+    # The same graph, and it is the one with the keys sorted, whichever line
+    # was kept.
+    for graph in (forwards, backwards):
+        (node,) = graph.nodes()
+        assert node.inputs.raw == '{"a": 2, "b": 1}'
+
+
+# --------------------------------------------------------------------------
 # The digit limit is the library's, not the interpreter's (batch S8)
 # --------------------------------------------------------------------------
 #

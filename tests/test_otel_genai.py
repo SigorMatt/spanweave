@@ -339,6 +339,42 @@ def test_a_text_value_too_deep_to_render_is_diagnosed_not_raised():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
+#: A structured value in the key order an exporter wrote it, and its text. The
+#: nested one sorts an object inside an object and one inside a list, so a
+#: rendering that sorted the top level only would not pass.
+STRUCTURED_RENDERINGS = [
+    ({"b": 1, "a": 2}, '{"a": 2, "b": 1}'),
+    (
+        {"b": 1, "a": {"d": [{"f": 6, "e": 5}], "c": 3}},
+        '{"a": {"c": 3, "d": [{"e": 5, "f": 6}]}, "b": 1}',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("reported", "text"), STRUCTURED_RENDERINGS, ids=["flat", "nested"]
+)
+def test_a_structured_value_is_rendered_with_its_keys_sorted(reported, text):
+    # The text is the library's rendering, not the exporter's, so the order
+    # the exporter wrote the keys in is not in it (`SPEC.md` §3.3). Were it,
+    # two lines that parse equal could build two graphs, depending on which
+    # came first (the scoped review of 2026-10-18, R-8). Through the
+    # already-structured branch, where the value is the one reported:
+    span = span_of({"gen_ai.operation.name": "chat", "gen_ai.input.messages": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.raw == text
+    assert span.inputs.value == reported
+    assert codes_of(span) == []
+
+    # And through the one attribute the convention states is text, where the
+    # rendering is the value as well.
+    span = a_retrieval(**{"gen_ai.retrieval.query.text": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.mime == "text/plain"
+    assert (span.inputs.raw, span.inputs.value) == (text, text)
+    assert codes_of(span) == []
+
+
 def test_a_tool_span_reads_the_tool_keys_and_an_llm_span_the_message_keys():
     tool = span_of(
         {

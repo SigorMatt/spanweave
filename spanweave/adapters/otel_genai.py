@@ -561,9 +561,18 @@ def _as_text(reported: JsonValue) -> str | None:
     if isinstance(reported, str):
         return reported
     try:
-        return jsoncodec.encode(reported, json.dumps)
+        return jsoncodec.encode(reported, _sorted_text)
     except RecursionError:
         return None
+
+
+def _sorted_text(reported: JsonValue) -> str:
+    # `jsoncodec.encode` runs this, and runs it again with any integer too long
+    # for the interpreter's setting written whole. `sort_keys`, at every level:
+    # the text is the library's, so the order the exporter wrote the keys in is
+    # not in it, and two records that parse equal -- one record, whichever copy
+    # comes first -- render one text (`SPEC.md` §3.3, §7).
+    return json.dumps(reported, sort_keys=True)
 
 
 def _unrenderable(key: str, mime: str, diagnostics: list[Diagnostic]) -> Payload:
