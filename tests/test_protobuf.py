@@ -61,17 +61,21 @@ def _pb2() -> ModuleType:
     """The `ExportTraceServiceRequest` module, or a skip naming the extra.
 
     The module is imported by name, not by a computed one: `tests/gates.py`
-    bans the latter under `spanweave/`, and the tests keep the same rule. What
-    is caught is what `pytest.importorskip` catches from pytest 9.1 on,
-    `ModuleNotFoundError`.
+    bans the latter under `spanweave/` and under `tests/` alike. What is caught
+    is what `pytest.importorskip` catches from pytest 9.1 on,
+    `ModuleNotFoundError`, and the import is the module's full dotted name, not
+    `from ... import`: on a partial install, where the packages down to
+    `...trace.v1` import and the module does not, the first raises
+    `ModuleNotFoundError` and the second a plain `ImportError`, which would be
+    an error where it should be a skip.
     """
     try:
-        from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+        import opentelemetry.proto.collector.trace.v1.trace_service_pb2 as pb2
     except ModuleNotFoundError:
         if os.environ.get(REQUIRE):
             raise
         pytest.skip(NO_EXTRA)
-    return trace_service_pb2
+    return pb2
 
 
 def _built(read: spanweave.Records) -> bytes:
@@ -1485,9 +1489,33 @@ def _hide_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setitem(sys.modules, name, None)
 
 
-def test_where_the_runtime_is_required_a_missing_one_is_a_failure(monkeypatch):
+def _a_partial_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The packages down to `...trace.v1` import; the module itself does not.
+
+    Each is a package with nothing in it (an empty `__path__`), so the module
+    is found nowhere (scoped review of 2026-10-18, R-12).
+    """
+    parts = ["opentelemetry", "proto", "collector", "trace", "v1"]
+    for depth in range(1, len(parts) + 1):
+        package = ModuleType(".".join(parts[:depth]))
+        package.__path__ = []
+        monkeypatch.setitem(sys.modules, package.__name__, package)
+    monkeypatch.delitem(
+        sys.modules,
+        "opentelemetry.proto.collector.trace.v1.trace_service_pb2",
+        raising=False,
+    )
+
+
+#: The two ways the runtime is missing that `_pb2` answers alike: none of it
+#: installed, and all of it but the module.
+MISSING = {"absent": _hide_the_runtime, "partial": _a_partial_install}
+
+
+@pytest.mark.parametrize("missing", list(MISSING.values()), ids=list(MISSING))
+def test_where_the_runtime_is_required_a_missing_one_is_a_failure(monkeypatch, missing):
     """What CI's `check` and `otlp` jobs rely on: `_pb2` raises, never skips."""
-    _hide_the_runtime(monkeypatch)
+    missing(monkeypatch)
     monkeypatch.setenv(REQUIRE, "1")
     with pytest.raises(ModuleNotFoundError):
         # A skip is not an exception `pytest.raises` catches: uncaught, it
@@ -1498,12 +1526,18 @@ def test_where_the_runtime_is_required_a_missing_one_is_a_failure(monkeypatch):
             pytest.fail(f"skipped where the runtime is required: {skipped}")
 
 
-def test_where_it_is_not_a_missing_runtime_is_a_skip_naming_the_extra(monkeypatch):
-    _hide_the_runtime(monkeypatch)
+@pytest.mark.parametrize("missing", list(MISSING.values()), ids=list(MISSING))
+def test_where_it_is_not_a_missing_runtime_is_a_skip_naming_the_extra(
+    monkeypatch, missing
+):
+    missing(monkeypatch)
     monkeypatch.delenv(REQUIRE, raising=False)
     with pytest.raises(pytest.skip.Exception) as skipped:
         _pb2()
     assert str(skipped.value) == NO_EXTRA
+    # The extra by its name, not only by the constant, which is equal to itself
+    # whatever it says (scoped review of 2026-10-18, R-12).
+    assert "spanweave[otlp]" in str(skipped.value)
 
 
 #: What `_as_bytes` refuses: a path-like `str`, any other type, a memoryview of

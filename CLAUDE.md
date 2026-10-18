@@ -101,7 +101,10 @@ of them is wrong even if it passes tests.
 - Frozen dataclasses (`@dataclass(frozen=True, slots=True)`) for all model types.
 - No network imports in core (`requests`, `httpx`, `socket`, `urllib.request`) —
   CI fails the build if they appear under `spanweave/`.
-- No `pickle`, `yaml.load`, `eval`, `exec`, `__import__` anywhere — CI gate.
+- No `pickle`, `yaml.load`, `eval`, `exec`, `__import__` anywhere — CI gate
+  under `spanweave/`; under `tests/` too for `__import__` and every other
+  import by a computed name, the install-check's probe excepted
+  (`tests/gates.py`).
 - No `hash()` in any identity or ordering path — CI gate.
 - No graph libraries (`networkx`) — the type is hand-rolled with explicit,
   deterministic iteration order (`DESIGN.md` §7).

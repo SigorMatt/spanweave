@@ -608,12 +608,16 @@ def test_the_census_holds_from_the_raw_bodies_as_from_the_json(capture):
     """Batch W1: each capture read from the exporter's protobuf, not the
     Collector's JSON of it, builds every count, node and edge the census holds
     -- the audit's feed and the whole capture alike, batch and incremental.
-    Skips without the `otlp` extra; CI's `check` and `otlp` jobs run it."""
+    Skips without the `otlp` extra; CI's `check` and `otlp` jobs run it. The
+    guard imports the module by name: `tests/gates.py` bans a computed name in
+    the tests as in the package."""
     if not os.environ.get("SPANWEAVE_REQUIRE_OTLP"):
-        pytest.importorskip(
-            "opentelemetry.proto.collector.trace.v1.trace_service_pb2",
-            reason="the `otlp` extra is not installed: pip install spanweave[otlp]",
-        )
+        try:
+            import opentelemetry.proto.collector.trace.v1.trace_service_pb2  # noqa: F401
+        except ModuleNotFoundError:
+            pytest.skip(
+                "the `otlp` extra is not installed: pip install spanweave[otlp]"
+            )
     assert zoo_census.records(capture, "raw") == zoo_census.records(capture)
     for feed, census, placed in (
         (zoo_census.audit_feed(capture, "raw"), capture.census, STRUCTURES),

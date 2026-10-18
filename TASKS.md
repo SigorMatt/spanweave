@@ -76,6 +76,14 @@ Code executes against.
   > one per rule per line (`from urllib.request import x` matches the ban twice
   > and saying so twice adds nothing), and a tripwire asserts the scan actually
   > visited files, since a gate that silently scans nothing passes forever.
+  >
+  > Since widened: no-unsafe's computed-import half (`no_computed_import`:
+  > `__import__`, `importlib.import_module` and pytest's `importorskip`, in
+  > every form `tests/gates.py` lists) reads `tests/` as well, so the tests
+  > import the `otlp` extra by name as the package does (scoped review of
+  > 2026-10-18, R-11). Its module and call bans read `spanweave/` only: a
+  > test may run a subprocess. The one exemption, the install-check's probe,
+  > and why it needs no hole cut, are stated there, beside `TESTS_ROOT`.
 
 - [x] **0.5 Neutrality + layering gates.** Two more checks, both **module-scoped**
   (`DESIGN.md` §3):

@@ -2,8 +2,9 @@
 
 Every gate is asserted twice: once against a **planted violation** -- a
 synthetic module that deliberately breaks it -- and once against the real
-package. The first assertion is the one that matters. A gate that has only
-ever been seen passing is indistinguishable from a gate that cannot fail.
+package (the computed-import check against `tests/` as well). The first
+assertion is the one that matters. A gate that has only ever been seen passing
+is indistinguishable from a gate that cannot fail.
 
 Rule implementations live in `tests/gates.py`.
 """
@@ -25,12 +26,20 @@ PLANTED_NETWORK = [
     ("import aiohttp", "aiohttp"),
 ]
 
-PLANTED_UNSAFE = [
+# The module and call bans: the package's, not the tests' (a test may run a
+# subprocess).
+PLANTED_UNSAFE_IN_THE_PACKAGE = [
     ("import pickle", "pickle"),
     ("import marshal", "marshal"),
     ("from subprocess import run", "subprocess"),
     ("value = eval(payload)", "eval"),
     ("exec(payload)", "exec"),
+    ("os.system(payload)", "os.system"),
+    ("value = yaml.load(payload)", "yaml.load"),
+]
+
+# An import by a computed name: banned in the package and in the tests alike.
+PLANTED_COMPUTED_IMPORT = [
     ("mod = __import__(name)", "__import__"),
     ("mod = builtins.__import__(name)", "builtins.__import__"),
     ("from builtins import __import__", "builtins.__import__"),
@@ -54,9 +63,17 @@ PLANTED_UNSAFE = [
     ('load = getattr(module, "__import__")', "'__import__'"),
     ("from importlib import __import__ as imp", "importlib.__import__"),
     ("mod = importlib.__import__(name)", "importlib.__import__"),
-    ("os.system(payload)", "os.system"),
-    ("value = yaml.load(payload)", "yaml.load"),
+    # pytest's, which imports the name it is handed (scoped review of
+    # 2026-10-18, R-11): the spelling `tests/test_zoo.py` and `_pb2` in
+    # `tests/test_protobuf.py` once used, and its aliases.
+    ('pytest.importorskip("opentelemetry", reason=why)', "pytest.importorskip"),
+    ("mod = importorskip(name)", "importorskip"),
+    ("from pytest import importorskip as skip_unless", "pytest.importorskip"),
+    ("load = pytest.importorskip", "pytest.importorskip"),
+    ('load = getattr(pytest, "importorskip")', "'importorskip'"),
 ]
+
+PLANTED_UNSAFE = PLANTED_UNSAFE_IN_THE_PACKAGE + PLANTED_COMPUTED_IMPORT
 
 PLANTED_HASH = [
     "bucket = hash(node_id)",
@@ -127,6 +144,68 @@ def test_the_gates_actually_scanned_something():
     # A gate that silently scans zero files passes forever. This is the
     # tripwire for that.
     assert len(gates.package_files()) >= 3
+
+
+@pytest.mark.parametrize(("source", "expected"), PLANTED_COMPUTED_IMPORT)
+def test_the_computed_import_check_fails_on_a_planted_violation(source, expected):
+    # The half of `no_unsafe` that reads `tests/` too catches each one alone.
+    found = gates.check_source("tests/planted.py", source, [gates.no_computed_import])
+    assert [v.rule for v in found] == ["no-unsafe"]
+    assert expected in found[0].detail
+
+
+@pytest.mark.parametrize(("source", "expected"), PLANTED_UNSAFE_IN_THE_PACKAGE)
+def test_the_computed_import_check_is_not_the_module_and_call_bans(source, expected):
+    # `import subprocess` in a test stays allowed: what reads `tests/` is the
+    # computed-import check, not all of `no_unsafe`.
+    del expected
+    found = gates.check_source("tests/planted.py", source, [gates.no_computed_import])
+    assert found == []
+
+
+def test_the_tests_import_by_name_as_the_package_does():
+    # A computed import in `tests/` -- Qodo's finding on PR #6 -- cannot come
+    # back with the gate green (scoped review of 2026-10-18, R-11).
+    found = gates.check_tests([gates.no_computed_import])
+    assert found == [], "\n".join(str(v) for v in found)
+
+
+def test_the_tests_scan_reads_every_module_under_tests():
+    # The tripwire for the tests' scan: the files that import the extra's
+    # module, the install-check, and a module one directory down.
+    seen = []
+
+    def record(path, source, tree):
+        del source, tree
+        seen.append(path)
+        return []
+
+    gates.check_tests([record])
+    assert {
+        "tests/conftest.py",
+        "tests/test_protobuf.py",
+        "tests/test_zoo.py",
+        "tests/install_check.py",
+        "tests/audit/probe1.py",
+    } <= set(seen)
+
+
+def test_the_one_exemption_is_the_install_check_probe_and_its_one_import():
+    # Named beside `TESTS_ROOT` in tests/gates.py, with its reason. The probe is
+    # a string, so the scan passes its file with no hole cut for it; read as
+    # the program the throwaway venv runs, it is one computed import, the
+    # walk's. If it stops being one, or becomes two, the comment changes too.
+    from tests import install_check
+
+    source = (gates.TESTS_ROOT / "install_check.py").read_text(encoding="utf-8")
+    rule = [gates.no_computed_import]
+    assert gates.check_source("tests/install_check.py", source, rule) == []
+    found = gates.check_source("PROBE", install_check.PROBE, rule)
+    assert [v.detail.split(";")[0] for v in found] == [
+        "calls importlib.import_module()"
+    ]
+    called = install_check.PROBE.splitlines()[found[0].line - 1]
+    assert called.strip() == "importlib.import_module(info.name)"
 
 
 # --------------------------------------------------------------------------

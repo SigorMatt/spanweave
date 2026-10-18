@@ -63,16 +63,19 @@ UNSAFE_MODULES = ("pickle", "marshal", "subprocess")
 UNSAFE_CALLS = ("eval", "exec", "os.system", "yaml.load")
 
 # An import by a computed name is an import, and the gates that read import
-# statements -- zero-dependencies above all -- cannot see one. So both ways of
-# making one are banned, matched on the name's LAST part so that the receiver
+# statements -- zero-dependencies above all -- cannot see one. So the three ways
+# of making one are banned -- `__import__`, `import_module`, and pytest's
+# `importorskip`, which imports the name it is handed (scoped review of
+# 2026-10-18, R-11) -- matched on the name's LAST part so that the receiver
 # does not matter:
 # - as a call (`__import__`, `builtins.__import__`, `importlib.import_module`,
 #   `il.import_module` after `import importlib as il`, a bare `import_module`
-#   after `from importlib import import_module`);
+#   after `from importlib import import_module`, `pytest.importorskip`);
 # - as a reference, called or not (`load = importlib.import_module`, `f =
 #   __import__`), since a reference is how a call gets a new name;
 # - as an import of the member (`from importlib import import_module as
-#   load`, `from importlib import __import__`), so an alias cannot hide it;
+#   load`, `from importlib import __import__`, `from pytest import
+#   importorskip`), so an alias cannot hide it;
 # - through `getattr` on `importlib` or `builtins` (or an `import ... as`
 #   alias of either), or with a member's name as a literal string, whatever
 #   the receiver.
@@ -81,11 +84,12 @@ UNSAFE_CALLS = ("eval", "exec", "os.system", "yaml.load")
 # `getattr(m, name)` gets past it, as does any indirection that never spells
 # a member's name (`vars(importlib)[name]`). Closing that needs data flow,
 # which an AST walk does not have (cold review of 2026-10-17b, R-3).
-DYNAMIC_IMPORT_CALLS = ("__import__", "import_module")
+DYNAMIC_IMPORT_CALLS = ("__import__", "import_module", "importorskip")
 DYNAMIC_IMPORT_MEMBERS = (
     "importlib.import_module",
     "importlib.__import__",
     "builtins.__import__",
+    "pytest.importorskip",
 )
 DYNAMIC_IMPORT_MODULES = ("importlib", "builtins")
 
@@ -198,20 +202,14 @@ def _dynamic_import_references(path: str, tree: ast.AST) -> list[Violation]:
     return found
 
 
-def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
+def no_computed_import(path: str, source: str, tree: ast.AST) -> list[Violation]:
+    """An import by a computed name, in every form `DYNAMIC_IMPORT_CALLS` lists.
+
+    The half of `no_unsafe` that reads `tests/` as well as the package
+    (`check_tests`); the module and call bans are the other half, and read the
+    package only.
+    """
     found = []
-    for imported, line in _imported_modules(tree):
-        for banned in UNSAFE_MODULES:
-            if _matches_module(imported, banned):
-                found.append(
-                    Violation(
-                        "no-unsafe",
-                        path,
-                        line,
-                        f"imports {imported!r}; trace content is never "
-                        f"deserialized into objects or executed (SECURITY.md)",
-                    )
-                )
     for imported, line in _imported_modules(tree):
         if imported in DYNAMIC_IMPORT_MEMBERS:
             found.append(
@@ -227,7 +225,6 @@ def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        name = _dotted_name(node.func)
         last = (
             node.func.attr
             if isinstance(node.func, ast.Attribute)
@@ -241,12 +238,34 @@ def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
                     "no-unsafe",
                     path,
                     node.lineno,
-                    f"calls {name or last}(); an import by a computed name is "
-                    f"one no import gate can read, and trace content is never "
-                    f"imported (SECURITY.md)",
+                    f"calls {_dotted_name(node.func) or last}(); an import by a "
+                    f"computed name is one no import gate can read, and trace "
+                    f"content is never imported (SECURITY.md)",
                 )
             )
-        elif name in UNSAFE_CALLS:
+    return found
+
+
+def no_unsafe(path: str, source: str, tree: ast.AST) -> list[Violation]:
+    found = []
+    for imported, line in _imported_modules(tree):
+        for banned in UNSAFE_MODULES:
+            if _matches_module(imported, banned):
+                found.append(
+                    Violation(
+                        "no-unsafe",
+                        path,
+                        line,
+                        f"imports {imported!r}; trace content is never "
+                        f"deserialized into objects or executed (SECURITY.md)",
+                    )
+                )
+    found.extend(no_computed_import(path, source, tree))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _dotted_name(node.func)
+        if name in UNSAFE_CALLS:
             found.append(
                 Violation(
                     "no-unsafe",
@@ -581,9 +600,47 @@ def package_files() -> list[pathlib.Path]:
     return sorted(PACKAGE_ROOT.rglob("*.py"))
 
 
-def check_package(rules: Sequence[Rule]) -> list[Violation]:
+def _check_files(
+    files: Sequence[pathlib.Path], rules: Sequence[Rule]
+) -> list[Violation]:
     found: list[Violation] = []
-    for file in package_files():
+    for file in files:
         relative = str(file.relative_to(PACKAGE_ROOT.parent))
         found.extend(check_source(relative, file.read_text(encoding="utf-8"), rules))
     return found
+
+
+def check_package(rules: Sequence[Rule]) -> list[Violation]:
+    return _check_files(package_files(), rules)
+
+
+# The tests import by name as the package does, and the gate holds them to it
+# (scoped review of 2026-10-18, R-11): `no_computed_import` reads `tests/` too.
+# Only it. The module and call bans stay the package's -- a test may run a
+# subprocess, and many do.
+#
+# One exemption, by name: the install-check's probe (`tests/install_check.py`,
+# `PROBE`). It must import the INSTALLED package from outside the repository,
+# every module of it, by the names `pkgutil.walk_packages` finds in the
+# install -- which modules shipped is the question it asks, so no name written
+# here can ask it. It needs no hole cut in the check: the probe is a string,
+# run by the throwaway venv's interpreter, and the check reads code, not
+# strings (which is also why the planted violations in `tests/test_gates.py`
+# do not trip it). That is the check's limit here, stated as its limit in the
+# package is above: a program a test runs from a string is not read.
+# `tests/test_gates.py` holds that the probe imports by a computed name exactly
+# once, and that the scan passes its file.
+TESTS_ROOT = PACKAGE_ROOT.parent / "tests"
+
+
+def tests_files() -> list[pathlib.Path]:
+    return sorted(TESTS_ROOT.rglob("*.py"))
+
+
+def check_tests(rules: Sequence[Rule]) -> list[Violation]:
+    """Run `rules` over every module under `tests/`.
+
+    Only `no_computed_import` is meant to be: the other rules are the
+    package's (see the comment above `TESTS_ROOT`).
+    """
+    return _check_files(tests_files(), rules)
