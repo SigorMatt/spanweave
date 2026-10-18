@@ -115,7 +115,7 @@ def input_reordered(data: bytes, order: Order, tally: Tally) -> tuple[bytes, lis
     was fed unchanged, and why.
 
     Split as the reader splits it (`SPEC.md` §7), by its own head scan: a
-    leading BOM is kept; an array, or a document whose first member key is
+    leading BOM is kept; an array, or a document whose first object states
     `resourceSpans`, is one value and is reordered whole; anything else is
     read line by line, an LF ending each, whatever `str.strip` removes kept
     around it. What the reader would not read as JSON -- not UTF-8, or refused

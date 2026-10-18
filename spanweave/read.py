@@ -50,8 +50,9 @@ Two things this layer must get right:
   *invented* span -- worse than a missing one, because nothing downstream can
   tell. A repeat is skipped and reported as ``duplicate_record`` (`SPEC.md`
   §7). Sameness is decided on the **parsed** record, because the parsed record
-  is what the library preserves; whitespace and key order never reach a node,
-  so collapsing two lines that parse equal loses nothing.
+  is what the library preserves; whitespace never reaches a node, nor does an
+  object's member order where each member is stated once, so collapsing two
+  lines that parse equal loses nothing.
 * **It is an iterator.** Nothing here requires the whole input as a
   precondition, which is the entire premium paid toward a possible future
   tail mode (`DESIGN.md` §6). The JSON-array form is the exception the format
@@ -286,12 +287,17 @@ class RecordStream:
         """One JSON document, buffered for the array form's own reason.
 
         A document is not a record until its closing brace, and the head scan
-        that got us here read one member key rather than the whole input, so
-        being wrong is expected rather than exceptional: a file of one export
-        per line begins with exactly these bytes. When the buffered input is
-        not a single document it is read line by line, which is byte for byte
-        what this input did before this branch existed -- including its
-        diagnostics, which is why the fallback below emits none of its own.
+        that got us here read the first object's members rather than the whole
+        input, so being wrong is expected rather than exceptional: a file of
+        one export per line begins with exactly these bytes, and a JSONL file
+        whose first record states ``resourceSpans`` beside other members gets
+        here too, as does one whose first record never closes. When the
+        buffered input is not a single document it is read line by line, which
+        is byte for byte what this input did before this branch existed --
+        including its diagnostics, which is why the fallback below emits none
+        of its own. That fallback is the safety net the scan relies on: what
+        the scan says of an input that is not one JSON document decides only
+        how much is buffered, never what is read.
         """
         text, undecodable = _decoded(data)
         try:
@@ -464,10 +470,21 @@ def record_digest(record: JsonValue) -> str:
 #: `examples/` contained it, and 64 of 64 `*.jsonl` opened with `trace_id`.
 _OTLP_ROOT = "resourceSpans"
 
-#: The same key as it appears in the bytes, for the head scan. Deliberately
-#: not built from `_OTLP_ROOT` at import time: what the scan matches is a
-#: literal run of bytes, and writing it out is how a reader checks it.
+#: The same key as it appears in the bytes when it is written without an
+#: escape, for the head scan, which compares a key's token to it before it
+#: decodes one (`_states_the_export_key`). Deliberately not built from
+#: `_OTLP_ROOT` at import time: writing the run of bytes out is how a reader
+#: checks it.
 _OTLP_ROOT_BYTES = b'"resourceSpans"'
+
+#: Where the head scan stops outside a string: a string's opening quote, and
+#: the brackets and commas that move it between members and depths. Nothing
+#: else in JSON's grammar can make a member's key out of what follows.
+_SCAN_OUTSIDE_A_STRING = re.compile(rb'["{}\[\],]')
+
+#: Where it stops inside one: the closing quote, or an escape, whose next byte
+#: is never the string's end.
+_SCAN_INSIDE_A_STRING = re.compile(rb'["\\]')
 
 #: Span keys that become the record shape the adapters read. Renaming, not
 #: interpreting: each has exactly one destination and no value is touched.
@@ -529,17 +546,24 @@ def _is_an_export(record: JsonValue) -> bool:
 
 
 def _opens_an_export(head: bytes, chunks: Iterator[bytes]) -> tuple[bytes, bool]:
-    """`(head, whether the input's first member key is the export key)`.
+    """`(head, whether the input's first object states the export key)`.
 
-    A head scan rather than a parse, and it stops at the first key: the whole
-    input has to be buffered to read an export, and buffering every input that
-    merely begins with ``{`` would end streaming for JSONL, which is most of
-    them. Pulls only as many chunks as the key needs, and gives up rather than
-    grow: giving up is free, because the caller then reads lines, which is what
-    it would have done anyway.
+    A head scan rather than a parse (`SPEC.md` §7, decisions log D39): the
+    whole input has to be buffered to read an export, and buffering every
+    input that merely begins with ``{`` would end streaming for JSONL, which is
+    most of them. **Presence decides, not position**: the scan reads the first
+    top-level object's members and stops at the first named ``resourceSpans``
+    or at the object's close, so where that member stands among the others --
+    member order, which never reaches a graph -- does not decide how the input
+    is read. That bounds it by the input's first record, which the line reader
+    buffers anyway; a first record that never closes is scanned to the end,
+    and giving up there is free, because the caller then reads lines, which is
+    what it would have done anyway. Pulls only as many chunks as that takes,
+    and reads each byte once however many there are.
     """
+    scan = _ExportScan()
     while True:
-        verdict = _scan_for_export_key(head)
+        verdict = scan.over(head)
         if verdict is not None:
             return head, verdict
         try:
@@ -550,18 +574,113 @@ def _opens_an_export(head: bytes, chunks: Iterator[bytes]) -> tuple[bytes, bool]
 
 def _scan_for_export_key(data: bytes) -> bool | None:
     """True, False, or None for "not enough bytes to say yet"."""
-    index = _past_space(data, 0)
-    if index == len(data):
-        return None
-    if data[index] != ord("{"):
+    return _ExportScan().over(data)
+
+
+class _ExportScan:
+    """Does the input's first top-level object state ``resourceSpans``?
+
+    It tracks what JSON's grammar needs to tell a member's key from everything
+    else and nothing more: where a string opens and closes, escapes included,
+    and how deep the brackets are. A key is a string at depth 1 that opens a
+    member -- the first after the object's brace or after a comma at that
+    depth -- so ``resourceSpans`` one level down, inside an array, as a value,
+    or as text inside a string is not one. The key is compared as JSON reads
+    it, escapes decoded, since the rule is the member's presence.
+
+    Resumable: ``over`` is handed the same buffer grown by each chunk, and
+    reads only the bytes after where it stopped, so a long first record is
+    read once. It does not validate: of an input that is not one JSON
+    document, what it says decides only how much is buffered, since either
+    answer reads such an input line by line (`RecordStream._read_document`).
+    """
+
+    __slots__ = ("_at", "_depth", "_opened", "_opens_a_member", "_string_from")
+
+    def __init__(self) -> None:
+        #: The next byte to read.
+        self._at = 0
+        #: Whether the first non-space byte has been read, and was ``{``.
+        self._opened = False
+        #: Brackets open, the first object's brace counted: 1 among its members.
+        self._depth = 0
+        #: Whether the next string at depth 1 is a member's key.
+        self._opens_a_member = False
+        #: Where the string being read opened, or None outside one.
+        self._string_from: int | None = None
+
+    def over(self, data: bytes) -> bool | None:
+        """True, False, or None for "not enough bytes to say yet"."""
+        at = self._at
+        if not self._opened:
+            at = _past_space(data, at)
+            if at == len(data):
+                self._at = at
+                return None
+            if data[at] != ord("{"):
+                return False
+            self._opened = True
+            self._depth = 1
+            self._opens_a_member = True
+            at += 1
+        while True:
+            if self._string_from is not None:
+                found = _SCAN_INSIDE_A_STRING.search(data, at)
+                if found is None:
+                    self._at = len(data)
+                    return None
+                at = found.start()
+                if data[at] == ord("\\"):
+                    # The escaped byte is never the closing quote. It may not
+                    # have arrived yet; the next call starts past it.
+                    at += 2
+                    if at > len(data):
+                        self._at = at
+                        return None
+                    continue
+                token = data[self._string_from : at + 1]
+                self._string_from = None
+                at += 1
+                if self._depth == 1 and self._opens_a_member:
+                    if _states_the_export_key(token):
+                        return True
+                    self._opens_a_member = False
+                continue
+            found = _SCAN_OUTSIDE_A_STRING.search(data, at)
+            if found is None:
+                self._at = len(data)
+                return None
+            at = found.start()
+            byte = data[at : at + 1]
+            at += 1
+            if byte == b'"':
+                self._string_from = at - 1
+            elif byte in b"{[":
+                self._depth += 1
+            elif byte in b"}]":
+                self._depth -= 1
+                if self._depth == 0:
+                    return False
+            elif self._depth == 1:
+                self._opens_a_member = True
+
+
+def _states_the_export_key(token: bytes) -> bool:
+    """Is this string token, quotes and all, ``resourceSpans`` as JSON reads it?
+
+    The bytes answer it where the token holds no escape, which is every
+    exporter's spelling; one that does is decoded, so ``"resource\\u0053pans"``
+    is the same key. A token JSON would not read as a string names no member.
+    """
+    if token == _OTLP_ROOT_BYTES:
+        return True
+    if b"\\" not in token:
         return False
-    index = _past_space(data, index + 1)
-    if index == len(data):
-        return None
-    rest = data[index:]
-    if len(rest) < len(_OTLP_ROOT_BYTES):
-        return None if _OTLP_ROOT_BYTES.startswith(rest) else False
-    return rest.startswith(_OTLP_ROOT_BYTES)
+    try:
+        key = jsoncodec.loads(token.decode("utf-8"))
+    except ValueError:
+        return False
+    return isinstance(key, str) and key == _OTLP_ROOT
 
 
 def _past_space(data: bytes, index: int) -> int:

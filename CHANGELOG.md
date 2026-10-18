@@ -2382,6 +2382,36 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An OTLP/JSON document is read whole wherever its object states
+  `resourceSpans`** (decisions log D39). The reader decided whether to buffer
+  an input that opens with `{` and read it as one document by its first
+  member key, so a document written over several lines whose object states
+  `resourceSpans` beside another member was one record with `resourceSpans`
+  first and, with it after, every line a `malformed_record`: the order the
+  members were written in decided the graph. The head scan now reads the
+  first top-level object's members -- strings, escapes and nesting tracked,
+  the key compared as JSON reads it -- and buffers when one of them is
+  `resourceSpans`, wherever it stands (`SPEC.md` §7). Such an object is
+  still not an export, and is one record carried verbatim, its other members
+  with it, as it was with `resourceSpans` first. A JSONL file's first record
+  is now scanned to its close rather than to its first key, which the line
+  reader buffers anyway; one whose first record never closes is scanned to
+  the end and then read line by line as before. No graph in the repository
+  changes: every conformance rendering and zoo body that states
+  `resourceSpans` states it alone, and no tracked JSONL file states it.
+- **A `kvlistValue` in an `exception_event` message is written as a map**
+  (decisions log D39). The message names the event's `exception.type` with
+  `repr`, and one stated as a `kvlistValue` folds to a map in the order its
+  list gives the entries, so the same map listed in two orders gave two
+  messages. Its keys are now sorted at every level first, by
+  `jsoncodec.keys_sorted`, the sorter the adapters use (`SPEC.md` §3.3, §7);
+  any other type is written as before. `SPEC.md` §7's key-order sentence now
+  claims what the gate holds, that an object's member order never reaches a
+  graph when each member is stated once, says how a member stated twice is
+  read today, as measured, and says that a list's order, a `kvlistValue`'s
+  among them, is the input's and reaches `raw.source` verbatim. No graph in
+  the repository changes: no conformance rendering, captured trace or zoo
+  body states an `exception.type` as a `kvlistValue`.
 - **A span kind or operation stated as an object is rendered with sorted
   keys** (decisions log D38). An exporter that carries nested attributes can
   state `openinference.span.kind` or `gen_ai.operation.name` as an object, and

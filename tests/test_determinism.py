@@ -991,6 +991,186 @@ def test_records_are_reordered_with_their_types_kept():
 
 
 # --------------------------------------------------------------------------
+# Where an export is found, and a kvlist's text (decisions log D39)
+# --------------------------------------------------------------------------
+#
+# Two orders the gate above could not hold. The reader found an export by its
+# FIRST member key, so a document written over several lines whose object
+# states `resourceSpans` beside another member was one record with it first
+# and every line `malformed_record` with it after: the gate splits an input as
+# the reader does, so it fed the second unchanged, as lines it could not read.
+# And the `exception_event` message wrote an `exception.type` stated as a
+# `kvlistValue` in the order the list gives its entries, which is a list's
+# order, not a member's, so no reordering of an object reached it. Each is
+# held here by one pair, both orders, and the content each must keep.
+
+
+#: The span inside the export the object states.
+_INNER_SPAN = {"traceId": "t1", "spanId": "s2", "name": "inner"}
+
+
+def _beside_another_member(resource_spans_first, members):
+    """One object over several lines, ``resourceSpans`` first or last."""
+    stated = [("resourceSpans", [{"scopeSpans": [{"spans": [_INNER_SPAN]}]}])]
+    ordered = [*stated, *members] if resource_spans_first else [*members, *stated]
+    lines = [f"  {json.dumps(key)}: {json.dumps(value)}" for key, value in ordered]
+    return ("{\n" + ",\n".join(lines) + "\n}\n").encode("utf-8")
+
+
+#: Beside `resourceSpans`: a flat record's members, so the object is a record
+#: an adapter claims and the pair builds a graph; and one member, as
+#: `tests/test_read.py`'s second-key case states it, which no adapter claims.
+BESIDE_RESOURCE_SPANS = {
+    "a flat record": [
+        ("trace_id", "t1"),
+        ("span_id", "s1"),
+        ("name", "carried"),
+        ("start_time", 1700000001),
+        ("attributes", {"openinference.span.kind": "LLM"}),
+    ],
+    "one other member": [("somethingElse", 1)],
+}
+
+
+@pytest.mark.parametrize("beside", sorted(BESIDE_RESOURCE_SPANS))
+def test_an_export_is_found_wherever_resource_spans_stands(beside):
+    """Decisions log D39: presence, not position, decides whether the reader
+    reads a document whole (`SPEC.md` §7). With `resourceSpans` first or last,
+    the document is one record -- the whole object, carried verbatim, its
+    other members with it, not unpacked, since `ExportTraceServiceRequest` has
+    one field -- and the two build one graph (or the same refusal), by the
+    gate's comparator: `dumps` less `meta.source_digest`."""
+    members = BESIDE_RESOURCE_SPANS[beside]
+    first = _beside_another_member(True, members)
+    last = _beside_another_member(False, members)
+    assert first != last and len(first.splitlines()) == len(members) + 3
+    stated = json.loads(first)
+    assert json.loads(last) == stated
+    assert next(iter(stated)) == "resourceSpans" != next(iter(json.loads(last)))
+    for data in (first, last):
+        read = spanweave.read_records(data)
+        assert read.records == (stated,), "not the whole object, as one record"
+        assert type(read.records[0]) is dict, "an object of two members unpacked"
+        assert (read.diagnostics, read.skipped_records) == ((), 0)
+    written, digest = _outcome(first)
+    again, digest_again = _outcome(last)
+    if beside == "a flat record":
+        assert isinstance(written, bytes), "the flat record built no graph"
+        (node,) = json.loads(written)["nodes"]
+        assert node["raw"]["source"] == stated
+        assert digest_again != digest
+    if isinstance(written, bytes) and isinstance(again, bytes) and written != again:
+        pytest.fail(
+            f"{beside}, resourceSpans first and last: the graph changed --\n  "
+            + "\n  ".join(_differences(_parsed(written), _parsed(again)))
+        )
+    assert again == written
+
+
+def _kvlists_reversed(value):
+    """``value`` with every `kvlistValue`'s entries listed the other way round,
+    at every depth: the same map, in the other list order. Its own inverse."""
+    if isinstance(value, list):
+        return [_kvlists_reversed(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    copy = {key: _kvlists_reversed(item) for key, item in value.items()}
+    listed = copy.get("kvlistValue")
+    if isinstance(listed, dict) and isinstance(listed.get("values"), list):
+        copy["kvlistValue"] = {**listed, "values": listed["values"][::-1]}
+    return copy
+
+
+def _exception_export(stated_type=STRUCTURED):
+    """An export whose span records an exception, its `exception.type` the
+    structured value as the nested `kvlistValue` OTLP/JSON writes it."""
+    event = {
+        "timeUnixNano": "1700000000500000000",
+        "name": "exception",
+        "attributes": _key_values(
+            {"exception.type": stated_type, "exception.message": "boom"}
+        ),
+    }
+    span = {
+        "traceId": "5b8efff798038103d269b633813fc60c",
+        "spanId": "eee19b7ec3c1b174",
+        "name": "failed",
+        "startTimeUnixNano": "1700000000000000000",
+        "attributes": _key_values({"openinference.span.kind": "LLM"}),
+        "events": [event],
+    }
+    return {"resourceSpans": [{"scopeSpans": [{"spans": [span]}]}]}
+
+
+def test_a_kvlist_rendered_to_text_is_rendered_as_a_map():
+    """Decisions log D39: an `exception.type` stated as a `kvlistValue` is
+    written in the `exception_event` message as the map it stands for, its
+    keys sorted at every level (`SPEC.md` §3.3, §7), so the map listed in two
+    orders gives one message. A list's order is the input's and reaches
+    `raw.source` verbatim, so the two graphs differ there, and only there:
+    with the second's entries listed back, it is the first, byte for byte, by
+    the gate's comparator."""
+    written = _exception_export()
+    listed_back = _kvlists_reversed(written)
+    assert listed_back != written
+    assert _kvlists_reversed(listed_back) == written
+    first, other = (
+        json.dumps(export).encode("utf-8") for export in (written, listed_back)
+    )
+    for data in (first, other):
+        graph = spanweave.build(data)
+        (event,) = [d for d in graph.diagnostics if d.code == "exception_event"]
+        assert event.message == (
+            "the span states event 0, an exception recorded by the OpenTelemetry "
+            "API ({'alpha': {'beta': True, 'mu': [{'xx': 1, 'yy': 2}]}, "
+            "'eta': [3, {'p': 's', 'q': None}], 'zeta': 1}); the graph has no "
+            "field for it, so it is reported here, its stacktrace kept verbatim "
+            "in raw with the whole event. Whether the span failed is its status"
+        )
+        assert event.source == {
+            "type": STRUCTURED,
+            "message": "boom",
+            "escaped": None,
+            "time": 1700000000.5,
+        }
+    one, digest = _outcome(first)
+    two, digest_two = _outcome(other)
+    assert isinstance(one, bytes) and isinstance(two, bytes)
+    assert one != two, "the list's order did not reach raw.source"
+    again = canonical_bytes(_kvlists_reversed(json.loads(two)))
+    if again != one:
+        pytest.fail(
+            "the kvlist listed in two orders: the graph changed --\n  "
+            + "\n  ".join(_differences(_parsed(one), _parsed(again)))
+        )
+    assert digest_two != digest
+
+
+#: An `exception.type` that is not a map, and its text in the message:
+#: `repr`'s, as before (`SPEC.md` §7), a map inside a list sorted.
+EXCEPTION_TYPE_TEXTS = {
+    "a string": ("ValueError", "'ValueError'"),
+    "an integer": (7, "7"),
+    "a list holding a map": (["b", {"d": 1, "c": 2}], "['b', {'c': 2, 'd': 1}]"),
+}
+
+
+@pytest.mark.parametrize("stated", sorted(EXCEPTION_TYPE_TEXTS))
+def test_an_exception_type_is_written_in_repr_s_spelling(stated):
+    """Decisions log D39 sorts a map's keys and nothing else: every other
+    `exception.type` reads in the message as `repr` writes it, a string
+    quoted, as it did before."""
+    value, text = EXCEPTION_TYPE_TEXTS[stated]
+    graph = spanweave.build(json.dumps(_exception_export(value)).encode("utf-8"))
+    (event,) = [d for d in graph.diagnostics if d.code == "exception_event"]
+    assert event.message.startswith(
+        "the span states event 0, an exception recorded by the OpenTelemetry "
+        f"API ({text}); the graph has no field for it"
+    )
+    assert event.source["type"] == value
+
+
+# --------------------------------------------------------------------------
 # The digit limit is the library's, not the interpreter's (batch S8)
 # --------------------------------------------------------------------------
 #

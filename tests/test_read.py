@@ -961,6 +961,86 @@ def test_an_object_with_a_second_top_level_key_is_not_an_export():
     assert only(json.dumps(record).encode()) == record
 
 
+#: The head scan's verdict (`SPEC.md` §7, decisions log D39): True where the
+#: input's first top-level object states `resourceSpans` as a member, wherever
+#: it stands among the members; False where that object closes without one,
+#: or the input does not open with one; None while the bytes cannot say yet.
+HEAD_SCANS = {
+    "first": (b'{"resourceSpans": []}', True),
+    "after another member": (b'{"a": 1, "resourceSpans": []}', True),
+    "after an object value": (b'{"a": {}, "resourceSpans": []}', True),
+    "after brackets in a string": (b'{"a": [{"b": "]}["}], "resourceSpans": []}', True),
+    "after an escaped quote": (b'{"a": "x\\"", "resourceSpans": []}', True),
+    "after an escaped backslash": (b'{"a": "x\\\\", "resourceSpans": []}', True),
+    "written with an escape": (b'{"resource\\u0053pans": []}', True),
+    "over several lines": (b'{\n  "a": 1,\n  "resourceSpans": []\n}\n', True),
+    "a key one level down": (b'{"a": {"b": 1, "resourceSpans": []}}', False),
+    "a key inside an array": (b'{"a": [{"b": 1, "resourceSpans": []}]}', False),
+    "a string value": (b'{"a": "resourceSpans", "b": 1}', False),
+    "inside a string value": (b'{"a": "x, \\"resourceSpans\\": [", "b": 1}', False),
+    "in the second object only": (b'{"a": 1}\n{"resourceSpans": []}\n', False),
+    "an empty object": (b"{}", False),
+    "an array": (b'[{"resourceSpans": []}]', False),
+    "a key not yet whole": (b'{"a": 1, "resourceSp', None),
+    "an escape not yet whole": (b'{"a": "x\\', None),
+    "nothing but space": (b"  \n", None),
+}
+
+
+@pytest.mark.parametrize("case", sorted(HEAD_SCANS))
+def test_the_head_scan_finds_resource_spans_by_presence_not_position(case):
+    from spanweave.read import _scan_for_export_key
+
+    data, verdict = HEAD_SCANS[case]
+    assert _scan_for_export_key(data) is verdict
+    # Fed a byte at a time, as chunks arrive, it says the same.
+    from spanweave.read import _opens_an_export
+
+    head, opens = _opens_an_export(
+        data[:1], iter(data[i : i + 1] for i in range(1, len(data)))
+    )
+    assert opens is bool(verdict)
+    assert data.startswith(head)
+
+
+def test_a_first_record_that_only_mentions_resource_spans_still_streams():
+    # The scan reads the first object's members and nothing below them, so a
+    # JSONL file whose first record names `resourceSpans` one level down, in
+    # an array or as a value is read as lines, the first record yielded before
+    # the second line is pulled (`SPEC.md` §7).
+    first = {
+        "span_id": "s0",
+        "note": "resourceSpans",
+        "nested": {"a": 1, "resourceSpans": []},
+        "listed": [{"b": 2, "resourceSpans": []}],
+    }
+    lines = [json.dumps(first).encode() + b"\n", *JSONL.splitlines(keepends=True)]
+    pulled = []
+
+    def chunks():
+        for line in lines:
+            pulled.append(line)
+            yield line
+
+    from spanweave.read import RecordStream
+
+    stream = iter(RecordStream("<test>", chunks()))
+    assert next(stream) == first
+    assert len(pulled) == 1
+    assert list(stream) == [{"span_id": "s0"}, {"span_id": "s1"}]
+
+
+def test_a_jsonl_file_whose_first_record_states_resource_spans_reads_as_lines():
+    # The cost the presence rule accepts: this input is buffered whole, since
+    # its first object states `resourceSpans`, and it is not one document, so
+    # it is read line by line -- exactly what the line reader makes of it.
+    first = {"x": 1, "resourceSpans": []}
+    data = json.dumps(first).encode() + b"\n" + JSONL
+    stream = read_trace(data)
+    assert list(stream) == [first, {"span_id": "s0"}, {"span_id": "s1"}]
+    assert stream.diagnostics.collected() == ()
+
+
 def test_two_copies_of_one_span_in_two_envelopes_are_still_one_record():
     # Expansion happens above deduplication, so an at-least-once export that
     # repeated a whole envelope still produces one node (`SPEC.md` §7).
@@ -1839,11 +1919,11 @@ def test_an_unterminated_export_document_is_diagnosed_in_its_own_call_too():
     """An OTLP document cut short is a loss in its own call as well.
 
     This container is buffered for the array's reason and reached by a head
-    scan of one member key, so a truncated export is read as far as the scan
-    went and then refused. The refusal is the line reader's, because an input
-    that is not a single document is read line by line -- what matters here is
-    that the refusal happens *now*, and that the bytes completing the document
-    cannot combine with it in the next call.
+    scan that stops at the `resourceSpans` member, so a truncated export is
+    read as far as the scan went and then refused. The refusal is the line
+    reader's, because an input that is not a single document is read line by
+    line -- what matters here is that the refusal happens *now*, and that the
+    bytes completing the document cannot combine with it in the next call.
     """
     whole = (
         b'{"resourceSpans":[{"scopeSpans":[{"spans":'
@@ -1973,7 +2053,7 @@ def test_every_container_reports_the_bytes_it_could_not_decode():
 def test_the_document_branch_that_falls_back_to_lines_reports_the_bytes_once():
     """The one path that decodes the same bytes twice must report them once.
 
-    An input whose first member key is `resourceSpans` is buffered and parsed
+    An input whose first object states `resourceSpans` is buffered and parsed
     as one document; when that fails it is read line by line instead (§7), so
     the bytes pass a decoder twice. Two diagnostics for one substitution would
     report the reader's own second attempt as a second fact about the input.

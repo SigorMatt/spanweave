@@ -210,9 +210,9 @@ TIMESTAMP_LITERAL = re.compile(
     r'("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|null)'
 )
 
-#: The first member key that makes an input an OTLP JSON document (`SPEC.md`
-#: §7). Used only to find the indented exports `OPEN_QUESTIONS.md` §16(a)
-#: counts diagnostics over.
+#: The key that makes an input an OTLP JSON document (`SPEC.md` §7), looked
+#: for here as the document's first member, as `OPEN_QUESTIONS.md` §16 found
+#: it. Used only to find the indented exports §16(a) counts diagnostics over.
 OTLP_FIRST_KEY = "resourceSpans"
 
 

@@ -14618,7 +14618,120 @@ decisions log D15, D16, D17, D18 and D19.
   for the maintainer: a rule for each — which key wins, or where the other
   goes; whether such a document is read whole; whether a `kvlistValue`'s
   entry order is key order — before the merge or in the next spanweave
-  series.
+  series. **The second and third are closed** by decisions log D39, before
+  the merge: presence of `resourceSpans` among the first object's members,
+  not its position, decides whether the reader reads a document whole, the
+  other members staying in the one record verbatim; and the
+  `exception_event` message writes a `kvlistValue` with its keys sorted, by
+  `jsoncodec.keys_sorted` (`SPEC.md` §7). `tests/test_determinism.py`'s
+  `test_an_export_is_found_wherever_resource_spans_stands` and
+  `test_a_kvlist_rendered_to_text_is_rendered_as_a_map` hold them, each in
+  both orders. **The first is carried** into *the reader's malformed input*,
+  below, for the next spanweave series: it is a member stated twice, which
+  `SPEC.md` §7 now leaves outside its claim and describes as measured.
+- **The reader's malformed input** (registered by decisions log D39, for the
+  next spanweave series). What the OTLP/JSON reader does with input that
+  states one member twice, or states what its fold does not read: nothing
+  here is refused or reported, and each is a rule to decide. Measured at
+  D39's commit; lines are `spanweave/read.py`'s there.
+  - *A member stated twice, by a repeated name.* `jsoncodec.loads` is
+    `json.loads` (read.py:264, :304, :350), so in any object the later value
+    wins, silently, and the earlier is gone from `raw.source`: member order
+    decides. Measured on a flat record's `name` and on an export span's
+    `name`, each order building a different graph.
+  - *A member stated twice, under two spellings or under a name the reader
+    writes* (the thread above's first). `_flattened` (read.py:782) and
+    `_flattened_links` (:836) write each key they rename or fold and each
+    key they carry into one record in the order the span writes them, so
+    the later is kept and the other is gone from `raw.source`. Measured,
+    each order a different record: `traceId` beside `trace_id` and `spanId`
+    beside `span_id`, a span's and a link's; `parentSpanId` beside
+    `parent_id`, `startTimeUnixNano` beside `start_time`, `endTimeUnixNano`
+    beside `end_time`, a `status` with a `message` beside `status_message`,
+    and `attributes` the fold leaves entries of beside `attributes_unfolded`,
+    a span's and a link's. Colliding, though not by order: a span's own
+    `attributes_unfolded` or `status_message` reads as the fold's where the
+    fold writes none; a span's own `resource_spans` or `scope_spans` is
+    overwritten by the level `_attach_levels` (:742) writes after every
+    member where that level carries anything, and is read as
+    `envelope(record).resource` or `.scope` where it does not. Not
+    colliding: `parentSpanId` beside `parent_span_id`,
+    `startTimeUnixNano` beside `start_time_unix_nano`, `endTimeUnixNano`
+    beside `end_time_unix_nano` and an event's `timeUnixNano` beside
+    `time_unix_nano` are both carried, the camelCase one read, in either
+    order.
+  - *The names the flattener writes*, on a span's record: `trace_id`,
+    `span_id`, `parent_id`, `start_time`, `end_time`, `status_message`,
+    `attributes_unfolded`, `resource_spans` and `scope_spans`; `name`,
+    `status`, `attributes` and `links` keep their own names. On a link:
+    `trace_id`, `span_id` and `attributes_unfolded`, and `attributes` its
+    own.
+  - *The two spellings*, from the descriptors of `opentelemetry-proto`
+    1.45.1, the lock, and 1.28.0, the floor, alike but where named. Span:
+    `trace_id`/`traceId`, `span_id`/`spanId`, `trace_state`/`traceState`,
+    `parent_span_id`/`parentSpanId`,
+    `start_time_unix_nano`/`startTimeUnixNano`,
+    `end_time_unix_nano`/`endTimeUnixNano`,
+    `dropped_attributes_count`/`droppedAttributesCount`,
+    `dropped_events_count`/`droppedEventsCount` and
+    `dropped_links_count`/`droppedLinksCount`; `flags`, `name`, `kind`,
+    `attributes`, `events`, `links` and `status` have one. Link:
+    `trace_id`/`traceId`, `span_id`/`spanId`, `trace_state`/`traceState` and
+    `dropped_attributes_count`/`droppedAttributesCount`. Event:
+    `time_unix_nano`/`timeUnixNano` and
+    `dropped_attributes_count`/`droppedAttributesCount`. AnyValue:
+    `string_value`/`stringValue`, `bool_value`/`boolValue`,
+    `int_value`/`intValue`, `double_value`/`doubleValue`,
+    `array_value`/`arrayValue`, `kvlist_value`/`kvlistValue`,
+    `bytes_value`/`bytesValue`, and at the lock only
+    `string_value_strindex`/`stringValueStrindex`. `Status` has one
+    spelling of each field.
+  - *What the fold does not read* (the first D39 commit's sweep, c2–c6).
+    c2: `_any_value` (read.py:916) reads the camelCase tags in a fixed
+    order and keeps the first it finds, so an `AnyValue` stating two
+    members of the `oneof`, an extra member, or `stringValue` beside
+    `string_value` loses the rest, in either order, from the record and the
+    graph. c3: a `KeyValue` entry's members other than `key` and `value` are
+    lost when it folds (`_folded_attributes`, :878). c4: an `arrayValue` or
+    a `kvlistValue` loses its members other than `values` (`_array_value`,
+    :961; `_kvlist_value`, :975). c5: a `scopeSpans` or `spans` that is not
+    a list is removed from its level and yielded nowhere (`_unpack`,
+    :705–708, :714–717). c6: a resource or scope level whose children are
+    all non-objects is yielded nowhere, each child yielded as itself
+    (:710–712, :719–721). Each measured with the value absent from the
+    graph. What would hold them: what the fold cannot hold sent to
+    `attributes_unfolded`, and such levels yielded as records of their own;
+    each changes the graph an export yields, so each needs a rule.
+  - *A per-span refusal* has no mechanism today. The reader refuses a line
+    (read.py:354), an array that will not parse or is not one (:268, :277)
+    and a protobuf body (`spanweave/otlp_protobuf.py`:136), each one
+    `malformed_record`, whose meaning is "the JSON parser could not read
+    it" and whose `source` is the line's text (`SPEC.md` §3.7); a span that
+    is not an object is kept verbatim (`_unpack`, :720–721). The options:
+    (a) extend `malformed_record` to a span, the span object its `source` —
+    a change to the code's meaning and its stated source shape; (b) a new
+    diagnostic code — a halt point (`spanweave/diagnostics.py`); (c) yield
+    the span unflattened through the kept-verbatim path — not a refusal,
+    and it carries no detail. Recommended: (b), which keeps
+    `malformed_record` meaning "would not parse" and could carry a repeated
+    name too.
+  - *The `json_format` facts*, corrected (decisions log D39): Python's
+    `json_format.Parse` accepts a span stating both spellings of a field,
+    the later member winning, at `protobuf` 7.36.0 and 5.27.0; it refuses a
+    key written twice, two members of `AnyValue`'s `oneof`, an `AnyValue`
+    member under both spellings and an unknown field. protojson is not
+    measured. So "proto3 JSON refuses it" is true of a repeated name and of
+    an `AnyValue`, and not of a span's two spellings.
+  - *An `intValue` no `int64` holds, as an `exception.type`* (found while
+    making D39's commit, older than it, registered by its merge rule). The
+    fold reads an `intValue` within the library's digit limit as an integer
+    (`SPEC.md` §5.3), and the `exception_event` message writes the type with
+    `repr`, which an interpreter whose own digit limit is lowered below the
+    integer's length refuses: `spanweave.build` raises a bare `ValueError`,
+    where §7 says no interpreter setting is load-bearing for what a graph
+    says. Measured at D39's parent and at its commit, under
+    `-X int_max_str_digits=640`. Not fixed: the type's text would need the
+    digit-safe `repr` `jsoncodec` keeps private.
 - **The wire-type table's `int32` row is held at the lock, not at the floor**
   (the scoped review of 2026-10-18, R-5; registered by decisions log D38).
   `b6cc68d`'s
@@ -14728,7 +14841,10 @@ dispositioned; the 2026-10-18b file is its dispositions, and the commits
 that applied it before its row was written cite it by finding, as "the
 scoped review of 2026-10-18, R-<n>". D38, like D28–D30, came from no relay
 file: the maintainer gave it in the session, after D37's nine commits and
-before the scoped review, on the thread the ninth registered.
+before the scoped review, on the thread the ninth registered. D39 came the
+same way, after D38's commit, on the thread that commit registered; as first
+given it stopped, and the maintainer narrowed it in the session. Its row is
+the narrowed decision, and records the first.
 
 | # | Date | Batch | Decision | By |
 |---|---|---|---|---|
@@ -14743,6 +14859,7 @@ before the scoped review, on the thread the ninth registered.
 | D36 | 2026-10-18 | review | Qodo's review of pull request #6 at `f38c193` (seven findings), dispositioned. Accepted: finding 6, a bug: an id whose bytes are all zero is omitted, as the Collector omits it, so a root span whose exporter wrote zero bytes for its parent is a root and not an orphan; finding 7, a bug: `unknown_fields` says, per field, whether the installed schema defines the number and the wire type it expects, so a known field with the wrong wire type is not blamed on a newer schema; finding 4, a rule violation: the rendered document is written with sorted keys; finding 3, a rule violation: the tests import the proto modules by name, not by `__import__`. Accepted as a pin and a thread: finding 5, a bug: a non-finite `doubleValue` reads as its proto3 JSON spelling, a string, on both paths, and a test pins that the two agree; changing it would change the graph a JSON export yields, so whether it draws a diagnostic is a thread for the next spanweave series. Declined as a design change, answered in the record: finding 1, a rule violation: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, because the records are the JSON path's records for the same export (D29), and SPEC §7 says so; finding 2, a rule violation: the `otlp` extra is the decided exception to the zero-dependency rule (D28), held by the gate to a lazy import, one module and the extra's two prefixes, and `CLAUDE.md`'s rule says so. Applied as seven commits on `wire`, one concern each. No `plan:` commits; nothing is amended or force-pushed. Commits 1–3 (`5f9db88`, `2066828`, `8b68608`) touch `spanweave/`, so they get their own scoped cold review before the merge, together with Qodo's diff after the push. The comment and its seven inline comments are archived as first fetched; the PR summary comment carries no findings and is not. | maintainer |
 | D37 | 2026-10-18 | review | The scoped review of 2026-10-18 of `f38c193..4e52f08` (R-1…R-20), the fixes of D36, dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-8, R-9, R-11, R-12, R-14, R-15, R-17, R-18. Read, recorded: R-7, R-10, R-13, R-16, R-19, R-20. R-8 is an invariant broken since before the series (`CLAUDE.md` 4): the adapters are fixed to match the spec, a structured payload's text written with sorted keys; a graph it moves is regenerated only if every difference is key order inside a payload's text, and any other difference is a stop. The zero rule is the Collector's: an id is omitted only at the length the schema gives it with every byte zero, and an id of any other length is carried as stated. Applied as nine commits on `wire`. No `plan:` commits; nothing is amended or force-pushed. The loop ends here: one more scoped review, of commits 1 and 2 only (`5ef4502`, `cf1afff`), the two that change behaviour under `spanweave/`, runs after the push together with Qodo's post-push diff; commit 8 (`42225e0`) touches `spanweave/` too, by a docstring only, and is not in it. From that pass only a broken invariant or a wrong behaviour is fixed before the merge; everything else is a thread for the next spanweave series, and the PR merges. | maintainer |
 | D38 | 2026-10-18 | review | A span kind or operation stated as an object reaching the graph in the record's key order is a broken invariant (`CLAUDE.md` 4), so it is fixed before the merge; and the class is closed by a property gate, not the one site. The gate takes every input the repository holds — every conformance rendering, the captured traces, the zoo's JSON bodies, and the records `read_protobuf` reads out of the zoo's raw bodies — and hand-made inputs stating a structured value wherever an adapter reads one (payloads, `openinference.span.kind`, `gen_ai.operation.name`, and any other attribute the adapters render to text), and re-feeds each with every object's keys reordered at every depth, once reversed and once by a fixed-seed shuffle; each must build a graph byte-identical to the original's. Every site it finds is fixed through one sorted encoder the adapters share and listed in the commit. `SPEC.md` §7's "key order never reaches a node" cites the gate. If a conformance graph, the census or a reading moves, D37's rule for commit 1 applies: proceed only if every difference is key order inside a value's text, list each file, and stop on anything else. The gate is the holder: `tests/test_determinism.py`'s `test_no_key_order_reaches_a_graph` and `test_no_key_order_reaches_a_graph_built_from_records`. The key-order thread the ninth commit of D37 registered is closed, and the `int32`-at-the-floor limit is registered as a thread. Applied as one commit. | maintainer |
+| D39 | 2026-10-18 | review | The three orders D38's commit registered, outside its gate. As first given, D39 fixed all three before the merge: a span stating a field twice, under both proto3 JSON spellings or under a name the reader writes, refused per span by the reader's existing mechanism; `resourceSpans` found by presence, not position; a `kvlistValue` rendered to text as a map. Its commit stopped, rightly: the reader has no per-span refusal. It refuses a line, an array that will not parse or is not one, and a protobuf body, each one `malformed_record`, and keeps a span that is not an object verbatim. **The correction**: the first rule's premise, that `json_format` and protojson both refuse a span stating `traceId` and `trace_id`, was wrong for `json_format`. Measured, Python's `json_format.Parse` accepts `traceId` beside `trace_id`, `parentSpanId` beside `parent_span_id` and `startTimeUnixNano` beside `start_time_unix_nano`, in either order, the later member winning, at `protobuf` 7.36.0 (the lock) and 5.27.0 (the floor); it refuses a key written twice, two members of `AnyValue`'s `oneof`, an `AnyValue` member under both spellings (`stringValue` beside `string_value`, which it reports as two members of the `oneof`) and an unknown field. protojson was not measured: there is no Go toolchain here. **Narrowed** to the second and third rules, applied as one commit: whether the reader reads a document whole is decided by `resourceSpans`'s presence among the first object's members, not its position, the other members staying in the one record verbatim as they do when it comes first; and the `exception_event` message writes an `exception.type` stated as a `kvlistValue` with its keys sorted, by `jsoncodec.keys_sorted`. `SPEC.md` §7 claims exactly what the gate holds, that an object's member order never reaches a graph when each member is stated once; says, as measured, how a member stated twice is read today; and says that a list's order is the input's and reaches `raw.source` verbatim. The holders, beside D38's two: `tests/test_determinism.py`'s `test_an_export_is_found_wherever_resource_spans_stands` and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map`. A member stated twice, the options for a per-span refusal and the silent losses the first commit's sweep found are one item for the next spanweave series, *the reader's malformed input*. **The narrowed merge rule**: from here only a defect this PR introduces, or one a claim this PR makes depends on, blocks the merge; older defects are registered for the next spanweave series. | maintainer |
 
 ### Cold review of the series — 2026-10-17
 
@@ -15001,7 +15118,8 @@ in the last entry are registered above, under *Still open after the close*.
 
 What the 2026-10-17 cold review of `wire`, the scoped review of its fixes,
 and the scoped review of 2026-10-18 of Qodo's fixes found untrue or unbound
-in the series' record. Each is set right here rather than by rewriting the
+in the series' record, and what decisions log D39 found of D38's commit.
+Each is set right here rather than by rewriting the
 record above, except two lines `4521cc2` edited in place: the close
 summary's "seventh deletion" ordinal, removed because a count no test holds
 is not stated; and the `UnknownFieldSet` version clause in W1's resume
@@ -15126,6 +15244,15 @@ review's; *scoped review of 2026-10-18, R-<n>* is the last one's.
   of which draws a diagnostic (scoped review of 2026-10-18, R-17). Since
   `42225e0`, §7 lists those beside what `unknown_fields` reports. The line
   keeps its words, with a bracket pointing here.
+- **`2f63a90`'s subject overclaims.** "determinism: no key order reaches a
+  graph" is true only of members stated once. A member stated twice, by a
+  repeated name or under a name the reader writes, is kept or lost by the
+  order it is written in, and `SPEC.md` §7 now says which, as measured; and
+  where `resourceSpans` stands among a document's members, and the order a
+  `kvlistValue` lists its entries in, still reached a graph outside the
+  gate, as `2f63a90`'s own message says, until decisions log D39. §7 claims
+  what the gate holds, and the subject stays as written (decisions log
+  D39).
 
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 

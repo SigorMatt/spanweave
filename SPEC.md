@@ -371,7 +371,11 @@ value with its keys sorted the same way, and that text is the node's
 `attributes.reported_kind` and the `unknown_span_kind` diagnostic's message
 and source (§3.2, §3.7). So the order an exporter wrote an object's keys in
 reaches none of them, and two records that parse equal give one node: which
-copy §7 keeps of a record that appears twice does not change it.
+copy §7 keeps of a record that appears twice does not change it. Below the
+seam the one such text is the `exception_event` message's
+`exception.type`, in `repr`'s spelling, sorted the same way, so an OTLP
+`kvlistValue` there reads as the map it stands for and not in its list's
+order (§7, decisions log D39).
 Rendering has the same limit parsing does — `json.dumps`
 refuses nesting it will not descend — so when there is no text form, `state`
 stays `present`, `value` and `raw` are both `None`, and the same
@@ -1715,8 +1719,8 @@ declares reaches `0.5`.
 
 - **JSONL** (one record per line), a **JSON array** of records, or an **OTLP
   JSON** document. The first two are told apart by the first non-whitespace
-  byte; the third is told apart by its first member key, and is specified in
-  its own bullet below.
+  byte; the third by whether its first object states `resourceSpans` as a
+  member, wherever it stands, and is specified in its own bullet below.
 - A **UTF-8 BOM** (`EF BB BF`) at the very start of the input is an encoding
   artifact, not content: it is skipped before the format is detected, so the
   first record reads like any other. Only at the start — the same bytes
@@ -1806,16 +1810,47 @@ declares reaches `0.5`.
   copies were seen.
   - **"The same record" is decided on the parsed record, not on its bytes.**
     What the library preserves is the parsed value (`RawRecord.source`, §3.5);
-    whitespace and key order never reach a node, so two lines that parse equal
-    are indistinguishable everywhere downstream and collapsing them loses
-    nothing. Key order is held by `tests/test_determinism.py`'s
+    whitespace never reaches a node, and **an object's member order never
+    reaches a graph when each member is stated once**, so two lines that
+    parse equal are indistinguishable everywhere downstream and collapsing
+    them loses nothing. That is what `tests/test_determinism.py` holds:
     `test_no_key_order_reaches_a_graph` and
-    `test_no_key_order_reaches_a_graph_built_from_records`: every input the
-    repository holds, and hand-made ones stating a structured value wherever
-    an adapter reads a value, each built again with every object's members
-    reordered at every depth, builds the same graph (§3.3). A bytes-level
-    rule would also have nothing to say about the JSON array form, where a
-    record has no bytes of its own. Records are compared
+    `test_no_key_order_reaches_a_graph_built_from_records` build every input
+    the repository holds, and hand-made ones stating a structured value
+    wherever an adapter reads a value, again with every object's members
+    reordered at every depth, and each builds the same graph (§3.3);
+    `test_an_export_is_found_wherever_resource_spans_stands` holds where
+    `resourceSpans` stands among a document's members (*OTLP JSON*, below),
+    and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map` the
+    `exception_event` message, the one text rendered from an OTLP map
+    outside the adapters (decisions log D39).
+    **A member stated twice is outside that claim.** What follows is how it is
+    read today, as measured, not a rule: it is registered for the next
+    spanweave series (`TASKS.md`, *the reader's malformed input*). Where an
+    object states one name twice, the later value is kept, the parser's rule,
+    and the earlier is gone with no diagnostic, so the order decides. So it
+    does in an OTLP span or link for a member under a name the reader writes
+    another member's value to — `trace_id` beside `traceId`, `span_id` beside
+    `spanId`, or `parent_id`, `start_time`, `end_time`, `status_message` or
+    `attributes_unfolded` beside the member the reader renames or folds into
+    it: whichever the span writes later is kept, and the other is gone, from
+    `raw.source` too. Three cases are not last-wins. A span's own
+    `resource_spans` or `scope_spans` gives way to the level the reader writes
+    after every member, wherever that level carries anything. Two spellings
+    the reader keeps apart — `parentSpanId` and `parent_span_id`,
+    `startTimeUnixNano` and `start_time_unix_nano`, `endTimeUnixNano` and
+    `end_time_unix_nano`, an event's `timeUnixNano` and `time_unix_nano` — are
+    both carried, and the camelCase one is read, in either order. And an
+    `AnyValue` stating two tags, `stringValue` beside `string_value` or two of
+    the tags the fold reads, is folded by the first of those tags in a fixed
+    order (`stringValue`, `boolValue`, `intValue`, `doubleValue`,
+    `bytesValue`, `arrayValue`, `kvlistValue`), in either order, and the other
+    is lost. **A list's order is the input's**, and reaches `raw.source`
+    verbatim: an OTLP `kvlistValue` is a list of entries, and the order it
+    lists them in is in the record. **Where a `kvlistValue` is rendered to
+    text, it is rendered as the map it stands for, its keys sorted** (§3.3).
+    A bytes-level rule would also have nothing to say about the JSON array
+    form, where a record has no bytes of its own. Records are compared
     by their **canonical digest** (§3.6): the SHA-256 of
     `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
     encoded UTF-8. §3.6 states the arguments exactly and why.
@@ -2017,7 +2052,12 @@ declares reaches `0.5`.
     reported **as stated** — no value is
     interpreted, so an `escaped` written as the string `"False"` is reported
     as that string; `exception.stacktrace` is not copied into the
-    diagnostic, and stays in the record. Any other event reports its name and
+    diagnostic, and stays in the record. The message names the
+    `exception.type` in Python's `repr`, and a `kvlistValue` there, which
+    folds to a map in the order its list gives the entries, is written with
+    its keys sorted at every level (`jsoncodec.keys_sorted`, §3.3), so the
+    same map listed in two orders gives one message (decisions log D39).
+    Any other event reports its name and
     time. Nothing about an event becomes a node field: whether the span
     failed is its `status`, which the export states separately.
   - **`parentSpanId` is renamed like the other eight, empty string and all.**
@@ -2150,12 +2190,27 @@ declares reaches `0.5`.
     keep whichever came first and make a node id depend on line order (§5.2).
   - **Reading it needs the whole input**, as the JSON array form does and for
     the same reason: a document is not a record until its closing brace. The
-    reader buffers only when the input's first member key is `resourceSpans`;
-    if what it buffered is not a single document — a file of one export per
-    line is a real artefact, and it begins with the same bytes — it is read
-    line by line as before, and each line that is an envelope is unpacked the
-    same way. A JSON array of envelopes is unpacked element by element for the
-    same reason.
+    reader buffers only when the input's first top-level object states
+    `resourceSpans` as a member, **wherever it stands among the members**
+    (decisions log D39): where a member stands is member order, which never
+    decides a graph (above). A member of that object, not a key inside one
+    of its values and not text inside a string; and the key as JSON reads
+    it, so `"resource\u0053pans"` is the same member. The head scan that
+    decides it tracks strings, their escapes and nesting depth, and stops at
+    that member or at the object's close, so it reads a JSONL file no
+    further than the end of its first record, which the line reader buffers
+    anyway. Its cost: a first record that does not close — truncated, or not
+    JSON — is scanned, and buffered, to the end of the input, and is then
+    read line by line exactly as it would have been, so what is read does
+    not change. If what it buffered is not a single document — a file of
+    one export per line is a real artefact, and it begins with the same
+    bytes — it is read line by line as before, and each line that is an
+    envelope is unpacked the same way. A document whose object states
+    `resourceSpans` beside another member is not an export —
+    `ExportTraceServiceRequest` has one field — and is one record, the
+    whole object carried verbatim, its other members included, wherever
+    `resourceSpans` stands. A JSON array of envelopes is unpacked element by
+    element for the same reason.
 - **OTLP protobuf** — an `ExportTraceServiceRequest` sent as
   `application/x-protobuf`, which is how the stock OTLP/HTTP exporter sends
   every export — is the same container in a second encoding, and the reader's
