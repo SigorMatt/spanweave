@@ -57,7 +57,8 @@ redrawn later around whatever happened to occur.
 ├═════════════════════════════════════════════════┤  ← the seam (§3)
 │ Adapters  (adapters/*.py)                       │  all dialect mess
 ├─────────────────────────────────────────────────┤
-│ Reader  (read.py, jsoncodec.py)                 │  bytes -> JSON records
+│ Reader  (read.py, jsoncodec.py,                 │  bytes -> JSON records
+│          otlp_protobuf.py)                      │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -203,8 +204,15 @@ to the north star itself — do not build them now.
   consumers (agent frameworks, eval harnesses, security tooling) live in Python.
 - **Zero runtime dependencies in core.** Not asceticism — a library meant to sit
   underneath other people's tools must not drag a dependency tree into them. A
-  tree readable in one screen is itself a feature. Optional extras (`otlp`,
-  `dev`) never affect core.
+  tree readable in one screen is itself a feature. The one exception is the
+  optional `otlp` extra, which `spanweave.read_protobuf` alone needs
+  (decisions log D28): it is confined to one module,
+  `spanweave/otlp_protobuf.py`, which imports none of it until
+  `read_protobuf` is called, so `import spanweave` needs nothing. Beyond
+  that one function, the optional extras (`otlp`, `dev`) never affect core:
+  without `otlp`, `read_protobuf` raises `SpanweaveError`
+  (`otlp_extra_not_installed`), and nothing else reads protobuf or behaves
+  differently.
 - **Hand-rolled graph type.** No `networkx`: it would be a glorified adjacency
   dict with nondeterministic iteration order, and iteration order is a
   correctness property here, not a detail. Frozen dataclasses + sorted tuples +

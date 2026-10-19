@@ -71,7 +71,15 @@ of them is wrong even if it passes tests.
 - **Degrade honestly.** Missing payloads are `absent`, not empty. Missing
   timestamps omit temporal edges and say so. Unmapped kinds become `unknown`
   plus a diagnostic. Never paper over a gap.
-- **Zero runtime dependencies in core.** Extras never affect core behavior.
+- **Zero runtime dependencies in core.** The one exception is the optional
+  `otlp` extra, which `spanweave.read_protobuf` alone needs (decisions log
+  D28): it is confined to one module, `spanweave/otlp_protobuf.py`, which
+  imports none of it until `read_protobuf` is called, and then only
+  `google.protobuf` and `opentelemetry.proto` — a CI gate holds all three.
+  Beyond that one function, extras never affect core behavior: without
+  `otlp`, `read_protobuf` raises `SpanweaveError`
+  (`otlp_extra_not_installed`), and nothing else reads protobuf or behaves
+  differently.
 
 ## Working agreement
 
@@ -97,7 +105,10 @@ of them is wrong even if it passes tests.
 - Frozen dataclasses (`@dataclass(frozen=True, slots=True)`) for all model types.
 - No network imports in core (`requests`, `httpx`, `socket`, `urllib.request`) —
   CI fails the build if they appear under `spanweave/`.
-- No `pickle`, `yaml.load`, `eval`, `exec`, `__import__` anywhere — CI gate.
+- No `pickle`, `yaml.load`, `eval`, `exec`, `__import__` anywhere — CI gate
+  under `spanweave/`; under `tests/` too for `__import__` and every other
+  import by a computed name, the install-check's probe excepted
+  (`tests/gates.py`).
 - No `hash()` in any identity or ordering path — CI gate.
 - No graph libraries (`networkx`) — the type is hand-rolled with explicit,
   deterministic iteration order (`DESIGN.md` §7).

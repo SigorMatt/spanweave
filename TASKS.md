@@ -76,6 +76,14 @@ Code executes against.
   > one per rule per line (`from urllib.request import x` matches the ban twice
   > and saying so twice adds nothing), and a tripwire asserts the scan actually
   > visited files, since a gate that silently scans nothing passes forever.
+  >
+  > Since widened: no-unsafe's computed-import half (`no_computed_import`:
+  > `__import__`, `importlib.import_module` and pytest's `importorskip`, in
+  > every form `tests/gates.py` lists) reads `tests/` as well, so the tests
+  > import the `otlp` extra by name as the package does (scoped review of
+  > 2026-10-18, R-11). Its module and call bans read `spanweave/` only: a
+  > test may run a subprocess. The one exemption, the install-check's probe,
+  > and why it needs no hole cut, are stated there, beside `TESTS_ROOT`.
 
 - [x] **0.5 Neutrality + layering gates.** Two more checks, both **module-scoped**
   (`DESIGN.md` §3):
@@ -11127,6 +11135,8 @@ it from the probe, so what remains in the probes is what no batch has closed.
 
 `WORKPLAN.md` §5, moved here. The review itself is `reviews/2026-09-10-run2.md`.
 
+`reviews/2026-09-10-run2.md`: `sha256` `1d12bd52c0968b5f68de2c11f8a0daf413e46466e8d7c32152b2bad53015a43b`, first anchored 2026-10-17; it agrees with the shortened digest `1d12bd52…a43b` recorded in `reviews/2026-09-11-run3.md` (§4, the Q3 table, line 285), its source; the full digest is re-derived from the archive's bytes.
+
 | Review finding | Batch |
 |---|---|
 | C3 digit-limit `ValueError` escapes `build` and the CLI | `audit-R1` |
@@ -11147,6 +11157,8 @@ a review whose nits quietly evaporate at the close is the one nobody writes
 again. The `§` column is the review's own section, and inside the table the
 review's spelling of a batch id is kept as it wrote it (`R1`, `R4`, `R5`) —
 quoting a document is not the place to apply this file's `audit-` prefix.
+
+`reviews/2026-09-11-run3.md`: `sha256` `6b3d0ee470b337c5eda8331a23d905c065774ae07baf92aecb3aff423858c2af`, first anchored 2026-10-17; no earlier digest was recorded.
 
 | § | Finding | Outcome |
 |---|---|---|
@@ -11196,6 +11208,8 @@ file's `audit-` prefix.
 
 Where a row names a batch, the closure was spot-checked at this close rather
 than read off the batch's own report; the rows say what was re-run.
+
+`reviews/2026-09-11-run4.md`: `sha256` `f7349552edd04ad105abac7cca7083e95ec2a67d24dd6c2444e0b3578ced6aa3`, first anchored 2026-10-17; the same full digest is recorded inside `reviews/2026-09-12-run5.md` (§7, line 772), its source, and equals the archive's bytes.
 
 | § | Finding | Outcome |
 |---|---|---|
@@ -11320,6 +11334,8 @@ Two files, both tracked:
   here and not in the archive, which is kept byte-for-byte; the name is
   provenance and not a path to open, because `patches/` is absent from a clean
   checkout and the doc-truth guard refuses a durable citation into it.
+
+`reviews/2026-09-20-qodo-bot.md`: `sha256` `a1284d2d44d94c944f0bf6fc8deea244763cd87094def798c4edb5e6b71a1119`, first anchored 2026-10-17; no earlier digest was recorded.
 
 **The nine items, and what answered each.** The `#` column is the number the
 comment renders, which is what the archive is filed under. The last column is
@@ -11735,6 +11751,8 @@ two blockers are also preserved here because both blockers became batches and
 the shape table is the only per-commit protocol evidence the series kept. The
 later cold read of run 2 — the one that reopened this section — is
 `reviews/2026-09-10-run2.md`.
+
+`reviews/2026-09-10-run1.md`: `sha256` `e2a8fa6023f8beb1ab42800e5143893a06cd35e4693cd61c88c2a8962dcb4cd0`, first anchored 2026-10-17; it agrees with the shortened digest `e2a8fa60…4cd0` recorded in `reviews/2026-09-11-run3.md` (§4, the Q3 table, line 284), its source; the full digest is re-derived from the archive's bytes.
 
 Both are in the repository because for a day they were not: they were written
 to `patches/`, which is untracked, and cited from here as if a reader could
@@ -13854,7 +13872,7 @@ prose until a stranger reads it.
   (decisions log D22) added it to the target.
 
 The stranger's-trace series answered the twenty-two probes (`PROBES.md`
-S1–S22) that `SigorMatt/spanweave-zoo` left for this library at `7eb5b69`.
+S1–S22) that the zoo left for this library at `SigorMatt/spanweave-zoo` `7eb5b69`.
 The probes come from twelve captures of six agents, each built by an
 implementer who knew nothing about this library, under stock
 instrumentation. The series ran on branch `stranger` from `main` at `fec7da2`
@@ -14243,7 +14261,7 @@ message (decisions log D24; R-23). This archive is the last of those commits.
 
 | Finding | Disposition |
 |---|---|
-| R-1 — `f590bff`, the README seal is not independent of the copy | **accepted, its limit stated**, `6efdfa7`. The seal table says the seals are copied from the zoo's sealed manifests at the pin and are the pin; the test holds the copy to the README, and holding the README to the zoo is the reviewer's, by comparing against the zoo checkout at `7eb5b69` |
+| R-1 — `f590bff`, the README seal is not independent of the copy | **accepted, its limit stated**, `6efdfa7`. The seal table says the seals are copied from the zoo's sealed manifests at the pin and are the pin; the test holds the copy to the README, and holding the README to the zoo is the reviewer's, by comparing against the zoo checkout at `SigorMatt/spanweave-zoo` `7eb5b69` |
 | R-2 — `6fe41f8`, "S16 by the Z2 `temporal` count" holds nothing | **accepted**, `80e5331`: the T0 row says S16 is held by `4bc9032`'s node-and-edge structures |
 | R-3 — `6fe41f8`, the contiguity check rests on an untested helper | **accepted**, `ea37864` |
 | R-4 — `6fe41f8`, two mutation counts do not reproduce | **read, recorded** (decisions log D24). The counts were 2 and 3, not 1; the tests named do go red. Recorded as measured in the 2026-10-14 table's R-4 line by `80e5331`; the message stays |
@@ -14295,6 +14313,8 @@ and nothing outside its fences is the bot's. A first comment from the same bot
 that day, id `6181520837`, is a PR summary and carries no findings; it is not
 archived. The maintainer's dispositions are decisions log D27, above.
 
+`reviews/2026-10-15-qodo-pr5.md`: `sha256` `72b9e2562b3bf4da4d86da96952eb1d1d399015fbf0fbfad3649439564e0f0fb`, first anchored 2026-10-17; no earlier digest was recorded.
+
 | Finding | Disposition |
 |---|---|
 | Qodo 2 — Malformed exception attributes go unreported (Bug, Correctness) | **accepted**, `f692a31`: `attributes` is read only as a list or as omitted or `null`; any other value leaves the event unread, named `<record>.events[<i>]` (decisions log D27) |
@@ -14311,7 +14331,7 @@ What answered one later is stated above: T6's Makefile entry is answered by
 decisions log D15, D16, D17, D18 and D19.
 
 - 2026-10-14: series opened on `stranger` from `main` `fec7da2`, from the
-  zoo's `PROBES.md` at `7eb5b69`. The receiver's series (L1–L4) follows this
+  zoo's `PROBES.md` at `SigorMatt/spanweave-zoo` `7eb5b69`. The receiver's series (L1–L4) follows this
   one, because L2 needs T1.
 - 2026-10-14 T0 (`162f1b6`): the zoo holds 29 bodies, not 24 (2+1+3+1+4+1+2+1+1+1+11+1, as
   `PROBES.md` and L1's "29 of 29"); row corrected. Census matches all twelve audits on all
@@ -14440,12 +14460,1305 @@ decisions log D15, D16, D17, D18 and D19.
   `make conformance` does not run the new module (its target names two files; Makefile left
   alone; `make check` runs it) — for the maintainer.
 
+## The wire series  *(closed 2026-10-17)*
+
+**Still open after the close. Read these first.**
+
+- **PR `wire` → `main` is not open yet.** The close stops at its commit. Per
+  the plan's §2, the remaining steps are: the push and CI on the pushed tip,
+  the aux cold review, the fix commits with their own scoped review, the PR,
+  Qodo's review of it (first fetch archived; post-push diff), and the merge
+  as a merge commit. Each review is archived into `reviews/` and
+  dispositioned here, as the earlier series did. At the close **this series
+  has no review archive**: no review of it has been run. Since then, the
+  cold review of 2026-10-17, a read of `88c7339..4689670`, is archived and
+  every finding dispositioned (*Cold review of the series — 2026-10-17*
+  below). The scoped review of those fixes, a read of `4689670..c4018b4`,
+  is archived and every finding dispositioned too (*Scoped review of the
+  fixes — 2026-10-17* below), and its fixes are applied. The PR is open,
+  as pull request #6, and Qodo's review of it at `f38c193` is archived and
+  its seven findings dispositioned (*Qodo's review of PR #6 — 2026-10-18*
+  below). The scoped review of those fixes, a read of `f38c193..4e52f08`,
+  is archived and every finding dispositioned too (*Scoped review of
+  Qodo's fixes — 2026-10-18* below), and its dispositions, decisions log
+  D37, are applied; decisions log D38 and D39 followed, each applied as one
+  commit (`2f63a90`, `743d027`). The scoped review of 2026-10-18b, a read
+  of the four commits that change behaviour, `5ef4502`, `cf1afff`,
+  `2f63a90` and `743d027`, is archived and every finding dispositioned
+  (*Scoped review of the four behaviour changes — 2026-10-18b* below), and
+  its dispositions, decisions log D40, are applied as seven commits, pushed,
+  with CI green on the pushed tip, `2f3ad43`. The bounded fix review of
+  those seven, a read of `743d027..2f3ad43`, is archived and every finding
+  dispositioned (*Bounded fix review of D40's commits — 2026-10-18c* below),
+  and its dispositions, decisions log D41, are applied as one commit, which
+  by D40's rule goes to the merge on green CI without a further review: the
+  loop ends at that pass. What remains: that commit's push and CI on the
+  pushed tip; Qodo's diff since its first fetch; and the merge, as a merge
+  commit, through `main`'s ruleset, which since 2026-10-19 requires a pull
+  request and the CI checks.
+- **The `otlp` CI job runs one interpreter, not the matrix.** W1 added the
+  job (`.github/workflows/ci.yml`, `otlp`) and it runs the suite with the
+  extra installed and `SPANWEAVE_REQUIRE_OTLP=1`, so a missing proto runtime
+  fails rather than skips; but on one Python only. The protobuf path is not
+  run under the other interpreters the main job covers. **Closed** by the
+  2026-10-17 cold review's fixes (R-16): the `check` matrix installs the
+  extra and sets `SPANWEAVE_REQUIRE_OTLP=1`, and the `otlp` job is a matrix
+  over the same Pythons.
+- **The extra's `protobuf>=4.25` floor is untested.** `pyproject.toml`'s
+  `otlp` extra states it; W1 built and tested against `protobuf` 7.36.0. No
+  job installs the floor. Open: either a job that does, or a floor
+  the record can cite. **Closed** by the 2026-10-17 cold review's fixes
+  (R-18): the `otlp` job installs the floors and runs the suite on them.
+  Measured first, 4.25 with `opentelemetry-proto` 1.27 passed on 3.11–3.13
+  and failed to import on 3.14, so the floors were raised to
+  `protobuf>=5.27` and `opentelemetry-proto>=1.28`, the lowest pair that
+  passed on all four (`pyproject.toml`).
+- **The missing-extra error is a plain `SpanweaveError`, not a subclass.**
+  Without the extra, `read_protobuf` raises `SpanweaveError` with code
+  `otlp_extra_not_installed` (`SPEC.md` §3.10). Whether it should be its own
+  subclass, as `EnvelopeError` is, was not decided. Open, for the maintainer.
+- **The zoo thread for `doubleValue` (decisions log D33).** No zoo export
+  carries a `doubleValue`, so the pairs never checked how one renders, and
+  `read_protobuf` reads it as `MessageToDict`'s float (`SPEC.md` §7).
+  `tests/test_protobuf.py`'s
+  `test_the_zoo_holds_no_double_value_so_no_pair_checks_one` turns red the
+  day one appears. What would settle `1` against `1.0`: one export carrying
+  a `doubleValue`, captured in `SigorMatt/spanweave-zoo` and re-encoded by
+  the Collector — a capture, not a guess. A thread for the zoo, not a batch
+  here.
+- **A non-finite `doubleValue` becomes a string with no diagnostic, on both
+  paths** (Qodo's review of PR #6, finding 5, accepted as a pin and a
+  thread). Proto3 JSON spells NaN and the infinities as the strings
+  `"NaN"`, `"Infinity"` and `"-Infinity"`, and `MessageToDict` writes them
+  so; what the Collector writes for one is not shown, since no pair
+  carries a `doubleValue`, so that is spec, not pair. The JSON reader reads
+  the spelling as a string, so the type change happens on the JSON path
+  too, and the type is not carried: the record is the one a `stringValue`
+  of the same spelling reads as, the type-honouring principle's one
+  exception (`SPEC.md` §7). Read as the float, a graph holding one builds
+  and `dumps` refuses the whole graph (`allow_nan=False`); and changing the
+  reading would change the graph a JSON export yields — outside this
+  series by its own rule. `tests/test_protobuf.py`'s
+  `test_a_non_finite_double_value_reads_as_its_json_spelling_on_both_paths`
+  pins that the two paths agree on all three, and since `44f3338` the
+  rendering, the node's `raw.source` and the diagnostics too; `SPEC.md` §7
+  states the reading. Open, for the next spanweave series: decide whether
+  it draws a diagnostic (`non_finite_number`, `warning`) or is read some
+  other way. A thread for the next series, not a batch here.
+- **The "spec, not pair" set, for the zoo.** A span with no `Status` on the
+  wire, `doubleValue`, `bytesValue`, `arrayValue`, `kvlistValue` and links
+  are each spec, not pair: no zoo export carries one. So is an id whose
+  bytes are all zero at the length the schema gives it, which
+  `read_protobuf` omits as an empty one is — the Collector's rule, not a
+  pair (`SPEC.md` §7): the export should carry a root span whose
+  `parentSpanId` is zero bytes, and a link's zero ids. Since the fixes of
+  decisions log D37, so are three more: an id of another length, zero or
+  not, which the reader carries as stated and the Collector is expected to
+  refuse the request for (`cf1afff`); a singular field the wire states
+  twice, which protobuf's merge settles to the last before the reader sees
+  it, as the Collector's runtime is expected to (`42225e0`): the export
+  should state a span's `name` twice; and a non-finite `doubleValue`, whose
+  spelling in the Collector's JSON no pair shows: the export should carry
+  NaN and both infinities. Hand-made exports sent through the zoo's
+  Collector harness would settle every one, the id of another length in an
+  export of its own, since the request carrying it is expected to be
+  refused.
+  `SigorMatt/spanweave-zoo`'s series 3 owns it; a thread for the zoo, not a
+  batch here.
+- **A field the wire states twice is merged, with no diagnostic** (the
+  scoped review of 2026-10-18, R-17, accepted; decisions log D37). Of a
+  singular field, or of a `oneof`, the wire states more than once,
+  protobuf's merge keeps the last, and a message field stated twice is
+  merged field by field, before the reader sees the message; since
+  `42225e0`, `SPEC.md` §7 lists it among what the rendering does not
+  carry. Nothing reports it: the parsed message no longer shows it, so
+  detecting it needs a read of the wire itself, beside the runtime's
+  parse. Open, for the next spanweave series: decide whether to. A thread
+  for the next series, not a batch here.
+- **A span kind stated as an object reaches the graph in the record's key
+  order** (found while making `5ef4502`, the first commit of decisions log
+  D37; a thread the decisions did not list). `5ef4502` writes a structured
+  payload's text with sorted keys, so a payload's key order no longer
+  reaches a node. A span kind (`openinference.span.kind`) or operation
+  (`gen_ai.operation.name`) stated as an object still does: the adapters
+  render it with `jsoncodec.python_text`, Python's `str`, in the record's
+  key order, and that text is the node's `attributes.reported_kind` and the
+  `unknown_span_kind` diagnostic's message and source. Two lines that parse
+  equal are one record and the reader keeps the first, so a file holding
+  one span twice, its kind's keys in two orders, builds a different graph
+  with its lines swapped: `CLAUDE.md` invariant 4 broken, and `SPEC.md`
+  §7's "key order never reaches a node" false there. Re-derived at
+  `42225e0` on both dialects. Not fixed by D37, because no decision gives
+  the rule. Open, for the maintainer: fixed before the merge, as the loop
+  rule's broken invariant, or in the next spanweave series. **Closed** by
+  decisions log D38, before the merge: both adapters render a kind or an
+  operation stated as an object with its keys sorted at every level, by
+  `jsoncodec.keys_sorted`, the one sorting a payload's text goes through too,
+  and in `str()`'s spelling as before (`SPEC.md` §3.3). The class is held,
+  not the site: `tests/test_determinism.py`'s
+  `test_no_key_order_reaches_a_graph` and
+  `test_no_key_order_reaches_a_graph_built_from_records` re-feed every input
+  the repository holds, and hand-made ones stating a structured value
+  wherever an adapter reads a value, with every object's keys reordered at
+  every depth, and each builds the graph it built as written. `SPEC.md`
+  §7's "key order never reaches a node" cites them.
+- **Where an order the input wrote still decides the graph, outside the
+  gate** (found while making D38's commit; a thread decisions log D38 did not
+  list). The gate does not hold these three: the first two are not a text an
+  adapter renders, so no hand-made input states them, and the third is not
+  an object's member order. First, `spanweave/read.py`'s `_flattened` and
+  `_flattened_links` write each key they rename, and the
+  status and attribute folds' `status_message` and `attributes_unfolded`,
+  into the record that carries every other key under its own name, in the
+  order the span writes them: a span stating both `traceId` and `trace_id`,
+  a `status` with a `message` and a `status_message`, or `attributes` and
+  `attributes_unfolded` — a link likewise — keeps whichever comes last, and
+  the other is gone from `raw.source` too (`CLAUDE.md` 2 and 4). Second, the
+  head scan that tells an OTLP export from JSONL reads the input's first
+  member key (`SPEC.md` §7): a document written over several lines whose
+  object carries `resourceSpans` beside another key is read whole, as one
+  record, with that key first, and line by line, every line malformed, with
+  it second. `SPEC.md` §7's "key order never reaches a node" is not true of
+  either, and each fix needs a rule the spec does not state. Third, not a
+  member order: the `exception_event` message (`spanweave/seam.py`) writes
+  an `exception.type` stated as a `kvlistValue` with `repr`, in the order
+  the list gives the map's entries, which no reordering of an object's
+  members changes (the gate's hand-made export states one, and stays
+  green); the same map listed in another order gives another message. Open,
+  for the maintainer: a rule for each — which key wins, or where the other
+  goes; whether such a document is read whole; whether a `kvlistValue`'s
+  entry order is key order — before the merge or in the next spanweave
+  series. **The second and third are closed** by decisions log D39, before
+  the merge: presence of `resourceSpans` among the first object's members,
+  not its position, decides whether the reader reads a document whole, the
+  other members staying in the one record verbatim; and the
+  `exception_event` message writes a `kvlistValue` with its keys sorted, by
+  `jsoncodec.keys_sorted` (`SPEC.md` §7). `tests/test_determinism.py`'s
+  `test_an_export_is_found_wherever_resource_spans_stands` and
+  `test_a_kvlist_rendered_to_text_is_rendered_as_a_map` hold them, each in
+  both orders. **The first is carried** into *the reader's malformed input*,
+  below, for the next spanweave series: it is a member stated twice, which
+  `SPEC.md` §7 now leaves outside its claim and describes as measured.
+- **The reader's malformed input** (registered by decisions log D39, for the
+  next spanweave series; since decisions log D40 it also holds the threads of
+  the scoped review of 2026-10-18b, and since decisions log D41 those of the
+  bounded fix review of 2026-10-18c). What the OTLP/JSON reader does with
+  input that states one member twice, or states what its fold does not read:
+  nothing here is refused or reported, and each is a rule to decide. Measured
+  at D39's commit; lines are `spanweave/read.py`'s there. The review's seven
+  threads follow, R-15 first, the one whose natural home this item is, the
+  review says; the other six are kept here with it, for the same series,
+  though not every one is malformed input. Each is a thread because it
+  predates the four commits the review read (R-13 as a pattern), or, R-17,
+  because it is the gate's reach by design; none blocks the merge (decisions
+  log D39's narrowed merge rule). Their line numbers are the review's,
+  `743d027`'s unless a commit is named, each with its file; where `b5d9572`
+  moved a line of `read.py`, its line at `67e469b` is given too. Their
+  measurements are the review's: its lead reproduced every blocking finding,
+  and of these threads it marks some measurements agent-measured, as each
+  line says, and none reproduced. Where a line says "re-measured at
+  `67e469b`", this record measured it again, by a scratch probe under
+  `python -I`, `spanweave.__file__` in the checkout. The bounded fix review
+  of 2026-10-18c's three threads, its R-2, R-3 and R-4, are kept here too:
+  its R-3 beside R-14's, whose cost it shares, and its R-2 and R-4 after
+  R-18's. Each is a thread by decisions log D40's bounded rule, and none
+  blocks the merge.
+  Their lines are `2f3ad43`'s, each with its file, and their measurements
+  are that review's: its lead measured them, with no sub-agent, and none is
+  re-measured here.
+  - *A member stated twice, by a repeated name.* `jsoncodec.loads` is
+    `json.loads` (read.py:264, :304, :350), so in any object the later value
+    wins, silently, and the earlier is gone from `raw.source`: member order
+    decides. Measured on a flat record's `name` and on an export span's
+    `name`, each order building a different graph.
+  - *A member stated twice, under two spellings or under a name the reader
+    writes* (the thread above's first). `_flattened` (read.py:782) and
+    `_flattened_links` (:836) write each key they rename or fold and each
+    key they carry into one record in the order the span writes them, so
+    the later is kept and the other is gone from `raw.source`. Measured,
+    each order a different record: `traceId` beside `trace_id` and `spanId`
+    beside `span_id`, a span's and a link's; `parentSpanId` beside
+    `parent_id`, `startTimeUnixNano` beside `start_time`, `endTimeUnixNano`
+    beside `end_time`, a `status` with a `message` beside `status_message`,
+    and `attributes` the fold leaves entries of beside `attributes_unfolded`,
+    a span's and a link's. Colliding, though not by order: a span's own
+    `attributes_unfolded` or `status_message` reads as the fold's where the
+    fold writes none; a span's own `resource_spans` or `scope_spans` is
+    overwritten by the level `_attach_levels` (:742) writes after every
+    member where that level carries anything, and is read as
+    `envelope(record).resource` or `.scope` where it does not. Not
+    colliding: `parentSpanId` beside `parent_span_id`,
+    `startTimeUnixNano` beside `start_time_unix_nano`, `endTimeUnixNano`
+    beside `end_time_unix_nano` and an event's `timeUnixNano` beside
+    `time_unix_nano` are both carried, the camelCase one read, in either
+    order.
+  - *The names the flattener writes*, on a span's record: `trace_id`,
+    `span_id`, `parent_id`, `start_time`, `end_time`, `status_message`,
+    `attributes_unfolded`, `resource_spans` and `scope_spans`; `name`,
+    `status`, `attributes` and `links` keep their own names. On a link:
+    `trace_id`, `span_id` and `attributes_unfolded`, and `attributes` its
+    own.
+  - *The two spellings*, from the descriptors of `opentelemetry-proto`
+    1.45.1, the lock, and 1.28.0, the floor, alike but where named. Span:
+    `trace_id`/`traceId`, `span_id`/`spanId`, `trace_state`/`traceState`,
+    `parent_span_id`/`parentSpanId`,
+    `start_time_unix_nano`/`startTimeUnixNano`,
+    `end_time_unix_nano`/`endTimeUnixNano`,
+    `dropped_attributes_count`/`droppedAttributesCount`,
+    `dropped_events_count`/`droppedEventsCount` and
+    `dropped_links_count`/`droppedLinksCount`; `flags`, `name`, `kind`,
+    `attributes`, `events`, `links` and `status` have one. Link:
+    `trace_id`/`traceId`, `span_id`/`spanId`, `trace_state`/`traceState` and
+    `dropped_attributes_count`/`droppedAttributesCount`. Event:
+    `time_unix_nano`/`timeUnixNano` and
+    `dropped_attributes_count`/`droppedAttributesCount`. AnyValue:
+    `string_value`/`stringValue`, `bool_value`/`boolValue`,
+    `int_value`/`intValue`, `double_value`/`doubleValue`,
+    `array_value`/`arrayValue`, `kvlist_value`/`kvlistValue`,
+    `bytes_value`/`bytesValue`, and at the lock only
+    `string_value_strindex`/`stringValueStrindex`. `Status` has one
+    spelling of each field.
+  - *What the fold does not read* (the first D39 commit's sweep, c2–c6).
+    c2: `_any_value` (read.py:916) reads the camelCase tags in a fixed
+    order and keeps the first it finds, so an `AnyValue` stating two
+    members of the `oneof`, an extra member, or `stringValue` beside
+    `string_value` loses the rest, in either order, from the record and the
+    graph. c3: a `KeyValue` entry's members other than `key` and `value` are
+    lost when it folds (`_folded_attributes`, :878). c4: an `arrayValue` or
+    a `kvlistValue` loses its members other than `values` (`_array_value`,
+    :961; `_kvlist_value`, :975). c5: a `scopeSpans` or `spans` that is not
+    a list is removed from its level and yielded nowhere (`_unpack`,
+    :705–708, :714–717). c6: a resource or scope level whose children are
+    all non-objects is yielded nowhere, each child yielded as itself
+    (:710–712, :719–721). Each measured with the value absent from the
+    graph. What would hold them: what the fold cannot hold sent to
+    `attributes_unfolded`, and such levels yielded as records of their own;
+    each changes the graph an export yields, so each needs a rule.
+  - *A per-span refusal* has no mechanism today. The reader refuses a line
+    (read.py:354), an array that will not parse or is not one (:268, :277)
+    and a protobuf body (`spanweave/otlp_protobuf.py`:136), each one
+    `malformed_record`, whose meaning is "the JSON parser could not read
+    it" and whose `source` is the line's text (`SPEC.md` §3.7); a span that
+    is not an object is kept verbatim (`_unpack`, :720–721). The options:
+    (a) extend `malformed_record` to a span, the span object its `source` —
+    a change to the code's meaning and its stated source shape; (b) a new
+    diagnostic code — a halt point (`spanweave/diagnostics.py`); (c) yield
+    the span unflattened through the kept-verbatim path — not a refusal,
+    and it carries no detail. Recommended: (b), which keeps
+    `malformed_record` meaning "would not parse" and could carry a repeated
+    name too.
+  - *The `json_format` facts*, corrected (decisions log D39): Python's
+    `json_format.Parse` accepts a span stating both spellings of a field,
+    the later member winning, at `protobuf` 7.36.0 and 5.27.0; it refuses a
+    key written twice, two members of `AnyValue`'s `oneof`, an `AnyValue`
+    member under both spellings and an unknown field. protojson is not
+    measured. So "proto3 JSON refuses it" is true of a repeated name and of
+    an `AnyValue`, and not of a span's two spellings.
+  - *An `intValue` no `int64` holds, as an `exception.type`* (found while
+    making D39's commit, older than it, registered by its merge rule). The
+    fold reads an `intValue` within the library's digit limit as an integer
+    (`SPEC.md` §5.3), and the `exception_event` message writes the type with
+    `repr`, which an interpreter whose own digit limit is lowered below the
+    integer's length refuses: `spanweave.build` raises a bare `ValueError`,
+    where §7 says no interpreter setting is load-bearing for what a graph
+    says. Measured at D39's parent and at its commit, under
+    `-X int_max_str_digits=640`. Not fixed: the type's text would need the
+    digit-safe `repr` `jsoncodec` keeps private.
+  - *A key an attributes list states twice* (the scoped review of
+    2026-10-18b, R-15; older than the series, the attribute fold). The fold
+    makes a span's OTLP attributes list a map, and a repeated key keeps the
+    last (`SPEC.md` *OTLP JSON*, :2097 at `743d027`), so the list's order
+    decides node fields: `openinference.span.kind` stated `LLM` then `TOOL`
+    builds a `tool` node, and reversed an `llm` node, both copies kept under
+    `attributes_unfolded`, as SPEC says. Agent-measured, the review says;
+    re-measured at `67e469b`, on an OTLP/JSON export, in both orders. The
+    same holds of `attributes.model` and of the operation, and an event
+    list's order likewise changes the `span_event` messages and sources (the
+    review's, not re-measured). The rule it touches: determinism
+    (`CLAUDE.md` 4) for what OTLP calls a map, and the scope of `SPEC.md`
+    §7's "member stated twice" paragraph. This item, as decisions log D39
+    registered it, covered an object's members, the two spellings and the
+    fold's c2–c6, not a key repeated across a list's entries. The review
+    names no fix.
+  - *An empty structured payload has two states* (the scoped review of
+    2026-10-18b, R-12; older than the series: `openinference.py`:441, since
+    `d8e2c375`, and `otel_genai.py`:519, since `bc21e7da`, both under
+    `spanweave/adapters/` and the same at `67e469b`). A structured `{}` or
+    `[]` with no JSON mime is `present` on OpenInference and `empty` on OTel
+    GenAI's text branch: OpenInference judges the rendered text
+    (`_state_of(text)`, and `"{}"` is not empty), OTel GenAI the value
+    (`_state_of(reported)`). The rule it touches: `SPEC.md` §3.3's `empty`,
+    "a payload was reported and is genuinely empty (`""`, `{}`, `[]`)", and
+    cross-dialect equivalence (`FIXTURES.md` §4). No conformance scenario
+    carries a structured payload, so the cross-dialect suite cannot see it.
+    Marked neither way in the review; re-measured at `67e469b`, `input.value`
+    under a `TOOL` kind and `gen_ai.retrieval.query.text` under `retrieval`,
+    each `{}` and `[]`: `present` and `empty`, the raw `{}` or `[]` on both.
+    The review names no fix.
+  - *A test's JSON twin is the code under test's own rendering* (the scoped
+    review of 2026-10-18b, R-13; `cf1afff`'s new test, the pattern older:
+    `5f9db88`, `tests/test_protobuf.py`:770, and `97231d7`, :486). In
+    `test_an_all_zero_id_of_another_length_is_carried_as_stated`
+    (:1244–1245), "reads equal to the same span's JSON stating it (written by
+    the test)" is `_rendered(_root(pb2))` with the id patched in, so the
+    assertion follows from the rendering assertion before it. The rule it
+    touches: no test green because of a choice it made about its own fixture
+    (`CONTRIBUTING.md`). Nothing false rests on it: an independent
+    hand-written OTLP/JSON agrees in all 50 cases (the review's *What held*,
+    marked neither way). `512d18e` renamed the test
+    `test_an_id_of_another_length_is_hex_as_stated_whether_zero_or_not` and
+    kept that assertion as it was, saying so; its mutations are red at the
+    rendering assertion before it. The review names no fix.
+  - *JSONL lines are read out of one buffer, which is quadratic* (the scoped
+    review of 2026-10-18b, R-14; older than the series, its reach widened by
+    `743d027`). `_read_lines` (read.py:330–331, the same at `67e469b`) takes
+    each line by `buffered.split(b"\n", 1)`, which copies the rest of the
+    buffer for every line, and every in-memory read takes that path:
+    `read_records(bytes)` and `build(bytes)` hand the reader one chunk. The
+    review's figures, marked neither way: on 20k, 40k and 80k lines, 1.36 s,
+    7.98 s and 34.75 s at `4e52f08`, and 1.49 s, 7.51 s and 34.71 s at
+    `743d027`; the same 40k lines read from a file in chunks, 1.6 s.
+    Agent-measured, the review says: `buffered += next(chunks)`
+    (read.py:335), and the head scan's `head += next(chunks)` (:570, :571 at
+    `67e469b`), are quadratic in one long line too, 0.14 s, 0.58 s and 2.72 s
+    for 6.25, 12.5 and 25 MB. Since `743d027`, two JSONL shapes buffer the
+    whole input before the first record is yielded, and are then read line by
+    line out of that one buffer: a first record that never closes, and one
+    that states `resourceSpans` other than first. The review's R-9 measured
+    them, a blocking finding, so reproduced by its lead, on 40,000 small
+    records read through `read_trace(path)` in 64 KiB chunks: a first line
+    `{"x":{`, 1.53 s at `2f63a90`, its first record after 0.001 s, and 9.44 s
+    at `743d027`, its first record after 0.78 s; a first line
+    `{"x":1,"resourceSpans":[]}`, 1.59 s and 8.00 s; plain JSONL, 1.63 s and
+    1.60 s; the results identical at both commits. No rule is broken in
+    behaviour: the thread records a cost. `SPEC.md` §7's "Its cost" names the
+    buffering, and since `b5d9572` `_opens_an_export`'s docstring says what
+    §7 says (R-9). None of it is re-measured here. Whether the cost is
+    accepted is this thread's, as R-9's fix says; for the next spanweave
+    series.
+  - *Nothing holds that the head scan reads each byte once* (the bounded fix
+    review of 2026-10-18c, R-3; `b5d9572`'s disclosed survivor, the gap
+    older: the same mutant survives at `743d027`, 4206 passed, 2 skipped,
+    with `743d027`'s `spanweave/` and `tests/test_read.py`). `self._at = at`
+    in place of `self._at = max(at, len(data))` (`spanweave/read.py`:634)
+    survives the full suite at `b5d9572`, 4224 passed, 2 skipped, as
+    `b5d9572`'s message and D40's R-10 line disclose. It is not equivalent:
+    it reads no record differently, but each call then searches a long
+    string again from where it began, so the head scan goes quadratic in a
+    long first record. Measured with `read_trace(path)`, a first record
+    whose `name` is N MB of `x`, then one more record: at 2, 4 and 8 MB,
+    0.07 s, 0.14 s and 0.35 s at the tip, and 0.28 s, 1.04 s and 3.85 s
+    under the mutant, the two records the same. `b5d9572`'s message says
+    the mutant "only reads them again on the next call", which is true, and
+    the re-reading starts from the string's start on every chunk; and it
+    says the docstrings' "reads each byte once" is held by no test, as at
+    `743d027`. Those two sentences, `_ExportScan`'s "reads only the bytes
+    after where it stopped, so a long first record is read once" and
+    `_opens_an_export`'s "reads each byte once however many there are",
+    are true of the code at the tip. The rule it touches: a plausible
+    mutation must be caught (`CONTRIBUTING.md`). A thread beside R-14's,
+    the reader's cost. For the next series, the review says: a test that
+    counts the bytes the scan reads, or a bound on them.
+  - *Nothing holds the head scan's refusal of `resource_spans`* (the scoped
+    review of 2026-10-18b, R-16; older than the series, the head scan's key
+    at `2f63a90` and at `743d027`: the parent's scan had the same gap, and no
+    claim of the four commits depends on it). Accepting the token
+    `"resource_spans"` too, in `_states_the_export_key` (read.py:675, :683;
+    :679, :687 at `67e469b`), survives the full suite, and under it a
+    pretty-printed `{"resource_spans": […]}` reads as 1 record instead of 3
+    `malformed_record`. Marked neither way in the review; re-measured at
+    `67e469b`, `read.py` copied aside, mutated at both lines and restored
+    from the copy (`cmp` silent): the full suite under
+    `SPANWEAVE_REQUIRE_OTLP=1` is 4226 passed, 2 skipped, and
+    `b'{\n "resource_spans": []\n}\n'` reads as 1 record, where unmutated it
+    is 3 `malformed_record` and no record. The rule it touches: a plausible
+    mutation must be caught. The refusal itself is what OTLP/JSON asks for,
+    keys in lowerCamelCase: the OTLP specification's rule as the review
+    recalled it, not re-read offline, nor here. The review names no fix.
+  - *What the key-order gate feeds nothing of, and its comparator* (the
+    scoped review of 2026-10-18b, R-17; `2f63a90`'s gate, by design). The
+    gate feeds what `SPEC.md` §7 says it feeds, decisions log D38's scope
+    ("every input the repository holds", and hand-made inputs at every key an
+    adapter reads), and no real leak was found in these classes at `2f63a90`
+    or `743d027`. But six input classes the reader accepts are fed nothing: a
+    JSON array document; a BOM; CRLF line endings; JSONL of one export per
+    line (and an array of exports); a forced dialect (`build(adapter=…)`,
+    `--adapter`); and `Builder.feed` and its deltas. For each, a leak planted
+    in code only that class reaches stays green in the gate, and the same
+    comparison fed that class differs in 108/180, 108/180, 108/180, 62/64,
+    108/180 and 180/180 cases (agent-measured, the review says). Unfed
+    elsewhere: in an export the kind and the operation are stated as
+    `kvlistValue` only, so on the text path no member reordering reaches
+    them, and only the records half holds those sites for exports. The
+    comparator is held by nothing (agent-measured): comparing nodes only
+    (x4), exempting all of `meta` (x6) and comparing a refusal by type only
+    (x7) survive, and none of the 90 inputs is refused, so the refusal arm
+    never runs; the comparator is correct as written. The rule it touches:
+    D38's scope, and a plausible mutation must be caught. For the next
+    series, the review says: feed the six classes from the repository's own
+    inputs (rewrapped as an array, BOM'd, CRLF'd, per-line exports,
+    `adapter=`, `Builder`), and plant one leak to prove the comparator.
+  - *A protobuf body's unknown fields reach the graph in wire order* (the
+    scoped review of 2026-10-18b, R-18; older than the series: `2066828`,
+    decisions log D36, and `SPEC.md` §3.7's `unknown_fields` row, which
+    states them "in the order they arrived"). A body whose span carries
+    unknown fields 100 and 101, each stated once, builds two graphs in the
+    two wire orders; the difference is `unknown_fields`'s `source.fields`, a
+    list in arrival order. The review measured it at `4e52f08` and `743d027`
+    alike, graph digests `e9d94e00…` against `8abf1b3f…`, and known fields
+    reordered on the wire build one graph; it marks it neither way, and
+    `2f63a90`'s agent found it independently. The gate feeds no hand-made
+    protobuf body, and this is the one code path only such a body reaches.
+    The rule it touches: determinism (`CLAUDE.md` 4), since the protobuf wire
+    encoding does not make field order significant. No claim of the four
+    commits depends on it: §7's key-order sentence is scoped to an object's
+    members, and the *Corrections after the close* line on `2f63a90`'s
+    subject does not list it. Re-measured at `67e469b` on a one-span body of
+    this record's own, so with digests of its own: fields 100 then 101, and
+    101 then 100, build two graphs (`490bd08c…` and `85fc403e…`), unequal at
+    the diagnostics only, each listing the fields in its wire order; the
+    span's known fields written in reverse build the first graph's bytes. For
+    the next series, the review says: sort the entries by number (keeping
+    each occurrence), or say in §7 that this is the one order of the input a
+    graph keeps.
+  - *A seam that sorts only under the tags the test states survives* (the
+    bounded fix review of 2026-10-18c, R-2; `60918ee`'s test, the reach
+    older: the seam has read the folded value since `743d027`).
+    `keys_sorted` at `spanweave/seam.py`:780, applied only when the event's
+    `exception.type` entry is tagged `kvlistValue`, `arrayValue` or
+    `stringValue` (the seam has the attribute list), survives the full suite
+    at `60918ee`, 4226 passed, 2 skipped, where `60918ee`'s own two-tag
+    variant is red, 2. Under it, the review's probe export, with
+    `{"b": 1, "a": {"d": [{"f": 1, "e": 2}], "c": 2}}` in two member orders,
+    builds one graph under `stringValue` and two under each of `intValue`,
+    `boolValue`, `doubleValue` and `bytesValue`; unmutated, the tip builds
+    one under all five. The behaviour at the tip is right for all five tags,
+    the test is the fix the scoped review of 2026-10-18b named for R-8
+    (`stringValue`), and no sentence is false: `60918ee`'s message says why
+    the other four tags are not parametrized, and its reason, "the seam sees
+    only the folded value", is true of the code as written, though no test
+    holds it; `SPEC.md` §7 names the test for an object stated under another
+    `AnyValue` tag, which one tag is. The rule it touches: a plausible
+    mutation must be caught (`CONTRIBUTING.md`; D40's "two more plausible
+    ones"). For the next series, the review says: parametrize the test over
+    the five `AnyValue` tags.
+  - *The key-order gate refuses every line it cannot reorder, not only one
+    that is not UTF-8* (the bounded fix review of 2026-10-18c, R-4;
+    `914cdd5`). `test_no_key_order_reaches_a_graph` asserts the whole list
+    `input_reordered` returns is empty (`tests/test_determinism.py`:850),
+    and that list includes text the parser refuses, which
+    `tests/key_order.py`'s docstring keeps unchanged for a sound reason;
+    `_values_written` (:914) reads every line with `json.loads`, and would
+    raise on such a line. No input reaches it today: none of the 90 inputs
+    holds one, 0 of the 55 renderings fails to parse line by line, and the
+    gate is green; `914cdd5`'s message says exactly what is asserted. But a
+    rendering with a malformed record line, the degenerate case `CLAUDE.md`
+    asks for, would turn the gate's cases and both depth tests red, the
+    depth tests by an exception, and neither for a reason of key order. The
+    rule it touches: degenerate fixtures matter as much as happy ones
+    (`CLAUDE.md`, "malformed JSON — each needs a fixture"), and decisions
+    log D40's narrowing, "the not-UTF-8 list asserted empty". For the next
+    series, the review says: assert only the not-UTF-8 entries empty, as
+    D40 worded it, and let `_values_written` skip what the reader refuses.
+- **The wire-type table's `int32` row is held at the lock, not at the floor**
+  (the scoped review of 2026-10-18, R-5; registered by decisions log D38).
+  `b6cc68d`'s
+  `test_every_reachable_field_is_expected_with_the_wire_type_the_runtime_writes`
+  holds each row of the reader's field-type-to-wire-type table that a field
+  reachable from the request uses. At the locked `opentelemetry-proto`
+  1.45.1, `KeyValue.key_strindex` and `AnyValue.string_value_strindex` are
+  reachable and are `int32` (field type 5), so the row is held there, on
+  the `check` matrix. At the declared floor, which CI's `otlp` job installs
+  — `protobuf` 5.27.0 and `opentelemetry-proto` 1.28.0, on the same
+  Pythons — neither field exists and no reachable field is `int32`, so
+  there the row's mutation, `5: 0` → `5`, survives. Open, for the next
+  spanweave series: whether the floor job should hold that row too, and by
+  what. A thread for the next series, not a batch here.
+- **`ROADMAP.md`'s announcement section still lists OTLP protobuf among
+  "Phase 4 wants"** (*What it must not claim*: "No dialect it does not
+  read"). The close edited `ROADMAP.md` only where its row said, the
+  Phase 4 line it marks done, and left that sentence as it is. Open, for
+  the maintainer. **Closed** by `4689670`, which rewrote that sentence
+  (2026-10-17 cold review, R-15).
+
+The wire series let the reader unpack the OTLP **protobuf** wire format into
+the same records it unpacks from OTLP/JSON. It answers the spanweave half of
+the zoo's L1 (`PROBES.md` at `SigorMatt/spanweave-zoo` `7eb5b69`): every
+capture's exports were sent by the stock Python OTLP/HTTP exporter as
+`application/x-protobuf`, and no consumer of this library could read one
+without a Collector in between. The zoo sealed, for every export, both the
+raw protobuf body and the Collector's JSON re-encoding of it, and those pairs
+are the series' oracle: `tests/test_protobuf.py` holds the protobuf path to
+the JSON path on every one, record by record and byte for byte of the built
+graph. The series ran on branch `wire` from `main` at `88c7339` in one run,
+W0 → W1 → W2, one batch per commit, and W1 halted once for a maintainer
+decision (`OPEN_QUESTIONS.md` §23).
+
+`WORKPLAN.md` was the series' execution state, and this close deletes it,
+as earlier closes deleted theirs. Everything of it that outlives the series is in this section: the batch
+registry, the decisions log and resume note in full, and L1's disposition.
+§0, the operating protocol, is not carried. A future series reads it at
+`git show 028e645:WORKPLAN.md`, the file's last state.
+
+**What this repo does not contain.** L1's receiver half — a receiver that
+accepts the protobuf body the exporter sends — is `SigorMatt/spanweave-live`'s
+V1, in that repository's own series (V0–V4), which pins to this series'
+merge. It was never going to run here, so the spanweave half closes
+complete.
+
+**Ids.** In this section, `W<n>` is a batch of this series, `L1` the zoo's
+probe (`PROBES.md` L1) and `V<n>` a batch of `spanweave-live`'s receiver
+series. The live-graphs section above also uses `L1`, for its first memo
+batch, which is unrelated.
+
+### The batches, with final status
+
+| Batch | What it did | Origin (plan §5) | Final status | Commit |
+|---|---|---|---|---|
+| — | Series opened: the plan file, its README row and its `durable_documents()` exclusion | — | **done** | `7b4b606` |
+| W0 | The raw bodies join the record: the zoo's protobuf bodies copied byte for byte into `fixtures/zoo/<project>/<run-id>/raw/`, each re-derived against its manifest's sha256 and paired with its JSON body by the manifest's `forwards` list | `PROBES.md` L1; the manifests' `bodies` entries | **done**. The zoo's SPEC §4.7 does not promise JSON/raw pairing by `NNNN`, so the test reads `forwards` and asserts the ordinals agree rather than assuming it | `09245d9` |
+| W1 | The reader unpacks the OTLP protobuf wire format into the same records: `spanweave.read_protobuf`, in `spanweave/otlp_protobuf.py`, behind the `otlp` extra | L1; `ROADMAP.md` Phase 4 ("OTLP protobuf behind the `otlp` extra"); `OPEN_QUESTIONS.md` §16 (F1/F2) | **done (decided)**. Halted because three behaviours had no pair to decide them (`OPEN_QUESTIONS.md` §23), and 1A, 2B and 3C were decided (decisions log D31, D32 and D33). CI green on every job, including the new `otlp` job | halt `da215a0`, decided `898e9f5`, done `4ecf414` |
+| W2 | The series closes: this section, `WORKPLAN.md` deleted, `ROADMAP.md`'s Phase 4 line marked done | Close | **done**, except the PR and its reviews, which follow the push | the closing commit of the series |
+
+The `plan:` commits between the batches are execution state. They are
+`b20280f`, `ed5a84e`, `898e9f5` and `028e645`. Every fact they carried is in
+the resume note below.
+
+**`schema_version` is unchanged.** It is `"0.1"`, unfrozen, in
+`spanweave/version.py`. No field was added to `Node`, `Edge`, `Diagnostic` or
+`Meta`, no `PASSTHROUGH` path was added, and the serialized key tree did not
+move: decisions log D30, in D9's words. The shape artifact moved only in its
+vocabularies, for one diagnostic code, `unknown_fields`, and its `source`
+shape; that is §3.7's "extend deliberately", as D32 permits. W1's new error
+code, `otlp_extra_not_installed` (SPEC §3.10), is raised and never
+serialized.
+
+### The probe, and what answered it
+
+| Probe | Disposition | By |
+|---|---|---|
+| L1 — every body answered 415: the exporter sends protobuf and nothing here read it | **Change (spanweave's half).** The raw bodies are in the record beside their JSON twins (W0), and `read_protobuf` reads each into the records its JSON twin reads as, held to it on every pair by `tests/test_protobuf.py` (W1). Where the pairs are silent, decisions log D31, D32 and D33. **The receiver's half** is `spanweave-live`'s V1, not this repository's | W0, W1 |
+
+### Decisions taken  *(the plan file's §3, folded in full)*
+
+The plan file's decisions log, verbatim, with an id per row in its `#`
+column. The ids continue this file's numbering, `D28`…`D33`, rather than
+restarting it, so that `decisions log D<n>` names one row in the whole file;
+`tests/test_doc_truth.py` resolves every such citation against both
+series' logs. A decision reworded is a decision re-taken.
+
+A relay file is named in commit messages and here; elsewhere in the tree only
+the review archives, verbatim, name one. Each reaches its rows by this map:
+
+| Relay file | Rows |
+|---|---|
+| `decisions-spanweave-2026-10-17` | D31, D32, D33 |
+| `decisions-spanweave-2026-10-17b` | D34 |
+| `decisions-spanweave-2026-10-17c` | D35 |
+| `decisions-spanweave-2026-10-18` | D36 |
+| `decisions-spanweave-2026-10-18b` | D37 |
+
+D28–D30 came from no relay file: the plan file held them when `7b4b606`
+opened the series. D34 was decided after the close, on the cold review of
+2026-10-17. It is a new row, not an edit. D35 was decided the same way, on
+the scoped review of those fixes. D36 is Qodo's review of pull request #6,
+dispositioned; the 2026-10-18 file is that review's dispositions, and the
+commits that applied it before its row was written cite the review by
+finding. D37 is the scoped review of 2026-10-18, a read of D36's fixes,
+dispositioned; the 2026-10-18b file is its dispositions, and the commits
+that applied it before its row was written cite it by finding, as "the
+scoped review of 2026-10-18, R-<n>". D38, like D28–D30, came from no relay
+file: the maintainer gave it in the session, after D37's nine commits and
+before the scoped review, on the thread the ninth registered. D39 came the
+same way, after D38's commit, on the thread that commit registered; as first
+given it stopped, and the maintainer narrowed it in the session. Its row is
+the narrowed decision, and records the first.
+D40, like D38 and D39, came from no relay file: the maintainer gave it in
+the session, on the scoped review of 2026-10-18b; the commits that applied
+it before its row was written cite it by finding, as "the scoped review of
+2026-10-18b, R-<n>". The review's `b` is its own: the 2026-10-18b relay
+file in the map is D37's. D41 came the same way, on the bounded fix review
+of 2026-10-18c, the pass D40's rule called for, and is applied by the one
+commit that writes its row.
+
+| # | Date | Batch | Decision | By |
+|---|---|---|---|---|
+| D28 | 2026-10-16 | series | The wire format is the reader's, not the receiver's: the stranger series decided the OTLP envelope is a container the reader owns (F1/F2, T1), and a second encoding of the same container is the same ownership; the receiver never reads a dialect, and a transcoder in the receiver would be a second reader of the envelope disagreeing subtly with the first. It is an optional extra because `protobuf` is a heavy dependency a JSON-only consumer should not pay for, and because the ROADMAP placed it there before this series existed. | maintainer |
+| D29 | 2026-10-16 | W1 | The oracle is the rule. Twenty-nine exports exist in both encodings, sealed by the zoo; the JSON path has built every graph this library has ever produced; the protobuf path is correct exactly when it yields the same records, and any place the two could differ (id encoding, 64-bit integers, enums, omitted defaults, unknown fields) is decided by the pair, stated in SPEC §7, and pinned by a mutation. A protobuf-only behaviour with no JSON counterpart is a halt, not a choice. | maintainer |
+| D30 | 2026-10-16 | W1 | No schema change: the records are the same records, so the graph, the shape artifact and `schema_version` cannot move; if the oracle shows they would, the batch halts. | maintainer |
+| D31 | 2026-10-17 | W1 | **1A.** A body that is not a protobuf message is one `malformed_record`, `skipped_records` 1, no records, `source` `null` — the `undecodable_bytes` precedent: JSON has no way to write the bytes, and inventing one (1B) would put in the record a representation the input never had. §3.7's source table gains the row. 1C declined: the reader never raises on malformed input, and the other encoding of the same container does not get a different rule. | maintainer |
+| D32 | 2026-10-17 | W1 | **2B.** Unknown fields are reported, never dropped and never fatal: the records are yielded, and each message that carries unknown fields draws one diagnostic under a new code, `unknown_fields` (level `warning`: the library could not map them — a gap, exactly what the level is for), `source` naming the message's path in the request and the field numbers and wire types as the proto runtime reports them. 2D is what the oracle rule says literally and what CLAUDE.md 2 forbids; where the two disagree, invariant 2 wins and the record says where the oracle was silent. 2A declined: refusing a whole body for one field a newer OTLP added would throw away every readable span to report one number. 2C declined for now: the bytes of a field with no definition have no representation the record ever had, and a consumer who needs them has the raw body; if one asks, it is a thread, not a guess. The code joins §3.7's vocabulary and the shape artifact is regenerated, as the series' standing rules permit. | maintainer |
+| D33 | 2026-10-17 | W1 | **3C.** `doubleValue` is `MessageToDict`'s float, stated in SPEC §7 as the one place the pairs could not check, with a test that the zoo holds no `doubleValue` (so the day one appears, the test says the claim is now checkable); and a thread at W2 for the zoo: one export carrying a `doubleValue` re-encoded by the Collector would settle `1` against `1.0` — a capture, not a guess (3B declined for being one). | maintainer |
+| D34 | 2026-10-17 | review | The cold review of 2026-10-17 of `88c7339..4689670` (R-1…R-18), dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-7, R-8, R-9, R-10, R-13 (the sha test and the record lines; the ordinal is removed, not bound), R-14, R-15, R-16, R-17, R-18. Read, recorded: R-12, the README row that said "are registered" before any was, deleted at the close. Declined with a reason: R-11 beyond what R-10's fix gives. A plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where the sha and corpus-count guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters. With R-10's fix the retired-figure guards do scan the plan, which is the part of R-11 worth having. Applied as eight commits on `wire`, one concern each; where a commit answers several findings they share one mechanism and the subject says so. If the extra's declared floors failed, they were to be raised to the lowest pair that passes, and said so in `pyproject.toml` and the CHANGELOG. Nothing is amended or force-pushed. | maintainer |
+| D35 | 2026-10-17 | review | The scoped review of 2026-10-17 of `4689670..c4018b4` (R-1…R-21), dispositioned. Accepted: R-1, R-2, R-3 (with its limit stated: the gate is syntactic, and a name bound by assignment is not chased), R-4, R-5, R-6, R-7, R-9, R-10, R-11 (the G7 branch), R-12 (the worst three; the rest recorded as the limit of a text-shape test), R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-20, R-21. Read, recorded: R-8, `21b106d`'s four guards under one subject, which were the grouping the maintainer gave. Declined with a reason: R-11's second bullet (`D33` changed to `D32`, a real but wrong row, stays green): a resolver holds that a citation exists, not that it is the right one; the only guard for meaning is a reader. Applied as ten commits on `wire`, one concern each; where several findings share one mechanism the subject says so. No `plan:` commits; nothing is amended or force-pushed. The loop is bounded: no third cold review unless a commit of this round touches `spanweave/` (none did); the PR, Qodo's review of it and the merge follow, and anything a further pass would find is a thread, registered at the next series' open. | maintainer |
+| D36 | 2026-10-18 | review | Qodo's review of pull request #6 at `f38c193` (seven findings), dispositioned. Accepted: finding 6, a bug: an id whose bytes are all zero is omitted, as the Collector omits it, so a root span whose exporter wrote zero bytes for its parent is a root and not an orphan; finding 7, a bug: `unknown_fields` says, per field, whether the installed schema defines the number and the wire type it expects, so a known field with the wrong wire type is not blamed on a newer schema; finding 4, a rule violation: the rendered document is written with sorted keys; finding 3, a rule violation: the tests import the proto modules by name, not by `__import__`. Accepted as a pin and a thread: finding 5, a bug: a non-finite `doubleValue` reads as its proto3 JSON spelling, a string, on both paths, and a test pins that the two agree; changing it would change the graph a JSON export yields, so whether it draws a diagnostic is a thread for the next spanweave series. Declined as a design change, answered in the record: finding 1, a rule violation: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, because the records are the JSON path's records for the same export (D29), and SPEC §7 says so; finding 2, a rule violation: the `otlp` extra is the decided exception to the zero-dependency rule (D28), held by the gate to a lazy import, one module and the extra's two prefixes, and `CLAUDE.md`'s rule says so. Applied as seven commits on `wire`, one concern each. No `plan:` commits; nothing is amended or force-pushed. Commits 1–3 (`5f9db88`, `2066828`, `8b68608`) touch `spanweave/`, so they get their own scoped cold review before the merge, together with Qodo's diff after the push. The comment and its seven inline comments are archived as first fetched; the PR summary comment carries no findings and is not. | maintainer |
+| D37 | 2026-10-18 | review | The scoped review of 2026-10-18 of `f38c193..4e52f08` (R-1…R-20), the fixes of D36, dispositioned. Accepted: R-1, R-2, R-3, R-4, R-5, R-6, R-8, R-9, R-11, R-12, R-14, R-15, R-17, R-18. Read, recorded: R-7, R-10, R-13, R-16, R-19, R-20. R-8 is an invariant broken since before the series (`CLAUDE.md` 4): the adapters are fixed to match the spec, a structured payload's text written with sorted keys; a graph it moves is regenerated only if every difference is key order inside a payload's text, and any other difference is a stop. The zero rule is the Collector's: an id is omitted only at the length the schema gives it with every byte zero, and an id of any other length is carried as stated. Applied as nine commits on `wire`. No `plan:` commits; nothing is amended or force-pushed. The loop ends here: one more scoped review, of commits 1 and 2 only (`5ef4502`, `cf1afff`), the two that change behaviour under `spanweave/`, runs after the push together with Qodo's post-push diff; commit 8 (`42225e0`) touches `spanweave/` too, by a docstring only, and is not in it. From that pass only a broken invariant or a wrong behaviour is fixed before the merge; everything else is a thread for the next spanweave series, and the PR merges. | maintainer |
+| D38 | 2026-10-18 | review | A span kind or operation stated as an object reaching the graph in the record's key order is a broken invariant (`CLAUDE.md` 4), so it is fixed before the merge; and the class is closed by a property gate, not the one site. The gate takes every input the repository holds — every conformance rendering, the captured traces, the zoo's JSON bodies, and the records `read_protobuf` reads out of the zoo's raw bodies — and hand-made inputs stating a structured value wherever an adapter reads one (payloads, `openinference.span.kind`, `gen_ai.operation.name`, and any other attribute the adapters render to text), and re-feeds each with every object's keys reordered at every depth, once reversed and once by a fixed-seed shuffle; each must build a graph byte-identical to the original's. Every site it finds is fixed through one sorted encoder the adapters share and listed in the commit. `SPEC.md` §7's "key order never reaches a node" cites the gate. If a conformance graph, the census or a reading moves, D37's rule for commit 1 applies: proceed only if every difference is key order inside a value's text, list each file, and stop on anything else. The gate is the holder: `tests/test_determinism.py`'s `test_no_key_order_reaches_a_graph` and `test_no_key_order_reaches_a_graph_built_from_records`. The key-order thread the ninth commit of D37 registered is closed, and the `int32`-at-the-floor limit is registered as a thread. Applied as one commit. | maintainer |
+| D39 | 2026-10-18 | review | The three orders D38's commit registered, outside its gate. As first given, D39 fixed all three before the merge: a span stating a field twice, under both proto3 JSON spellings or under a name the reader writes, refused per span by the reader's existing mechanism; `resourceSpans` found by presence, not position; a `kvlistValue` rendered to text as a map. Its commit stopped, rightly: the reader has no per-span refusal. It refuses a line, an array that will not parse or is not one, and a protobuf body, each one `malformed_record`, and keeps a span that is not an object verbatim. **The correction**: the first rule's premise, that `json_format` and protojson both refuse a span stating `traceId` and `trace_id`, was wrong for `json_format`. Measured, Python's `json_format.Parse` accepts `traceId` beside `trace_id`, `parentSpanId` beside `parent_span_id` and `startTimeUnixNano` beside `start_time_unix_nano`, in either order, the later member winning, at `protobuf` 7.36.0 (the lock) and 5.27.0 (the floor); it refuses a key written twice, two members of `AnyValue`'s `oneof`, an `AnyValue` member under both spellings (`stringValue` beside `string_value`, which it reports as two members of the `oneof`) and an unknown field. protojson was not measured: there is no Go toolchain here. **Narrowed** to the second and third rules, applied as one commit: whether the reader reads a document whole is decided by `resourceSpans`'s presence among the first object's members, not its position, the other members staying in the one record verbatim as they do when it comes first; and the `exception_event` message writes an `exception.type` stated as a `kvlistValue` with its keys sorted, by `jsoncodec.keys_sorted`. `SPEC.md` §7 claims exactly what the gate holds, that an object's member order never reaches a graph when each member is stated once; says, as measured, how a member stated twice is read today; and says that a list's order is the input's and reaches `raw.source` verbatim. The holders, beside D38's two: `tests/test_determinism.py`'s `test_an_export_is_found_wherever_resource_spans_stands` and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map`. A member stated twice, the options for a per-span refusal and the silent losses the first commit's sweep found are one item for the next spanweave series, *the reader's malformed input*. **The narrowed merge rule**: from here only a defect this PR introduces, or one a claim this PR makes depends on, blocks the merge; older defects are registered for the next spanweave series. | maintainer |
+| D40 | 2026-10-18 | review | The scoped review of 2026-10-18b of the four commits `5ef4502`, `cf1afff`, `2f63a90` and `743d027` (R-1…R-18), dispositioned. Accepted: the eleven blocking findings, R-1…R-11, each answered by the fix that finding names under "The fix", with the maintainer's narrowings: R-5, the gate measures the change it made at each depth, against the deepest object each input holds, with that depth as the floor instead of 3; R-6, the not-UTF-8 list asserted empty for the repository's inputs and the docstring corrected, rather than such a line reordered; R-9, the docstring says what SPEC §7 says about the cost, and the cost itself is R-14's thread. Registered as threads for the next spanweave series, under *the reader's malformed input*: R-15, whose natural home it is, and R-12, R-13, R-14, R-16, R-17 and R-18 there too, each with its measurements. Applied as seven commits on `wire`, in the order given, one sub-agent per commit. No `plan:` commits; nothing is amended or force-pushed. The oracle stays green (88), and the moved-files rule of D38 applies. **The bounded fix-review rule**: From D40 on, a review of fix commits is bounded. It reads only the fixing commits and applies the standard per-commit rules: the new test red on the derived parent, the commit's mutation caught plus two more plausible ones, one concern. It re-runs the previous review's own survivors and probes, and opens no new search. Only a defect the fixing commits introduce, or one a claim they make depends on, blocks the merge; anything else is a thread for the next series. If the pass finds a blocking defect, the fix is made with its own red test and caught mutation, and goes to the merge on green CI without a further review: the loop ends at that pass. For PR #6, the pass covers all seven of D40's commits, not only commit 4, because the tests and sentences make claims too. | maintainer |
+| D41 | 2026-10-19 | review | The bounded fix review of 2026-10-18c of D40's seven commits (R-1…R-4), dispositioned. R-1, the one blocking finding, a record slip in `2f3ad43`'s message, is set right under *Corrections after the close*. R-2, R-3 and R-4 are registered as threads under *the reader's malformed input*. The review found every R-1…R-11 survivor of 2026-10-18b caught at `2f3ad43`, and the oracle unmoved (on every pair, 0 digests moved). By D40's rule the loop ends at this pass: this commit goes to the merge on green CI without a further review. What remains for PR #6 is Qodo's post-push diff and the merge as a merge commit, through `main`'s ruleset (pull request and the required CI checks, since 2026-10-19). | maintainer |
+
+### Cold review of the series — 2026-10-17
+
+`reviews/2026-10-17-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-17.md`: `cmp` silent,
+and `sha256`
+`db5fe6caa4452f9d07a30b977e90ec52b34b30009fbd7c95d3344ae0effe7c61` on both
+sides. It takes the dated name the earlier archives carry. As for them, the
+scratch name and the whole digest are written here and not in the archive,
+which is kept byte-for-byte; the scratch name is provenance and not a path to
+open.
+
+A cold read of `88c7339..4689670`, ten commits: one sub-agent per commit
+touching `spanweave/`, `tests/` or `fixtures/` (four: `7b4b606`, `09245d9`,
+`4ecf414`, `285902e`; the last one's agent also read `4689670`), a fifth that
+re-derived the oracle without the test helpers, and the five plan and
+question commits read directly, every parent derived as `<sha>^` and the
+extra driven installed, hidden, and hidden with `SPANWEAVE_REQUIRE_OTLP=1`.
+It found `fixtures/zoo/` byte-identical to the zoo at its pin, the oracle
+holding when re-derived independently, no clock, randomness or network
+added, and `schema_version` unchanged; it raised eighteen findings,
+R-1…R-18. The maintainer's dispositions are decisions log D34, above. The
+accepted findings were applied on `wire` as eight commits, one concern each;
+where a commit answers several findings they share one mechanism and the
+subject says so (decisions log D24). This archive is the last of those
+commits. What the review found untrue in the series' record is set right
+under *Corrections after the close*, below.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `4ecf414`, link ids credited to the pairs, which carry no links | **accepted**, `118f0d4` (with R-2, R-4, R-5, R-6; one mechanism, a hand-made `ExportTraceServiceRequest` for each thing the zoo's bodies lack). SPEC §7 says what the pairs cover and what a hand-made request holds instead; a span with two links holds the ids' lowercase hex |
+| R-2 — `4ecf414`, `bytesValue` said to agree "on every pair", which hold none | **accepted**, `118f0d4` (with R-1). `bytesValue`, `arrayValue` and `kvlistValue` are stated from the OTLP/JSON spec and marked "spec, not pair", as `doubleValue` is |
+| R-3 — `4ecf414`, the gate's allowance is wider than the extra | **accepted**, `723515a`: the allowance is the prefixes `google.protobuf` and `opentelemetry.proto`, and the gate bans `importlib.import_module` as it bans `__import__` |
+| R-4 — `4ecf414`, omitted `kind`, `status` and `flags` not exercised | **accepted**, `118f0d4` (with R-1): a span with `kind` 0, `status` unset and `flags` 0 renders with all three omitted |
+| R-5 — `4ecf414`, "refuses what `read_records` refuses" tested on `str` only | **accepted**, `118f0d4` (with R-1): `read_protobuf` refuses a wide-item `memoryview` and whatever else `_as_bytes` refuses, by the same error |
+| R-6 — `4ecf414`, the arrival order of unknown fields untested | **accepted**, `118f0d4` (with R-1): two distinct unknown fields are reported in arrival order |
+| R-7 — `4ecf414`, the prose pair count bound to nothing | **accepted**, `21b106d` (with R-13's sha test, R-14, R-17; one mechanism, citations are held): the corpus counts are read from SPEC, CHANGELOG, this file, `ci.yml` and `otlp_protobuf.py`'s docstring and held to the census |
+| R-8 — `09245d9`, pairing by file name instead of `forwards` survives | **accepted**, `5c020c6`: a unit test of `pairs()` on a synthetic manifest whose `forwards` disagree with name order, with a non-200 forward and a count mismatch |
+| R-9 — `09245d9`, `FIXTURES.md` not updated for the raw bodies | **accepted**, `4521cc2`: the layout gains `raw/NNNN.body`, `NNNN.json` is the Collector's re-encoding, and the list of what `tests/test_zoo.py` checks gains the raw sha256, the pairing and the binary attribute |
+| R-10 — `7b4b606`, "No other doc-truth guard was weakened" is false | **accepted**, `00e55dd` (with R-11 in part): `durable_documents()` keeps `WORKPLAN.md` in, and only the scratch-path and README Documents-table guards skip it, by name, with the reason. The record line is `4521cc2`'s, under *Corrections after the close* |
+| R-11 — `7b4b606`, no test touches `WORKPLAN.md`'s numbers | **accepted in part**, `00e55dd`: the retired-figure guards scan the plan. **Declined beyond that** (decisions log D34): a plan's numbers are execution state, corrected by the batch that falsifies them and folded into this file at the close, where `21b106d`'s guards hold them; a test over a file that exists only while a series runs would be green on every tip that matters |
+| R-12 — `7b4b606`, the README row's present tense came before the entries | **read, recorded** (decisions log D34). The row was deleted at the close (`285902e`); noted by `4521cc2` under *Corrections after the close* |
+| R-13 — `285902e`, numbers and shas in this file and ROADMAP tied to nothing | **accepted.** The sha test is `21b106d` (with R-7): every sha a durable document cites resolves as a commit. The record lines are `4521cc2`: the ordinal is removed, not bound; `285902e`'s counts are recorded as measured with the extra hidden, beside the with-extra counts; the unverified `UnknownFieldSet` version claim is removed. `ba8a6f0`, a citation that resolved only from a local reflog, resolves for any clone since the maintainer pushed the tag `rejected/ba8a6f0` |
+| R-14 — `285902e`, a decisions citation under `spanweave/` outside the resolver | **accepted**, `21b106d` (with R-7): the resolver reads `spanweave/**/*.py` |
+| R-15 — `4689670`, an item it closed still listed as open | **accepted**, `4521cc2`: the item is marked closed by `4689670` |
+| R-16 — `4689670`, two voices on whether `make check` runs the protobuf tests | **accepted**, `e709afa` (with R-18; one mechanism, CI installs what the documents say): the `check` matrix syncs `--extra dev --extra otlp` with `SPANWEAVE_REQUIRE_OTLP=1`, and the "never installs it" comments say what is now true |
+| R-17 — `4689670`, none of its changed lines held | **accepted**, `21b106d` (with R-7): a `uv sync` line's extras exist in `pyproject.toml`, and the ROADMAP sentence's sha resolves |
+| R-18 — `4ecf414`, the extra's floors never installed | **accepted**, `e709afa` (with R-16): the `otlp` job is a matrix that installs the floors. Measured first, `protobuf` 4.25 with `opentelemetry-proto` 1.27 does not import on Python 3.14 (protobuf before 5.27 does not), so the floors are raised to `protobuf>=5.27` and `opentelemetry-proto>=1.28`, the lowest pair that passes on every interpreter CI runs |
+
+### Scoped review of the fixes — 2026-10-17
+
+`reviews/2026-10-17b-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-17b.md`: `cmp` silent,
+and `sha256`
+`ea09b50ce7a76fbc1f334b2063028efd6091161696d8b41999d5fa78697755b0` on both
+sides. It takes the dated name the earlier archives carry, with the `b` of
+its scratch name, since the cold review above holds the date's plain name.
+As for the earlier archives, the scratch name and the whole digest are
+written here and not in the archive, which is kept byte-for-byte; the
+scratch name is provenance and not a path to open.
+
+A scoped read of `4689670..c4018b4`, ten commits: the eight fix commits of
+decisions log D34 and the two after the archive. One sub-agent per commit
+touching `spanweave/`, `fixtures/`, `tests/`, the `Makefile`,
+`pyproject.toml` or `.github/` (eight), each commit's tests run on its
+parent and its mutations on its tip in worktrees, each mutation reverted;
+the two record commits, `4521cc2` and `3dfe461`, and the cross-cutting
+checks read directly. It found the extra's floors passing on every
+interpreter CI runs, at the exact lower bounds too; `fixtures/zoo/`
+byte-identical to the zoo at its pin; no clock, randomness or network
+added; every mutation a commit names caught by the test it names; and every
+review archive equal to its recorded digest. It disclosed one breach of its
+own rules: one agent ran `git ls-remote --tags origin` once, read-only. It
+raised twenty-one findings, R-1…R-21. The maintainer's dispositions are
+decisions log D35, above. They were applied on `wire` as ten commits, one
+concern each; where several findings share one mechanism the subject says
+so (decisions log D24). This archive is in the tenth, with the record lines
+under *Corrections after the close*, below, because the archive is part of
+the record agreeing with itself.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `118f0d4`, the "no other kind" guard read span attributes only | **accepted**, `e3fccfa` (with R-2; two holes in one test file, one guard each): the census walks the resource, scope, span, event and link attribute lists and the values nested in `arrayValue` and `kvlistValue`, and SPEC §7 says so. R-1's resource and event mutations are red |
+| R-2 — `118f0d4`, the bytes said to show `+` and `/` showed only `/` | **accepted**, `e3fccfa` (with R-1): the fixture's bytes are `00 0f bf 10`, base64 `AA+/EA==`, and the test asserts both characters of its own fixture. The `+`→`-` mutation is red |
+| R-3 — `723515a`, an alias by assignment passes the dynamic-import ban | **accepted, with its limit stated**, `e2c4563` (with R-4; one file, `tests/gates.py`, one guard each): `importlib.__import__` joins `DYNAMIC_IMPORT_MEMBERS`; a reference to `import_module` or `__import__` that is not a call is banned, and so is `getattr` on `importlib` or `builtins` or of either name. Beyond the decisions' text, a bare `__import__` name reference is banned too, the Name form of the same hole. The gate is syntactic: a name bound by assignment is not chased, which the comment and `tests/test_gates.py` say and a test pins |
+| R-4 — `723515a`, the allowance not pinned to its two prefixes | **accepted**, `e2c4563` (with R-3): a test holds `OPTIONAL_EXTRA_PACKAGES` equal to the prefixes derived from `pyproject.toml`'s `[otlp]`, `google.protobuf` and `opentelemetry.proto`, and refuses `google._upb` |
+| R-5 — `5c020c6`, "did not answer 200" tested with a 5xx only | **accepted**, `88cc441`: the not-200 test plants a 502, a 404 and a 204, a forward with no `status` is refused, and the raw-directory assert in `pairs()` has its own test |
+| R-6 — `00e55dd`, "scanned by every other" pinned for one guard only | **accepted**, `0648755`: a planted plan is red in the review-citation, decision-citation and three retired-figure guards (M2, M3, M5), and in the sha guard, the seventh guard that reads the plan, which the decisions' text did not name; the two by-name skips match exactly `WORKPLAN.md` at the root, case-sensitive (M6, M7, M8 red) |
+| R-7 — `00e55dd`, CONTRIBUTING's history sentence false for the first two openers | **accepted**, the tenth commit (with R-10, R-15, R-21; one mechanism, the record agrees with itself): the sentence names the four openers that did both and the wire series' own, and the two that predate `durable_documents()`; it says the guards that iterate `durable_documents()` read the plan, not every guard |
+| R-8 — `21b106d`, four independent guards under one subject | **read, recorded** (decisions log D35): the grouping was the one the maintainer gave; recorded under *Corrections after the close* |
+| R-9 — `21b106d`, the sha test resolved against the object store, not the refs | **accepted**, `ba6e633`: each cited sha must be a commit `git rev-list --all` reaches, so a dangling commit is red and a full clone with tags is what the test vouches for; outside a repository the sha tests skip and say why, and CONTRIBUTING says the gates need a full clone with tags. The other doc-truth tests that read what git tracks still fail outside a repository rather than skip, as R-9 records; `ba6e633` does not reach them |
+| R-10 — `21b106d`, "four zoo-pin citations" is three | **accepted**, the tenth commit (with R-7): the count is set right under *Corrections after the close*, and the doubled repository name in the stranger's-trace section is made single |
+| R-11 — `21b106d`, the G7 branch and a wrong-row citation survive | **First bullet accepted**, `ba0a511`: the guard already skipped by sentence, so no guard code changes; a test pins the zoo figures read from this file at the measured value, `TASKS_ZOO_FIGURES = 10`, and G7 is red (under G7 this file falls to 3 figures read, not the review's 4: it had moved since `21b106d`). **Second bullet declined** (decisions log D35): `D33` changed to `D32`, a real but wrong row, stays green; a resolver holds that a citation exists, not that it is the right one, and the only guard for meaning is a reader. The resolver's docstring says so |
+| R-12 — `e709afa`, the CI-shape tests held the steps' text, not what they do | **accepted, the worst three**, `212650f` (with R-13, R-14; one mechanism, CI does what its steps say): a sync after the floor install, a `print` for an `assert` and a narrowed `pytest` are red, and so are `mypy spanweave \|\| true` and an appended `protobuf==7.*`; the lock-only drift is R-13's. The rest is recorded as the limit of a text-shape test: a step's `if:`, `continue-on-error:` or `shell:` is not seen |
+| R-13 — `e709afa`, nothing ties `uv.lock` to `pyproject.toml` | **accepted**, `212650f` (with R-12): every `uv sync` in CI is `--locked`. The `Makefile` has no `uv sync` of its own, and its `uv run` stages re-lock a stale lock by default, so `check` gains a first stage, `lock`, running `uv lock --check`. The lock-only drift is red in `make check` and in CI's sync, not in a test |
+| R-14 — `e709afa`, the floors job installed the newest patch of each floor | **accepted**, `212650f` (with R-12): the `otlp` job installs `protobuf==5.27.0` and `opentelemetry-proto==1.28.0` and asserts both, and its comment is true. The minor point, two findings in one commit, is D34's shared mechanism |
+| R-15 — `4521cc2`, "rather than by rewriting the record above" in the commit that edited two lines of it | **accepted**, the tenth commit (with R-7): the opening of *Corrections after the close* says which two lines were edited and why, and `FIXTURES.md`'s long line is wrapped |
+| R-16 — `d2053ae`, the archive digests fail on a CRLF checkout | **accepted**, `df72ac2` (with R-17; one guard): `.gitattributes` gives `reviews/**` `-text`, and a test holds each archive's `text` attribute unset. R-16's `core.autocrlf=true` reproduction is green |
+| R-17 — `d2053ae`, two records in one paragraph held by no text | **accepted**, `df72ac2` (with R-16): `digest_records` already used `finditer`, so what was missing was the test. A paragraph with two records, in both orders, holds "two different digests are recorded", and the single-`search` mutation is red |
+| R-18 — `c4018b4`, the reader called CommonMark's is not CommonMark's | **accepted**, `ebdc27d` (with R-19, R-20; one mechanism, one fence reader): tilde fences are read, a closing fence carries no info string, and the docstring says containers are not modelled |
+| R-19 — `c4018b4`, the length, indent and character rules unpinned | **accepted**, `ebdc27d` (with R-18): tests pin the length rule, the three-space indent, tildes and the closing info string; R-19's three mutations and `>=`→`>` are red |
+| R-20 — `c4018b4`, an unrelated thread rides along, and "every fence reader" overstates | **accepted**, `ebdc27d` (with R-18): the seven other fence readers read through the shared module, by `fenced_blocks()`, built on `fence_kinds()`, rather than calling `fence_kinds()` as the decisions' text has it, because they want a block's info string and body; that no tracked document's result changes is measured in the commit's message, not tested. The thread is the grouping the maintainer asked for, recorded under *Corrections after the close* |
+| R-21 — `3dfe461`, `d2053ae`, `c4018b4`, two commits after the archive unrecorded | **accepted**, the tenth commit (with R-7): *Corrections after the close* records both, with their reason |
+
+### Qodo's review of PR #6 — 2026-10-18
+
+`reviews/2026-10-18-qodo-pr6.md` holds eight comments by
+`qodo-code-review[bot]` on pull request #6, all rendered against `f38c193`,
+each its `body` field as the GitHub API returned it, unchanged: the issue
+comment *Code Review by Qodo*, id `6238057340`, which carries the seven
+findings, and the seven inline comments of review `5559191961` (whose own
+body is empty), ids `4303811452` to `4303811474` on findings 1 to 7, in
+order. Each body sits in the archive between a ````` ````text ````` line
+and a ````` ```` ````` line, less the line break before the closing one;
+extracted so, each is byte-identical to the scratch drop's copy of it, and
+to the `body` field of the API's response, and its `sha256` is the same on
+all three:
+
+| Comment | Bytes | `sha256` |
+|---|---|---|
+| issue comment `6238057340` | 25,320 | `c1c77df5a645d65f80d2c913fa872d6ef57f87793723944833816ef7eacce3ee` |
+| inline comment `4303811452` | 1,705 | `1c116bfc889166c2e4eb6fc70f00176b79dde8aa451479f09a14226bed17aa20` |
+| inline comment `4303811456` | 1,716 | `74129d6a334c67b3ef7e06b132c417246d034a10ad54ee2ba59e8b217986af79` |
+| inline comment `4303811460` | 1,431 | `5972b6cf4bd9f3fa5f87e7a4243de47361571145ef08d45811ff3b4c0577196d` |
+| inline comment `4303811464` | 1,509 | `0c314bfd8ebea7ef41263fad19086e13b7519dc9acb6721814ca4330a36385ac` |
+| inline comment `4303811466` | 1,501 | `13ed9d41a56ec4db3ec3e36a88f1c94c14fbe5719d5b5d24ef51f419bd1cf2a4` |
+| inline comment `4303811470` | 2,104 | `342747bd59fed514b704fd12ab98cfa3458859f44a506da5840f64676c51b5ba` |
+| inline comment `4303811474` | 1,681 | `119056c685f2d9f254a37ab670c73b911ca246a66722bec4c96e1a423f122b84` |
+
+As for the earlier archives, the digests are written here and not in the
+archive. The archive's header says where each comment came from and how to
+extract it, and nothing outside its fences is the bot's. The comments were
+posted on 2026-10-17; the archive takes the date of their dispositions. A
+first comment from the same bot that day, id `6238013976`, is a PR summary
+and carries no findings; it is not archived. The maintainer's dispositions
+are decisions log D36, above. They were applied on `wire` as seven commits,
+one concern each, and this archive is the last of them.
+
+`reviews/2026-10-18-qodo-pr6.md`: `sha256` `6b20fd35a537cb5b597392b4cab023c518a887f5dc10832964edcddef25021c5`, first anchored 2026-10-18, by the commit that archives it.
+
+| Finding | Disposition |
+|---|---|
+| Qodo 6 — All-zero parent ids turn root spans into orphans (Bug, Correctness) | **accepted**, `5f9db88`: a `traceId`, `spanId` or `parentSpanId`, a span's or a link's, whose bytes are all zero is omitted, as an empty one is: the Collector's rule, not a pair (`SPEC.md` §7). The JSON path is unchanged (decisions log D36) |
+| Qodo 7 — Malformed known fields are blamed on a newer schema (Bug, Observability) | **accepted**, `2066828`: each `unknown_fields` entry carries `defined` and `expected_wire_type`, and the message says "not readable as the installed schema defines it" of a defined number and "not defined by the installed schema" of the rest; no new code, `diagnostic_source` regenerated (decisions log D36) |
+| Qodo 4 — The reader emits unsorted JSON (Rule violation, Maintainability) | **accepted**, `8b68608`: `read_protobuf`'s intermediate text and the tests' serializations of rendered documents use `sort_keys=True`; the graph bytes moved on no pair (decisions log D36) |
+| Qodo 3 — Tests invoke a banned dynamic import (Rule violation, Security) | **accepted**, `f68995c`: `_pb2` in `tests/test_protobuf.py` imports the proto module by an explicit `from … import …` inside the extra guard, and two tests hold its two outcomes (decisions log D36) |
+| Qodo 5 — Non-finite doubles become strings silently (Bug, Correctness) | **accepted as a pin and a thread**, `97231d7`: the two paths agree on NaN and both infinities, each read as its proto3 JSON spelling, and `SPEC.md` §7 states the reading. Whether it draws a diagnostic is registered under *Still open after the close*, for the next spanweave series (decisions log D36) |
+| Qodo 1 — Protobuf records lose their original bytes (Rule violation, Correctness) | **declined as a design change, answered in the record**, `568adc2`: a protobuf record's `raw.source` is its OTLP/JSON rendering, not the wire bytes, by decisions log D29, and `SPEC.md` §7 says so; nothing is lost but what `unknown_fields` reports, and the body's bytes are the caller's to keep (decisions log D36) [since `42225e0`, `SPEC.md` §7 lists, beside what `unknown_fields` reports, what the rendering does not carry (decisions log D37): see *Corrections after the close*] |
+| Qodo 2 — Core package gains runtime protobuf dependencies (Rule violation, Architecture) | **declined as a design change, answered in the record**, `568adc2`: the `otlp` extra is the decided exception, by decisions log D28, and the gate holds it lazy, in one module and to the extra's two prefixes; `CLAUDE.md`'s zero-dependency rule now states the exception (decisions log D36) |
+
+### Scoped review of Qodo's fixes — 2026-10-18
+
+`reviews/2026-10-18-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-18.md`: `cmp` silent,
+and `sha256`
+`4d34b5061aa235ad4fe4d96f1659e0edfd230f407e9092286a8517eb6f85b942` on both
+sides, 35,395 bytes. It takes the dated name the earlier archives carry;
+Qodo's archive of the same date carries its own suffix. As for the earlier
+archives, the scratch name and the whole digest are written here and not in
+the archive, which is kept byte-for-byte; the scratch name is provenance and
+not a path to open. Its own title calls it a cold review; it is the scoped
+review decisions log D36 called for, made of the round's seven commits
+rather than its first three.
+
+A scoped read of `f38c193..4e52f08`, the seven commits of decisions log
+D36. One sub-agent per commit touching `spanweave/`, `tests/` or
+`fixtures/` (five: `5f9db88`, `2066828`, `8b68608`, `f68995c`,
+`97231d7`), each commit's tests run on its derived parent and its
+mutations on its tip in worktrees, each mutation reverted; the two record
+commits, `568adc2` and `4e52f08`, and the cross-cutting checks read
+directly. It found the oracle holding at `f38c193` and at each commit when
+re-derived without the test helpers, records and graph bytes, and the
+graph bytes unchanged from `f38c193`'s on both paths; Qodo's archive equal
+to its recorded digest, and its fenced bodies to the fetched ones; no
+clock, randomness or network added; and the gate holding what `CLAUDE.md`'s
+new sentence says. What it says of the Collector it did not re-derive:
+that cannot be checked offline. It disclosed three slips of its own: one
+agent's floor probe wrote bytecode into a uv cache entry, and deleted
+exactly what it wrote; a probe named `enum.py` was left in its scratch
+scripts, where it shadows the standard library for a script run without
+`-I`, so its own scripts ran with `python -I`; and its first install-check
+at the tip ran with `PYTHONPATH` set, red on its isolation checks, and was
+green rerun without it. It raised twenty findings, R-1…R-20; one, R-8, is
+an invariant broken since before the series. The maintainer's
+dispositions are decisions log D37, above. They were applied on `wire` as
+nine commits, in the decisions' grouping: where a subject joins two
+concerns with "and", the grouping is the maintainer's, as R-19 found of
+`568adc2`. This archive is in the ninth, with the record lines under
+*Corrections after the close*, below, and the threads under *Still open
+after the close*, above.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `5f9db88`, "any byte not zero is hex" held at one byte position | **accepted**, `cf1afff` (with R-2; one mechanism, the zero rule): the one-byte test is parametrized over every position of each of the five ids, a span's three and a link's two, and R-1's six survivors are red (decisions log D37) |
+| R-2 — `5f9db88`, an all-zero id of any length dropped | **accepted**, `cf1afff` (with R-1): an id is omitted only when it has the length the schema gives it, 16 bytes for a `traceId` and 8 for a `spanId` or `parentSpanId`, a span's or a link's, and every byte is zero; an id of any other length, zero or not, is hex as stated, as the JSON path carries it. `SPEC.md` §7's row says so (at another length, spec, not pair), R-2's mutation is red, and the zoo guard holds every span id on the wire at its length (decisions log D37) |
+| R-3 — `5f9db88`, "the JSON path is untouched" held at the seam only | **accepted**, `64a56e2` (with R-4; tests only): an OTLP/JSON export stating the zero hex as a span's, a parent's or a link's id flattens to a record that states it, and it builds as a stated id; R-3's `_flattened` and `_flattened_links` mutations are red, and `SPEC.md` §7 says the container reader carries it as stated (decisions log D37) |
+| R-4 — `5f9db88`, the zoo guard does not read a link's ids on the wire | **accepted**, `64a56e2` (with R-3): the guard reads every id on the wire, a span's and each link's, through `_wire_ids`, which a test of its own holds; R-4's planted link is red, as is a link id of the wrong length (decisions log D37) |
+| R-5 — `2066828`, six rows of the wire-type table held by nothing | **accepted**, `b6cc68d` (with R-6; tests only): for every field reachable from the request, the wire type the reader expects is held equal to the one the runtime writes, read back from a message serialized with that field alone set, not from protobuf's internal `type_checkers` table, which the backend in use does not write by; R-5's six rows are red (at the extra's floor, where no reachable field is an `int32`, that row's mutation survives). The comment over the mistyped-span cases says what they hold (decisions log D37) |
+| R-6 — `2066828`, the joiner and SPEC §3.7's keys held by nothing | **accepted**, `b6cc68d` (with R-5): a test reads §3.7's `unknown_fields` row and holds the keys the code emits equal to it, and the both-kinds message is held as one exact string; R-6's rename and joiner mutations are red. The nits are `42225e0`'s: §3.7's row names the group wire type, §7's "leaves `name` at its default" says what is measured, and `_unknown_fields_message`'s docstring says what a single-kind message carries (decisions log D37) |
+| R-7 — `5f9db88`, the tests behind one mutation listed one short | **read, recorded** (decisions log D37): under *Corrections after the close* |
+| R-8 — `8b68608`, and the adapters since `62385b6`: input line order changes the graph | **accepted**, `5ef4502`: both adapters write a structured payload's text with sorted keys at every level (`SPEC.md` §3.3), and R-8's pair, the lines swapped, builds the same bytes but for `meta.source_digest`, on both dialects. No graph in the repository moved and nothing was regenerated: no input here carries a structured payload. `8b68608`'s comment rests on `SPEC.md` §7's "key order never reaches a node", true of a payload since `5ef4502` and still false of a span kind stated as an object, which `5ef4502` found and did not fix: a thread under *Still open after the close* (decisions log D37) |
+| R-9 — `8b68608`, the sorted-keys test sees four object types | **accepted**, `93a59ce` (tests only): the test walks every object of the text `read_protobuf` hands `read_records`, with its level, over the pairs and a hand-made request carrying what no pair does; its anti-vacuity check reads `MessageToDict`'s own order on that request, level by level, against a table. R-9's two survivors are red, and the refactor it names is green (decisions log D37) |
+| R-10 — `8b68608`, `4e52f08`, "no behaviour" for a change its own commit measured | **read, recorded** (decisions log D37): `CHANGELOG.md`'s entry now says "no value or graph-bytes change"; `8b68608`'s wording is noted under *Corrections after the close* |
+| R-11 — `f68995c`, nothing holds the fix, and "the tests keep the same rule" is true of one file | **accepted**, `8d7ad23` (with R-12; one mechanism, the extra imported by name in the tests): `tests/test_zoo.py` imports the module by name; the gate's computed-import check, `no_computed_import`, and only it, reads `tests/` too, with pytest's `importorskip` among the computed imports. Its one exemption, the install-check probe, is a named statement in a comment, not a code path: the probe is a string the check does not parse. R-11's revert is red, and `CLAUDE.md` and this file's 0.4 state the gate's scope (decisions log D37) |
+| R-12 — `f68995c`, one import case changed outcome, and two parts of `_pb2` held by nothing | **accepted**, `8d7ad23` (with R-11): `_pb2` imports the full dotted name `as` a module, the parent's outcome on a partial install, and its two outcome tests run on a partial install too; the skip test asserts the literal `spanweave[otlp]` in the reason. R-12's `NO_EXTRA` mutations are red. Not taken up by the decision, and left: `except ModuleNotFoundError` read as `except ImportError`, which still survives, and the variable's reading, which R-12 calls low value (decisions log D37) |
+| R-13 — `f68995c`, two sentences about the gate false | **read, recorded** (decisions log D37): under *Corrections after the close* |
+| R-14 — `97231d7`, the test holds the records, not the rendering | **accepted**, `44f3338` (tests only): for NaN and both infinities, the test asserts the rendering, in `_rendered`'s output and in the text `read_protobuf` hands `read_records`, as `{"doubleValue": "<spelling>"}`; the node's `raw.source` equal to the record; and the graph's diagnostics, whole, equal to the finite case's. R-14's survivors are red, the rendering's in both of its forms (decisions log D37) |
+| R-15 — `97231d7`, the reading contradicts a stated principle, and two sentences overstate | **accepted**, `42225e0` (with R-17, R-18): the type-honouring principle names the non-finite `doubleValue` as its one exception, with the reason corrected (a graph holding a float NaN builds, and `dumps` refuses it); "the one rendering the pairs did not check" and "and so does the Collector" say what the table and the evidence show. This file's thread for it says the same, under *Still open after the close* (decisions log D37) |
+| R-16 — `97231d7`, one mutation red for another reason than its message gives | **read, recorded** (decisions log D37): under *Corrections after the close*; `44f3338` re-ran the mutation and measured what R-16 did |
+| R-17 — `568adc2`, "nothing is lost but what `unknown_fields` reports" false three ways | **accepted**, `42225e0` (with R-15): `SPEC.md` §7 lists what the rendering does not carry, none of which draws a diagnostic: an all-zero id of the length the schema gives it; all but the last of a singular field, or of a `oneof`, the wire states more than once, a message field so stated being merged field by field; and a non-finite `doubleValue`'s type. The `oneof` and the message-field merge go past R-17's examples: the commit's probe measured them. Whether to detect a field stated twice, which needs a wire-level read, is a thread under *Still open after the close* (decisions log D37) |
+| R-18 — `568adc2`, the extra's exception in `CLAUDE.md` only, after the wrong sentence | **accepted**, `42225e0` (with R-15): `CLAUDE.md`, `DESIGN.md` §7 and `README.md`'s Guarantees say the same thing, that core has zero runtime dependencies and the one exception is the optional `otlp` extra, which `read_protobuf` alone needs, confined to one module that imports none of it until that is called; in `CLAUDE.md` it follows "Zero runtime dependencies in core.", and "extras never affect core behavior" comes after it (decisions log D37) |
+| R-19 — `568adc2`, two findings under one subject | **read, recorded** (decisions log D37): the grouping was the decisions'; under *Corrections after the close* |
+| R-20 — `4e52f08`, the record names three commits that touch `spanweave/`, and there are four | **read, recorded** (decisions log D37): `97231d7`'s docstring is the fourth; set right under *Corrections after the close*. The row of decisions log D37 names every commit of its own round the path rule catches: `5ef4502` and `cf1afff`, which change behaviour, and `42225e0`, a docstring only |
+
+### Scoped review of the four behaviour changes — 2026-10-18b
+
+`reviews/2026-10-18b-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-18b.md`: `cmp` silent,
+and `sha256`
+`3f981f764b297a7ff9f526a91ffd8486078884f9be90429e7333c25fcac1187c` on both
+sides, 38,653 bytes. It takes the dated name the earlier archives carry,
+with the `b` of its scratch name, since the scoped review of 2026-10-18
+holds the date's plain name. As for the earlier archives, the scratch name
+and the whole digest are written here and not in the archive, which is kept
+byte-for-byte; the scratch name is provenance and not a path to open. Its
+own title calls it a cold review; it is the scoped review decisions log D37
+called for, of `5ef4502` and `cf1afff`, made of those two and the commits of
+decisions log D38 and D39, `2f63a90` and `743d027`: the four that change
+behaviour, the last before the merge.
+
+A scoped read of exactly those four commits, with decisions log D37's, D38's
+and D39's rows and the items they touch as context. One sub-agent per
+commit, all four on the same written brief, the briefs for `2f63a90` and
+`743d027` naming five probes besides: a site whose sort is removed, a
+reordering only at the top level, an input class the gate does not feed,
+export detection by first key restored, and a kvlist rendered in entry
+order. Each commit's tests ran on its derived parent, `<sha>^` with only the
+commit's `tests/` checked out, and its mutations on its tip, one at a time,
+each file restored from a copy with `cmp` silent, in worktrees created by
+absolute path, `spanweave.__file__` and `tests.__file__` proved inside each,
+all removed after; tools ran straight from the venv with `PYTHONPATH` unset
+and `SPANWEAVE_REQUIRE_OTLP=1`, and scripts under `python -I`. The lead, not
+an agent, re-derived the oracle without the test helpers, by a script that
+imports nothing from `tests/`; read `SPEC.md` §7's key-order sentence
+against the gate; took the counts at the tip; ran install-check offline; and
+reproduced every blocking finding but the measurements a finding marks
+agent-measured. It found the oracle holding on every pair at `4e52f08` and
+at each of the four commits, records and `dumps` bytes, with no digest moved
+from `4e52f08`'s on either path; every count at the tip as `743d027`'s
+message gives it; each derived parent red as its commit's message says, for
+the right reason (at `2f63a90`, its `keys_sorted` unit tests red only
+because the function is absent, which pins no behaviour); each commit's own
+mutations reproducing with their stated counts where re-run (three of
+`743d027`'s eight); and §7's key-order sentence holding, clause by clause,
+but where its findings say. It disclosed two slips of its own: the `5ef4502`
+agent's first probes ran without `-B` and wrote `__pycache__` into its own
+worktrees, which are git-ignored files, and it deleted them; and
+install-check wrote `dist/` and caches into the lead's worktree at the tip,
+ignored files removed with it. What it did not re-derive: everything it says
+of the Collector, protojson, and `json_format` at `protobuf` 5.27.0 for
+D39's correction. It raised eighteen findings, R-1…R-18, graded by decisions
+log D39's narrowed merge rule: eleven blocking, R-1…R-11, each a defect one
+of the four introduced or one a claim they make depends on; and seven
+threads, R-12…R-18, older than them or by design. The maintainer's
+dispositions are decisions log D40, above. They were applied on `wire` as
+seven commits, in the order D40 gives, one sub-agent per commit. This
+archive is the seventh, with the threads under *the reader's malformed
+input* and the PR's status under *Still open after the close*, above, and
+one record line under *Corrections after the close*, below; the six before
+it wrote R-8's four.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `5ef4502`, a structured payload's spelling, beyond key order, held by no test | **accepted**, `e40b4a7` (tests only): R-1's three cases on each dialect. A non-ASCII value, whose text is the six-character escape (`ensure_ascii` at its default), and a NaN, which builds and whose graph `dumps` refuses, `graph_not_serializable` (`allow_nan` at its default), sit beside each adapter's key-order rendering test; the long integer, written whole and sorted under the lowest digit limit, is in `tests/test_determinism.py`, run in a subprocess under `PYTHONINTMAXSTRDIGITS`, because a guard fails any test file that sets the limit in-process. R-1's three mutations are red on both dialects. The review calls the reader's intermediate one of the encoders that pass `ensure_ascii=False`; the commit found that `otlp_protobuf.py`'s intermediate passes `ensure_ascii=True`, and that the two passing `False` are `canonical_dump` and the record digest's text. Its message's slip is under *Corrections after the close* (decisions log D40) |
+| R-2 — `cf1afff`, "all zero or not" held for all-zero ids only | **accepted**, `512d18e` (with R-3; one mechanism, an id of another length): the test, renamed `test_an_id_of_another_length_is_hex_as_stated_whether_zero_or_not`, runs each of its fifteen cases with one byte not zero too, the last byte 1, R-2's own `00000001` among them: thirty cases. R-2's XOR, count and base64 survivors are red, and so is a truncation probe past the review's; uppercase hex, which the review found surviving at `cf1afff` only, is red already (decisions log D40) |
+| R-3 — `cf1afff`, SPEC §7 calls every id of another length invalid | **accepted**, `512d18e` (with R-2): `SPEC.md` §7's bullet says the schema gives each id its length and calls a span's own `traceId` or `spanId` of another length invalid, and of a `parentSpanId`, or a link's ids, gives the length only, as the installed `trace_pb2.pyi` says (`opentelemetry-proto` 1.45.1, and the floor's 1.28.0 alike). `cf1afff`'s message says the same thing SPEC said, "the schema calls an id of another length invalid"; it is history and stands, and SPEC is what is corrected (decisions log D40) |
+| R-4 — `2f63a90`, two `keys_sorted` mutations survive, the gate's value holding neither shape | **accepted**, `914cdd5` (with R-5, R-6; tests only; one mechanism, the key-order gate): `STRUCTURED` gains an object inside an array inside an array and two keys differing only by case, and feeds both halves of the gate; R-4's x1 and x2 are red (decisions log D40) |
+| R-5 — `2f63a90`, the gate's reach held by its own tally, to depth 3 | **accepted, narrowed**, `914cdd5` (with R-4): the two depth tests measure the change the gate made, per input and per order, each reordered object's member order against the written one, and assert it changed at every depth where the input holds an object of two or more members (some depths hold only arrays or one-member objects), inside an array too, the floor each input's own deepest object instead of 3; `tally.deepest >= 3` is gone, and a test of its own holds the walker. R-5's b8, b3, b7 and b16 (b6) are red (decisions log D40) |
+| R-6 — `2f63a90`, a line that is not UTF-8 fed unchanged, for a false reason, its list dropped | **accepted, narrowed**, `914cdd5` (with R-4): `test_no_key_order_reaches_a_graph` asserts the list `input_reordered` returns is empty for every input it feeds, rather than such a line being reordered, and `input_reordered`'s docstring, which gave the false reason, gives the two reasons apart (the module docstring had no such sentence). `2f63a90`'s message gives the same false reason; the docstring it describes is the one corrected. R-6's planted byte and the review's span-kind probe are red (decisions log D40) |
+| R-7 — `743d027`, the scan's bracket depth held for `{` only | **accepted**, `b5d9572` (with R-9, R-10; one mechanism, the export scan): `HEAD_SCANS` gains R-7's input, a key-shaped string as an element of an array that is a member's value, verdict `False`; R-7's mutant is red (decisions log D40) |
+| R-8 — `2f63a90`, `743d027`, and `5ef4502`'s record: an `exception.type` stated as an `AnyValue` tag holding an object | **accepted**, `60918ee`: `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map`, beside the kvlist test, states the object under `stringValue` in two member orders through the gate's text path, and the two build one graph; `SPEC.md` §7 names it among the holders, in one clause. Four lines under *Corrections after the close*, one per false sentence: `2f63a90`'s message, the thread on orders outside the gate, `743d027`'s `CHANGELOG.md` entry and `5ef4502`'s message. The review's seam mutation is red, and so is one past it that survived at `b5d9572` (decisions log D40) |
+| R-9 — `743d027`, `_opens_an_export`'s docstring calls giving up free | **accepted, narrowed**, `b5d9572` (with R-7): the docstring says what `SPEC.md` §7 says, a first record that does not close is scanned, and buffered, to the end of the input and then read line by line, without §7's lead-in "Its cost:", since the neutrality gate refuses the word under `spanweave/`; `_read_document`'s docstring is corrected too. `SPEC.md` is unchanged: no sentence of §7 was false, its "Its cost" naming the first record that never closes and its buffering rule covering the second shape R-9 names. The cost itself is R-14's thread (decisions log D40) |
+| R-10 — `743d027`, an empty chunk after an escape loses the escape | **accepted**, `b5d9572` (with R-7): the scan keeps its place when no byte is new, `self._at = max(at, len(data))`; a test feeds R-10's input with an empty chunk, and the head-scan test feeds every case a third way, an empty chunk before each byte; red on the derived parent, 2. No `CHANGELOG.md` line: no chunk source the library has yields an empty chunk after the head. One mutation of the commit's own survives, `self._at = at`, which changes no verdict and only reads bytes again (decisions log D40) |
+| R-11 — `743d027`, "a list's order … reaches `raw.source` verbatim", false where the reader folds the list | **accepted**, `67e469b` (documents only): `SPEC.md` §7 and `743d027`'s `CHANGELOG.md` entry give the finding's wording, which lists the reader carries as written and which it folds to a map, and one clause past it, because "their order is not carried" is false for the entries the fold cannot take, which `attributes_unfolded` keeps in list order. R-11's table is re-derived and agrees (decisions log D40) |
+| R-12 — the adapters since `d8e2c375` and `bc21e7da`, an empty structured payload `present` on one dialect and `empty` on the other | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-13 — `cf1afff`'s new test, and the pattern older: a JSON twin rendered by the code under test | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-14 — `_read_lines`, older than the series: JSONL lines read out of one buffer, quadratic | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-15 — the attribute fold, older than the series: a key an attributes list states twice decides node fields | **registered as a thread** (decisions log D40): under *the reader's malformed input*, its natural home, for the next spanweave series |
+| R-16 — the head scan, older than the series: nothing holds its refusal of `resource_spans` | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-17 — `2f63a90`'s gate, by design: six input classes fed nothing, and a comparator nothing tests | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+| R-18 — `2066828`, older than the series: a protobuf body's unknown fields reach the graph in wire order | **registered as a thread** (decisions log D40): under *the reader's malformed input*, for the next spanweave series |
+
+### Bounded fix review of D40's commits — 2026-10-18c
+
+`reviews/2026-10-18c-wire.md`, archived byte-for-byte from the untracked
+scratch drop, where the file is named `REVIEW-2026-10-18c.md`: `cmp` silent,
+and `sha256`
+`4c918f5f1f22ccb76c77de8df7e952f00405f77efe54071b17a65424e5596bc2` on both
+sides, 23,763 bytes. It takes the dated name the earlier archives carry,
+with the `c` of its scratch name, since the scoped reviews of 2026-10-18 and
+2026-10-18b hold the date's plain name and its `b`. As for the earlier
+archives, the scratch name and the whole digest are written here and not in
+the archive, which is kept byte-for-byte; the scratch name is provenance and
+not a path to open. It is the bounded fix review decisions log D40 called
+for, of all seven of D40's commits, since the tests and sentences make
+claims too.
+
+A bounded read of exactly the seven commits `743d027..2f3ad43`, as
+`git log --oneline 743d027..origin/wire` lists them, local `wire` and
+`origin/wire` both at `2f3ad43`: `e40b4a7` (R-1 of the scoped review of
+2026-10-18b), `512d18e` (R-2, R-3), `914cdd5` (R-4, R-5, R-6), `b5d9572`
+(R-7, R-9, R-10, the one code change), `60918ee` (R-8), `67e469b` (R-11) and
+`2f3ad43`, the record and D40's row. Per commit, the rules D40 states: the
+new test red on the derived parent where it pins a change, the commit's
+mutation caught plus two more plausible ones, one concern. Then every
+survivor and probe that the 2026-10-18b review names under R-1…R-11,
+re-run at `2f3ad43`; no new search was opened. The review's lead measured
+everything, with no sub-agent, and relays no figure. Derived parents, for
+the five commits that change `tests/`, were `<sha>^` with only that
+commit's changed `tests/` files checked out, their staged diff against the
+commit's `tests/` empty when created and again before removal; mutations
+ran on each commit's tip, one at a time, each file copied aside and
+restored from the copy, `cmp` equal and `git status` unchanged after every
+one of the 63; all in worktrees created by absolute path, all removed
+after. A runner asserted in every one of the 69 suite runs (5 parents, 1
+unmutated tip, 63 mutations) that `spanweave` and `tests` import from
+inside the worktree, in a child started as the suite starts its children
+too, with `PYTHONPATH` unset and `SPANWEAVE_REQUIRE_OTLP=1`; Python ran as
+`-I -B` from the main venv, with no `uv run`, no `make` and no sync. Probes
+ran on `git archive` copies under `python -I`, and the oracle by a script
+that imports nothing from `tests/`.
+
+It found the oracle holding on every pair at `743d027` and at `2f3ad43`:
+the records equal by `==`, typed at every leaf and as canonical text, the
+two paths' `dumps` bytes equal, and no digest moved from `743d027`'s on any
+of the five it took, each path's `dumps`, `build` of the JSON, and each
+path's records. At the tip, the full suite 4226 passed, 2 skipped, `ruff`
+and `mypy` clean, and every count as the seven messages give it. Each
+derived parent is as its commit's message says: `b5d9572`'s red, 2, for the
+right reason, and the other four green, their tests pinning behaviour the
+parent already had. Every mutation a message states reproduced with its
+stated count, `b5d9572`'s disclosed survivor, `self._at = at`, surviving
+as disclosed (its R-3); and of the review's own, two or more per commit,
+every one was caught but one (its R-2). Each commit holds one concern, as
+D40 grouped the findings. Every survivor of the 2026-10-18b review's
+R-1…R-11 is caught at `2f3ad43`, and every probe reads as D40's
+dispositions say, R-9's cost unchanged, as D40 accepted it. It disclosed
+five slips of its own: its first suite run at the tip wrote `__pycache__`,
+ignored files, into a worktree, since `-I` ignores
+`PYTHONDONTWRITEBYTECODE`, deleted before any mutation, with `-B` from
+then on; its first oracle run imported from a worktree while a mutation
+was applied there, and was discarded; one queued run was not defined, and
+ran alone after; `ruff` and `mypy` wrote caches into a scratch archive of
+the tip; and its first write of the file turned each six-character escape
+into its character, the slip its R-1 is about, restored and checked with
+`grep` and `od -c` before the file was final. Not run: install-check, and
+anything that touches the network. Not re-run: `512d18e`'s truncation probe;
+`67e469b`'s protobuf twin of its table, and its "differs at `raw.source`
+only"; and the Collector's behaviour and `json_format` at `protobuf`
+5.27.0, which the 2026-10-18b review did not re-derive either.
+
+Graded by decisions log D40's bounded rule: **blocking**, a defect one of
+the seven commits introduces, or one a claim one of them makes depends on;
+a **thread**, anything else. It raised four findings, R-1…R-4: one
+blocking, R-1, a record slip in `2f3ad43`'s message, which affects no
+code, test, document or graph; and three threads, R-2 and R-3, whose reach
+is older than the commit they read (`743d027`), and R-4, which no input
+reaches today and whose commit's message says exactly what is asserted.
+The maintainer's dispositions are decisions log D41, above, applied as one
+commit: this archive, with R-1's line under *Corrections after the close*,
+below, and the three threads under *the reader's malformed input* and the
+PR's status under *Still open after the close*, above.
+
+| Finding | Disposition |
+|---|---|
+| R-1 — `2f3ad43`'s message: where it re-checks `e40b4a7`'s escape, it writes the character for the escape, and says the two `raw` lines give it as the tests assert it | **accepted**, by the commit that archives this review: the line under *Corrections after the close*. Blocking (record), because `2f3ad43` wrote the sentence. D40's "its own red test and caught mutation" has nothing to bind to, since no test reads a commit message, as the review says (decisions log D41) |
+| R-2 — `60918ee`'s test, the reach older (`743d027`): a seam sort limited to the tested tags survives | **registered as a thread** (decisions log D41): under *the reader's malformed input*, with the review's fix, the test parametrized over the five `AnyValue` tags; for the next spanweave series |
+| R-3 — `b5d9572`'s disclosed survivor, `self._at = at`, the gap older (`743d027`): the head scan quadratic in a long first record | **registered as a thread** (decisions log D41): under *the reader's malformed input*, beside the scoped review of 2026-10-18b's R-14 (the reader's cost), with the review's fix, a test that counts the bytes the scan reads, or a bound on them; for the next spanweave series |
+| R-4 — `914cdd5`: the gate asserts the whole list `input_reordered` returns empty, so a malformed-line fixture would turn it red by an exception, not by key order | **registered as a thread** (decisions log D41): under *the reader's malformed input*, with the review's fix, only the not-UTF-8 entries asserted empty, as D40 worded it, and `_values_written` skipping what the reader refuses; for the next spanweave series |
+
+### The resume note  *(the plan file's §4, folded in full)*
+
+Every dated entry, verbatim and in order, except one clause removed after
+the close and marked where it stood. The batches recorded their
+corrections, measurements and open items here, and only here; the open items
+in the last entry are registered above, under *Still open after the close*.
+
+- 2026-10-16: series opened on `wire` from `main` `88c7339`, from the zoo's
+  L1 at `SigorMatt/spanweave-zoo` `7eb5b69`. The receiver's series (V0–V4) follows and pins to this
+  series' merge.
+- 2026-10-17: W0 done (`09245d9`). The zoo's SPEC §4.7 does not guarantee
+  JSON/raw pairing by `NNNN`; the test reads `forwards` and checks the
+  ordinals agree (they do in all 12 captures). That each pair is the same
+  export is W1's oracle to prove; `tests/zoo_census.py` `pairs()` serves it.
+- 2026-10-17: W1 halted before code (`da215a0`, OPEN_QUESTIONS §23): an
+  unparseable body (malformed_record with no text source), unknown proto
+  fields (MessageToDict drops them; the pairs cannot show any), and
+  `doubleValue` rendering (absent from the zoo) are behaviours no spec rule
+  or pair decides. A scratch prototype (MessageToDict, integer enums, hex
+  ids, then the JSON `read_records`) matched all 29 pairs on records and
+  `dumps` bytes; the Collector differs from MessageToDict only in hex ids
+  and integer `kind`/`status.code`. On resume: `otlp` extra lacks
+  `opentelemetry-proto` (lock refresh), the zero-deps gate needs a module
+  allowlist, mypy needs an override for the absent extra.
+- 2026-10-17: W1 decided (1A, 2B, 3C). The halt was right on all three: the
+  oracle is silent where the JSON path has nothing to show, and silence is
+  decided by the container's existing rules (1A), by invariant 2 over the
+  oracle's letter (2B), or by saying it is undecided and naming what would
+  decide it (3C). The three setup items (lock refresh for the extra, the
+  zero-deps gate's module allowlist, the mypy override) are W1's to make, in
+  its one commit. Run 1 resumes: W1 → W2.
+- 2026-10-17: W1 done (`4ecf414`): `spanweave.read_protobuf` in
+  `spanweave/otlp_protobuf.py`, CI green on all jobs including the new
+  `otlp` job (`SPANWEAVE_REQUIRE_OTLP=1`: a missing proto runtime fails,
+  not skips). Open for the close: the job runs one interpreter, not the
+  matrix; the extra's `protobuf>=4.25` floor is untested (built against
+  7.36.0; [a protobuf version claim, never verified, removed after the
+  close: see *Corrections after the close*]); the missing-extra error is a plain
+  `SpanweaveError` with code `otlp_extra_not_installed`, not a subclass.
+
+### Corrections after the close  *(the 2026-10-17 reviews, the scoped reviews of 2026-10-18 and 2026-10-18b, and the bounded fix review of 2026-10-18c)*
+
+What the 2026-10-17 cold review of `wire`, the scoped review of its fixes,
+the scoped review of 2026-10-18 of Qodo's fixes, the scoped review of
+2026-10-18b of `5ef4502`, `cf1afff`, `2f63a90` and `743d027`, and the
+bounded fix review of 2026-10-18c of D40's seven commits found untrue
+or unbound in the series' record, what decisions log D39 found of D38's
+commit, and one slip found while making the seventh commit of decisions
+log D40. Each is set right here rather than by rewriting the
+record above, except two lines `4521cc2` edited in place: the close
+summary's "seventh deletion" ordinal, removed because a count no test holds
+is not stated; and the `UnknownFieldSet` version clause in W1's resume
+entry, removed and marked where it stood (the resume note's opening says
+so), because an unverified claim kept verbatim would still read as true.
+One line gained a pointer in place and kept its words: Qodo 1's
+disposition, whose bracket points here. The items under *Still open after
+the close* are status, not record, and are edited in place; one sentence of
+a thread there that is closed is set right here instead, as the scoped
+review of 2026-10-18b asked, and keeps its words. `R-<n>` alone is the cold
+review's finding; *scoped review, R-<n>* is the scoped review's; *scoped
+review of 2026-10-18, R-<n>* is the third's; *scoped review of 2026-10-18b,
+R-<n>* is the fourth's; *bounded fix review of 2026-10-18c, R-<n>* is the
+last one's.
+
+- **`285902e`'s counts were measured with the extra hidden.** Its message
+  gives `make check` 3555 passed / 111 skipped, `make conformance` 1156
+  passed / 14 skipped, and `make install-check` 36 checks, 5 plants. Those
+  were true only without the `otlp` extra installed, which the message does
+  not say. With the extra, `make check` is 3664 passed / 2 skipped and
+  `make conformance` 1168 passed / 2 skipped (R-13).
+- **The `UnknownFieldSet` version claim is removed.** W1's resume entry and
+  the floor's open item said `UnknownFieldSet` needs about protobuf 4.24;
+  nothing cited or tested it (R-13). The floor is not stated from it: it is
+  what `e709afa` measured, in its message and `pyproject.toml`'s comment,
+  `protobuf>=5.27` with `opentelemetry-proto>=1.28` (the floor's item above,
+  R-18).
+- **`7b4b606`'s "No other doc-truth guard was weakened" was false.** Its
+  by-name `WORKPLAN.md` exclusion took the plan out of every guard that
+  iterates `durable_documents()`, when only the scratch-path guard needed
+  it (R-10). `00e55dd` retires the mechanism: the plan is scanned by every
+  guard but the two it cannot pass.
+- **`7b4b606`'s README row was premature.** It said "Items are registered
+  in TASKS.md", in the present tense, when no W0–W2 entry was yet (R-12).
+  The row was deleted at the close (`285902e`).
+- **`21b106d`'s "four zoo-pin citations" were three.** Its message says
+  this file's five-backtick prose line made a `startswith` reader drop the
+  rest of the file, "including four zoo-pin citations". After that line,
+  `21b106d:TASKS.md` cites the zoo's pin, `SigorMatt/spanweave-zoo`
+  `7eb5b69`, three times, at lines 14314, 14485 and 14577 (scoped review,
+  R-10). The same commit's qualifier gave the stranger's-trace section's
+  opening sentence the zoo's repository twice; it names it once now.
+- **Two commits followed the archive.** The cold review's section above
+  says "This archive is the last of those commits", and decisions log D34
+  "Applied as eight commits on `wire`". Both stay true of the
+  dispositions, since neither later commit answers a finding, but the
+  record named neither (scoped review, R-21). `d2053ae` holds every review
+  archive to the `sha256` this file records for it: `3dfe461`'s own sanity
+  check had found one changed byte of an archive left the suite green, so
+  the digests the record keeps were held by nothing. `c4018b4` gives the
+  three readers that split prose from code one fence rule: this file's
+  five-backtick prose line had them read the rest of the file as one
+  fenced block, the bound `21b106d` recorded and left. `c4018b4` also
+  carries the "spec, not pair" thread under *Still open after the close*,
+  which has nothing to do with fences; it is there because the maintainer
+  asked for it there (scoped review, R-20). `21b106d`'s four guards under
+  one subject were likewise the grouping the maintainer gave (scoped
+  review, R-8).
+- **`ebdc27d`'s message overstates one mutation's reach.** For `>=`→`>`
+  (a close must be strictly longer) it gives 22 failed: the length test,
+  the other four new tests, "and seventeen readers over real documents".
+  The seventeen are seventeen other tests: fourteen read real documents,
+  and three read hand-made text, two of them `FENCE_DOCUMENT`. Re-run for
+  this record, the same 22 fail. Recorded here, not by amending.
+- **`5f9db88`'s message lists the tests behind one mutation one short.**
+  For `any(raw)` → `all(raw)` it gives 38 red and names every one-byte
+  case, the oracle's pairs whose ids hold a zero byte, the link-ids test
+  and the two-places test;
+  `test_an_unknown_field_is_read_and_reported_never_dropped` is red too
+  and is not named. The count is right of `tests/test_protobuf.py`, where
+  the review measured it. Re-run at `5f9db88` for this record, the file is
+  38 red and the full suite 45: the seven more are cases of
+  `tests/test_zoo.py`'s
+  `test_the_census_holds_from_the_raw_bodies_as_from_the_json`, which the
+  message does not name either (scoped review of 2026-10-18, R-7).
+- **`8b68608`'s message: two phrases.** "Their keys are now inserted in
+  sorted order": what is sorted is the text `read_protobuf` hands
+  `read_records`, not the records it yields, which are in sorted order on
+  no pair, since the reader renames keys and appends `resource_spans` and
+  `scope_spans`. "The Collector writes `flags` after `parentSpanId`": on a
+  root span, which states no `parentSpanId`, it writes `flags` after
+  `spanId`. Both re-derived at `8b68608` for this record. And
+  `4e52f08`'s `CHANGELOG.md` entry said findings 4 and 3 were fixed by two
+  commits that "change no behaviour", when the protobuf records' key order
+  changed, as `8b68608` measured, and so the key order of `to_document`
+  written without sorted keys; it now says "no value or graph-bytes
+  change", which is exact (scoped review of 2026-10-18, R-10).
+- **`f68995c`'s two sentences about the gate hold of its computed-import
+  check only.** "The gate's own `no_unsafe`, run over the file, finds the
+  `__import__` at HEAD and nothing now": run over the file, it finds an
+  `import subprocess` at `f68995c`, and that and the `__import__` at its
+  parent. "The gate's `no_unsafe` finds nothing in tests/": over `tests/`
+  it finds an `import subprocess` wherever a test imports it, which the
+  module ban reports and a test may do. Both re-derived for this record.
+  Both are true of the computed-import half, which `8d7ad23` made its own
+  check, `no_computed_import`, run over `tests/` too (scoped review of
+  2026-10-18, R-13).
+- **`97231d7`'s message gives one mutation's red the wrong reason.** Both
+  paths reading the non-finite spelling as a float is red on all three, as
+  it says: for NaN at the records, which are unequal, and for the
+  infinities, whose records are equal, at `dumps`, which raises
+  `GraphNotSerializableError` before the `str` check the message names is
+  reached. `44f3338` re-ran it and measured the same (scoped review of
+  2026-10-18, R-16).
+- **`568adc2` joins two findings under one subject.** Qodo 1 (`SPEC.md`,
+  `raw.source`) and Qodo 2 (`CLAUDE.md`, the extra) share no text and no
+  mechanism, and each could be reverted alone. The decisions grouped them
+  as one commit, the maintainer's grouping, as `21b106d`'s four guards were
+  (scoped review, R-8). The "one concern each" of decisions log D36 is true
+  of the other six (scoped review of 2026-10-18, R-19).
+- **Four commits of decisions log D36's round touch `spanweave/`, not
+  three.** D36's row says "Commits 1–3 (`5f9db88`, `2066828`, `8b68608`)
+  touch `spanweave/`", and `4e52f08`'s message and the *Still open* item
+  said the same. `97231d7` changes `spanweave/otlp_protobuf.py` too, its
+  module docstring only (the module's AST is the same with docstrings
+  stripped), and the rule that a commit touching `spanweave/` gets a scoped
+  review is a path rule. The decisions named commits 1–3 before the
+  commits were made, and the record copied that list rather than the
+  diff. The scoped review of 2026-10-18 read `97231d7` anyway, so no commit
+  went unreviewed. D36's row stands as decided; the *Still open* item is
+  status and names D37's round now (scoped review of 2026-10-18, R-20).
+- **Qodo 1's disposition repeats a sentence `SPEC.md` no longer makes.**
+  Its "nothing is lost but what `unknown_fields` reports" was `568adc2`'s
+  sentence in `SPEC.md` §7, false three ways: an all-zero id, a singular
+  field the wire states twice, and a non-finite `doubleValue`'s type, none
+  of which draws a diagnostic (scoped review of 2026-10-18, R-17). Since
+  `42225e0`, §7 lists those beside what `unknown_fields` reports. The line
+  keeps its words, with a bracket pointing here.
+- **`2f63a90`'s subject overclaims.** "determinism: no key order reaches a
+  graph" is true only of members stated once. A member stated twice, by a
+  repeated name or under a name the reader writes, is kept or lost by the
+  order it is written in, and `SPEC.md` §7 now says which, as measured; and
+  where `resourceSpans` stands among a document's members, and the order a
+  `kvlistValue` lists its entries in, still reached a graph outside the
+  gate, as `2f63a90`'s own message says, until decisions log D39. §7 claims
+  what the gate holds, and the subject stays as written (decisions log
+  D39).
+- **`2f63a90`'s message missed a way into the `exception_event` message.**
+  Under "Listed, not reached by key order" it gives seam.py:780, "the
+  exception_event message's {source['type']!r} -- an exception.type stated
+  as a kvlistValue folds to a dict in the kvlist's list order, which no
+  member reordering changes on the text path". Of a `kvlistValue` that is
+  true, but the site was reached by member order through another tag. An
+  `exception.type` stated as an `AnyValue` tag holding an object, such as
+  `{"stringValue": {"b": 1, "a": 2}}`, folds to that object in the order
+  its members are written, and `repr` wrote it so: at `2f63a90` the same
+  export with the object's members in two orders built two graphs, less
+  `meta.source_digest`, and likewise under `intValue`, `boolValue`,
+  `doubleValue` and `bytesValue` (re-measured for this record, at
+  `9a856e0` and `5ef4502` too). The gate states the type as a
+  `kvlistValue` only, so it stayed green. Since `743d027` the two orders
+  build one graph, because decisions log D39's sort reads the folded
+  value, not the tag that stated it; `tests/test_determinism.py`'s
+  `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map` now
+  holds it under `stringValue`, both orders, through the gate's text path
+  (scoped review of 2026-10-18b, R-8).
+- **The thread on orders outside the gate put its third out of the gate's
+  reach.** Its item under *Still open after the close*, "Where an order
+  the input wrote still decides the graph, outside the gate", written by
+  `2f63a90`, says the `exception_event` message writes an `exception.type`
+  stated as a `kvlistValue` "in the order the list gives the map's
+  entries, which no reordering of an object's members changes (the gate's
+  hand-made export states one, and stays green)". Of a `kvlistValue` that
+  is true, but a reordering of an object's members did change the message,
+  through an `AnyValue` tag holding an object (the line on `2f63a90`'s
+  message, above); the gate stayed green because it states no such tag,
+  not because the site was out of its reach. The third is closed by
+  decisions log D39, whose sort closes this shape too, and the sentence
+  keeps its words (scoped review of 2026-10-18b, R-8).
+- **`743d027`'s `CHANGELOG.md` entry says too little changed.** Its entry
+  "A `kvlistValue` in an `exception_event` message is written as a map"
+  says the keys of one so stated are now sorted at every level, and "any
+  other type is written as before". The sort reads the folded value, not
+  the tag that stated it, so a map is sorted wherever the value holds one:
+  under another `AnyValue` tag, `{"stringValue": {"d": 1, "c": 2}}` was
+  written `{'d': 1, 'c': 2}` at `2f63a90` and is `{'c': 2, 'd': 1}` since
+  `743d027`; and a map inside a list is sorted too, as `743d027`'s own
+  `test_an_exception_type_is_written_in_repr_s_spelling` asserts. A value
+  holding no map is written as before. Re-measured at both commits for
+  this record (scoped review of 2026-10-18b, R-8).
+- **`5ef4502`'s message named one place where there were three.** It says
+  the premise `8b68608`'s comment rests on, "key order never reaches a
+  node (`SPEC.md` §7)", "is still false in one place this commit does not
+  touch: a span kind (`openinference.span.kind`) or operation
+  (`gen_ai.operation.name`) stated as an object". At `5ef4502`, among
+  members stated once, there were three: that one, closed by decisions
+  log D38; the head scan, which found an export by its first member key,
+  so a document written over several lines stating `resourceSpans` beside
+  another member was one record with it first and every line
+  `malformed_record` with it after, registered by `2f63a90` and closed by
+  decisions log D39; and an `exception.type` stated as an `AnyValue` tag
+  holding an object (the line on `2f63a90`'s message, above), closed by
+  D39's sort. Each re-measured at `5ef4502` for this record. A member
+  stated twice reached a graph there too, and still does: `SPEC.md` §7 now
+  leaves it outside its claim, and *the reader's malformed input*, above,
+  registers it (scoped review of 2026-10-18b, R-8).
+- **`e40b4a7`'s message writes the escape as the character.** Where it gives
+  the text the non-ASCII and NaN tests assert as `raw`, it writes `é` for the
+  six characters `\u00e9`:
+  `raw '{"a": 1, "b": "é"}', the six-character escape` and
+  `raw '{"a": "é", "b": NaN}'`. The tests assert the escape,
+  `{"a": 1, "b": "\u00e9"}` and `{"a": "\u00e9", "b": NaN}`, in
+  `tests/test_openinference.py` and `tests/test_otel_genai.py` alike. The
+  message writes `é` eight times, each the two bytes `303 251` under `od -c`,
+  and `\u00e9` nowhere: those two; five where the character is right, three
+  in the value the tests state (R-1's record among them) and two in the value
+  read back; and the Y4 mutation's `(raw '{"a": 1, "b": "é"}')`, which is the
+  text that mutation, `ensure_ascii=False`, writes, so it reads true there.
+  Recorded here, not by amending (found while making the seventh commit of
+  decisions log D40).
+- **`2f3ad43`'s message repeats the slip it records.** Where it re-checks
+  `e40b4a7`'s escape, at its lines 113–116
+  (`git log -1 --format=%B 2f3ad43`), it says the message holds the
+  character, `é`, eight times, each the bytes `303 251`, "and" the
+  character "nowhere". There the second one, the two bytes `303 251` under
+  `od -c` too, was meant to be the six characters `\u00e9`, so
+  the sentence says the message holds the character eight times and
+  nowhere. And "Two give raw as the tests assert it" says the reverse of
+  what is true: those two, `e40b4a7`'s message lines 19 and 26, give `raw`
+  with the character, where the tests assert the escape, as the message's
+  own next clause says. The entry just above, on `e40b4a7`'s message,
+  written by the same commit, is right. Recorded here, not by amending
+  (bounded fix review of 2026-10-18c, R-1; decisions log D41).
+
 ## Phase 4 — Breadth, then freeze  *(provisional)*
 
 - Further adapters (Langfuse, LangSmith, Logfire, Vercel AI SDK; OTLP
   protobuf behind the `otlp` extra). OTLP JSON is not among them: F1/F2
   decided it a container the reader unpacks, not a dialect (2026-09-10;
-  `c943543`, `ff05b2d`; `OPEN_QUESTIONS.md` §16).
+  `c943543`, `ff05b2d`; `OPEN_QUESTIONS.md` §16). *OTLP protobuf is done, at
+  `4ecf414` (the wire series, W1): not an adapter either, but the other
+  encoding of the same container, read by the reader behind the `otlp` extra
+  (decisions log D28).*
 - Contributor conformance harness: one command validates a new adapter against
   the corpus.
 - `CONTRIBUTING.md` adapter walkthrough, written against a **real merged**

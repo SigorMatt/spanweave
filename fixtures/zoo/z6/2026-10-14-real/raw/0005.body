@@ -1,0 +1,307 @@
+
+ä
+Î
+"
+telemetry.sdk.language
+python
+%
+telemetry.sdk.name
+opentelemetry
+!
+telemetry.sdk.version
+1.45.1
+=
+service.instance.id&
+$dbff18a4-1a7b-404b-91ba-79e7096baaf7
+
+service.name
+crew-of-threeŒe
+.
+$openinference.instrumentation.openai0.1.65Ùd
+¥çAˆCŒ¥mOùM&Q´›şä9­¾Ï"…<yA’ğ»c*ChatCompletion09G¹Æh=ŞAœ’Ä‚i=ŞJ
+
+llm.system
+openaiJä
+input.valueÔ
+Ñ{"messages": [{"role": "system", "content": "You are Release Notes Writer. You are a technical writer who groups changes by kind and writes for users.\nYour personal goal is: Turn a list of commits into clear, well-structured Markdown release notes."}, {"role": "user", "content": "\nCurrent Task: Revise the draft release notes to fix linting issues. Specifically:\n\n1. Ensure no line exceeds 100 characters. Break long lines appropriately.\n2. Remove all trailing whitespace at the end of lines.\n\nThe following lines have issues:\n- Line 3: too long\n- Line 7: trailing whitespace\n- Line 8: trailing whitespace and too long\n- Line 11: trailing whitespace\n- Line 12: trailing whitespace and too long\n- Line 17: trailing whitespace\n- Line 18: trailing whitespace and too long\n- Line 21: trailing whitespace\n- Line 22: trailing whitespace and too long\n- Line 25: trailing whitespace\n- Line 26: trailing whitespace and too long\n- Line 31: trailing whitespace\n- Line 32: trailing whitespace and too long\n- Line 37: trailing whitespace\n- Line 38: trailing whitespace and too long\n- Line 43: trailing whitespace\n- Line 44: trailing whitespace and too long\n\nPlease return a clean version of the release notes that passes markdown linting.\n\nThis is the expected criteria for your final answer: Your best answer to your coworker asking you this, accounting for the context shared.\nyou MUST return the actual complete content as the final answer, not a summary.\n\nThis is the context you're working with:\n# Release Notes for v2.4.0\n\nThis release brings new features, performance improvements, bug fixes, and updated documentation. Below is a summary of changes grouped by type.\n\n## Features\n\n- **Add `--since` flag to export command**  \n  The `export` command now supports a `--since` flag, allowing users to filter results based on a timestamp or date. This is useful for incremental data exports.  \n  *(Contributed by dana, a1c3e5f)*\n\n- **Support YAML output format**  \n  In addition to existing formats, command output can now be exported in YAML format using the appropriate flag (e.g., `--format yaml`).  \n  *(Contributed by dana, c3e5a7b)*\n\n## Bug Fixes\n\n- **Handle empty config file without crashing**  \n  The application now gracefully handles cases where the configuration file exists but is empty, instead of raising a parsing error.  \n  *(Contributed by lee, b2d4f6a)*\n\n- **Correct timezone in log timestamps**  \n  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was incorrectly assumed.  \n  *(Contributed by lee, e5a7c9d)*\n\n- **Retry uploads on HTTP 503 errors**  \n  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried, improving reliability in unstable network conditions.  \n  *(Contributed by kim, b8d0f2a)*\n\n## Performance Improvements\n\n- **Cache parsed templates between runs**  \n  Templates are now cached after parsing, reducing startup time and CPU usage during repeated executions.  \n  *(Contributed by kim, f6b8d0e)*\n\n## Documentation\n\n- **Document the plugin API**  \n  Comprehensive documentation for the plugin API has been added, enabling developers to extend functionality more easily.  \n  *(Contributed by sam, d4f6b8c)*\n\n## Miscellaneous\n\n- **Bump minimum Python version to 3.10**  \n  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their environments accordingly.  \n  *(Contributed by sam, a7c9e1f)*\n\n---\n\nThank you to all contributors for making this release possible!\n\nProvide your complete response:"}], "model": "Qwen/Qwen3-235B-A22B-Instruct-2507"}J%
+input.mime_type
+application/jsonJÅ
+output.value´
+±{"id":"chatcmpl-499525d9-7d26-4140-bd5e-a77fd8c3d01a","choices":[{"finish_reason":"stop","index":0,"logprobs":null,"message":{"content":"# Release Notes for v2.4.0\n\nThis release brings new features, performance improvements, bug fixes, and updated documentation.  \nBelow is a summary of changes grouped by type.\n\n## Features\n\n- **Add `--since` flag to export command**  \n  The `export` command now supports a `--since` flag, allowing users to filter results based on a  \n  timestamp or date. This is useful for incremental data exports.  \n  *(Contributed by dana, a1c3e5f)*\n\n- **Support YAML output format**  \n  In addition to existing formats, command output can now be exported in YAML format using the  \n  appropriate flag (e.g., `--format yaml`).  \n  *(Contributed by dana, c3e5a7b)*\n\n## Bug Fixes\n\n- **Handle empty config file without crashing**  \n  The application now gracefully handles cases where the configuration file exists but is empty,  \n  instead of raising a parsing error.  \n  *(Contributed by lee, b2d4f6a)*\n\n- **Correct timezone in log timestamps**  \n  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was  \n  incorrectly assumed.  \n  *(Contributed by lee, e5a7c9d)*\n\n- **Retry uploads on HTTP 503 errors**  \n  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried,  \n  improving reliability in unstable network conditions.  \n  *(Contributed by kim, b8d0f2a)*\n\n## Performance Improvements\n\n- **Cache parsed templates between runs**  \n  Templates are now cached after parsing, reducing startup time and CPU usage during repeated  \n  executions.  \n  *(Contributed by kim, f6b8d0e)*\n\n## Documentation\n\n- **Document the plugin API**  \n  Comprehensive documentation for the plugin API has been added, enabling developers to extend  \n  functionality more easily.  \n  *(Contributed by sam, d4f6b8c)*\n\n## Miscellaneous\n\n- **Bump minimum Python version to 3.10**  \n  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their  \n  environments accordingly.  \n  *(Contributed by sam, a7c9e1f)*\n\n---\n\nThank you to all contributors for making this release possible!","refusal":null,"role":"assistant","annotations":null,"audio":null,"function_call":null,"tool_calls":[],"reasoning":null},"stop_reason":null,"token_ids":null,"routed_experts":null}],"created":1791937222,"model":"Qwen/Qwen3-235B-A22B-Instruct-2507","object":"chat.completion","moderation":null,"service_tier":null,"system_fingerprint":"vllm-v0.22.0-tp4-8006095a","usage":{"completion_tokens":505,"prompt_tokens":839,"total_tokens":1344,"completion_tokens_details":null,"prompt_tokens_details":{"audio_tokens":null,"cached_tokens":48}},"prompt_logprobs":null,"prompt_token_ids":null,"prompt_text":null,"kv_transfer_params":null}J&
+output.mime_type
+application/jsonJN
+llm.invocation_parameters1
+/{"model": "Qwen/Qwen3-235B-A22B-Instruct-2507"}J-
+!llm.input_messages.0.message.role
+systemJ÷
+$llm.input_messages.0.message.contentÎ
+ËYou are Release Notes Writer. You are a technical writer who groups changes by kind and writes for users.
+Your personal goal is: Turn a list of commits into clear, well-structured Markdown release notes.J+
+!llm.input_messages.1.message.role
+userJß
+$llm.input_messages.1.message.content¶
+³
+Current Task: Revise the draft release notes to fix linting issues. Specifically:
+
+1. Ensure no line exceeds 100 characters. Break long lines appropriately.
+2. Remove all trailing whitespace at the end of lines.
+
+The following lines have issues:
+- Line 3: too long
+- Line 7: trailing whitespace
+- Line 8: trailing whitespace and too long
+- Line 11: trailing whitespace
+- Line 12: trailing whitespace and too long
+- Line 17: trailing whitespace
+- Line 18: trailing whitespace and too long
+- Line 21: trailing whitespace
+- Line 22: trailing whitespace and too long
+- Line 25: trailing whitespace
+- Line 26: trailing whitespace and too long
+- Line 31: trailing whitespace
+- Line 32: trailing whitespace and too long
+- Line 37: trailing whitespace
+- Line 38: trailing whitespace and too long
+- Line 43: trailing whitespace
+- Line 44: trailing whitespace and too long
+
+Please return a clean version of the release notes that passes markdown linting.
+
+This is the expected criteria for your final answer: Your best answer to your coworker asking you this, accounting for the context shared.
+you MUST return the actual complete content as the final answer, not a summary.
+
+This is the context you're working with:
+# Release Notes for v2.4.0
+
+This release brings new features, performance improvements, bug fixes, and updated documentation. Below is a summary of changes grouped by type.
+
+## Features
+
+- **Add `--since` flag to export command**  
+  The `export` command now supports a `--since` flag, allowing users to filter results based on a timestamp or date. This is useful for incremental data exports.  
+  *(Contributed by dana, a1c3e5f)*
+
+- **Support YAML output format**  
+  In addition to existing formats, command output can now be exported in YAML format using the appropriate flag (e.g., `--format yaml`).  
+  *(Contributed by dana, c3e5a7b)*
+
+## Bug Fixes
+
+- **Handle empty config file without crashing**  
+  The application now gracefully handles cases where the configuration file exists but is empty, instead of raising a parsing error.  
+  *(Contributed by lee, b2d4f6a)*
+
+- **Correct timezone in log timestamps**  
+  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was incorrectly assumed.  
+  *(Contributed by lee, e5a7c9d)*
+
+- **Retry uploads on HTTP 503 errors**  
+  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried, improving reliability in unstable network conditions.  
+  *(Contributed by kim, b8d0f2a)*
+
+## Performance Improvements
+
+- **Cache parsed templates between runs**  
+  Templates are now cached after parsing, reducing startup time and CPU usage during repeated executions.  
+  *(Contributed by kim, f6b8d0e)*
+
+## Documentation
+
+- **Document the plugin API**  
+  Comprehensive documentation for the plugin API has been added, enabling developers to extend functionality more easily.  
+  *(Contributed by sam, d4f6b8c)*
+
+## Miscellaneous
+
+- **Bump minimum Python version to 3.10**  
+  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their environments accordingly.  
+  *(Contributed by sam, a7c9e1f)*
+
+---
+
+Thank you to all contributors for making this release possible!
+
+Provide your complete response:J6
+llm.model_name$
+"Qwen/Qwen3-235B-A22B-Instruct-2507J
+llm.token_count.totalÀ
+J
+llm.token_count.promptÇJ!
+llm.token_count.completionùJ/
+)llm.token_count.prompt_details.cache_read0J1
+"llm.output_messages.0.message.role
+	assistantJ©
+%llm.output_messages.0.message.contentÿ
+ü# Release Notes for v2.4.0
+
+This release brings new features, performance improvements, bug fixes, and updated documentation.  
+Below is a summary of changes grouped by type.
+
+## Features
+
+- **Add `--since` flag to export command**  
+  The `export` command now supports a `--since` flag, allowing users to filter results based on a  
+  timestamp or date. This is useful for incremental data exports.  
+  *(Contributed by dana, a1c3e5f)*
+
+- **Support YAML output format**  
+  In addition to existing formats, command output can now be exported in YAML format using the  
+  appropriate flag (e.g., `--format yaml`).  
+  *(Contributed by dana, c3e5a7b)*
+
+## Bug Fixes
+
+- **Handle empty config file without crashing**  
+  The application now gracefully handles cases where the configuration file exists but is empty,  
+  instead of raising a parsing error.  
+  *(Contributed by lee, b2d4f6a)*
+
+- **Correct timezone in log timestamps**  
+  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was  
+  incorrectly assumed.  
+  *(Contributed by lee, e5a7c9d)*
+
+- **Retry uploads on HTTP 503 errors**  
+  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried,  
+  improving reliability in unstable network conditions.  
+  *(Contributed by kim, b8d0f2a)*
+
+## Performance Improvements
+
+- **Cache parsed templates between runs**  
+  Templates are now cached after parsing, reducing startup time and CPU usage during repeated  
+  executions.  
+  *(Contributed by kim, f6b8d0e)*
+
+## Documentation
+
+- **Document the plugin API**  
+  Comprehensive documentation for the plugin API has been added, enabling developers to extend  
+  functionality more easily.  
+  *(Contributed by sam, d4f6b8c)*
+
+## Miscellaneous
+
+- **Bump minimum Python version to 3.10**  
+  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their  
+  environments accordingly.  
+  *(Contributed by sam, a7c9e1f)*
+
+---
+
+Thank you to all contributors for making this release possible!J
+llm.finish_reason
+stopJ 
+openinference.span.kind
+LLMz…   7
+.
+$openinference.instrumentation.crewai1.1.21Î6
+¥çAˆCŒ¥mOùM&Q´›…<yA’ğ»c"–¶vİDÀR*Delegate work to coworker.run09ÍeğÅh=ŞAÂƒi=ŞJ–
+input.value†
+ƒ{"coworker": "Release Notes Writer", "task": "Revise the draft release notes to fix linting issues. Specifically:\n\n1. Ensure no line exceeds 100 characters. Break long lines appropriately.\n2. Remove all trailing whitespace at the end of lines.\n\nThe following lines have issues:\n- Line 3: too long\n- Line 7: trailing whitespace\n- Line 8: trailing whitespace and too long\n- Line 11: trailing whitespace\n- Line 12: trailing whitespace and too long\n- Line 17: trailing whitespace\n- Line 18: trailing whitespace and too long\n- Line 21: trailing whitespace\n- Line 22: trailing whitespace and too long\n- Line 25: trailing whitespace\n- Line 26: trailing whitespace and too long\n- Line 31: trailing whitespace\n- Line 32: trailing whitespace and too long\n- Line 37: trailing whitespace\n- Line 38: trailing whitespace and too long\n- Line 43: trailing whitespace\n- Line 44: trailing whitespace and too long\n\nPlease return a clean version of the release notes that passes markdown linting.", "context": "# Release Notes for v2.4.0\n\nThis release brings new features, performance improvements, bug fixes, and updated documentation. Below is a summary of changes grouped by type.\n\n## Features\n\n- **Add `--since` flag to export command**  \n  The `export` command now supports a `--since` flag, allowing users to filter results based on a timestamp or date. This is useful for incremental data exports.  \n  *(Contributed by dana, a1c3e5f)*\n\n- **Support YAML output format**  \n  In addition to existing formats, command output can now be exported in YAML format using the appropriate flag (e.g., `--format yaml`).  \n  *(Contributed by dana, c3e5a7b)*\n\n## Bug Fixes\n\n- **Handle empty config file without crashing**  \n  The application now gracefully handles cases where the configuration file exists but is empty, instead of raising a parsing error.  \n  *(Contributed by lee, b2d4f6a)*\n\n- **Correct timezone in log timestamps**  \n  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was incorrectly assumed.  \n  *(Contributed by lee, e5a7c9d)*\n\n- **Retry uploads on HTTP 503 errors**  \n  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried, improving reliability in unstable network conditions.  \n  *(Contributed by kim, b8d0f2a)*\n\n## Performance Improvements\n\n- **Cache parsed templates between runs**  \n  Templates are now cached after parsing, reducing startup time and CPU usage during repeated executions.  \n  *(Contributed by kim, f6b8d0e)*\n\n## Documentation\n\n- **Document the plugin API**  \n  Comprehensive documentation for the plugin API has been added, enabling developers to extend functionality more easily.  \n  *(Contributed by sam, d4f6b8c)*\n\n## Miscellaneous\n\n- **Bump minimum Python version to 3.10**  \n  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their environments accordingly.  \n  *(Contributed by sam, a7c9e1f)*\n\n---\n\nThank you to all contributors for making this release possible!"}J%
+input.mime_type
+application/jsonJ(
+	tool.name
+Delegate work to coworkerJå
+tool.descriptionĞ
+ÍTool Name: delegate_work_to_coworker
+Tool Arguments: {
+  "properties": {
+    "task": {
+      "description": "The task to delegate",
+      "title": "Task",
+      "type": "string"
+    },
+    "context": {
+      "description": "The context for the task",
+      "title": "Context",
+      "type": "string"
+    },
+    "coworker": {
+      "description": "The role/name of the coworker to delegate to",
+      "title": "Coworker",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task",
+    "context",
+    "coworker"
+  ],
+  "title": "DelegateWorkToolSchema",
+  "type": "object",
+  "additionalProperties": false
+}
+Tool Description: Delegate a specific task to one of the following coworkers: Commit Collector, Release Notes Writer
+The input to this tool should be the coworker, the task you want them to do, and ALL necessary context to execute the task, they know nothing about the task, so share absolutely everything you know, don't reference things but instead explain them.J¯
+tool.parameters›
+˜{"properties": {"task": {"description": "The task to delegate", "title": "Task", "type": "string"}, "context": {"description": "The context for the task", "title": "Context", "type": "string"}, "coworker": {"description": "The role/name of the coworker to delegate to", "title": "Coworker", "type": "string"}}, "required": ["task", "context", "coworker"], "title": "DelegateWorkToolSchema", "type": "object"}J
+tool.description_updated J0
+tool.cache_function
+_default_cache_functionJ
+tool.result_as_answer J
+tool.current_usage_count J
+output.valueÿ
+ü# Release Notes for v2.4.0
+
+This release brings new features, performance improvements, bug fixes, and updated documentation.  
+Below is a summary of changes grouped by type.
+
+## Features
+
+- **Add `--since` flag to export command**  
+  The `export` command now supports a `--since` flag, allowing users to filter results based on a  
+  timestamp or date. This is useful for incremental data exports.  
+  *(Contributed by dana, a1c3e5f)*
+
+- **Support YAML output format**  
+  In addition to existing formats, command output can now be exported in YAML format using the  
+  appropriate flag (e.g., `--format yaml`).  
+  *(Contributed by dana, c3e5a7b)*
+
+## Bug Fixes
+
+- **Handle empty config file without crashing**  
+  The application now gracefully handles cases where the configuration file exists but is empty,  
+  instead of raising a parsing error.  
+  *(Contributed by lee, b2d4f6a)*
+
+- **Correct timezone in log timestamps**  
+  Log entries now display timestamps in the correct local timezone, fixing an issue where UTC was  
+  incorrectly assumed.  
+  *(Contributed by lee, e5a7c9d)*
+
+- **Retry uploads on HTTP 503 errors**  
+  Failed uploads due to server-side temporary errors (HTTP 503) are now automatically retried,  
+  improving reliability in unstable network conditions.  
+  *(Contributed by kim, b8d0f2a)*
+
+## Performance Improvements
+
+- **Cache parsed templates between runs**  
+  Templates are now cached after parsing, reducing startup time and CPU usage during repeated  
+  executions.  
+  *(Contributed by kim, f6b8d0e)*
+
+## Documentation
+
+- **Document the plugin API**  
+  Comprehensive documentation for the plugin API has been added, enabling developers to extend  
+  functionality more easily.  
+  *(Contributed by sam, d4f6b8c)*
+
+## Miscellaneous
+
+- **Bump minimum Python version to 3.10**  
+  The minimum supported Python version is now 3.10. Users are encouraged to upgrade their  
+  environments accordingly.  
+  *(Contributed by sam, a7c9e1f)*
+
+---
+
+Thank you to all contributors for making this release possible!J 
+output.mime_type
+
+text/plainJ!
+openinference.span.kind
+TOOLz…   

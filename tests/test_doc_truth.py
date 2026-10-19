@@ -35,18 +35,21 @@ something the project has not done yet.
 from __future__ import annotations
 
 import ast
+import hashlib
 import itertools
 import json
 import pathlib
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 
 import pytest
 
 import spanweave
 from spanweave.adapters import registered
+from tests import zoo_census
 from tests.conformance import CORPUS, adapter_backed, dialect_parts, scenarios
 from tests.corpus_census import (
     FRACTIONAL_FIGURES,
@@ -59,6 +62,7 @@ from tests.corpus_census import (
     render,
     report,
 )
+from tests.markdown_fences import FencedBlock, fence_kinds, fenced_blocks
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -90,16 +94,12 @@ def section(markdown: str, heading: str) -> str:
 
 
 def fenced_lines(markdown: str) -> list[str]:
-    """Lines inside ``` fences: the commands a reader would actually run."""
-    lines: list[str] = []
-    inside = False
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            inside = not inside
-            continue
-        if inside:
-            lines.append(line)
-    return lines
+    """Lines inside ``` fences: the commands a reader would actually run.
+
+    A fence opens and closes as `tests/markdown_fences.py` has it, the rule
+    every fence reader here shares.
+    """
+    return [line for line, kind in fence_kinds(markdown.splitlines()) if kind == "code"]
 
 
 def code_spans(markdown: str) -> list[str]:
@@ -120,14 +120,129 @@ def code_spans(markdown: str) -> list[str]:
     precise because the candidates are enumerable.
     """
     spans = fenced_lines(markdown)
-    inside = False
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            inside = not inside
-            continue
-        if not inside:
+    for line, kind in fence_kinds(markdown.splitlines()):
+        if kind == "prose":
             spans.extend(re.findall(r"`([^`]+)`", line))
     return spans
+
+
+#: The three readers that split prose from code are held to this document;
+#: the rule they and every other fence reader share is held line by line
+#: below it. A three-backtick fence; a five-backtick fence holding a
+#: three-backtick line, a prose-shaped line and shas; a prose line that
+#: *opens* with five backticks, as `TASKS.md`'s does; inline spans before and
+#: after.
+FENCE_DOCUMENT = (
+    "Before: `uv run pytest`.\n"
+    "```bash\n"
+    "make check\n"
+    "```\n"
+    "`````text\n"
+    "```\n"
+    "quoted `inline` line, `abc1234` and 1a2b3c4\n"
+    "`````\n"
+    "````` ```` ````` line, less the line break\n"
+    "After: `make golden` at `fed4321`\n"
+)
+
+#: What the fence readers read of it: the five-backtick fence holds both of
+#: the lines under it, and the prose line after it is prose.
+FENCE_DOCUMENT_FENCED = [
+    "make check",
+    "```",
+    "quoted `inline` line, `abc1234` and 1a2b3c4",
+]
+# The five-backtick prose line's two `" "` are the single-backtick pairing
+# inline spans have always had; what matters is that what follows it is
+# read as inline, and not as fenced lines.
+FENCE_DOCUMENT_SPANS = [
+    *FENCE_DOCUMENT_FENCED,
+    "uv run pytest",
+    " ",
+    " ",
+    "make golden",
+    "fed4321",
+]
+
+
+def test_a_fence_opens_and_closes_as_commonmark_has_it():
+    assert fenced_lines(FENCE_DOCUMENT) == FENCE_DOCUMENT_FENCED
+    assert code_spans(FENCE_DOCUMENT) == FENCE_DOCUMENT_SPANS
+
+
+def test_the_install_check_reads_fences_by_the_same_rule():
+    from tests import install_check
+
+    # The same spans, in document order: this reader yields as it goes.
+    assert list(install_check._code_spans(FENCE_DOCUMENT)) == [
+        "uv run pytest",
+        *FENCE_DOCUMENT_FENCED,
+        " ",
+        " ",
+        "make golden",
+        "fed4321",
+    ]
+
+
+def kinds(*lines: str) -> list[str]:
+    return [kind for _, kind in fence_kinds(lines)]
+
+
+def test_a_fence_closes_on_a_run_of_its_own_length_or_longer_only():
+    # A run one shorter than the opener is a line of code, not a close.
+    assert kinds("````", "```", "````", "after") == [
+        "fence",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("```", "a", "`````", "after") == ["fence", "code", "fence", "prose"]
+
+
+def test_a_fence_has_at_most_three_spaces_of_indent():
+    # Four spaces is an indented line, whether opening or closing.
+    assert kinds("   ```", "a", "   ```", "after") == [
+        "fence",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("    ```", "a", "    ```") == ["prose", "prose", "prose"]
+    assert kinds("```", "    ```", "a", "```") == ["fence", "code", "code", "fence"]
+
+
+def test_a_tilde_fence_is_a_fence_and_only_its_own_character_closes_it():
+    # A tilde info string may hold a backtick; a backtick one may not.
+    assert kinds("~~~", "```", "a", "~~~", "after") == [
+        "fence",
+        "code",
+        "code",
+        "fence",
+        "prose",
+    ]
+    assert kinds("```", "~~~", "```") == ["fence", "code", "fence"]
+    assert kinds("~~~ `x`", "a", "~~~") == ["fence", "code", "fence"]
+
+
+def test_a_closing_fence_carries_no_info_string():
+    # CommonMark 0.31, example 143: ``` aaa inside a fence is code. Trailing
+    # blanks are no info string.
+    assert kinds("```", "aaa", "``` aaa", "```") == ["fence", "code", "code", "fence"]
+    assert kinds("```", "a", "```  \t", "after") == ["fence", "code", "fence", "prose"]
+
+
+def test_a_fenced_block_is_its_stripped_info_and_its_lines():
+    """`fenced_blocks`, which the readers of a block's language and body use.
+
+    The info string is stripped; the body keeps its line breaks and the
+    fences' own lines are not in it; prose is in no block; a fence left open
+    is a block to the end of the text.
+    """
+    text = "prose\n```python  \nx = 1\n\n```\nprose\n~~~\nopen\n"
+    assert fenced_blocks(text) == [
+        FencedBlock("python", "x = 1\n\n"),
+        FencedBlock("", "open\n"),
+    ]
 
 
 # -- The install line that must not exist yet ------------------------------
@@ -308,9 +423,11 @@ def test_every_make_target_a_document_names_exists():
 
     The exclusion stays narrow on purpose. It is two directories, both of
     which exist to hold quoted text, and every other document -- `README.md`,
-    `SPEC.md`, `TASKS.md`, `CONTRIBUTING.md`, the Makefile's own neighbours --
-    is still scanned, so a target that does not exist, named by anything that
-    is speaking for the project today, is still red.
+    `SPEC.md`, `TASKS.md`, `CONTRIBUTING.md`, the Makefile's own neighbours,
+    and a series' `WORKPLAN.md` while one exists -- is scanned, so a target
+    that does not exist, named by anything that is speaking for the project
+    today, is red. A plan names the targets its batches run, so a typo there
+    is a gate a batch would skip (cold review of 2026-10-17, R-10).
     """
     targets = makefile_targets()
     assert {"check", "conformance"} <= targets, "Makefile parse produced nothing"
@@ -590,7 +707,11 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
     table = section(read("README.md"), "\n## Documents")
     listed = set(re.findall(r"^\| `([^`]+\.md)` \|", table, re.M))
     assert listed, "the README's Documents table parsed to nothing"
-    on_disk = {path.name for path in ROOT.glob("*.md")} - {"README.md"}
+    # A plan is deleted at its series' close, so the table -- a durable map
+    # -- does not list it: it is skipped on disk, and a row for it is a ghost.
+    # The skip is the one name, case-sensitive, and no pattern
+    # (`test_the_documents_table_skip_is_the_plan_at_the_root_and_nothing_else`).
+    on_disk = {path.name for path in ROOT.glob("*.md")} - {"README.md", PLAN_FILE}
     assert listed == on_disk, (
         "the README's Documents table has drifted from the repository root.\n"
         f"  listed but absent: {sorted(listed - on_disk)}\n"
@@ -610,25 +731,27 @@ def test_the_readme_document_table_lists_every_document_and_no_ghosts():
 #: Directories that archive text verbatim, and so quote paths as they stood.
 VERBATIM_PARTS = frozenset({"patches", "reviews"})
 
+#: A work series' execution state: at the root while the series runs, deleted
+#: at its close. Durable for every guard but the two that skip it by name.
+PLAN_FILE = "WORKPLAN.md"
+
 
 def durable_documents() -> list[pathlib.Path]:
-    """Documents that outlive a series, so their citations must resolve later.
+    """Documents that speak for the project, so their citations must resolve.
 
     One exclusion, because the excluded text is a record of a moment rather
     than a claim made now: `reviews/` and `patches/` hold cold reviews copied
     verbatim, and a review that says a file was untracked *when it was read*
     is reporting, not citing.
 
-    A second exclusion stood here while a series was open: `WORKPLAN.md`, that
-    series' own execution state, which owns `patches/` as its scratch drop and
-    is written to be deleted at series close. That is exactly why nothing
-    durable was allowed to depend on it, and it is gone again: the
-    stranger's-trace series closed and the file went with it (`TASKS.md`,
-    *The stranger's-trace series*). It has gone six times now -- four across
-    the September 2026 audit-fix series and its reopenings, once at the
-    live-graphs series' close, once here -- so the exclusion is a fixture of a
-    **series**, not of a file: the next series' plan file needs it back, and
-    takes it back out at its own close.
+    `WORKPLAN.md`, a series' execution state, is **in** whenever it exists.
+    Until 2026-10-17 it was excluded here by name -- re-added by each series'
+    opener, removed at each close -- and that took it out of every guard that
+    iterates this list (make targets, review, decision and sha citations,
+    retired figures) when only two could not hold it (cold review of 2026-10-17,
+    R-10). Those two skip `PLAN_FILE` themselves, with the reason beside the
+    skip; every other guard reads the plan as it reads `SPEC.md`. A series'
+    opener needs no accommodation here.
     """
     return [
         path
@@ -646,6 +769,13 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
     """
     scratch: dict[str, set[str]] = {}
     for path in durable_documents():
+        # A plan cites `patches/` by design -- it is the series' scratch drop,
+        # where its cold reviews land -- and the plan is deleted at close, so
+        # nothing durable is left depending on what it points at there.
+        # Exactly `WORKPLAN.md` at the root, case-sensitive; a near name is read
+        # (`test_the_scratch_path_skip_is_the_plan_at_the_root_and_nothing_else`).
+        if path.relative_to(ROOT) == pathlib.Path(PLAN_FILE):
+            continue
         for span in code_spans(path.read_text(encoding="utf-8")):
             for match in re.finditer(r"\bpatches/\S+", span):
                 scratch.setdefault(match.group(0), set()).add(
@@ -657,6 +787,172 @@ def test_a_durable_document_cites_no_untracked_scratch_path():
         "the file into `reviews/` and cite it there.\n"
         f"  {scratch}"
     )
+
+
+# -- A planted plan file, scanned by every guard but the two that skip it ----
+#
+# The repository carries no `WORKPLAN.md` between series, so these tests plant
+# one under a redirected `ROOT` -- a scratch root holding the plan beside what
+# the guard reads -- and never in the checkout.
+#
+# Every guard that iterates `durable_documents()` has a planted plan here that
+# it must turn red: make targets, review citations, decision citations, shas,
+# and the three retired-figure guards (the working-tree census, the corpus
+# figures, a retired figure asserted live). Until the cold review of
+# 2026-10-17 (scoped, R-6) only the make-target guard had one, so a by-name
+# skip of the plan in any of the others left the suite green. The two skips
+# are pinned the other way: each matches exactly `WORKPLAN.md` at the root,
+# case-sensitive, and a near name -- another case, a suffix, a subdirectory,
+# a glob -- is still read. Guards that iterate `documents()` instead (an
+# index install, a CLI subcommand, an example path) read the plan through a
+# list that names no plan, and are not pinned here.
+
+
+def plant_plan(tmp_path, monkeypatch, plan: str, *copied: str) -> None:
+    """A scratch `ROOT` holding `copied` (paths relative to the real root)
+    and a `WORKPLAN.md` reading `plan`; the module reads it from now on."""
+    for relative in copied:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / relative).read_bytes())
+    (tmp_path / PLAN_FILE).write_text(plan, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+
+def test_a_plan_naming_a_make_target_that_does_not_exist_is_red(tmp_path, monkeypatch):
+    plant_plan(
+        tmp_path, monkeypatch, "Each batch runs `make install-chek`.\n", "Makefile"
+    )
+    assert durable_documents() == [tmp_path / PLAN_FILE]
+    with pytest.raises(AssertionError, match=r"'install-chek': \['WORKPLAN\.md'\]"):
+        test_every_make_target_a_document_names_exists()
+
+
+def test_a_plan_citing_its_scratch_drop_passes_the_scratch_path_guard(
+    tmp_path, monkeypatch
+):
+    plant_plan(tmp_path, monkeypatch, "The review lands at `patches/REVIEW-x.md`.\n")
+    test_a_durable_document_cites_no_untracked_scratch_path()
+    # The skip is by name: the same citation anywhere else is still red.
+    (tmp_path / "NOTES.md").write_text("See `patches/REVIEW-x.md`.\n", encoding="utf-8")
+    with pytest.raises(
+        AssertionError, match=r"'patches/REVIEW-x\.md': \{'NOTES\.md'\}"
+    ):
+        test_a_durable_document_cites_no_untracked_scratch_path()
+
+
+def test_a_plan_at_the_root_is_not_owed_a_documents_row(tmp_path, monkeypatch):
+    listed = sorted(path.name for path in ROOT.glob("*.md"))
+    plant_plan(tmp_path, monkeypatch, "# plan\n", *listed)
+    test_the_readme_document_table_lists_every_document_and_no_ghosts()
+    # A row for the plan is a ghost: the table is durable and the plan is not.
+    readme = tmp_path / "README.md"
+    text = readme.read_text(encoding="utf-8")
+    row = "| `CONTRIBUTING.md` | How to contribute. |\n"
+    assert row in text, "the README's Documents table moved; re-anchor this test"
+    readme.write_text(
+        text.replace(row, row + f"| `{PLAN_FILE}` | Execution state. |\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match=r"listed but absent: \['WORKPLAN\.md'\]"):
+        test_the_readme_document_table_lists_every_document_and_no_ghosts()
+
+
+def plant_near_plan(tmp_path, monkeypatch, relative: str, text: str) -> None:
+    """A scratch `ROOT` holding one file at `relative`, a near name of the
+    plan, and no plan: on a case-insensitive filesystem `workplan.md` and
+    `WORKPLAN.md` would be one file, so the near name is planted alone."""
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+
+#: Names a by-name skip of the plan could be loosened to match: another case,
+#: a suffix, a subdirectory, a glob's `*PLAN*`. Each is a document, not the plan.
+NEAR_PLAN_NAMES = ["workplan.md", "OLD-WORKPLAN.md", "docs/WORKPLAN.md", "PLANNING.md"]
+
+
+@pytest.mark.parametrize("relative", NEAR_PLAN_NAMES)
+def test_the_scratch_path_skip_is_the_plan_at_the_root_and_nothing_else(
+    relative, tmp_path, monkeypatch
+):
+    plant_near_plan(
+        tmp_path, monkeypatch, relative, "The review lands at `patches/REVIEW-x.md`.\n"
+    )
+    with pytest.raises(
+        AssertionError, match=rf"'patches/REVIEW-x\.md': \{{'{re.escape(relative)}'\}}"
+    ):
+        test_a_durable_document_cites_no_untracked_scratch_path()
+
+
+@pytest.mark.parametrize("name", [name for name in NEAR_PLAN_NAMES if "/" not in name])
+def test_the_documents_table_skip_is_the_plan_at_the_root_and_nothing_else(
+    name, tmp_path, monkeypatch
+):
+    # The table reads the root only, so a subdirectory is no near name here.
+    listed = sorted(path.name for path in ROOT.glob("*.md"))
+    for copied in listed:
+        (tmp_path / copied).write_bytes((ROOT / copied).read_bytes())
+    plant_near_plan(tmp_path, monkeypatch, name, "# not the plan\n")
+    with pytest.raises(
+        AssertionError, match=rf"present but unlisted: \['{re.escape(name)}'\]"
+    ):
+        test_the_readme_document_table_lists_every_document_and_no_ghosts()
+
+
+def test_a_plan_citing_a_review_that_is_not_in_the_tree_is_red(tmp_path, monkeypatch):
+    plant_plan(tmp_path, monkeypatch, "The review is `reviews/2099-01-01-x.md`.\n")
+    with pytest.raises(
+        AssertionError, match=r"'reviews/2099-01-01-x\.md': \['WORKPLAN\.md'\]"
+    ):
+        test_every_review_a_document_cites_is_in_the_repository()
+
+
+def test_a_plan_citing_a_decision_that_is_no_row_is_red(tmp_path, monkeypatch):
+    # Split, so that this file, which the resolver reads, does not carry it.
+    plant_plan(tmp_path, monkeypatch, "As (decisions log " + "D99) says.\n", "TASKS.md")
+    assert tmp_path / PLAN_FILE in citing_files()
+    with pytest.raises(
+        AssertionError, match=r"\{'WORKPLAN\.md': \[\"'decisions log D\d+' cites"
+    ):
+        test_every_decision_citation_names_a_row_by_its_id()
+
+
+def test_a_plan_citing_a_sha_that_is_no_commit_is_red(tmp_path, monkeypatch):
+    # The scratch root is an empty repository, so no sha resolves in it; the
+    # guard's floor (more than 100 citations) is met by the plan alone.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    sha = "e" * 39 + "1"
+    plant_plan(tmp_path, monkeypatch, "".join(f"Commit `{sha}`.\n" for _ in range(101)))
+    with pytest.raises(AssertionError, match=rf"'WORKPLAN\.md': \['line 1: {sha}'"):
+        test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository()
+
+
+def test_a_plan_stating_the_working_tree_census_is_red(tmp_path, monkeypatch):
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 57 files / 177 records.\n")
+    with pytest.raises(AssertionError, match=r"WORKPLAN\.md: The corpus holds 57"):
+        test_no_durable_document_states_the_working_tree_census_as_a_fact()
+
+
+def test_a_plan_stating_a_corpus_figure_the_census_does_not_count_is_red(
+    tmp_path, monkeypatch
+):
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 99 files, 999 records.\n")
+    with pytest.raises(
+        AssertionError, match=r"WORKPLAN\.md states corpus files / records as 99, 999"
+    ):
+        test_every_corpus_figure_a_durable_document_asserts_is_the_census()
+
+
+def test_a_plan_asserting_a_retired_figure_live_is_red(tmp_path, monkeypatch):
+    assert (52, 151) in RETIRED_CENSUS_FIGURES["corpus files / records"]
+    plant_plan(tmp_path, monkeypatch, "The corpus holds 52 files, 151 records.\n")
+    with pytest.raises(
+        AssertionError,
+        match=r"WORKPLAN\.md states corpus files / records as 52, 151, a retired",
+    ):
+        test_no_durable_document_asserts_a_retired_figure_in_a_live_sentence()
 
 
 def test_every_review_a_document_cites_is_in_the_repository():
@@ -674,6 +970,197 @@ def test_every_review_a_document_cites_is_in_the_repository():
     assert not missing, f"documents cite reviews that are not in the tree: {missing}"
 
 
+# -- Every review archive is held to its recorded sha256 ---------------------
+#
+# Each archive under `reviews/` is kept byte for byte, and each archiving
+# commit wrote "`cmp` silent, and `sha256` <digest>" into `TASKS.md` beside the
+# archive's name -- and then no test read it back. One byte of an archive could
+# change and every test stayed green (the sanity check `3dfe461`'s body
+# records). The registry is that prose, not a sidecar file: the digest stands
+# where the provenance is told, and this reads it from there.
+
+#: Where a digest is recorded, in the order a failure names its source.
+DIGEST_REGISTRY = ("TASKS.md", "CHANGELOG.md")
+
+ARCHIVE_NAME = re.compile(r"`(reviews/[A-Za-z0-9._-]+\.md)`")
+DIGEST_RECORD = re.compile(r"`sha256`\s+`([0-9a-f]{64})`")
+
+
+def digest_records(text: str) -> list[tuple[str, str]]:
+    """`(archive, digest)` for every digest the text ties to one archive.
+
+    A record is a `sha256` code span, then only whitespace, then a 64-hex code
+    span, and it belongs to the archive named before it in its paragraph
+    (`paragraphs()`: blank lines and list items split). **Exactly one** archive
+    may be named there. A paragraph naming two before a digest is not a
+    record of either: `CHANGELOG.md`'s live-graphs entry names run 2 and run 3
+    and then gives both digests, and "the last name wins" would hand run 2's
+    digest to run 3. An archive named *after* the digest -- a source cited for
+    it -- does not count. A table header's `sha256` is followed by `|`, so a
+    table of other digests is not read either.
+    """
+    records = []
+    for paragraph in paragraphs(text):
+        for match in DIGEST_RECORD.finditer(paragraph):
+            named = set(ARCHIVE_NAME.findall(paragraph[: match.start()]))
+            if len(named) == 1:
+                records.append((named.pop(), match.group(1)))
+    return records
+
+
+def archive_digest_faults(
+    registry: dict[str, str], archives: dict[str, bytes]
+) -> list[str]:
+    """Why an archive is not the bytes its record says it is.
+
+    `registry` maps a registry file's name to its text, in `DIGEST_REGISTRY`'s
+    order; `archives` maps `reviews/<name>.md` to its bytes. Every archive needs
+    a record. Every record in every registry file is read, so two different
+    digests for one archive are a fault wherever they stand, never a choice.
+    The digest compared is the first registry file's that records one.
+    """
+    recorded: dict[str, dict[str, set[str]]] = {}
+    for source, text in registry.items():
+        for archive, digest in digest_records(text):
+            recorded.setdefault(archive, {}).setdefault(source, set()).add(digest)
+    faults = []
+    for archive in sorted(set(recorded) - set(archives)):
+        faults.append(f"{archive}: a digest is recorded for an archive not in the tree")
+    for archive in sorted(archives):
+        by_source = recorded.get(archive, {})
+        if not by_source:
+            faults.append(
+                f"{archive}: no sha256 is recorded for it in {' or '.join(registry)}"
+            )
+            continue
+        digests = set().union(*by_source.values())
+        if len(digests) > 1:
+            faults.append(
+                f"{archive}: two different digests are recorded, "
+                f"{ {source: sorted(found) for source, found in by_source.items()} }"
+            )
+            continue
+        source = next(name for name in registry if name in by_source)
+        (digest,) = digests
+        actual = hashlib.sha256(archives[archive]).hexdigest()
+        if digest != actual:
+            faults.append(
+                f"{archive}: {source} records sha256 {digest}, its bytes are {actual}"
+            )
+    return faults
+
+
+def test_every_review_archive_is_the_bytes_its_recorded_sha256_says():
+    archives = {
+        str(path.relative_to(ROOT)): path.read_bytes()
+        for path in sorted((ROOT / "reviews").glob("*.md"))
+    }
+    assert archives, "no archive under reviews/; the scan found nothing"
+    registry = {name: read(name) for name in DIGEST_REGISTRY}
+    faults = archive_digest_faults(registry, archives)
+    assert not faults, "\n  ".join(["archives and their recorded sha256:", *faults])
+
+
+def test_the_archive_digest_scan_ties_one_digest_to_one_archive():
+    body = b"a review\n"
+    good = hashlib.sha256(body).hexdigest()
+    other = hashlib.sha256(b"another\n").hexdigest()
+    archives = {"reviews/a.md": body}
+
+    def faults(tasks: str, changelog: str = "") -> list[str]:
+        return archive_digest_faults(
+            {"TASKS.md": tasks, "CHANGELOG.md": changelog}, archives
+        )
+
+    # Wrapped across a line, as the archiving paragraphs write it.
+    wrapped = f"`reviews/a.md`, archived: `cmp` silent, and `sha256`\n`{good}`."
+    assert faults(wrapped) == []
+    # A source named after the digest does not count against it.
+    assert faults(f"- `reviews/a.md`: `sha256` `{good}`; also in `reviews/b.md`.") == []
+    # Only the changelog records it: the changelog is the source.
+    assert faults("", f"`reviews/a.md` (`sha256` `{good}`)") == []
+
+    wrong = faults(f"`reviews/a.md`: `sha256` `{other}`")
+    assert wrong == [
+        f"reviews/a.md: TASKS.md records sha256 {other}, its bytes are {good}"
+    ]
+    assert faults("", f"`reviews/a.md`: `sha256` `{other}`")[0].startswith(
+        "reviews/a.md: CHANGELOG.md records"
+    )
+    # Two different digests are a failure, in one file or across the two.
+    for tasks, changelog in (
+        (f"`reviews/a.md` `sha256` `{good}`\n\n`reviews/a.md` `sha256` `{other}`", ""),
+        (f"`reviews/a.md` `sha256` `{good}`", f"`reviews/a.md` `sha256` `{other}`"),
+    ):
+        (fault,) = faults(tasks, changelog)
+        assert "two different digests" in fault, fault
+    # Ambiguous paragraphs and tables are not records, so nothing is recorded.
+    missing = "reviews/a.md: no sha256 is recorded for it in TASKS.md or CHANGELOG.md"
+    for unread in (
+        f"`reviews/a.md` and `reviews/b.md`, `sha256`\n`{good}` and `{other}`",
+        f"`reviews/a.md`\n\n| `sha256` |\n|---|\n| `{good}` |",
+        f"`reviews/a.md` is archived.\n\nIts `sha256` `{good}`.",
+        f"`reviews/a.md` `sha256` `{good[:16]}`",
+    ):
+        assert faults(unread) == [missing], unread
+    # A record for an archive the tree does not hold.
+    stray = f"`reviews/a.md` `sha256` `{good}`\n\n`reviews/z.md` `sha256` `{good}`"
+    assert faults(stray) == [
+        "reviews/z.md: a digest is recorded for an archive not in the tree"
+    ]
+
+
+def test_every_digest_record_in_one_paragraph_is_read():
+    """Two records in one paragraph are two records: a later correction does
+    not hide behind the first digest, and the first does not hide behind it.
+    Reading only a paragraph's first record (a `search`, not a `finditer`)
+    passed every other test (cold review of 2026-10-17, scoped, R-17)."""
+    body = b"a review\n"
+    good = hashlib.sha256(body).hexdigest()
+    other = hashlib.sha256(b"another\n").hexdigest()
+
+    def faults(tasks: str) -> list[str]:
+        return archive_digest_faults(
+            {"TASKS.md": tasks, "CHANGELOG.md": ""}, {"reviews/a.md": body}
+        )
+
+    for first, second in ((good, other), (other, good)):
+        paragraph = (
+            f"`reviews/a.md`: `sha256` `{first}`; corrected later to `sha256`\n"
+            f"`{second}`."
+        )
+        assert len(paragraphs(paragraph)) == 1
+        found = faults(paragraph)
+        assert [fault.split(", {")[0] for fault in found] == [
+            "reviews/a.md: two different digests are recorded"
+        ], found
+        assert digest_records(paragraph) == [
+            ("reviews/a.md", first),
+            ("reviews/a.md", second),
+        ]
+    # The same digest twice in one paragraph is one digest, and it holds.
+    assert faults(f"`reviews/a.md` `sha256` `{good}`, again `sha256` `{good}`") == []
+
+
+def test_git_converts_no_line_ending_of_a_review_archive():
+    """`.gitattributes` gives `reviews/**` `-text`, so the bytes the digest
+    test hashes are the committed bytes on every checkout. Without it a
+    `core.autocrlf=true` clone writes CRLF and all 17 archives were red there
+    alone, a result that depended on the machine (cold review of 2026-10-17,
+    scoped, R-16)."""
+    paths = [
+        str(path.relative_to(ROOT)) for path in sorted((ROOT / "reviews").glob("*.md"))
+    ]
+    assert paths, "no archive under reviews/; the scan found nothing"
+    answered = subprocess.run(
+        ["git", "-C", str(ROOT), "check-attr", "text", "--", *paths],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert answered == [f"{path}: text: unset" for path in paths]
+
+
 # -- Decisions, cited by their row's id ------------------------------------
 #
 # The stranger's-trace decisions log was cited by date and batch, and on
@@ -681,8 +1168,12 @@ def test_every_review_a_document_cites_is_in_the_repository():
 # nothing held a citation to the log at all: a relay file's bare name, or a row
 # that does not exist, passed every test (cold review of 2026-10-15, R-17,
 # R-18). Each row now has an id, and a citation names it.
+#
+# A later series' log continues the numbering rather than restarting it (the
+# wire series' rows are D28 on), so `decisions log D<n>` names one row in the
+# whole file; the resolver reads every series' log, in the file's order.
 
-DECISIONS_SERIES = "\n## The stranger's-trace series"
+DECISIONS_SERIES = ("\n## The stranger's-trace series", "\n## The wire series")
 DECISIONS_HEADING = "### Decisions taken  *(the plan file's §3, folded in full)*"
 
 #: A row of the log, by its id and its date.
@@ -709,11 +1200,16 @@ RELAY_NAME = re.compile(
 
 
 def decisions_log() -> str:
-    """The stranger's-trace series' decisions log: its intro, map and table."""
+    """Every series' decisions log that carries ids: each one's intro, map and
+    table, in the file's order."""
     tasks = read("TASKS.md")
-    series = tasks[tasks.index(DECISIONS_SERIES) :]
-    start = series.index(DECISIONS_HEADING)
-    return series[start : series.index("\n### ", start + len(DECISIONS_HEADING))]
+    logs = []
+    for heading in DECISIONS_SERIES:
+        series = tasks[tasks.index(heading) :]
+        start = series.index(DECISIONS_HEADING)
+        end = series.index("\n### ", start + len(DECISIONS_HEADING))
+        logs.append(series[start:end])
+    return "\n".join(logs)
 
 
 def decision_rows() -> dict[str, str]:
@@ -735,7 +1231,13 @@ def flowed(text: str) -> str:
 
 
 def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
-    """Each citation of a decision that names no row by its id."""
+    """Each citation of a decision that names no row by its id.
+
+    It holds that a cited row exists, not that it is the right one: `D33`
+    changed to `D32`, a real row that decides something else, is no fault
+    here, and no resolver could make it one. The only guard for a
+    citation's meaning is a reader (cold review of 2026-10-17, scoped, R-11,
+    second bullet, declined: decisions log D35)."""
     text = flowed(text)
     faults = [
         f"{match.group(0)!r} cites {cited}, which is no row of the log"
@@ -756,8 +1258,21 @@ def citation_faults(text: str, rows: dict[str, str]) -> list[str]:
 
 
 def citing_files() -> list[pathlib.Path]:
-    """The durable documents and the tests: where a decision is cited."""
-    return durable_documents() + sorted((ROOT / "tests").rglob("*.py"))
+    """The durable documents, the tests and the package: where a decision is
+    cited. The package's docstrings and comments cite the log too
+    (`otlp_protobuf.py`'s D28), and were outside this list until the cold
+    review of 2026-10-17 changed that one to D38 with the suite green (R-14)."""
+    return (
+        durable_documents()
+        + sorted((ROOT / "tests").rglob("*.py"))
+        + sorted((ROOT / "spanweave").rglob("*.py"))
+    )
+
+
+def test_the_citing_files_include_the_package_s_one_citation():
+    package = ROOT / "spanweave" / "otlp_protobuf.py"
+    assert package in citing_files()
+    assert DECISION_CITATION.search(flowed(package.read_text(encoding="utf-8")))
 
 
 def test_the_decisions_log_numbers_its_rows_in_order():
@@ -831,6 +1346,621 @@ def test_the_citation_resolver_refuses(text):
 @pytest.mark.parametrize("text", CITATIONS_KEPT)
 def test_the_citation_resolver_keeps(text):
     assert citation_faults(text, decision_rows()) == [], text
+
+
+# -- Cited shas, held to the repository ------------------------------------
+#
+# A sha in a durable document is a citation like a file path: it names an
+# object a reader is meant to be able to open. Until 2026-10-17 nothing held
+# one -- `4ecf414` changed to `4ecf415` in `ROADMAP.md`, or a registry row's
+# `09245d9` changed to `09245d8`, left the suite green (cold review of
+# 2026-10-17, R-13, R-17). Each is now resolved by `git cat-file`, as a
+# *commit*: a blob or tree id that happens to share the prefix is not what a
+# citation names, and an ambiguous prefix names nothing.
+#
+# **And as a commit a ref reaches** (`git rev-list --all`), not merely one
+# the object store holds. A dangling commit -- `git commit-tree` with no ref
+# naming it, or a branch deleted locally -- resolves in the clone that made
+# it and in no other, so a resolver over the object store vouched for a
+# citation a fresh clone refuses (cold review of 2026-10-17b, R-9: a
+# `commit-tree` commit cited in `ROADMAP.md` was green). What the test
+# vouches for is a full clone with tags, which is what CI checks out
+# (`CONTRIBUTING.md`). Outside a git repository -- an unpacked sdist, a
+# `git archive` tree -- there is nothing to resolve against, and the sha
+# tests skip and say so rather than fail or pass vacuously. Twelve other
+# doc-truth tests, which read what git tracks, still fail there rather than
+# skip; R-9 records that, and this change does not reach them.
+#
+# **What counts as a citation, and why the shape is this narrow.** The
+# documents are full of hex that is not a sha: sha256 digests and their
+# prefixes, span and trace ids, `chatcmpl-tool-...` ids, number literals. A
+# regex over all hex reads them as citations, and a guard that has to be
+# talked out of a hundred false positives is a guard on its way to being
+# switched off. So a sha is read in three shapes only:
+#
+# - a code span that is *nothing but* 7 to 40 hex digits, optionally a
+#   revision suffix (`^`, `~n`) or a range (`a..b`, `a^..HEAD`). A truncated
+#   digest is written with its ellipsis (`ec3eeae2...`), and so is not this
+#   shape; a full sha256 is 64 digits, past the 40 a sha can be;
+# - any 7-to-40-digit hex word inside a code span that is a `git` command
+#   (`git show 028e645:WORKPLAN.md`), where the position is a revision;
+# - outside code, a 7-digit word mixing letters and digits: what
+#   `git log --oneline` prints in this repository, pasted into prose
+#   ("fixed in 79f7dcd"). Prose is not read at other widths, because every
+#   longer bare hex run in prose is a digest prefix or an id; a longer sha
+#   is cited in a code span, where it is read at any width.
+#
+# The span shape still admits three values that are not shas, each written
+# bare in a code span, and each is named in `NOT_SHAS` with what it is. The
+# table fails closed: a new bare hex span that does not resolve is red until
+# someone says which it is, and an entry no document carries any more is red
+# too.
+#
+# **Another repository's sha** is that repository's to hold, and the
+# citation says so by naming it *beside* the sha: the code span immediately
+# before the sha's span is an `owner/repo` name, separated from it only by
+# whitespace (a line break and a blockquote's `>` included) and at most the
+# word `at` -- `` `SigorMatt/spanweave-zoo` at `7eb5b69` ``. A repository
+# named earlier in the sentence does not qualify a later sha, and naming
+# this repository qualifies nothing: its shas resolve here.
+
+#: This repository, as an `owner/repo` qualifier would name it.
+THIS_REPOSITORY = "SigorMatt/spanweave"
+
+#: Bare hex code spans that are not shas: value -> what it is and where.
+NOT_SHAS = {
+    "9db11f5f": "a canonical digest's first digits (the `café` example)",
+    "645fa443": "a canonical digest's first digits (the `café` example)",
+    "3013a003149d6951": "the span id of Z4's root span `concierge.conversation`",
+}
+
+#: Hex of a sha's width, with a letter in it: a run of digits alone in a
+#: span is a number (timestamps, ids), and a sha of digits alone -- about one
+#: 7-digit sha in twenty-seven -- is read only inside a `git` command.
+_HEX = r"(?=[0-9]*[a-f])[0-9a-f]{7,40}"
+_REVISION = rf"({_HEX}|HEAD)(?:\^|~\d*)*"
+#: A code span that is a revision or a range and nothing else.
+SHA_SPAN = re.compile(rf"{_REVISION}(?:\.\.{_REVISION})?")
+#: A hex word inside a `git` command span.
+GIT_COMMAND_SHA = re.compile(r"(?<![\w./-])[0-9a-f]{7,40}(?![\w/-])")
+#: A 7-digit sha in prose: a letter and a digit both, bounded by non-words.
+PROSE_SHA = re.compile(
+    r"(?<![\w./`-])(?=[0-9a-f]{0,6}[0-9])(?=[0-9a-f]{0,6}[a-f])[0-9a-f]{7}(?![\w/`-])"
+)
+#: An inline code span, matched within one line as `code_spans` matches it.
+INLINE_SPAN = re.compile(r"`([^`\n]+)`")
+#: An `owner/repo` span ending the text before a sha's span ("beside").
+REPOSITORY_BESIDE = re.compile(r"`([\w.-]+/[\w.-]+)`[\s>]*(?:at[\s>]+)?\Z")
+
+
+@dataclass(frozen=True)
+class ShaCitation:
+    sha: str
+    line: int
+    #: The `owner/repo` named beside it, if any.
+    repository: str | None
+
+
+def sha_citations(text: str) -> list[ShaCitation]:
+    """Every sha `text` cites, in the three shapes above, in text order."""
+    found: list[tuple[int, str, str | None]] = []
+    offset = 0
+    prose_lines: list[tuple[int, str]] = []
+    for line, kind in fence_kinds(text.splitlines(keepends=True)):
+        if kind == "code":
+            span = line.strip()
+            if span.startswith("git "):
+                found += [
+                    (offset + m.start(), m.group(0), None)
+                    for m in GIT_COMMAND_SHA.finditer(span)
+                ]
+        elif kind == "prose":
+            prose_lines.append((offset, line))
+        offset += len(line)
+    for start, line in prose_lines:
+        for match in INLINE_SPAN.finditer(line):
+            span = match.group(1).strip()
+            at = start + match.start()
+            if span.startswith("git "):
+                found += [
+                    (at, m.group(0), None) for m in GIT_COMMAND_SHA.finditer(span)
+                ]
+            elif SHA_SPAN.fullmatch(span):
+                beside = REPOSITORY_BESIDE.search(text, 0, at)
+                repository = beside.group(1) if beside else None
+                found += [(at, sha, repository) for sha in re.findall(_HEX, span)]
+        prose = INLINE_SPAN.sub(lambda m: " " * len(m.group(0)), line)
+        found += [
+            (start + m.start(), m.group(0), None) for m in PROSE_SHA.finditer(prose)
+        ]
+    return [
+        ShaCitation(sha, text.count("\n", 0, at) + 1, repository)
+        for at, sha, repository in sorted(found)
+    ]
+
+
+def test_the_sha_scan_reads_fences_by_the_same_rule():
+    # The shas inside the five-backtick fence are under a three-backtick
+    # line, which does not close it; the one after the fence closes is read.
+    assert sha_citations(FENCE_DOCUMENT) == [ShaCitation("fed4321", 10, None)]
+
+
+def require_this_repository() -> None:
+    """Skip the calling test, saying why, unless `ROOT` is the top of a git
+    work tree: outside one no sha can resolve, and a test that read that as
+    red, or as green, would be reporting on the checkout, not the documents."""
+    top = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if top.returncode != 0 or pathlib.Path(top.stdout.strip()).resolve() != (
+        ROOT.resolve()
+    ):
+        pytest.skip(
+            f"{ROOT} is not the top of a git repository, so no cited sha can be "
+            "resolved; the sha tests need a full clone with tags"
+        )
+
+
+def reachable_commits() -> set[str]:
+    """Every commit a ref reaches, as a full sha: what a full clone with
+    tags holds, whatever else this clone's object store happens to keep."""
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-list", "--all"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return set(listed)
+
+
+def unresolved_commits(shas: set[str]) -> set[str]:
+    """The shas that name no commit a ref of this repository reaches
+    (missing, ambiguous, an object of another type, or dangling)."""
+    require_this_repository()
+    reachable = reachable_commits()
+    ordered = sorted(shas)
+    answer = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "--batch-check"],
+        input="".join(f"{sha}^{{commit}}\n" for sha in ordered),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert len(answer) == len(ordered), answer
+    return {
+        sha
+        for sha, line in zip(ordered, answer, strict=True)
+        if line.split()[1:2] != ["commit"] or line.split()[0] not in reachable
+    }
+
+
+def held_here(citation: ShaCitation) -> bool:
+    """Whether this repository must hold the cited sha."""
+    return (
+        citation.repository in (None, THIS_REPOSITORY) and citation.sha not in NOT_SHAS
+    )
+
+
+def sha_faults(cited: dict[str, list[ShaCitation]]) -> dict[str, list[str]]:
+    """Per document, each cited sha this repository must hold and does not."""
+    missing = unresolved_commits(
+        {c.sha for citations in cited.values() for c in citations if held_here(c)}
+    )
+    faults = {
+        where: [
+            f"line {c.line}: {c.sha}"
+            for c in citations
+            if held_here(c) and c.sha in missing
+        ]
+        for where, citations in cited.items()
+    }
+    return {where: found for where, found in faults.items() if found}
+
+
+def cited_shas_by_document() -> dict[str, list[ShaCitation]]:
+    return {
+        str(path.relative_to(ROOT)): sha_citations(path.read_text(encoding="utf-8"))
+        for path in durable_documents()
+    }
+
+
+def test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository():
+    require_this_repository()
+    cited = cited_shas_by_document()
+    assert sum(map(len, cited.values())) > 100, "the sha scan read almost nothing"
+    faults = sha_faults(cited)
+    assert not faults, (
+        "a durable document cites a sha that is no commit of this repository. "
+        "A wrong sha in a dated record is a finding, not a fix; another "
+        "repository's sha names that repository beside it:\n"
+        f"  {faults}"
+    )
+
+
+def test_every_hex_value_called_not_a_sha_is_still_cited_and_is_no_object():
+    # Outside a repository `cat-file -e` fails for every value, and this
+    # would pass having checked nothing (R-9).
+    require_this_repository()
+    bare = {
+        citation.sha
+        for citations in cited_shas_by_document().values()
+        for citation in citations
+    }
+    assert set(NOT_SHAS) <= bare, sorted(set(NOT_SHAS) - bare)
+    for value in NOT_SHAS:
+        exists = subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e", value], capture_output=True
+        )
+        assert exists.returncode != 0, f"{value} names an object; it may be a sha"
+
+
+def _short(revision: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--short=7", revision],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_the_sha_scan_reads_each_shape_and_only_those():
+    text = (
+        "Fixed in abc1234 and `def5678`, `aaaa111..bbbb222`, `ccc3333^`,\n"
+        "`git show ddd4444:WORKPLAN.md`, and `" + "e" * 39 + "1`.\n"
+        "Not `ec3eeae2…`, not `chatcmpl-tool-ba26764988bf8aa9`, not 1234567,\n"
+        "not abcdefa, not `" + "f" * 64 + "`.\n"
+        "```\n"
+        "git log -1 fff6666\n"
+        "1234abc\n"
+        "```\n"
+        "```x` opens a prose line and is no fence, so `abcd999` is read.\n"
+    )
+    assert [c.sha for c in sha_citations(text)] == [
+        "abc1234",
+        "def5678",
+        "aaaa111",
+        "bbbb222",
+        "ccc3333",
+        "ddd4444",
+        "e" * 39 + "1",
+        "fff6666",
+        "abcd999",
+    ]
+
+
+def test_another_repository_s_sha_is_exempt_only_when_named_beside_it():
+    text = (
+        "`SigorMatt/spanweave-zoo` at\n> `1111aaa`, and `owner/other` `2222bbb`;\n"
+        "but `SigorMatt/spanweave-zoo` holds the pin `3333ccc`, and\n"
+        "`SigorMatt/spanweave` `4444ddd` is this repository's, and a bare\n"
+        "`2222bbb` is this repository's too.\n"
+    )
+    assert [(c.sha, c.repository) for c in sha_citations(text)] == [
+        ("1111aaa", "SigorMatt/spanweave-zoo"),
+        ("2222bbb", "owner/other"),
+        ("3333ccc", None),
+        ("4444ddd", "SigorMatt/spanweave"),
+        ("2222bbb", None),
+    ]
+    faults = sha_faults({"NOTES.md": sha_citations(text)})
+    assert faults == {
+        "NOTES.md": ["line 3: 3333ccc", "line 4: 4444ddd", "line 5: 2222bbb"]
+    }
+
+
+def test_a_sha_resolves_only_as_a_commit_of_this_repository():
+    require_this_repository()
+    commit = _short("HEAD")
+    blob = _short("HEAD:README.md")
+    tree = _short("HEAD^{tree}")
+    full = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert unresolved_commits({commit, full}) == set()
+    assert unresolved_commits({blob, tree, "0000000", "e" * 40}) == {
+        blob,
+        tree,
+        "0000000",
+        "e" * 40,
+    }
+
+
+#: An identity for the scratch commits, so they need no user configuration.
+_SCRATCH_IDENTITY = ("-c", "user.name=t", "-c", "user.email=t@t.invalid")
+
+
+def _scratch_git(root: pathlib.Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *_SCRATCH_IDENTITY, *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_a_commit_no_ref_reaches_is_unresolved_though_the_store_holds_it(
+    tmp_path, monkeypatch
+):
+    _scratch_git(tmp_path, "init", "-q")
+    tree = _scratch_git(tmp_path, "hash-object", "-t", "tree", "-w", "/dev/null")
+    parent = _scratch_git(tmp_path, "commit-tree", tree, "-m", "parent")
+    child = _scratch_git(tmp_path, "commit-tree", tree, "-p", parent, "-m", "child")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    # Both are commits in the object store, and no ref names either.
+    assert _scratch_git(tmp_path, "cat-file", "-t", child) == "commit"
+    assert unresolved_commits({parent[:7], child}) == {parent[:7], child}
+    # A tag, not a branch, reaches the child, and through it the parent: what
+    # a ref reaches is its history, not only its tip.
+    _scratch_git(tmp_path, "update-ref", "refs/tags/rejected/x", child)
+    assert unresolved_commits({parent[:7], child}) == set()
+
+
+def test_the_sha_tests_skip_outside_the_top_of_a_repository(tmp_path, monkeypatch):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    inner = tmp_path / "repository" / "sub"
+    inner.mkdir(parents=True)
+    _scratch_git(tmp_path / "repository", "init", "-q")
+    for root in (plain, inner):
+        monkeypatch.setattr(sys.modules[__name__], "ROOT", root)
+        with pytest.raises(
+            pytest.skip.Exception, match=r"is not the top of a git repository"
+        ):
+            test_every_sha_a_durable_document_cites_is_a_commit_of_this_repository()
+        with pytest.raises(pytest.skip.Exception, match=r"need a full clone with tags"):
+            test_every_hex_value_called_not_a_sha_is_still_cited_and_is_no_object()
+
+
+# -- The zoo's counts, read from the documents that state them -------------
+#
+# `test_the_zoo_seals_twenty_nine_pairs` asserts the literal 29, and nothing
+# read it from the prose: "29 pairs" changed to "28 pairs" in `SPEC.md`,
+# `CHANGELOG.md`, `ci.yml` and `otlp_protobuf.py`'s docstring together left
+# the suite green, as did TASKS.md's "all 12 captures" changed to 13 and
+# D29's "Twenty-nine exports" changed to "Thirty" (cold review of
+# 2026-10-17, R-7, R-13). The figures are now read from the files that state
+# them and held to `tests/zoo_census.py`, as `test_codes` holds `SPEC.md`'s.
+#
+# **What is read.** A number -- digits or words -- directly before `pairs`,
+# `captures`, `exports` or `[raw|JSON] bodies`, in a paragraph that names the
+# zoo; a table is read in the scope of the paragraph before it, since a
+# table's rows rarely repeat their subject, and in its own if it names the zoo
+# (the decisions log's D29 row does; its intro does not). Each noun has one
+# census value: a capture is a capture, and a pair, a body and an export are
+# each one of the zoo's exports (decisions log D29). **What is not:** a figure
+# after `other` (a subset: "the other eight captures"), and a sentence that
+# records a correction ("the row's 24 bodies were 29, corrected at ..."),
+# which states the old figure on purpose. The skip is that sentence, not its
+# paragraph: skipping the whole paragraph left the suite green while TASKS.md
+# fell from 10 figures read to 3 (cold review of 2026-10-17, scoped, R-11,
+# mutation G7), so TASKS.md's count is pinned at its measured value. Out of
+# reach, said rather than carried: a figure in a paragraph that does not name
+# the zoo, and the other documents.
+
+#: The files the counts are read from, and how each one's prose is reached.
+ZOO_COUNT_SOURCES = (
+    "SPEC.md",
+    "CHANGELOG.md",
+    "TASKS.md",
+    ".github/workflows/ci.yml",
+    "spanweave/otlp_protobuf.py",
+)
+
+_UNITS = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen",
+]  # fmt: skip
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40}
+
+
+def number_value(word: str) -> int:
+    """`29`, `twelve`, `Twenty-nine` -> the integer."""
+    word = word.lower()
+    if word.isdigit():
+        return int(word)
+    if word in _UNITS:
+        return _UNITS.index(word) + 1
+    tens, _, unit = word.partition("-")
+    return _TENS[tens] + (_UNITS.index(unit) + 1 if unit else 0)
+
+
+_NUMBER = (
+    r"\d+|(?:" + "|".join(_TENS) + r")(?:-(?:" + "|".join(_UNITS[:9]) + r"))?"
+    r"|" + "|".join(sorted(_UNITS, key=len, reverse=True))
+)
+#: A zoo figure: the number, then its noun.
+ZOO_COUNT = re.compile(
+    rf"(?i)(?<![\w.,/-])(?<!other )({_NUMBER})\s+(?:(?:raw|json)\s+)?"
+    r"(pairs|captures|exports|bodies)\b"
+)
+#: A sentence that records a correction states a superseded figure.
+ZOO_CORRECTION = re.compile(r"\bcorrected\b", re.I)
+
+
+def zoo_census_counts() -> dict[str, int]:
+    """Each noun's census value, recounted from `fixtures/zoo/`."""
+    pairs = sum(len(zoo_census.pairs(capture)) for capture in zoo_census.CAPTURES)
+    bodies = sum(len(zoo_census.bodies(capture)) for capture in zoo_census.CAPTURES)
+    raw = sum(len(zoo_census.raw_bodies(capture)) for capture in zoo_census.CAPTURES)
+    assert pairs == bodies == raw, (pairs, bodies, raw)
+    return {
+        "captures": len(zoo_census.CAPTURES),
+        "pairs": pairs,
+        "exports": pairs,
+        "bodies": bodies,
+    }
+
+
+def prose_of(relative: str, text: str) -> str:
+    """The prose of a source file: a workflow's comments, a module's
+    docstring, a document whole. Paragraphs stay separated by blank lines."""
+    if relative.endswith(".yml"):
+        return "\n".join(
+            line.split("#", 1)[1] if line.lstrip().startswith("#") else ""
+            for line in text.splitlines()
+        )
+    if relative.endswith(".py"):
+        docstring = ast.get_docstring(ast.parse(text))
+        assert docstring, relative
+        return docstring
+    return text
+
+
+def zoo_count_figures(text: str) -> list[tuple[str, int, str]]:
+    """Each zoo figure the text asserts: (noun, value, sentence)."""
+    figures: list[tuple[str, int, str]] = []
+    in_scope = False
+    for paragraph in re.split(r"\n[\s>]*\n", text):
+        flowed_paragraph = " ".join(paragraph.split())
+        names_the_zoo = bool(re.search(r"\bzoo\b", flowed_paragraph, re.I))
+        if flowed_paragraph.lstrip("> ").startswith("|"):
+            in_scope = in_scope or names_the_zoo
+        else:
+            in_scope = names_the_zoo
+        if not in_scope:
+            continue
+        for sentence in SENTENCE_BOUNDARY.split(flowed_paragraph):
+            if ZOO_CORRECTION.search(sentence):
+                continue
+            figures += [
+                (match.group(2).lower(), number_value(match.group(1)), sentence)
+                for match in ZOO_COUNT.finditer(sentence)
+            ]
+    return figures
+
+
+def zoo_count_faults(text: str, counts: dict[str, int]) -> list[str]:
+    return [
+        f"{value} {noun} (the census: {counts[noun]}): {sentence[:160]!r}"
+        for noun, value, sentence in zoo_count_figures(text)
+        if value != counts[noun]
+    ]
+
+
+@pytest.mark.parametrize("relative", ZOO_COUNT_SOURCES)
+def test_the_zoo_counts_a_document_states_are_the_census(relative):
+    prose = prose_of(relative, read(relative))
+    assert zoo_count_figures(prose), f"{relative}: no zoo figure was read"
+    faults = zoo_count_faults(prose, zoo_census_counts())
+    assert not faults, f"{relative} states a zoo count the census does not:\n  " + (
+        "\n  ".join(faults)
+    )
+
+
+def test_the_zoo_count_scan_reads_the_spellings_and_skips_what_it_says():
+    counts = {"captures": 12, "pairs": 29, "exports": 29, "bodies": 29}
+    text = (
+        "On the zoo's 28 pairs, all thirteen captures and Thirty exports;\n"
+        "its 30 raw bodies.\n"
+        "\n"
+        "| What | In the 27 pairs |\n"
+        "|---|---|\n"
+        "\n"
+        "Nothing here.\n"
+        "\n"
+        "| D | Twenty-eight exports, sealed by the zoo |\n"
+        "\n"
+        "In the zoo, the other eight captures keep theirs; its 31 pairs are correct.\n"
+        "The row's 24 bodies were 29, corrected at T0. Its 14 captures stand.\n"
+        "\n"
+        "Elsewhere, three pairs of something else entirely.\n"
+    )
+    assert [(n, v) for n, v, _ in zoo_count_figures(text)] == [
+        ("pairs", 28),
+        ("captures", 13),
+        ("exports", 30),
+        ("bodies", 30),
+        ("pairs", 27),
+        ("exports", 28),
+        ("pairs", 31),
+        ("captures", 14),
+    ]
+    assert len(zoo_count_faults(text, counts)) == 8
+    # The workflow's comments and the module's docstring are what is read.
+    assert prose_of("ci.yml", "  # the zoo's 29 pairs\n  run: 28 pairs\n").strip() == (
+        "the zoo's 29 pairs"
+    )
+    assert prose_of("m.py", '"""The zoo\'s 29 pairs."""\nX = "28 pairs"\n') == (
+        "The zoo's 29 pairs."
+    )
+
+
+#: How many zoo figures TASKS.md states, measured. Its record carries
+#: corrections beside live figures, so it is where a skip that reaches past
+#: the correcting sentence drops figures without a fault.
+TASKS_ZOO_FIGURES = 10
+
+
+def test_tasks_md_zoo_figure_count_is_the_measured_one():
+    figures = zoo_count_figures(prose_of("TASKS.md", read("TASKS.md")))
+    assert len(figures) == TASKS_ZOO_FIGURES, (
+        f"TASKS.md: {len(figures)} zoo figures read, {TASKS_ZOO_FIGURES} measured. "
+        "If TASKS.md gained or lost a figure, re-measure and move the pin; if it "
+        "did not, the scan is skipping more than the sentence that says "
+        "'corrected':\n  " + "\n  ".join(f"{v} {n}: {s[:100]!r}" for n, v, s in figures)
+    )
+
+
+# -- A Setup command's extras, held to the package -------------------------
+#
+# `ENVIRONMENT.md`'s Setup line and the README's Development block both say
+# `uv sync --extra dev --extra otlp`, and an extra spelled `otlpx` in either
+# left the suite green (cold review of 2026-10-17, R-17): `uv sync` with an
+# extra the package does not declare fails for the first person who pastes
+# it. Every `--extra` a `uv sync` line names is read from the code a reader
+# would run and held to `pyproject.toml`'s `[project.optional-dependencies]`.
+
+#: The documents whose `uv sync` lines a reader pastes.
+SYNC_DOCUMENTS = ("ENVIRONMENT.md", "README.md")
+
+
+def declared_extras() -> set[str]:
+    import tomllib
+
+    metadata = tomllib.loads(read("pyproject.toml"))
+    return set(metadata["project"]["optional-dependencies"])
+
+
+def sync_extras(markdown: str) -> list[str]:
+    """Every extra a `uv sync` command in the document's code names."""
+    extras: list[str] = []
+    for span in code_spans(markdown):
+        for command in re.findall(r"\buv sync\b[^#`;|&]*", span):
+            words = shlex.split(command)
+            extras += [
+                words[i + 1] for i, word in enumerate(words[:-1]) if word == "--extra"
+            ]
+            extras += [
+                word.split("=", 1)[1] for word in words if word.startswith("--extra=")
+            ]
+    return extras
+
+
+@pytest.mark.parametrize("relative", SYNC_DOCUMENTS)
+def test_every_extra_a_uv_sync_line_names_is_one_the_package_declares(relative):
+    named = sync_extras(read(relative))
+    assert named, f"{relative}: no `uv sync --extra` line was read"
+    undeclared = sorted(set(named) - declared_extras())
+    assert not undeclared, (
+        f"{relative} tells a reader to `uv sync` an extra `pyproject.toml` "
+        f"does not declare: {undeclared}"
+    )
+
+
+def test_the_sync_scan_reads_fenced_and_inline_commands():
+    text = (
+        "- Setup: `uv sync --extra dev --extra=otlpx`\n"
+        "```bash\n"
+        "uv sync --extra dev --extra otlpy   # a comment --extra not\n"
+        "```\n"
+    )
+    assert sync_extras(text) == ["dev", "otlpy", "dev", "otlpx"]
 
 
 # -- `CONTRACTS.md` against `SPEC.md` --------------------------------------
@@ -1566,8 +2696,10 @@ def documented_example_paths(
     # The Python block is the same paste by another route.
     for path in scanned:
         text = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S):
-            for literal in re.findall(r"""["']([^"'\n]+)["']""", match.group(1)):
+        for block in fenced_blocks(text):
+            if block.info != "python":
+                continue
+            for literal in re.findall(r"""["']([^"'\n]+)["']""", block.body):
                 if "/" in literal and (ROOT / literal).is_file():
                     found.setdefault(literal, set()).add(path.name)
     return found
@@ -3544,7 +4676,7 @@ def test_the_readme_shows_the_failure_line_the_cli_actually_prints(tmp_path, cap
     from spanweave.cli import main
 
     body = section(read("README.md"), "\n## Exit codes")
-    fences = re.findall(r"^```\n(.*?)^```", body, re.M | re.S)
+    fences = [block.body for block in fenced_blocks(body) if not block.info]
     transcripts = [fence for fence in fences if fence.lstrip().startswith("$ ")]
     assert len(transcripts) == 1, (
         "the README's Exit codes section no longer shows exactly one "

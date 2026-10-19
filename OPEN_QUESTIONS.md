@@ -42,6 +42,14 @@ with final statuses, the decisions log in full, the resume note, and each
 probe's disposition — is in `TASKS.md` under *The stranger's-trace series*.
 These references are kept as written, for the reason the audit's are.
 
+**Entry §23 was written as a halt during the wire series** (2026-10-17) and
+refers to that series' own `WORKPLAN.md`. It carries the maintainer's decision
+beneath it. The file was deleted at the series' close on 2026-10-17, and
+everything of it that outlives the series — the batch registry with final
+statuses, the decisions log in full, the resume note, and L1's disposition —
+is in `TASKS.md` under *The wire series*. These references are kept as
+written, for the reason the audit's are.
+
 ---
 
 ## 1. Should `unknown` nodes be promotable?
@@ -4021,3 +4029,116 @@ no adapter branches on it; `escaped` and every value are carried as stated;
 `exception.message` is copied into `source` because it is the fact reported,
 `exception.stacktrace` is not and stays verbatim in `raw.source`; unclaimed
 spans report their events with `adapter` null.
+
+## 23. W1: What does the protobuf reader do where its JSON twin has nothing to show?
+
+*Written 2026-10-17 by batch W1 of the wire series (`WORKPLAN.md`, branch
+`wire`, parent `b20280f`), as the halt its brief names: "a rule the spec does
+not already state — stop". The decisions log's second W1 row says the same of
+this case in its own words: "A protobuf-only behaviour with no JSON
+counterpart is a halt, not a choice." Nothing in this commit changes
+behaviour.*
+
+**(a) The question.** W1 adds a function that unpacks the bytes of an
+`ExportTraceServiceRequest` into the records `read_records` yields for the
+Collector's JSON of the same export, held to that JSON by the zoo's pairs.
+Three things the function must do have no pair to decide them, and two of
+them have no JSON counterpart at all:
+
+1. **A body that is not a protobuf message.** `ParseFromString` raises
+   `DecodeError` ("Wire format was corrupt") on bytes that are not one. The
+   reader never raises on malformed input (§7), and the JSON container's rule
+   is one `malformed_record` counting one in `skipped_records` — but §3.7's
+   source table gives `malformed_record` a `str`, the text, and a binary body
+   has none.
+2. **A field the schema does not define.** Protobuf keeps a field it has no
+   definition for (a newer OTLP than the installed `opentelemetry-proto`, or a
+   vendor extension) as an *unknown field* on the message, with a number and
+   a wire type but no name. `MessageToDict` drops it, and says nothing:
+   measured on the parent, a zoo body with one unknown varint field appended
+   converts to a dict equal to the body's without it. Carried through, that is
+   a silent discard (`CLAUDE.md` 2). The pairs cannot decide it: no raw body
+   in the zoo carries an unknown field at any level (measured on the parent by
+   walking every message with `google.protobuf.unknown_fields`), and the
+   Collector, which re-encoded each raw body to its JSON, is a Go program that
+   would not have written a field it did not know into the JSON either — so
+   matching the oracle and keeping invariant 2 are, here, two different
+   answers.
+3. **A `double`.** The OTLP/JSON mapping lets a `doubleValue` be written `1`
+   or `1.0`, and the JSON path reads the first as an integer and the second as
+   a float, so the built graph writes them differently. `MessageToDict` gives
+   a Python float. No JSON body in the zoo carries a `doubleValue`, so the
+   pairs say nothing about which spelling the Collector uses.
+
+**(b) What the pairs did decide**, measured on the parent with a prototype
+(`MessageToDict(..., use_integers_for_enums=True)`, then each span's and
+link's `traceId` / `spanId` / `parentSpanId` from base64 to lowercase hex,
+then the existing `read_records` on the JSON text): on every pair the zoo
+seals, the records are equal record by record, `Unpacked` mark included, and
+`dumps` of the built graphs are equal byte for byte. The Collector differs
+from `MessageToDict`'s defaults in exactly two places on these bodies: ids
+(hex, not base64) and enums (`kind` and `status.code` as integers, not
+names). `*UnixNano` as decimal strings, `intValue` as a decimal string,
+omitted defaults (an empty `parentSpanId` on a root span, an unset `status`
+written `{}`) already agree. An empty body parses as an empty request, which
+`MessageToDict` writes `{}`; restoring the omitted `resourceSpans` as `[]`
+gives what the JSON path gives `{"resourceSpans": []}` — no records — so that
+case follows from the existing rule and is not asked here.
+
+**(c) Options.**
+
+*For 1, a body that does not parse:*
+
+- **1A.** One `malformed_record`, `skipped_records` 1, no records, `source`
+  `null` — the `undecodable_bytes` precedent (§3.7: "JSON has no way to write"
+  a byte sequence). Adds a row to §3.7's source table ("`null` for a protobuf
+  body"). Recommended: it is the JSON container's rule, applied to the other
+  encoding of the same container.
+- **1B.** `source` the body in base64. Carries the bytes, but invents a
+  representation the record never had.
+- **1C.** Raise a `SpanweaveError` with a new code. Contradicts "the reader
+  never raises on malformed input".
+
+*For 2, unknown fields:*
+
+- **2A.** Refuse the body whole: one `malformed_record` as 1A, naming the
+  path of the first message that carries one. No new code; loud; costs every
+  readable span in that body.
+- **2B.** Yield the records, and add one diagnostic per message carrying
+  unknown fields, under a new code (the series' standing rules let the code
+  vocabulary grow, with the shape artifact regenerated), naming the message's
+  path in the request and the field numbers; `source` `null` or the numbers.
+  Keeps the spans, reports the loss; the field's bytes are still not carried.
+- **2C.** As 2B, with each unknown field's bytes carried in base64 on the
+  diagnostic's `source`. Lossless in content; invents a representation.
+- **2D.** Match the Collector and drop them silently. Listed because the
+  oracle rule taken literally gives it; violates `CLAUDE.md` 2.
+
+*For 3, doubles:*
+
+- **3A.** `MessageToDict`'s float, stated in §7 as unproven by the pairs, with
+  a test that the zoo holds no `doubleValue`.
+- **3B.** Write an integral finite double as the integer, on the guess that
+  the Collector's Go encoder writes `1` — a guess the pairs cannot check.
+- **3C.** Defer: 3A now, and a fixture pair with a `doubleValue` captured
+  from a Collector as the thing that would settle it, recorded as an open
+  thread in `TASKS.md` at W2.
+
+**(d) What does not move under any option.** No model or schema change, no
+new `NodeKind`, no normalized key, and no change to the graph a JSON export
+yields: the protobuf path ends in the same `read_records` call. 1A and 2B grow
+only the diagnostic source vocabulary or the code vocabulary, which the
+series' standing rules permit with the artifact regenerated.
+
+**The decision (2026-10-17, maintainer).** 1A, 2B, 3C. The other encoding
+of the same container gets the container's rules: a body that does not
+parse is one `malformed_record` with a `null` source, as `undecodable_bytes`
+already does for bytes JSON cannot write. Where the oracle is silent and
+invariant 2 is not, invariant 2 wins: unknown fields are reported per
+message under `unknown_fields`, with the path and the numbers, and the spans
+are kept — refusing the body (2A) would lose readable spans to report a
+number, and carrying the bytes (2C) would invent a representation; the
+Collector's own drop (2D) is the oracle's letter and not its point. A
+`doubleValue` is a float, said in §7 to be the one thing the pairs did not
+check, with a test that notices the day a pair appears and a zoo thread to
+make one.

@@ -259,6 +259,11 @@ a dialect for an adapter (registered in the `TASKS.md` audit section). F1 and
 F2 answered it on 2026-09-10: a container format in the reader, not an
 adapter.*
 
+*OTLP protobuf behind the `otlp` extra is done at `4ecf414`, by the wire
+series' W1: like raw OTLP JSON, it is read by the reader as the other encoding
+of the same container, not by an adapter (registered in the `TASKS.md` wire
+series section).*
+
 The flywheel is deliberate: the contribution surface is *"add your
 instrumentor"*, backed by a corpus that makes a correct contribution obvious and
 an incorrect one impossible to merge.
@@ -293,7 +298,7 @@ conformance corpus and run against the cross-dialect equivalence test.
 
 **The zoo corpus exists, and it is not the third dialect.** `fixtures/zoo/`
 holds twelve captures of six agents built by implementers who knew nothing
-about this library, copied byte for byte from the zoo at `7eb5b69`; the census
+about this library, copied byte for byte from the zoo at `SigorMatt/spanweave-zoo` `7eb5b69`; the census
 and the readings are its gates (`tests/zoo_census.py`,
 `tests/test_zoo_readings.py`, both run by `make conformance`). It is the corpus
 the flywheel above wanted — captures nobody shaped for the library, which make
@@ -581,8 +586,10 @@ and each of these is a claim the repo can already prove false:
   `spanweave --version` says so. This gate exists *because* it is unfrozen;
   announcing it as settled makes the freeze a formality and destroys the
   evidence the announcement was posted to collect.
-- **No dialect it does not read.** Langfuse, LangSmith, Logfire, Vercel and OTLP
-  protobuf are Phase 4 wants. "Supports OpenTelemetry" reads as all of them.
+- **No dialect it does not read.** Langfuse, LangSmith, Logfire and Vercel are
+  Phase 4 wants. OTLP protobuf is read (behind the `otlp` extra, since
+  `4ecf414`, by the reader, not an adapter). "Supports OpenTelemetry" must not
+  read as covering the unread ones.
 - **No unqualified equivalence claim.** `Node.name` is declared dialect-varying
   in **every** scenario compared across both dialects, so "one graph from two
   instrumentors" is a claim about everything `canonical()` compares *except*

@@ -146,3 +146,62 @@ def test_the_fallback_rendering_is_the_one_str_gives():
     value = {"a": [_whole(long), 2.5, None, True, "x'y"], "b": {"c": "d"}}
     short = {"a": [7, 2.5, None, True, "x'y"], "b": {"c": "d"}}
     assert jsoncodec._repr_of(value) == str(short).replace("7", long, 1)
+
+
+# -- One sorting, two spellings (decisions log D38) -------------------------
+
+
+def test_keys_sorted_sorts_every_object_at_every_depth_and_nothing_else():
+    value = {
+        "b": [{"d": 1.5, "c": {"f": None, "e": True}}, "y"],
+        "a": {"h": 4, "g": "x"},
+    }
+    written = json.dumps(value)
+    copy = jsoncodec.keys_sorted(value)
+    assert copy == value
+    # The value it was handed keeps the order it was written in.
+    assert json.dumps(value) == written
+    assert json.dumps(copy) == json.dumps(value, sort_keys=True)
+    assert jsoncodec.python_text(copy) == (
+        "{'a': {'g': 'x', 'h': 4}, 'b': [{'c': {'e': True, 'f': None}, 'd': 1.5}, 'y']}"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["text", 7, 2.5, True, None, [], {}],
+    ids=["string", "integer", "float", "true", "null", "array", "object"],
+)
+def test_keys_sorted_writes_what_it_does_not_sort_as_it_was(value):
+    assert jsoncodec.python_text(jsoncodec.keys_sorted(value)) == str(value)
+    assert json.dumps(jsoncodec.keys_sorted(value)) == json.dumps(value)
+
+
+def test_keys_sorted_meets_no_depth_ceiling_the_encoder_would_not():
+    value: object = "leaf"
+    for depth in range(5000):
+        value = {"b": value, "a": depth}
+    copy = jsoncodec.keys_sorted(value)
+    for _ in range(5000):
+        assert list(copy) == ["a", "b"]
+        copy = copy["b"]
+    assert copy == "leaf"
+
+
+def test_keys_sorted_keeps_a_value_that_refers_back_to_itself():
+    looped: dict[str, object] = {"b": 1}
+    looped["a"] = looped
+    copy = jsoncodec.keys_sorted(looped)
+    assert copy["a"] is copy
+    assert jsoncodec.python_text(copy) == "{'a': {...}, 'b': 1}"
+
+
+def test_keys_sorted_writes_a_long_integer_whole_in_either_spelling():
+    long = digit_limit.above_the_floor()
+    value = {"b": [_whole(long)], "a": -_whole(long)}
+    assert jsoncodec.encode(jsoncodec.keys_sorted(value), _refusing_dump) == (
+        f'{{"a":-{long},"b":[{long}]}}'
+    )
+    assert jsoncodec._repr_of(jsoncodec.keys_sorted(value)) == (
+        f"{{'a': -{long}, 'b': [{long}]}}"
+    )

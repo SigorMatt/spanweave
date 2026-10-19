@@ -24,7 +24,9 @@ Two claims, each re-derived on every run (`make conformance` runs this file):
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from dataclasses import fields
 
 import pytest
@@ -36,10 +38,13 @@ from spanweave.model import JsonValue
 from tests import zoo_census
 from tests.zoo_census import (
     CAPTURES,
+    PROTOBUF,
+    ROOT,
     STRUCTURES,
     WHOLE_STRUCTURES,
     ZOO,
     ZOO_BODY_DIR,
+    ZOO_RAW_DIR,
     Capture,
     Census,
 )
@@ -61,6 +66,28 @@ def _listed_bodies(capture: Capture) -> dict[str, str]:
     return listed
 
 
+def _listed_raw_bodies(capture: Capture) -> dict[str, str]:
+    """`NNNN.body` -> sha256 for every protobuf body the manifest lists.
+
+    Chosen by the entry's `content_type`, as the manifest seals it; each such
+    entry is asserted to sit in `raw/`, so a protobuf body anywhere else, or a
+    `raw/` entry of another type, is a failure and not a silent omission.
+    """
+    document = zoo_census.manifest(capture)
+    entries = document["bodies"]
+    assert isinstance(entries, list)
+    listed: dict[str, str] = {}
+    for entry in entries:
+        assert isinstance(entry, dict)
+        directory, _, name = str(entry["file"]).partition("/")
+        is_protobuf = entry["content_type"] == PROTOBUF
+        assert is_protobuf == (directory == ZOO_RAW_DIR), entry
+        if is_protobuf:
+            assert entry["content_encoding"] is None, entry
+            listed[name] = str(entry["sha256"])
+    return listed
+
+
 def test_the_copy_holds_the_twelve_captures_and_nothing_else():
     on_disk = sorted(
         str(path.relative_to(ZOO)) for path in ZOO.rglob("*") if path.is_file()
@@ -69,11 +96,18 @@ def test_the_copy_holds_the_twelve_captures_and_nothing_else():
         ["README.md"]
         + [f"{c.run}/MANIFEST.json" for c in CAPTURES]
         + [f"{c.run}/{name}" for c in CAPTURES for name in _listed_bodies(c)]
+        + [
+            f"{c.run}/{ZOO_RAW_DIR}/{name}"
+            for c in CAPTURES
+            for name in _listed_raw_bodies(c)
+        ]
     )
     assert on_disk == expected
     assert len(CAPTURES) == 12
-    # PROBES.md "The captures": 29 bodies across the twelve.
+    # PROBES.md "The captures": 29 bodies across the twelve; and L1, "29 of 29
+    # bodies" answered 415 -- the raw ones, one for each.
     assert sum(len(c.records_per_body) for c in CAPTURES) == 29
+    assert sum(len(_listed_raw_bodies(c)) for c in CAPTURES) == 29
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
@@ -82,6 +116,146 @@ def test_every_body_is_the_zoo_s_byte_for_byte(capture):
     assert [path.name for path in zoo_census.bodies(capture)] == sorted(listed)
     for path in zoo_census.bodies(capture):
         assert zoo_census.sha256(path) == listed[path.name], path
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_raw_body_is_the_zoo_s_byte_for_byte(capture):
+    """The exporter's own protobuf bytes, as the manifest seals them."""
+    listed = _listed_raw_bodies(capture)
+    raw = zoo_census.raw_bodies(capture)
+    assert [path.name for path in raw] == sorted(listed)
+    for path in raw:
+        assert zoo_census.sha256(path) == listed[path.name], path
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_every_json_body_pairs_with_one_raw_body_by_the_forwards_list(capture):
+    """The wire series' oracle: each JSON body beside the raw body it came from.
+
+    `zoo_census.pairs` reads the pairing from the manifest's `forwards`; this
+    holds it to the bodies the manifest lists -- every JSON body paired, every
+    raw body paired exactly once -- and to the shared ordinal the zoo names
+    both forms of one export by (its `SPEC.md` §2.4), which §4.7 does not
+    promise and so is asserted here rather than assumed. On every capture the
+    `forwards` order is the names' order, so this alone cannot tell a pairing
+    read from `forwards` from one read from the names; the synthetic captures
+    below can.
+    """
+    paired = zoo_census.pairs(capture)
+    json_names = [json_body.name for json_body, _ in paired]
+    raw_names = [raw_body.name for _, raw_body in paired]
+    assert json_names == sorted(_listed_bodies(capture))
+    assert sorted(raw_names) == sorted(_listed_raw_bodies(capture))
+    assert len(set(raw_names)) == len(raw_names)
+    for json_body, raw_body in paired:
+        assert json_body.stem == raw_body.stem, (json_body, raw_body)
+        assert raw_body.is_file(), raw_body
+
+
+def _synthetic(tmp_path, monkeypatch, forwards, json_count, raw_count):
+    """A capture under a synthetic `ZOO`, for `pairs` alone; never the zoo.
+
+    On every real capture the `forwards` order is the file-name order, so the
+    test above cannot tell a pairing read from `forwards` from one read from
+    the names (the review's R-8). This writes `json_count` JSON bodies,
+    `raw_count` raw bodies and a manifest whose only claim is `forwards`, in
+    `tmp_path`, and points `zoo_census.ZOO` there.
+    """
+    capture = CAPTURES[0]
+    directory = tmp_path / capture.run
+    (directory / ZOO_RAW_DIR).mkdir(parents=True)
+    for k in range(1, json_count + 1):
+        (directory / f"{k:04d}.json").write_bytes(b"{}")
+    for k in range(1, raw_count + 1):
+        (directory / ZOO_RAW_DIR / f"{k:04d}.body").write_bytes(b"")
+    manifest = {"forwards": forwards}
+    (directory / "MANIFEST.json").write_text(json.dumps(manifest, sort_keys=True))
+    monkeypatch.setattr(zoo_census, "ZOO", tmp_path)
+    return capture, directory
+
+
+def _forward(name, status=200):
+    return {"file": f"{ZOO_RAW_DIR}/{name}", "status": status}
+
+
+def test_pairs_follows_forwards_and_not_the_file_names(tmp_path, monkeypatch):
+    """The `k`-th JSON body pairs with the `k`-th forward, whatever its name."""
+    forwards = [_forward("0002.body"), _forward("0003.body"), _forward("0001.body")]
+    capture, directory = _synthetic(tmp_path, monkeypatch, forwards, 3, 3)
+    raw = directory / ZOO_RAW_DIR
+    assert zoo_census.pairs(capture) == [
+        (directory / "0001.json", raw / "0002.body"),
+        (directory / "0002.json", raw / "0003.body"),
+        (directory / "0003.json", raw / "0001.body"),
+    ]
+
+
+@pytest.mark.parametrize("status", [502, 404, 204])
+def test_pairs_refuses_a_forward_the_collector_did_not_answer_200(
+    tmp_path, monkeypatch, status
+):
+    """A forward the Collector refused has no JSON body: the `k`-th no longer
+    lines up, so `pairs` refuses the capture rather than shift the pairing.
+    Every status but 200 is refused: a 5xx, a 4xx, and a 2xx that is not 200
+    (the review's R-5: a 502 alone let `status < 500` pass)."""
+    forwards = [_forward("0001.body"), _forward("0002.body", status=status)]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match=f"'status': {status}"):
+        zoo_census.pairs(capture)
+
+
+def test_pairs_refuses_a_forward_that_states_no_status(tmp_path, monkeypatch):
+    """A forward with no `status` is not one the Collector answered 200: no
+    default stands in for the missing field (the review's R-5)."""
+    unstated = {"file": f"{ZOO_RAW_DIR}/0002.body"}
+    forwards = [_forward("0001.body"), unstated]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match=re.escape(repr(unstated))):
+        zoo_census.pairs(capture)
+
+
+@pytest.mark.parametrize("file", ["json/0002.body", "0002.body", "raws/0002.body"])
+def test_pairs_refuses_a_forward_outside_the_raw_directory(tmp_path, monkeypatch, file):
+    """A forward names its body as `raw/NNNN.body`; one in another directory,
+    or in none, is refused, not read from `raw/` by its last part."""
+    forwards = [_forward("0001.body"), {"file": file, "status": 200}]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 2, 2)
+    with pytest.raises(AssertionError, match=re.escape(file)):
+        zoo_census.pairs(capture)
+
+
+def test_pairs_refuses_a_count_of_forwards_unlike_the_json_bodies(
+    tmp_path, monkeypatch
+):
+    """Two forwards, three JSON bodies and three raw bodies: the raw bodies'
+    count agrees with the JSON bodies', `forwards` does not, and `forwards`
+    is what `pairs` counts."""
+    forwards = [_forward("0001.body"), _forward("0002.body")]
+    capture, _ = _synthetic(tmp_path, monkeypatch, forwards, 3, 3)
+    assert len(zoo_census.bodies(capture)) == 3
+    assert len(zoo_census.raw_bodies(capture)) == 3
+    with pytest.raises(AssertionError, match=capture.run):
+        zoo_census.pairs(capture)
+
+
+def test_git_treats_every_raw_body_as_binary():
+    """`.gitattributes` marks the raw bodies `binary`: no diff, no merge, and
+    no line-ending conversion of the exporter's bytes on any checkout."""
+    paths = [
+        str(path.relative_to(ROOT))
+        for capture in CAPTURES
+        for path in zoo_census.raw_bodies(capture)
+    ]
+    assert len(paths) == 29
+    for attribute in ("binary", "diff", "merge", "text"):
+        answered = subprocess.run(
+            ["git", "-C", str(ROOT), "check-attr", attribute, "--", *paths],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        expected = "set" if attribute == "binary" else "unset"
+        assert answered == [f"{path}: {attribute}: {expected}" for path in paths]
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
@@ -122,6 +296,35 @@ def test_every_seal_is_the_one_the_readme_pins(capture):
     document = zoo_census.manifest(capture)
     assert zoo_census.seal_of(document) == pinned, capture.run
     assert document["seal"] == pinned, capture.run
+
+
+#: A capture's row of the README's table, its raw column: the count, then the
+#: bytes of each raw body in the order its JSON bodies pair with them.
+_README_RAW = re.compile(
+    r"^\| `(z\d/[^`]+)` \|(?: [^|]+ \|){3} (\d+) \(([\d, ]+)\) \| `[0-9a-f]{64}` \|$"
+)
+
+
+def _readme_raw() -> dict[str, tuple[int, list[int]]]:
+    """Capture run -> the README's raw column: (count, bytes per raw body)."""
+    named: dict[str, tuple[int, list[int]]] = {}
+    for line in (ZOO / "README.md").read_text(encoding="utf-8").splitlines():
+        match = _README_RAW.match(line)
+        if match is not None:
+            run, count, sizes = match.groups()
+            assert run not in named, run
+            named[run] = (int(count), [int(size) for size in sizes.split(", ")])
+    return named
+
+
+def test_the_readme_s_raw_column_is_each_capture_s_raw_bodies():
+    """Every number in the raw column, re-derived from the files: how many raw
+    bodies a capture holds and each one's length, in pair order."""
+    named = _readme_raw()
+    assert sorted(named) == sorted(IDS)
+    for capture in CAPTURES:
+        sizes = [raw.stat().st_size for _, raw in zoo_census.pairs(capture)]
+        assert named[capture.run] == (len(sizes), sizes), capture.run
 
 
 #: A capture's row of the README's table, its instrumentation column.
@@ -398,6 +601,38 @@ def test_the_audit_s_census_holds_batch_and_incremental(capture):
     # Where each node sits, and each edge with its basis (R-10): the bytes
     # above make the `Builder`'s graph this one, so both are held.
     assert zoo_census.structure(graph) == STRUCTURES[capture.run], capture.run
+
+
+@pytest.mark.parametrize("capture", CAPTURES, ids=IDS)
+def test_the_census_holds_from_the_raw_bodies_as_from_the_json(capture):
+    """Batch W1: each capture read from the exporter's protobuf, not the
+    Collector's JSON of it, builds every count, node and edge the census holds
+    -- the audit's feed and the whole capture alike, batch and incremental.
+    Skips without the `otlp` extra; CI's `check` and `otlp` jobs run it. The
+    guard imports the module by name: `tests/gates.py` bans a computed name in
+    the tests as in the package."""
+    if not os.environ.get("SPANWEAVE_REQUIRE_OTLP"):
+        try:
+            import opentelemetry.proto.collector.trace.v1.trace_service_pb2  # noqa: F401
+        except ModuleNotFoundError:
+            pytest.skip(
+                "the `otlp` extra is not installed: pip install spanweave[otlp]"
+            )
+    assert zoo_census.records(capture, "raw") == zoo_census.records(capture)
+    for feed, census, placed in (
+        (zoo_census.audit_feed(capture, "raw"), capture.census, STRUCTURES),
+        (
+            [r.record for r in zoo_census.records(capture, "raw")],
+            capture.whole if capture.whole is not None else capture.census,
+            {**STRUCTURES, **WHOLE_STRUCTURES},
+        ),
+    ):
+        batch, incremental = zoo_census.batch_and_incremental(feed)
+        assert batch == incremental
+        graph = graph_from_records(feed)
+        assert graph.trace_id == capture.trace_id
+        assert zoo_census.count(graph) == census, capture.run
+        assert zoo_census.structure(graph) == placed[capture.run], capture.run
 
 
 @pytest.mark.parametrize("capture", CAPTURES, ids=IDS)

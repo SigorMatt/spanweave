@@ -36,7 +36,9 @@ fix one deliberately, don't let them drift.
 - **`pyproject.toml` is the single source of truth** for metadata and dependencies.
 - Dependency tool: **uv**. The committed **`uv.lock`** pins exact versions so
   builds and graphs are reproducible byte-for-byte (`CLAUDE.md` 4). `uv.lock` is
-  committed and MUST NOT be gitignored.
+  committed and MUST NOT be gitignored. A lock that disagrees with
+  `pyproject.toml` is a failure, not a silent re-lock: `make check` runs
+  `uv lock --check` first, and every `uv sync` in CI is `--locked`.
 - Lint/format: **ruff**. Types: **mypy --strict** (code is fully type-annotated).
   Tests: **pytest**.
 
@@ -46,13 +48,29 @@ fix one deliberately, don't let them drift.
   current state (`DESIGN.md` §7). A library that other tools depend on must not
   drag a tree into them.
 - `dev` extra: ruff, mypy, pytest. Never imported by core.
-- `otlp` extra (Phase 4): protobuf, for the binary OTLP form only. Core must
-  work fully without it, and `make check` never installs it.
+- `otlp` extra (Phase 4): `opentelemetry-proto` and `protobuf`, for the OTLP
+  protobuf wire format only (`spanweave.read_protobuf`, `SPEC.md` §7). Imported
+  by one module, `spanweave/otlp_protobuf.py`, and only inside the function —
+  the zero-dependencies gate allows exactly that and nothing more
+  (`tests/gates.py`, `OPTIONAL_EXTRA_MODULE`): the modules the extra provides,
+  `google.protobuf` and `opentelemetry.proto` and what is under them, not
+  anything else under `google` or `opentelemetry`. Core must work fully
+  without it.
+  The dev install includes the extra (`uv sync --extra dev --extra otlp`), so
+  local `make check` runs the protobuf tests (`tests/test_protobuf.py`); they
+  skip, saying why, only in an environment installed without the extra. CI's
+  `check` matrix installs it the same way, and both it and the `otlp` job run
+  with `SPANWEAVE_REQUIRE_OTLP=1`, under which a proto runtime that will not
+  import fails rather than skips. The `otlp` job installs the extra's declared
+  lower bounds (`opentelemetry-proto>=1.28`, `protobuf>=5.27`) exactly, as
+  `==1.28.0` and `==5.27.0`, over the lock, and runs the whole suite against
+  them on every Python the matrix covers, so the floors are tested, not
+  assumed (`pyproject.toml` says how they were chosen).
 - Adding **any** core runtime dependency is a halt point (`AGENT.md`).
 
 ## Commands (exact — the agent uses these, does not invent them)
 
-- Setup:   `uv sync --extra dev`
+- Setup:   `uv sync --extra dev --extra otlp`
 - Lint:    `uv run ruff check .`
 - Format:  `uv run ruff format --check .`
 - Types:   `uv run mypy spanweave`

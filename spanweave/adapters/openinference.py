@@ -339,11 +339,13 @@ def _kind_of(
         return NodeKind.UNKNOWN, normalized
 
     # Anything else was read: `str` renders it -- the library's rendering,
-    # which writes a long integer whole on every interpreter setting -- and
-    # whatever it renders is kept verbatim as `reported_kind` below when it
-    # maps to no `NodeKind`.
+    # which writes a long integer whole on every interpreter setting -- with
+    # every object's keys sorted first, by the sorting a payload's text has
+    # (`SPEC.md` §3.3), so the order the record wrote them in is not in it;
+    # and whatever it renders is kept verbatim as `reported_kind` below when
+    # it maps to no `NodeKind`.
     consumed.add(SPAN_KIND)
-    text = jsoncodec.python_text(reported)
+    text = jsoncodec.python_text(jsoncodec.keys_sorted(reported))
     mapped = KINDS.get(text.upper())
     if mapped is not None:
         return mapped, normalized
@@ -450,7 +452,13 @@ def _as_text(reported: JsonValue) -> str | None:
     if isinstance(reported, str):
         return reported
     try:
-        return jsoncodec.encode(reported, json.dumps)
+        # Its keys sorted at every level, by the sorting the adapters share:
+        # the text is the library's, so the order the exporter wrote the keys
+        # in is not in it, and two records that parse equal -- one record,
+        # whichever copy comes first -- render one text (`SPEC.md` §3.3, §7).
+        # `encode` writes any integer too long for the interpreter's setting
+        # whole.
+        return jsoncodec.encode(jsoncodec.keys_sorted(reported), json.dumps)
     except RecursionError:
         return None
 

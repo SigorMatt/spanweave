@@ -178,7 +178,11 @@ These are permanent non-goals, not a backlog. See `SPEC.md` §9.
   (`SPEC.md` §5.3).
 - **Lossless.** Every node keeps its verbatim source record. Anything that can't
   be mapped becomes a **diagnostic**, never a silent discard.
-- **Zero runtime dependencies.** Core is stdlib-pure and readable in one sitting.
+- **Zero runtime dependencies.** Core imports only the standard library, and
+  is readable in one sitting. The one exception is the optional `otlp` extra,
+  which `read_protobuf` alone needs: it is confined to one module, which
+  imports none of it until `read_protobuf` is called, so `import spanweave`
+  needs nothing (`TASKS.md`, decisions log D28).
 - **Dialect-agnostic core.** Adding a dialect is a new *adapter*, never a change
   to the graph model.
 
@@ -242,6 +246,17 @@ a multi-byte character split between two chunks is half a character in each: a
 receiver reading bytes in flight splits them on `\n` and keeps the remainder
 for its next call, rather than handing over an arbitrary boundary
 (`SPEC.md` §7).
+
+**`read_protobuf(data)` is the same reader for the OTLP protobuf wire format**
+— the `application/x-protobuf` body the stock OTLP/HTTP exporter sends. It
+returns the `Records` `read_records` returns for the same export written as
+OTLP/JSON, and is held to that on every export the zoo seals in both
+encodings (`SPEC.md` §7). It needs the optional `otlp` extra
+(`pip install spanweave[otlp]`); without it, it raises `SpanweaveError` with
+the code `otlp_extra_not_installed`, and nothing else in the library needs it.
+A body that will not parse is a `malformed_record`, and a field the installed
+OTLP schema does not define, or defines with another wire type, is reported as
+`unknown_fields` rather than dropped.
 
 **`envelope(record)` is what the transport stated about one span**, for a
 record the reader unpacked from an OTLP export: its trace id, span id, parent,
@@ -332,7 +347,7 @@ test, not a request.
 | For | Names |
 |---|---|
 | Building a graph | `build`, `Builder` |
-| Reading records without building one | `read_records`, `Records`, `envelope`, `Envelope` |
+| Reading records without building one | `read_records`, `read_protobuf`, `Records`, `envelope`, `Envelope` |
 | The graph and what it holds | `Graph`, `Node`, `Edge`, `Diagnostic`, `Meta`, `Payload`, `Provenance`, `RawRecord`, `Status`, `Usage` |
 | The closed vocabularies | `NodeKind`, `EdgeKind`, `Warrant`, `PayloadState`, `DiagnosticLevel` |
 | What changed between two versions | `Delta`, `BasisRewrite` |
@@ -458,7 +473,7 @@ fails the build until the change is regenerated into the diff.
 ## Development
 
 ```
-uv sync --extra dev
+uv sync --extra dev --extra otlp   # otlp: the protobuf tests run instead of skipping
 make check          # the gate: lint, types, tests, the invariant gates, the CLI
 make conformance    # the corpus: every scenario, against its canonical graph
                     # (tests/test_conformance.py); and the zoo gates: its census

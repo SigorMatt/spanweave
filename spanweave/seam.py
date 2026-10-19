@@ -773,11 +773,16 @@ def _event_diagnostic(
         key: attributes.get(attribute) for attribute, key in EXCEPTION_ATTRIBUTES
     }
     source["time"] = time
+    # A `kvlistValue` folds to a map in the order its list gave the entries,
+    # which is a list's order and not the map's: the text is the map's, its
+    # keys sorted at every level by the sorter the adapters use (`SPEC.md`
+    # §3.3, decisions log D39), and `repr`'s spelling as before.
+    stated_type = jsoncodec.keys_sorted(source["type"])
     return Diagnostic(
         code=EXCEPTION_EVENT,
         message=(
             f"the span states event {index}, an exception recorded by the "
-            f"OpenTelemetry API ({source['type']!r}); the graph has no field "
+            f"OpenTelemetry API ({stated_type!r}); the graph has no field "
             "for it, so it is reported here, its stacktrace kept verbatim in "
             "raw with the whole event. Whether the span failed is its status"
         ),

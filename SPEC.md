@@ -357,7 +357,26 @@ string, and a diagnostic is emitted. Never raise on a malformed payload.
 
 The mirror case: an exporter that carries **nested attributes** hands the
 adapter a value that was never a string, and the adapter renders it back to
-text for `raw`. Rendering has the same limit parsing does — `json.dumps`
+text for `raw`. That text is the library's, not the exporter's: it is written
+with **sorted keys**, at every level of nesting and inside lists — `json.dumps`
+at its default arguments, of the value with every object's keys sorted, which
+is `json.dumps` with `sort_keys=True`. Where the payload has no JSON mime,
+that text is its `value` too; where it has one, `value` is a JSON value, whose
+keys the writer sorts (§5.2). **The sorting is one rule the adapters share,
+for every text an adapter renders from a structured value a record states**;
+only the spelling differs. A payload's is JSON's, above. A span kind
+(`openinference.span.kind`) or operation (`gen_ai.operation.name`) stated as
+anything but a string is rendered with `str()`, Python's spelling, of the
+value with its keys sorted the same way, and that text is the node's
+`attributes.reported_kind` and the `unknown_span_kind` diagnostic's message
+and source (§3.2, §3.7). So the order an exporter wrote an object's keys in
+reaches none of them, and two records that parse equal give one node: which
+copy §7 keeps of a record that appears twice does not change it. Below the
+seam the one such text is the `exception_event` message's
+`exception.type`, in `repr`'s spelling, sorted the same way, so an OTLP
+`kvlistValue` there reads as the map it stands for and not in its list's
+order (§7, decisions log D39).
+Rendering has the same limit parsing does — `json.dumps`
 refuses nesting it will not descend — so when there is no text form, `state`
 stays `present`, `value` and `raw` are both `None`, and the same
 `payload_parse_failed` diagnostic says so. Nothing is lost: the value is in
@@ -666,9 +685,10 @@ Seed codes (extend deliberately; codes are a public contract once frozen):
 | `missing_trace_id` | no trace id in this input, so the graph reports none (§7); one per graph, never one per record, and only when the built graph reports no trace id at all; a record carrying none among records that do is not diagnosed |
 | `multi_trace_input` | more than one trace id in a single input (§7) |
 | `unclaimed_record` | no registered adapter claimed this record (§6.1); it is kept as an `unknown` node carrying the record verbatim, and its `provenance` names no adapter. Where the node is keyed and placed by the record's OTLP envelope (§6.1), what nobody read is the span's attributes, and the message says so |
-| `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here |
+| `malformed_record` | an input record the JSON parser could not read (malformed, or nested deeper than it will recurse); its text is kept here. Also a body `spanweave.read_protobuf` could not parse as an `ExportTraceServiceRequest`, whose bytes JSON cannot write (§7) |
 | `undecodable_bytes` | bytes in the input that UTF-8 could not decode; they are replaced with U+FFFD and the record is **still read** (§7), so what is reported is the substitution and not a record that was lost. Record-scoped where a record results, naming the line in its message; one statement about the whole input for a container read as one buffered document. `skipped_records` does not count it — the record was read |
 | `ordering_cycle` | the ordering edges contain a cycle (§5.2); the graph is still built |
+| `unknown_fields` | a message in an OTLP protobuf body carries fields the protobuf runtime could not read into it: numbers the schema the reader was installed with does not define — a newer OTLP, or an extension — or numbers it does define, arriving with a wire type other than the one it expects — a malformed body (§7). The message is read without them, and this is the report that they were there, saying of each which it is: one per message, whichever they are, never a discard and never a refusal. Level **`warning`**: the library could not map them. Made by the reader, so it names no node and no adapter. Batch W1 (`OPEN_QUESTIONS.md` §23, 2B) |
 | `attributes_dropped` | the OTLP export states that the span dropped attributes before export — `droppedAttributesCount` above zero (§7) — and names none of them. A fact about the span the transport stated, not a key an adapter left unread, so it is not an `unmapped_attributes` key; nothing the span does not carry is looked for elsewhere (a `model` the span states no name for stays absent). Record-scoped, made from the envelope rather than a dialect, so a span no adapter claimed reports it too (`adapter` `null`). Level **`warning`** (`Diagnostic`'s default): unlike an event, it says the record holds less than the span did. Batch T3 |
 | `exception_event` | the OTLP export states an `exception` span event — the event the OpenTelemetry API's `record_exception` writes (§7) — which the model has no field for. Level **`info`**: an event is a fact the transport stated and this diagnostic carries, not a gap in the mapping; whether the span *failed* is the node's `status`, where the telemetry put it, and a caught exception on a span whose status is unset says only that (batch T4, `OPEN_QUESTIONS.md` §22). Record-scoped, made from the envelope, so a span no adapter claimed reports it too (`adapter` `null`) |
 | `span_event` | the OTLP export states any other span event, which the model has no field for. Level `info`, record-scoped and made from the envelope, as `exception_event`. Batch T4 |
@@ -780,8 +800,9 @@ cases are worth naming because each looks like an exception and is not:
   reported. So is a mime stated beside **no value at all** — an `absent`
   payload carries no mime either, so that key was never read.
 - **A key whose only unreadable rendering is `null`.** A span kind is rendered
-  with `str()`, so every value but `null` is read and is preserved verbatim as
-  `attributes.reported_kind`; `null` alone leaves nothing, and is reported.
+  with `str()`, an object's keys sorted first (§3.3), so every value but `null`
+  is read and is preserved verbatim as `attributes.reported_kind`; `null` alone
+  leaves nothing, and is reported.
   The `unknown_span_kind` diagnostic must also say **which** of the two
   happened: a message that says "no attribute" of a key the span carried is
   untrue in the one place a reader would look to find out.
@@ -796,7 +817,7 @@ cases are worth naming because each looks like an exception and is not:
 
 `source` is typed `JsonValue`, so its shape is per code and must be stated
 rather than inferred. Most codes carry the offending fragment as the type it
-arrived as; six carry an object, four carry nothing, and one carries something
+arrived as; seven carry an object, four carry nothing, and one carries something
 the library computed rather than something it was given. Those three counts are
 measured from the table below by `tests/test_codes.py`, beside the count
 `CONTRACTS.md` states, so the next row added fails the build instead of ageing
@@ -807,7 +828,7 @@ this sentence.
 | `unpaired_call` | `{"call_id": str, "operation": str \| null}` |
 | `unpaired_result` | `{"call_id": str, "operation": str \| null}` |
 | `unmapped_attributes` | `list[str]` — attribute keys, never values |
-| `malformed_record` | `str` — the line's text |
+| `malformed_record` | `str` — the line's text; for a protobuf body that would not parse, nothing, as `undecodable_bytes` below and for its reason: the fragment is bytes (§7, batch W1) |
 | `missing_trace_id` | `null` — there is no fragment. The absence being reported is the graph's own empty `trace_id`, and there is no node to point at either |
 | `missing_timestamp` | `null` — there is no fragment. The diagnostic is about something **absent**, and `node_id` is where to look |
 | `payload_parse_failed` | `null` — the unparsed text is already on the payload's `raw` (§3.3), and copying it here would duplicate content for no benefit |
@@ -816,6 +837,7 @@ this sentence.
 | `attributes_dropped` | `{"count": int}` — the count the export states, read as the `uint32` it is (§7). An object rather than the bare number, so the one field a consumer reads is named |
 | `exception_event` | `{"type": JsonValue, "message": JsonValue, "escaped": JsonValue, "time": number \| null}` — the event's `exception.type`, `exception.message` and `exception.escaped` **as the attributes state them** (a string `"False"` stays the string `"False"`; `null` where the event states none), and its `timeUnixNano` in unix seconds by §3.1's rule for a declared nanosecond count, kept as reported even after the node's `ended_at`. `exception.stacktrace` is **not** copied: it stays in `raw.source` with the whole event (§7). The message is copied because it is the fact being reported — the keys-only rule above guards `unmapped_attributes` from carrying content by accident, which this is not |
 | `span_event` | `{"name": str, "time": number \| null}` — the event's name (`""` where it states none, proto3's default) and its time read as `exception_event`'s. Its attributes are not copied; they stay in `raw.source` |
+| `unknown_fields` | `{"path": str, "fields": [{"number": int, "wire_type": int, "defined": bool, "expected_wire_type": int \| null}, ...]}` — the message's place in the request in OTLP/JSON's field names (`resourceSpans[0].scopeSpans[0].spans[3]`; `""` is the request itself), and each unknown field's number and wire type as the protobuf runtime reports them, in the order they arrived, one entry per occurrence. `defined` says whether the installed schema defines that number **on that message**, and `expected_wire_type` is, where it does, the wire type the schema's type for it is written with (`2` for a string, bytes or message; `0` for an integer, bool or enum; `1` for a 64-bit fixed or double; `5` for a 32-bit fixed or float; `3` for a group, which no OTLP message has), and `null` where it does not. **Not** the field's bytes: a field with no definition has no name and no type, and one with a definition arrived in a form its type cannot be read from, so there is no representation of either the input ever had, and a consumer who needs them holds the body (§7, `OPEN_QUESTIONS.md` §23) |
 | `timestamp_unit_suspect` | `{"started_at": number, "ended_at": number}` — an object naming **only** the fields over the threshold, so one key, the other, or both, each carrying the value as reported. An object rather than an array because *which* field is over the line is the content of the report |
 | everything else | the offending fragment, as the type it arrived as |
 
@@ -1093,6 +1115,7 @@ SpanweaveError:
 | `unknown_adapter` | `UnknownAdapterError` | a caller named an adapter that is not registered |
 | `graph_not_serializable` | `GraphNotSerializableError` | a value the library must encode cannot be: it nests deeper than the JSON encoder will descend, is a non-finite number RFC 8259 cannot write, or refers back to itself (§7). Either the graph is held and cannot be written, or a record cannot be digested (§3.6) — one code, because it is one fact about one value |
 | `not_an_envelope` | `EnvelopeError` | `spanweave.envelope` was given a record with no readable OTLP envelope: one the reader did not unpack from an export, one that states no `trace_id` or no `span_id`, or one stating an envelope field in a type the envelope cannot hold (§7) |
+| `otlp_extra_not_installed` | `SpanweaveError` | `spanweave.read_protobuf` was called and the `otlp` extra it reads with is not installed (§7). The code names the extra because installing it is the fix; nothing else in the library needs it, so `import spanweave` never raises this |
 | `delta_unavailable` | `DeltaUnavailableError` | the journal no longer holds the `since` a caller asked for, because the retention policy dropped it (§10.8). One code, because it is one fact: the answer cannot be given, and an approximate one would not be distinguishable from an exact one |
 
 Codes are a **public contract from `0.9.x`**, on the same terms as diagnostic
@@ -1696,8 +1719,8 @@ declares reaches `0.5`.
 
 - **JSONL** (one record per line), a **JSON array** of records, or an **OTLP
   JSON** document. The first two are told apart by the first non-whitespace
-  byte; the third is told apart by its first member key, and is specified in
-  its own bullet below.
+  byte; the third by whether its first object states `resourceSpans` as a
+  member, wherever it stands, and is specified in its own bullet below.
 - A **UTF-8 BOM** (`EF BB BF`) at the very start of the input is an encoding
   artifact, not content: it is skipped before the format is detected, so the
   first record reads like any other. Only at the start — the same bytes
@@ -1787,10 +1810,56 @@ declares reaches `0.5`.
   copies were seen.
   - **"The same record" is decided on the parsed record, not on its bytes.**
     What the library preserves is the parsed value (`RawRecord.source`, §3.5);
-    whitespace and key order never reach a node, so two lines that parse equal
-    are indistinguishable everywhere downstream and collapsing them loses
-    nothing. A bytes-level rule would also have nothing to say about the JSON
-    array form, where a record has no bytes of its own. Records are compared
+    whitespace never reaches a node, and **an object's member order never
+    reaches a graph when each member is stated once**, so two lines that
+    parse equal are indistinguishable everywhere downstream and collapsing
+    them loses nothing. That is what `tests/test_determinism.py` holds:
+    `test_no_key_order_reaches_a_graph` and
+    `test_no_key_order_reaches_a_graph_built_from_records` build every input
+    the repository holds, and hand-made ones stating a structured value
+    wherever an adapter reads a value, again with every object's members
+    reordered at every depth, and each builds the same graph (§3.3);
+    `test_an_export_is_found_wherever_resource_spans_stands` holds where
+    `resourceSpans` stands among a document's members (*OTLP JSON*, below),
+    and `test_a_kvlist_rendered_to_text_is_rendered_as_a_map` the
+    `exception_event` message, the one text rendered from an OTLP map
+    outside the adapters (decisions log D39), with
+    `test_an_exception_type_tag_holding_an_object_is_rendered_as_a_map`
+    for an object stated under another `AnyValue` tag, its members
+    reordered by the gate's text path (the scoped review of 2026-10-18b,
+    R-8).
+    **A member stated twice is outside that claim.** What follows is how it is
+    read today, as measured, not a rule: it is registered for the next
+    spanweave series (`TASKS.md`, *the reader's malformed input*). Where an
+    object states one name twice, the later value is kept, the parser's rule,
+    and the earlier is gone with no diagnostic, so the order decides. So it
+    does in an OTLP span or link for a member under a name the reader writes
+    another member's value to — `trace_id` beside `traceId`, `span_id` beside
+    `spanId`, or `parent_id`, `start_time`, `end_time`, `status_message` or
+    `attributes_unfolded` beside the member the reader renames or folds into
+    it: whichever the span writes later is kept, and the other is gone, from
+    `raw.source` too. Three cases are not last-wins. A span's own
+    `resource_spans` or `scope_spans` gives way to the level the reader writes
+    after every member, wherever that level carries anything. Two spellings
+    the reader keeps apart — `parentSpanId` and `parent_span_id`,
+    `startTimeUnixNano` and `start_time_unix_nano`, `endTimeUnixNano` and
+    `end_time_unix_nano`, an event's `timeUnixNano` and `time_unix_nano` — are
+    both carried, and the camelCase one is read, in either order. And an
+    `AnyValue` stating two tags, `stringValue` beside `string_value` or two of
+    the tags the fold reads, is folded by the first of those tags in a fixed
+    order (`stringValue`, `boolValue`, `intValue`, `doubleValue`,
+    `bytesValue`, `arrayValue`, `kvlistValue`), in either order, and the other
+    is lost. **Where the reader carries a list as written** (an event's, a
+    resource's and a scope's attributes, an `arrayValue`), **its order is the
+    input's** and reaches `raw.source`; a span's or a link's attributes, and a
+    `kvlistValue` inside one, are folded to a map, and their order is not
+    carried, but for the entries the fold cannot take, which it keeps under
+    `attributes_unfolded` in the order the list gives them: among them are both
+    copies of a key the attributes state twice, whose last value the map keeps
+    (*OTLP JSON*, below). **Where a `kvlistValue` is rendered to
+    text, it is rendered as the map it stands for, its keys sorted** (§3.3).
+    A bytes-level rule would also have nothing to say about the JSON array
+    form, where a record has no bytes of its own. Records are compared
     by their **canonical digest** (§3.6): the SHA-256 of
     `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
     encoded UTF-8. §3.6 states the arguments exactly and why.
@@ -1992,7 +2061,12 @@ declares reaches `0.5`.
     reported **as stated** — no value is
     interpreted, so an `escaped` written as the string `"False"` is reported
     as that string; `exception.stacktrace` is not copied into the
-    diagnostic, and stays in the record. Any other event reports its name and
+    diagnostic, and stays in the record. The message names the
+    `exception.type` in Python's `repr`, and a `kvlistValue` there, which
+    folds to a map in the order its list gives the entries, is written with
+    its keys sorted at every level (`jsoncodec.keys_sorted`, §3.3), so the
+    same map listed in two orders gives one message (decisions log D39).
+    Any other event reports its name and
     time. Nothing about an event becomes a node field: whether the span
     failed is its `status`, which the export states separately.
   - **`parentSpanId` is renamed like the other eight, empty string and all.**
@@ -2018,6 +2092,17 @@ declares reaches `0.5`.
     and read by §3.1's rule for a numeric string — the rule written for this
     encoding — and the unit its name declares is honoured there, by the time
     reader, not here (§3.1, *Declared nanoseconds*).
+    **The principle's one exception is a non-finite `doubleValue`**, a value
+    its stated type admits and the reader does not read as that type.
+    Proto3's JSON mapping spells NaN and the infinities as the strings
+    `"NaN"`, `"Infinity"` and `"-Infinity"`, and the fold unwraps a
+    `doubleValue` to the value the document states, so the attribute is that
+    string, not the float it names (the protobuf reader's
+    *A non-finite one is a string on both paths*, below). Read as the float,
+    it would leave a graph that builds and cannot be written: a graph holding
+    a float NaN builds, as one holding an unquoted `NaN` does (§3.1), and
+    `dumps` refuses the whole graph (*What it writes is RFC 8259 JSON*,
+    above).
     A repeated key keeps the last, and every entry the fold could not take —
     a non-object entry, a missing or non-string `key`, an unrecognized `value`
     tag, and **both** copies of a repeated key — is kept in a list under
@@ -2114,14 +2199,212 @@ declares reaches `0.5`.
     keep whichever came first and make a node id depend on line order (§5.2).
   - **Reading it needs the whole input**, as the JSON array form does and for
     the same reason: a document is not a record until its closing brace. The
-    reader buffers only when the input's first member key is `resourceSpans`;
-    if what it buffered is not a single document — a file of one export per
-    line is a real artefact, and it begins with the same bytes — it is read
-    line by line as before, and each line that is an envelope is unpacked the
-    same way. A JSON array of envelopes is unpacked element by element for the
-    same reason.
-- A dialect-specific binary form (OTLP protobuf) is Phase 4 and lives behind an
-  optional extra — never in core (`ENVIRONMENT.md`).
+    reader buffers only when the input's first top-level object states
+    `resourceSpans` as a member, **wherever it stands among the members**
+    (decisions log D39): where a member stands is member order, which never
+    decides a graph (above). A member of that object, not a key inside one
+    of its values and not text inside a string; and the key as JSON reads
+    it, so `"resource\u0053pans"` is the same member. The head scan that
+    decides it tracks strings, their escapes and nesting depth, and stops at
+    that member or at the object's close, so it reads a JSONL file no
+    further than the end of its first record, which the line reader buffers
+    anyway. Its cost: a first record that does not close — truncated, or not
+    JSON — is scanned, and buffered, to the end of the input, and is then
+    read line by line exactly as it would have been, so what is read does
+    not change. If what it buffered is not a single document — a file of
+    one export per line is a real artefact, and it begins with the same
+    bytes — it is read line by line as before, and each line that is an
+    envelope is unpacked the same way. A document whose object states
+    `resourceSpans` beside another member is not an export —
+    `ExportTraceServiceRequest` has one field — and is one record, the
+    whole object carried verbatim, its other members included, wherever
+    `resourceSpans` stands. A JSON array of envelopes is unpacked element by
+    element for the same reason.
+- **OTLP protobuf** — an `ExportTraceServiceRequest` sent as
+  `application/x-protobuf`, which is how the stock OTLP/HTTP exporter sends
+  every export — is the same container in a second encoding, and the reader's
+  for the same reason the JSON one is (batch W1, the zoo's L1).
+  **`spanweave.read_protobuf(data)`** takes the bytes of one request, in any
+  buffer `read_records` takes and refusing what it refuses, and returns the
+  `Records` `read_records` returns for the same export written as OTLP/JSON:
+  the same records, marked `Unpacked`, the same diagnostics, the same
+  `skipped_records`. It lives in `spanweave/otlp_protobuf.py`, the one module
+  that imports the protobuf runtime, and only when called — it is behind the
+  optional **`otlp`** extra (`pip install spanweave[otlp]`, which installs
+  `opentelemetry-proto` and `protobuf`), so `import spanweave` needs neither,
+  and called without them it raises `SpanweaveError` with the code
+  `otlp_extra_not_installed` (§3.10). Nothing else reads protobuf: `build`, the
+  CLI and `read_records` are unchanged, and the JSON path does not depend on
+  the extra in any way.
+  - **The JSON is the Collector's, and the oracle decides it.** The body is
+    parsed by the protobuf runtime, rendered as OTLP/JSON, and read by the
+    JSON reader above, so nothing about unpacking an export is written twice.
+    A record's `raw.source` is therefore its OTLP/JSON rendering, not the wire
+    bytes: the records are the ones the JSON path reads for the same export,
+    which is what the oracle holds (decisions log D29), and the body's bytes
+    are the caller's to keep. Nothing the body states is lost but what
+    `unknown_fields` reports (below) and what the rendering does not carry,
+    none of which draws a diagnostic:
+    - **An all-zero id of the length the schema gives it.** It is no id, as
+      the Collector has it (below): the records are those of the same request
+      with the field unset.
+    - **All but the last of a singular field, or of a `oneof`, the wire
+      states more than once.** Protobuf's merge keeps the last value of a
+      scalar, and of a `oneof` the last member stated, before the reader sees
+      the message; a message field stated more than once is merged field by
+      field by the same rule. So a span whose `name` arrives as `"first"` and
+      then as `"second"` reads as `"second"`, one whose `spanId` arrives not
+      zero and then as eight zero bytes has no span id, and an `AnyValue`
+      stating a `stringValue` and then an `intValue` reads as the integer. The
+      rule is the protobuf encoding's, so the Collector's runtime is expected
+      to do the same (not verified here — spec, not pair).
+    - **A non-finite `doubleValue`'s type.** It is the string proto3 JSON
+      spells it (below), so its record is the one a `stringValue` of that
+      spelling reads as.
+
+    The rendering is the OTLP/JSON specification's as the Collector writes it,
+    not `MessageToDict`'s where the two differ; on the zoo's 29 pairs — every
+    export in it sealed both as the exporter's protobuf body and as the
+    Collector's JSON of it — they differ in exactly two places, and both are
+    the Collector's here:
+
+    | Field | Collector (used) | `MessageToDict` default |
+    |---|---|---|
+    | a span's `traceId`, `spanId`, `parentSpanId` | lowercase hex | base64 |
+    | `kind`, `status.code` (enums) | the number | the enum's name |
+
+    Everything else already agrees on every pair: `*UnixNano` and `intValue`
+    as decimal strings (proto3 JSON's `int64`/`fixed64`), `flags` and
+    `droppedAttributesCount` as numbers, and a default omitted — an empty
+    `parentSpanId` on a root span; a `status` the exporter sent with nothing
+    in it is written `{}` by both. On every pair the records are equal record
+    by record, mark included, and the graph each builds is equal byte for
+    byte; `tests/test_protobuf.py` holds both, and the zoo census runs every
+    capture from its protobuf bodies as well as its JSON ones and holds every
+    count, node and edge equal. An empty body is an empty request, as its
+    JSON `{"resourceSpans": []}` is: no records, no diagnostics.
+  - **What the pairs cover, and what a hand-made request holds instead.** The
+    pairs prove only what they contain. Where they contain nothing, the
+    rendering follows the OTLP/JSON specification's rule — proto3's JSON
+    mapping with lowerCamelCase keys, trace and span ids as hex rather than
+    base64, enums as integers — and a hand-made `ExportTraceServiceRequest`
+    in `tests/test_protobuf.py` holds the rendering to that rule. Those rows
+    are **the spec's, not a pair's**: no Collector re-encoding checked them,
+    and a guard test fails the day a zoo body carries one, so the claim
+    becomes checkable. The guard reads every AnyValue in every JSON body:
+    the resource's, the scope's, the span's, each event's and each link's
+    attributes, and the values nested in an `arrayValue` or a `kvlistValue`.
+    It reads every id on the wire too, in every raw body, a span's and each
+    of its links': each one stated has the length the schema gives it and a
+    byte not zero.
+
+    | What | In the 29 pairs | Held by |
+    |---|---|---|
+    | AnyValue `stringValue`, `intValue`, `boolValue` | yes, and no other kind | the pairs |
+    | a span stating `kind`, `status` and `flags` | every span | the pairs |
+    | a link's `traceId`, `spanId` as lowercase hex | no span has a link | a hand-made request — spec, not pair |
+    | `bytesValue` as standard base64; `arrayValue` as `{"values": [AnyValue…]}`; `kvlistValue` as `{"values": [{"key", "value"}…]}` | none | a hand-made request — spec, not pair |
+    | `kind` 0, no `status` on the wire, `flags` 0: all three omitted | none | a hand-made request — spec, not pair |
+    | a `traceId` of 16 bytes, or a `spanId` or `parentSpanId` of 8 — the length the schema gives it — a span's or a link's, whose bytes are all zero: omitted, as an empty one is; an id of any other length, all zero or not, is hex as stated | none | a hand-made request (below) — the Collector's rule, not a pair; at another length, spec, not pair |
+    | a field the schema does not define | none | a hand-made request (below) |
+    | a field the schema defines, with another wire type | none | a hand-made request (below) |
+    | `doubleValue` | none | a hand-made request (below) — spec, not pair |
+    | a non-finite `doubleValue` — NaN, `Infinity`, `-Infinity` — as the string proto3 JSON spells it, on both paths | none | a hand-made request (below) — spec, not pair |
+
+    The `status` row is the one whose JSON twin would read differently if a
+    Collector wrote it otherwise: `"status": {}` reads as `UNSET`, and no
+    `status` reads as none. Every unset `status` in the zoo was sent as an
+    empty message, so what a Collector writes for one absent from the wire is
+    not shown by any pair.
+  - **An all-zero id of the right length is no id, as the Collector has
+    it.** The Collector holds a trace id as a 16-byte array and a span id as
+    an 8-byte one, and treats the all-zero value as empty, so its JSON for a
+    body whose `parentSpanId` is eight zero bytes omits the field, exactly as
+    it omits an empty one. The rendering does the same for every `traceId` of
+    16 bytes and every `spanId` and `parentSpanId` of 8, a span's or a
+    link's, because the protobuf path yields what the JSON path yields for
+    the Collector's JSON of the same export: a root span whose exporter wrote
+    zero bytes for its parent is a root, with no `orphan_parent`, and its
+    records are those of the same request with the field unset; an all-zero
+    `traceId` reads as an unset one, which is no trace id
+    (`missing_trace_id`, §3.7). **An id is omitted only when both hold: it
+    has the length the schema gives it, and every byte is zero.** An id with
+    any byte not zero is hex, as every other, wherever in the id that byte
+    is. An id of any other length is carried as stated, all zero or not:
+    hex, as the JSON path carries a hex string of any length. The schema
+    gives each id its length, and calls a span's own `traceId` or `spanId`
+    of another length invalid; of a `parentSpanId`, or a link's ids, it
+    gives the length only. The Collector would refuse the request rather
+    than write JSON for it (not verified here — spec, not pair), so there
+    is no Collector JSON for the rendering to match; omitting the id would
+    be a rule of the reader's own and a silent discard (`CLAUDE.md` 2), and
+    the reader does not refuse a body for one id. No pair shows any of
+    it — the zoo's exporter leaves an unset id unset, and states every id at
+    its length — so the row is the Collector's rule at the schema's lengths
+    and the spec's at any other, and not a pair's. **The JSON path is
+    untouched:** a JSON record that *states* `"0000000000000000"` states an
+    id there (§4.0; `spanweave.seam`), and so does an OTLP/JSON export that
+    states it, a span's or a link's: the reader renames the key and carries
+    the hex as stated. The two encodings differ on this only because the
+    Collector never writes one.
+  - **A body that will not parse is one `malformed_record`**, `skipped_records`
+    1, no records, and **`source` `null`** — the `undecodable_bytes` precedent
+    (§3.7): JSON has no way to write the bytes, and carrying them in some
+    encoding would put a representation in the record the input never had.
+    It never raises, as no reading path does (`OPEN_QUESTIONS.md` §23, 1A).
+  - **A field the schema does not define is reported, never dropped.** The
+    runtime keeps such a field — from a newer OTLP than the installed
+    `opentelemetry-proto`, or an extension — with a number and a wire type and
+    no name, and `MessageToDict` drops it without a word. So the message is
+    read without it, and each message carrying any draws one `unknown_fields`
+    (`warning`, §3.7) naming its path in the request and each field's number
+    and wire type. The pairs cannot decide this one: no zoo body carries an
+    unknown field, and the Collector would not have written one into its JSON
+    either; matching it would be a silent discard (`CLAUDE.md` 2), and
+    refusing the body would lose every readable span to report one number
+    (§23, 2B). A graph built from such a body differs from its JSON twin's by
+    those diagnostics and nothing else.
+  - **So is a field the schema defines that arrives with another wire type.**
+    The runtime keeps a span's `name` (field 5, a string) sent as a varint in
+    the same place as a number it has never heard of, and does not read it
+    into `name`: the record's `name` is what a correctly typed `name` in the
+    same span says, if one also arrived; if none did, `name` is left at its
+    default and the record has none. Blaming the schema's age for it would
+    misreport a malformed body.
+    So each entry says whether the installed schema defines its number on that
+    message and, where it does, the wire type it expects (§3.7), and the
+    message says "not readable as the installed schema defines it" of those
+    and "not defined by the installed schema" of the rest. A message carrying
+    both is still one `unknown_fields`, whose message gives the count of each,
+    the defined first; the code is the same one, because what is reported is
+    the same — fields the message was read without.
+  - **A finite `doubleValue` is a float** — `MessageToDict`'s, so a `1.0`
+    reads as `1.0` and never as the integer `1`. **No pair checks it**, as no
+    pair checks any row the table above marks "none": no export in the zoo
+    carries a `doubleValue` (`tests/test_protobuf.py` asserts it, so the day
+    one does the claim becomes checkable), and OTLP/JSON lets a Collector
+    write `1` or `1.0`, which the JSON reader reads as an integer and a float
+    respectively. A capture of one, re-encoded by a Collector, would settle
+    it (§23, 3C).
+    - **A non-finite one is a string on both paths, with no diagnostic.**
+      Proto3's JSON mapping spells NaN and the infinities as the strings
+      `"NaN"`, `"Infinity"` and `"-Infinity"`, and `MessageToDict` writes them
+      so. What the Collector writes for one is not shown — no pair carries a
+      `doubleValue` — so the table's row for it is the proto3 JSON spelling's:
+      spec, not pair. The JSON reader unwraps a `doubleValue` to the value the
+      document states, so on both paths the attribute is that string, with no
+      diagnostic: a protobuf body carrying one and its proto3 JSON spelling
+      yield equal records and build the same bytes (`tests/test_protobuf.py`,
+      all three values). The type is not carried: the record is the one a
+      `stringValue` of the same spelling reads as (above). It is not read back
+      as a float because a graph holding a float NaN could not be written: it
+      builds, as a graph holding an unquoted `NaN` does (§3.1), and `dumps`
+      refuses the whole graph, because the encoder runs with `allow_nan=False`
+      (*What it writes is RFC 8259 JSON*, above). Reading it some other way on
+      the protobuf path alone would break the rule the oracle holds, and on
+      both would change the graph a JSON export yields. Whether it should draw
+      a diagnostic, or be read some other way, is a thread for the next series
+      (`TASKS.md`, the wire series).
 
 ### Outputs
 

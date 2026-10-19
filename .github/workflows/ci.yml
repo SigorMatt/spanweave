@@ -15,6 +15,16 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The `otlp` extra is installed here, so the protobuf tests run on every
+    # Python in the matrix, and SPANWEAVE_REQUIRE_OTLP makes a proto runtime
+    # that will not import a failure rather than a skip that passes (cold
+    # review of 2026-10-17, R-16). The sync below is ENVIRONMENT.md's Setup,
+    # `--locked`: a `uv.lock` that disagrees with pyproject.toml fails here
+    # rather than being re-locked without a word (cold review of 2026-10-17b,
+    # R-13). Every `uv sync` in this file is `--locked`, and `make check`
+    # runs `uv lock --check` for the same reason.
+    env:
+      SPANWEAVE_REQUIRE_OTLP: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -29,13 +39,20 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
+        # Full history and tags: `tests/test_doc_truth.py` holds every sha a
+        # document cites to a commit a ref reaches (`git rev-list --all`), and
+        # the default depth-1 clone holds one commit (cold review of
+        # 2026-10-17, R-13; of 2026-10-17b, R-9).
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Install uv
         # @v8 / @v8.0 moving tags no longer resolve; pin a full version tag.
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.25"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: uv sync --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --locked --extra dev --extra otlp --python ${{ matrix.python-version }}
       # make check wraps the exact toolchain commands (ruff, mypy, pytest)
       # plus the invariant gates and phase done-whens -- the acceptance
       # harness, task 0.8.
@@ -49,6 +66,53 @@ jobs:
       # dependencies: ENVIRONMENT.md network zone 1. It never publishes.
       - run: make install-check
 
+  otlp:
+    # The `otlp` extra at its declared FLOORS (cold review of 2026-10-17,
+    # R-18). The `check` matrix runs the protobuf tests against the lock's
+    # versions; this job runs the whole suite -- the zoo's 29 pairs, the
+    # census from the raw bodies -- against the lowest versions
+    # pyproject.toml's `[otlp]` admits, exactly: `protobuf>=5.27` admits
+    # 5.27.0, so the pin is `==5.27.0`, not `==5.27.*`, which installs the
+    # newest patch (cold review of 2026-10-17b, R-14). The minimums are
+    # tested rather than suspected. `tests/test_acceptance.py` holds the pins
+    # below equal to pyproject.toml's lower bounds, and this matrix equal to
+    # the check job's: a floor is an interpreter-dependent claim (the
+    # previous pair, `protobuf` 4.25 with `opentelemetry-proto` 1.27, passed
+    # on 3.11-3.13 and failed to import on 3.14). `uv run` re-syncs to the
+    # lock by default and would silently put the lock's versions back, so
+    # every `uv run` here is `--no-sync`, nothing syncs after the floor
+    # install, and a step asserts the versions the suite actually ran
+    # against before mypy and the whole suite run (R-12).
+    runs-on: ubuntu-latest
+    env:
+      SPANWEAVE_REQUIRE_OTLP: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: uv sync --locked --extra dev --extra otlp --python ${{ matrix.python-version }}
+      - name: Install the floors over the lock
+        run: uv pip install "protobuf==5.27.0" "opentelemetry-proto==1.28.0"
+      - name: The floors are what is installed
+        run: >-
+          uv run --no-sync python -c "import importlib.metadata as m;
+          v = {p: m.version(p) for p in ('protobuf', 'opentelemetry-proto')};
+          print(v);
+          assert v['protobuf'] == '5.27.0', v;
+          assert v['opentelemetry-proto'] == '1.28.0', v"
+      - run: uv run --no-sync mypy spanweave
+      - run: uv run --no-sync pytest -rs
+
   determinism:
     # Determinism is a cross-machine claim (CLAUDE.md 4), so it is worth
     # proving on more than one OS rather than only on the machine that
@@ -60,11 +124,14 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.25"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: uv sync --extra dev
+      - run: uv sync --locked --extra dev
       - run: make conformance
       - run: uv run pytest tests/test_determinism.py -v

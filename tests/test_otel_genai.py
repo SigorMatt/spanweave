@@ -12,10 +12,12 @@ invent.
 """
 
 import json
+import math
 import pathlib
 
 import pytest
 
+import spanweave
 from spanweave import diagnostics as codes
 from spanweave.adapters.otel_genai import OtelGenAiAdapter
 from spanweave.model import NodeKind, PayloadState, Status
@@ -339,6 +341,110 @@ def test_a_text_value_too_deep_to_render_is_diagnosed_not_raised():
     assert codes.PAYLOAD_PARSE_FAILED in codes_of(span)
 
 
+#: A structured value in the key order an exporter wrote it, and its text. The
+#: nested one sorts an object inside an object and one inside a list, so a
+#: rendering that sorted the top level only would not pass.
+STRUCTURED_RENDERINGS = [
+    ({"b": 1, "a": 2}, '{"a": 2, "b": 1}'),
+    (
+        {"b": 1, "a": {"d": [{"f": 6, "e": 5}], "c": 3}},
+        '{"a": {"c": 3, "d": [{"e": 5, "f": 6}]}, "b": 1}',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("reported", "text"), STRUCTURED_RENDERINGS, ids=["flat", "nested"]
+)
+def test_a_structured_value_is_rendered_with_its_keys_sorted(reported, text):
+    # The text is the library's rendering, not the exporter's, so the order
+    # the exporter wrote the keys in is not in it (`SPEC.md` §3.3). Were it,
+    # two lines that parse equal could build two graphs, depending on which
+    # came first (the scoped review of 2026-10-18, R-8). Through the
+    # already-structured branch, where the value is the one reported:
+    span = span_of({"gen_ai.operation.name": "chat", "gen_ai.input.messages": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.raw == text
+    assert span.inputs.value == reported
+    assert codes_of(span) == []
+
+    # And through the one attribute the convention states is text, where the
+    # rendering is the value as well.
+    span = a_retrieval(**{"gen_ai.retrieval.query.text": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.mime == "text/plain"
+    assert (span.inputs.raw, span.inputs.value) == (text, text)
+    assert codes_of(span) == []
+
+
+# The spelling past key order, as in `tests/test_openinference.py`: the text
+# is `json.dumps` at its default arguments (`SPEC.md` §3.3), and nothing held
+# that: with either default below moved, every test passed (the scoped review
+# of 2026-10-18b, R-1). The third case, a long integer under the
+# interpreter's lowest digit limit, is in `tests/test_determinism.py`, which
+# sets the limit in a subprocess. The two below each go through both branches
+# that render a structured value: the already-structured one, where the value
+# is the one reported, and the one attribute the convention states is text,
+# where the rendering is the value.
+
+
+def test_a_structured_value_s_text_writes_a_character_past_ascii_escaped():
+    # `ensure_ascii` at its default: `é` is the six characters `\u00e9`. The
+    # graph's writer and the record digest's text pass `ensure_ascii=False`,
+    # which is what makes the other spelling plausible here; the payload's
+    # text is neither's.
+    reported = {"b": "é", "a": 1}
+    text = '{"a": 1, "b": "\\u00e9"}'
+    span = span_of({"gen_ai.operation.name": "chat", "gen_ai.input.messages": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.raw == text
+    assert span.inputs.value == reported
+    assert codes_of(span) == []
+
+    span = a_retrieval(**{"gen_ai.retrieval.query.text": reported})
+    assert span.inputs.state is PayloadState.PRESENT
+    assert span.inputs.mime == "text/plain"
+    assert (span.inputs.raw, span.inputs.value) == (text, text)
+    assert codes_of(span) == []
+
+
+@pytest.mark.parametrize(
+    ("operation", "key"),
+    [("chat", "gen_ai.input.messages"), ("retrieval", "gen_ai.retrieval.query.text")],
+    ids=["structured", "text"],
+)
+def test_a_structured_value_holding_nan_builds_and_its_graph_is_refused_at_dumps(
+    operation, key
+):
+    # `allow_nan` at its default: the reader reads a bare `NaN` as Python's
+    # parser does (`SPEC.md` §3.1), and the payload's text spells it `NaN`, as
+    # `json.dumps` writes it. So the record builds -- with `allow_nan=False`
+    # `build` raised the encoder's bare `ValueError`, which is no
+    # `SpanweaveError` (§3.10) -- and the graph, holding the float in
+    # `raw.source`, is refused where it is written, by name.
+    graph = spanweave.build(
+        (
+            '{"trace_id":"t1","span_id":"s1","name":"op","attributes":'
+            f'{{"gen_ai.operation.name":"{operation}","{key}":'
+            '{"b":NaN,"a":"é"}}}\n'
+        ).encode()
+    )
+    (node,) = graph.nodes()
+    assert node.provenance.adapter_id == "otel_genai"
+    assert node.inputs.state is PayloadState.PRESENT
+    assert node.inputs.raw == '{"a": "\\u00e9", "b": NaN}'
+    if key == "gen_ai.retrieval.query.text":
+        assert node.inputs.mime == "text/plain"
+        assert node.inputs.value == node.inputs.raw
+    else:
+        assert node.inputs.value["a"] == "é"
+        assert math.isnan(node.inputs.value["b"])
+    assert codes.PAYLOAD_PARSE_FAILED not in [d.code for d in graph.diagnostics]
+    with pytest.raises(spanweave.SpanweaveError) as refused:
+        spanweave.dumps(graph)
+    assert refused.value.code == "graph_not_serializable"
+
+
 def test_a_tool_span_reads_the_tool_keys_and_an_llm_span_the_message_keys():
     tool = span_of(
         {
@@ -551,6 +657,22 @@ def test_an_operation_name_that_is_not_a_string_is_still_read_and_consumed(value
     assert span.kind is NodeKind.UNKNOWN
     assert span.attributes["reported_kind"] == str(value)
     assert span.unmapped == ()
+
+
+def test_an_operation_name_stated_as_an_object_is_rendered_with_its_keys_sorted():
+    # Still `str()`'s spelling -- Python's, not JSON's -- of the value with
+    # every object's keys sorted, at every level and inside a list, as a
+    # payload's text is (`SPEC.md` §3.3): the order the record wrote the keys
+    # in reaches neither `reported_kind` nor the diagnostic (decisions log D38).
+    value = {"b": None, "a": {"d": [{"f": True, "e": 5}], "c": 3}}
+    text = "{'a': {'c': 3, 'd': [{'e': 5, 'f': True}]}, 'b': None}"
+    span = span_of({"gen_ai.operation.name": value})
+    assert span.attributes["reported_kind"] == text
+    [kind_diagnostic] = [
+        d for d in span.diagnostics if d.code == codes.UNKNOWN_SPAN_KIND
+    ]
+    assert kind_diagnostic.source == text
+    assert f"gen_ai.operation.name={text!r} does not map" in kind_diagnostic.message
 
 
 # --------------------------------------------------------------------------

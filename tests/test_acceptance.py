@@ -45,10 +45,25 @@ def _recipe(target: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "prerequisite", ["lint", "types", "test", "gates", "bench-smoke"]
+    "prerequisite", ["lock", "lint", "types", "test", "gates", "bench-smoke"]
 )
 def test_check_depends_on_every_stage(prerequisite):
-    assert prerequisite in _recipe("check").splitlines()[0]
+    assert prerequisite in _recipe("check").splitlines()[0].split()
+
+
+def test_check_checks_the_lock_before_anything_runs_under_it():
+    """A stale `uv.lock` is red, before a `uv run` can re-lock it unseen.
+
+    Nothing ran `uv lock --check`, `--locked` or `--frozen`, so `uv.lock`'s
+    `requires-dist` alone drifted from `pyproject.toml` left every gate green:
+    `uv run` re-locks by default and says nothing (cold review of 2026-10-17b,
+    R-13). `lock` is `check`'s first stage, because every stage after it is a
+    `uv run`.
+    """
+    commands = [line.strip() for line in _recipe("lock").splitlines()[1:]]
+    assert "uv lock --check" in commands, commands
+    stages = _recipe("check").splitlines()[0].split()[1:]
+    assert stages[0] == "lock", f"`check` runs {stages}; `lock` is not first"
 
 
 def test_check_smoke_tests_the_installed_entrypoint():
@@ -117,8 +132,203 @@ def test_gates_runs_the_gate_suites():
 
 
 def test_ci_runs_the_same_harness_rather_than_its_own():
-    assert "uv sync --extra dev" in WORKFLOW
+    assert "uv sync --locked --extra dev" in WORKFLOW
     assert "make check" in WORKFLOW
+
+
+def _job(name: str) -> str:
+    """One job of the workflow: its key line and everything indented under it."""
+    lines = WORKFLOW.splitlines()
+    start = lines.index(f"  {name}:")
+    body = [lines[start]]
+    for line in lines[start + 1 :]:
+        if re.match(r"  \S", line):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _runs(job: str) -> list[str]:
+    """A job's `run:` commands in order, a folded (`>-`) one joined as YAML
+    joins it, with single spaces."""
+    lines = job.splitlines()
+    runs = []
+    for index, line in enumerate(lines):
+        found = re.match(r"\s*(?:- )?run:\s*(.*)$", line)
+        if not found:
+            continue
+        command = found.group(1)
+        if command in (">-", ">"):
+            key = line.index("run:")
+            folded = []
+            for following in lines[index + 1 :]:
+                if len(following) - len(following.lstrip()) <= key:
+                    break
+                folded.append(following.strip())
+            command = " ".join(folded)
+        runs.append(command)
+    return runs
+
+
+def _requires_otlp(job: str) -> bool:
+    """The job's own `env:` sets SPANWEAVE_REQUIRE_OTLP to "1"."""
+    return bool(
+        re.search(
+            r'\n    env:\n(?:      .*\n)*?      SPANWEAVE_REQUIRE_OTLP: "1"\n', job
+        )
+    )
+
+
+def _otlp_floors() -> dict[str, str]:
+    """`pyproject.toml`'s `[otlp]` lower bounds: {package: "X.Y"}."""
+    import tomllib
+
+    declared = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    floors = {}
+    for requirement in declared["project"]["optional-dependencies"]["otlp"]:
+        bound = re.fullmatch(r"([A-Za-z0-9_.-]+)>=(\d+\.\d+)", requirement)
+        assert bound, f"[otlp] states {requirement!r}, not a `name>=X.Y` floor"
+        floors[bound.group(1)] = bound.group(2)
+    return floors
+
+
+def test_every_ci_sync_is_locked():
+    """Every `uv sync` in CI refuses a lock that disagrees with pyproject.toml.
+
+    A plain `uv sync` re-locks a stale lock and installs what it re-resolved,
+    so CI tested a lock nobody committed (cold review of 2026-10-17b, R-13).
+    """
+    for name in ("check", "otlp", "determinism"):
+        syncs = [run for run in _runs(_job(name)) if run.startswith("uv sync")]
+        assert syncs, f"the {name} job no longer runs `uv sync`"
+        for sync in syncs:
+            assert "--locked" in sync.split(), (
+                f"the {name} job runs `{sync}`, which re-locks a stale uv.lock "
+                f"without a word; it must be `--locked`"
+            )
+    every = [run for run in _runs(WORKFLOW) if "uv sync" in run]
+    assert all("--locked" in run.split() for run in every), every
+
+
+def test_ci_check_job_installs_and_requires_the_otlp_extra():
+    """The matrix runs the protobuf tests on every Python, and a skip fails.
+
+    `make check` without the extra skips them, saying why, and passes: the
+    check job synced `--extra dev` alone while ENVIRONMENT.md's Setup said
+    `--extra dev --extra otlp` (cold review of 2026-10-17, R-16).
+    """
+    check = _job("check")
+    runs = _runs(check)
+    syncs = [run for run in runs if run.startswith("uv sync")]
+    assert syncs, "the check job no longer runs `uv sync`"
+    for sync in syncs:
+        assert "--extra dev" in sync and "--extra otlp" in sync, sync
+    assert _requires_otlp(check), (
+        "the check job does not set SPANWEAVE_REQUIRE_OTLP=1, so a proto "
+        "runtime that will not import is a skip that passes"
+    )
+    assert "make check" in runs
+
+
+def test_ci_otlp_job_runs_the_declared_floors():
+    """The floors `pyproject.toml` declares are the versions the job tests.
+
+    They were declared and never installed (cold review of 2026-10-17, R-18),
+    and once installed, the old pair failed on 3.14. So the pins are read
+    against the declaration rather than written twice and trusted. `uv run`
+    re-syncs to the lock by default, which would put the lock's versions back
+    under the suite without a word, so every `uv run` must be `--no-sync`.
+    """
+    floors = _otlp_floors()
+    assert set(floors) == {"protobuf", "opentelemetry-proto"}, floors
+    otlp = _job("otlp")
+    assert _requires_otlp(otlp), "the otlp job does not set SPANWEAVE_REQUIRE_OTLP=1"
+    runs = _runs(otlp)
+    sync = next(
+        (
+            index
+            for index, run in enumerate(runs)
+            if run.startswith("uv sync")
+            and "--extra dev" in run
+            and "--extra otlp" in run
+        ),
+        None,
+    )
+    assert sync is not None, "the otlp job does not sync the dev and otlp extras"
+    installs = [
+        index for index, run in enumerate(runs) if run.startswith("uv pip install")
+    ]
+    assert len(installs) == 1, f"expected one floor install, got {installs}"
+    install = installs[0]
+    assert install > sync, "the floors are installed before the sync replaces them"
+    # `>=5.27` admits 5.27.0, and `==5.27.*` installs the newest 5.27 patch
+    # (cold review of 2026-10-17b, R-14), so the pin is the floor exactly, and
+    # the line installs the two floors and nothing besides.
+    exact = {package: f"{floor}.0" for package, floor in floors.items()}
+    requirements = runs[install].split()[3:]
+    assert sorted(requirements) == sorted(
+        f'"{package}=={version}"' for package, version in exact.items()
+    ), (
+        f"the otlp job installs {requirements}; pyproject.toml's [otlp] floors "
+        f"are {exact}. A floor CI does not install is suspected, not tested."
+    )
+    after = runs[install + 1 :]
+    # Nothing after the install may put the lock's versions back: a sync, a
+    # second install, or a `uv run` that re-syncs (R-12, the worst of them).
+    for run in after:
+        assert not re.search(r"\buv (?:sync|pip (?:install|sync))\b", run), (
+            f"`{run}` runs after the floor install and replaces the floors"
+        )
+    for run in runs:
+        if run.startswith("uv run"):
+            assert "--no-sync" in run.split(), (
+                f"`{run}` re-syncs to the lock and undoes the floor install"
+            )
+    # The version step ASSERTS: a statement of its own, `assert v[...] ==`,
+    # not a comparison a `print` would show and pass (R-12).
+    asserted = {}
+    for run in after:
+        for statement in run.split(";"):
+            found = re.fullmatch(
+                r"\s*assert v\['([A-Za-z0-9_.-]+)'\] == '([0-9.]+)', v\"?\s*",
+                statement,
+            )
+            if found:
+                asserted[found.group(1)] = found.group(2)
+    assert asserted == exact, (
+        f"the otlp job asserts {asserted} installed after the floor install, "
+        f"not the floors {exact}"
+    )
+    assert any(run.split()[-2:] == ["mypy", "spanweave"] for run in after), (
+        f"no step after the floor install ends `mypy spanweave`: {after}"
+    )
+    # The whole suite: `pytest` with report flags only, no path, no `-k`, no
+    # `-m`, no `--deselect` -- a narrowed run is a floor tested in part (R-12).
+    pytests = [run.split() for run in after if "pytest" in run.split()]
+    assert len(pytests) == 1, f"expected one pytest run after the floors: {after}"
+    arguments = pytests[0][pytests[0].index("pytest") + 1 :]
+    assert set(arguments) <= {"-rs", "-ra", "-v", "-q"}, (
+        f"the otlp job runs pytest {arguments}, not the whole suite"
+    )
+
+
+def test_ci_otlp_job_runs_the_floors_on_every_python_the_check_job_does():
+    """A floor is a claim per interpreter: the old pair passed on 3.11-3.13
+    and did not import on 3.14 (cold review of 2026-10-17, R-18)."""
+
+    def matrix(job: str) -> set[str]:
+        lines = [
+            line
+            for line in job.splitlines()
+            if line.strip().startswith("python-version:")
+        ]
+        assert len(lines) == 1, lines
+        return set(re.findall(r'"(\d+\.\d+)"', lines[0]))
+
+    assert matrix(_job("otlp")) == matrix(_job("check"))
+    assert "--python ${{ matrix.python-version }}" in next(
+        run for run in _runs(_job("otlp")) if run.startswith("uv sync")
+    )
 
 
 def test_ci_still_covers_every_supported_python():
@@ -421,6 +631,117 @@ def test_the_dependency_gate_fails_on_a_planted_import(source):
         "spanweave/planted.py", source, [gates.zero_dependencies]
     )
     assert [v.rule for v in found] == ["zero-dependencies"]
+
+
+# The one exception, and its shape (batch W1): `spanweave/otlp_protobuf.py`
+# may import the `otlp` extra's packages, and only inside a function -- a
+# module-level import would make `import spanweave` need the extra. The
+# packages are what the extra declares, `google.protobuf` and
+# `opentelemetry.proto`, as module prefixes (R-3), not their top-level names.
+
+LAZY_PROTO = """
+def read(data):
+    from google.protobuf import json_format
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+"""
+
+
+def test_the_extra_s_module_may_import_the_extra_inside_a_function():
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, LAZY_PROTO, [gates.zero_dependencies]
+    )
+    assert found == []
+
+
+# The module prefix each `[otlp]` distribution provides. A distribution's
+# name is not its import name, so this one step is written down rather than
+# derived; everything else is read from `pyproject.toml`.
+OTLP_IMPORT_PREFIX = {
+    "protobuf": "google.protobuf",
+    "opentelemetry-proto": "opentelemetry.proto",
+}
+
+
+def test_the_extra_s_allowance_is_exactly_what_pyproject_declares():
+    """The allowance is the `[otlp]` extra's two prefixes, and nothing more.
+
+    The other allowance tests name the prefixes they refuse, so any prefix
+    they do not name could be added to `OPTIONAL_EXTRA_PACKAGES` with the
+    suite green -- `google._upb` among them, which the installed `protobuf`
+    also ships and the reader does not import (cold review of 2026-10-17b,
+    R-4). Held to the declaration, the allowance cannot grow without the
+    extra growing first.
+    """
+    declared = sorted(_otlp_floors())
+    assert declared == sorted(OTLP_IMPORT_PREFIX), (
+        f"[otlp] declares {declared}; give each its import prefix here"
+    )
+    derived = sorted(OTLP_IMPORT_PREFIX[name] for name in declared)
+    assert sorted(gates.OPTIONAL_EXTRA_PACKAGES) == derived
+    assert len(gates.OPTIONAL_EXTRA_PACKAGES) == len(derived)
+    assert derived == ["google.protobuf", "opentelemetry.proto"]
+    assert "google._upb" not in gates.OPTIONAL_EXTRA_PACKAGES
+
+
+@pytest.mark.parametrize("imported", ["google.protobuf", "opentelemetry.proto"])
+def test_the_extra_s_allowance_includes_the_prefix_itself(imported):
+    source = f"def read(data):\n    import {imported}\n"
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "import google.cloud",
+        "import opentelemetry.sdk.trace",
+        "from google.cloud import storage",
+        "import google.protobufx",
+        "from opentelemetry.protocol import wire",
+        "from google import protobuf",
+        "from google._upb import _message",
+    ],
+    ids=[
+        "google-outside-protobuf",
+        "opentelemetry-outside-proto",
+        "from-google-outside-protobuf",
+        "protobuf-prefix-without-the-dot",
+        "proto-prefix-without-the-dot",
+        "the-google-namespace-itself",
+        "protobuf-s-upb-backend",
+    ],
+)
+def test_the_extra_s_allowance_is_the_extra_not_its_top_level_name(statement):
+    source = f"def read(data):\n    {statement}\n"
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from google.protobuf import json_format",
+        "import opentelemetry.proto",
+        "def read(data):\n    import yaml\n",
+    ],
+    ids=["proto-at-module-level", "otlp-at-module-level", "another-package"],
+)
+def test_the_extra_s_module_imports_nothing_else_and_nothing_eagerly(source):
+    found = gates.check_source(
+        gates.OPTIONAL_EXTRA_MODULE, source, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies"]
+
+
+def test_no_other_module_may_import_the_extra():
+    found = gates.check_source(
+        "spanweave/read.py", LAZY_PROTO, [gates.zero_dependencies]
+    )
+    assert [v.rule for v in found] == ["zero-dependencies", "zero-dependencies"]
 
 
 def test_pyproject_declares_no_runtime_dependencies():

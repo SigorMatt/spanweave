@@ -1,8 +1,9 @@
 """The zoo census: what the audit counted on a stranger's trace, re-derived.
 
 `fixtures/zoo/` is a byte-for-byte copy of the twelve captures'
-`json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at `ZOO_PIN`, with each
-capture's sealed `MANIFEST.json` beside them (`fixtures/zoo/README.md`). Six
+`json/NNNN.json` bodies of `SigorMatt/spanweave-zoo` at `ZOO_PIN`, and of the
+`raw/NNNN.body` protobuf bodies each re-encodes (`pairs`), with each capture's
+sealed `MANIFEST.json` beside them (`fixtures/zoo/README.md`). Six
 agents, built by implementers who knew nothing about this library, under stock
 instrumentation (each manifest's `project_manifest.instrumentation`).
 
@@ -61,6 +62,12 @@ ZOO_PIN = "7eb5b6944ccef34861dbaf92e8f0acb0b7edaf99"
 
 #: Where a body sits in the zoo's capture directory, and so in its manifest.
 ZOO_BODY_DIR = "json"
+
+#: Where a raw body -- the exporter's own bytes -- sits, there and here.
+ZOO_RAW_DIR = "raw"
+
+#: The content type a zoo manifest gives a raw body: the exporter's protobuf.
+PROTOBUF = "application/x-protobuf"
 
 
 @dataclass(frozen=True)
@@ -1225,15 +1232,70 @@ def bodies(capture: Capture) -> list[pathlib.Path]:
     return sorted((ZOO / capture.run).glob("[0-9][0-9][0-9][0-9].json"))
 
 
-def records(capture: Capture) -> list[Record]:
-    """Every record of every body, in body order, as `read_records` yields it.
+def raw_bodies(capture: Capture) -> list[pathlib.Path]:
+    """The capture's raw protobuf bodies, in receipt order (`raw/NNNN.body`)."""
+    return sorted((ZOO / capture.run / ZOO_RAW_DIR).glob("[0-9][0-9][0-9][0-9].body"))
+
+
+def pairs(capture: Capture) -> list[tuple[pathlib.Path, pathlib.Path]]:
+    """Each JSON body beside the raw body it re-encodes, in JSON body order.
+
+    The pairing is read from the manifest's `forwards` list -- one entry per
+    forward to the Collector, in the order they completed (the zoo's
+    `SPEC.md` §4.5) -- and not from the file names: the `k`-th JSON body, the
+    `k`-th POST the Collector made, is paired with the `k`-th body forwarded
+    to it. The zoo promises neither that nor the shared `NNNN` (§4.7: a batch
+    processor may coalesce or split); it holds when the Collector answers
+    every forward and makes one POST of each, and this refuses a capture where
+    the counts or a status say otherwise. `tests/test_zoo.py` asserts the
+    pairing and the file names agree on every capture rather than assuming
+    it, and -- since on every capture `forwards` is in file-name order --
+    holds the reading of `forwards` itself on synthetic captures: one whose
+    `forwards` order is not the names', one with a forward answered anything
+    but 200 or stating no status, one with a forward outside `raw/`, and one
+    whose `forwards` count is not the bodies'. That each pair is one
+    export is the wire series' oracle, not this.
+    """
+    forwards = manifest(capture)["forwards"]
+    assert isinstance(forwards, list)
+    raw: list[pathlib.Path] = []
+    for forward in forwards:
+        assert isinstance(forward, dict)
+        assert forward.get("status") == 200, (capture.run, forward)
+        directory, _, name = str(forward["file"]).partition("/")
+        assert directory == ZOO_RAW_DIR, (capture.run, forward)
+        raw.append(ZOO / capture.run / ZOO_RAW_DIR / name)
+    json_bodies = bodies(capture)
+    assert len(json_bodies) == len(raw), capture.run
+    return list(zip(json_bodies, raw, strict=True))
+
+
+#: The two encodings every export in the zoo is sealed in: the Collector's
+#: OTLP/JSON (`json/NNNN.json`), and the exporter's own protobuf (`raw/`).
+ENCODINGS = ("json", "raw")
+
+
+def records(capture: Capture, encoding: str = "json") -> list[Record]:
+    """Every record of every body, in body order, as the reader yields it.
+
+    ``encoding`` is which half of each pair is read: the JSON body through
+    `spanweave.read_records`, or the raw body it re-encodes through
+    `spanweave.read_protobuf` (batch W1; needs the `otlp` extra). Either way a
+    record is named by its **JSON** body's name, so the two readings of one
+    capture line up record for record and `Capture.unrouted` names the same
+    records in both.
 
     A body the reader could not read whole is a failure here, not a smaller
     census: each read's diagnostics are returned to the caller to assert on.
     """
     out: list[Record] = []
-    for body in bodies(capture):
-        read = spanweave.read_records(body.read_bytes())
+    for body, raw in pairs(capture):
+        if encoding == "json":
+            read = spanweave.read_records(body.read_bytes())
+        elif encoding == "raw":
+            read = spanweave.read_protobuf(raw.read_bytes())
+        else:
+            raise ValueError(f"no encoding {encoding!r}; the zoo seals {ENCODINGS}")
         if read.diagnostics or read.skipped_records:
             raise AssertionError(f"{capture.run}/{body.name}: {read.diagnostics}")
         out.extend(
@@ -1243,10 +1305,12 @@ def records(capture: Capture) -> list[Record]:
     return out
 
 
-def audit_feed(capture: Capture) -> list[JsonValue]:
+def audit_feed(capture: Capture, encoding: str = "json") -> list[JsonValue]:
     """The records the audit fed the trace's build, in the order it fed them."""
     skip = set(capture.unrouted)
-    return [r.record for r in records(capture) if (r.body, r.index) not in skip]
+    return [
+        r.record for r in records(capture, encoding) if (r.body, r.index) not in skip
+    ]
 
 
 def count(graph: spanweave.Graph) -> Census:

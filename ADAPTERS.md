@@ -42,6 +42,15 @@ consults no adapter, names no dialect, and classifies nothing. A live consumer
 reads with it and then feeds a `Builder` (`SPEC.md` §10) — which is to say the
 dialect question is still asked per record, one layer above this one.
 
+**The same container in its other encoding is still not an adapter.** An
+OTLP export sent as protobuf (`application/x-protobuf`) is read by
+`spanweave.read_protobuf(data)`, in `spanweave/otlp_protobuf.py`, behind the
+optional `otlp` extra (`SPEC.md` §7, batch W1). It renders the request as the
+Collector's OTLP/JSON and hands it to `read_records`, so the records an
+adapter is given are the records its JSON twin gives — on every export the
+zoo seals in both encodings, equal record by record — and an adapter cannot
+tell, and must not ask, which encoding a record arrived in.
+
 ## 2. The protocol
 
 ```python

@@ -15,6 +15,102 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Added
 
+- **The scoped review of 2026-10-18b is archived, and every finding has a
+  disposition** (decisions log D40). No behaviour change.
+  `reviews/2026-10-18b-wire.md` is the review of the four commits that
+  changed behaviour last before the merge, `5ef4502`, `cf1afff`, `2f63a90`
+  and `743d027`, byte for byte, its `sha256` in `TASKS.md`, which gains a
+  line per finding, R-1…R-18. The eleven blocking findings were answered by
+  the six commits before this one, each by the fix the review names, three
+  of them as the maintainer narrowed it; those commits add tests, set right
+  sentences in `SPEC.md`, this file, `TASKS.md` and docstrings, and change
+  the export scan, and none adds an entry under Fixed: the scan's change
+  alters no reading the library's chunk sources can reach. Seven threads are
+  registered for the next spanweave series, under the reader's malformed
+  input. And a review of fix commits is bounded from here: it reads only the
+  fixing commits, and only a defect they introduce, or one a claim they make
+  depends on, blocks the merge.
+- **The scoped review of 2026-10-18 is archived, and every finding has a
+  disposition** (decisions log D37). No behaviour change.
+  `reviews/2026-10-18-wire.md` is the review of the fixes for Qodo's review
+  of PR #6 byte for byte, its `sha256` in `TASKS.md`, which gains a line
+  per finding, R-1…R-20: the commit that answered it, or the reading it was
+  read and recorded with. The record lines it found are set right in
+  `TASKS.md`, and the entry below for Qodo's review now says findings 4
+  and 3 were fixed with no value or graph-bytes change, where it said the
+  two commits "change no behaviour": `8b68608` changed the key order of
+  the protobuf records. Two threads are registered: a field the wire
+  states twice, merged with no diagnostic, for the next spanweave series;
+  and a span kind stated as an object, whose key order reaches the graph,
+  for the maintainer to fix before the merge or in that series. The zoo's
+  thread for a hand-made capture now also covers an id of another length,
+  a field stated twice and a non-finite `doubleValue`.
+- **Qodo's review of PR #6 is archived, and all seven findings have a
+  disposition** (decisions log D36). No behaviour change.
+  `reviews/2026-10-18-qodo-pr6.md` holds the "Code Review by Qodo" comment
+  and its seven inline comments, each body as first fetched, unchanged,
+  their `sha256`s in `TASKS.md`, which gains a line per finding: findings
+  6 and 7 accepted and fixed by the all-zero-id and `unknown_fields`
+  entries under Fixed; findings 4 and 3 accepted and fixed by two commits
+  with no value or graph-bytes change, sorted keys in the rendered
+  document and the proto modules imported by name in the tests; finding 5
+  accepted as a pin and a thread; findings 1 and 2 declined as design
+  changes and answered in `SPEC.md` §7 and `CLAUDE.md`. The PR summary
+  comment carries no findings and is not archived.
+- **The scoped review of 2026-10-17 is archived, and every finding has a
+  disposition** (decisions log D35). No behaviour change.
+  `reviews/2026-10-17b-wire.md` is the review of the fixes byte for byte,
+  its `sha256` in `TASKS.md`, which gains a line per finding, R-1…R-21:
+  the commit that answered it, or the reading it was read, recorded or
+  declined with. The record's own disagreements it found are set right in
+  `TASKS.md`, `CONTRIBUTING.md` and `FIXTURES.md`.
+- **The cold review of 2026-10-17 is archived, and every finding has a
+  disposition** (decisions log D34). No behaviour change.
+  `reviews/2026-10-17-wire.md` is the review byte for byte, its `sha256`
+  in `TASKS.md`, which gains a line per finding, R-1…R-18: the commit that
+  answered it, or the reading it was read, recorded or declined with.
+- **`spanweave.read_protobuf` reads the OTLP protobuf wire format** (wire
+  series, W1; the zoo's `PROBES.md` L1). It takes the bytes of one
+  `ExportTraceServiceRequest` -- the `application/x-protobuf` body the stock
+  OTLP/HTTP exporter sends -- and returns the `Records` `read_records`
+  returns for the same export written as OTLP/JSON. It lives in
+  `spanweave/otlp_protobuf.py`, behind the `otlp` extra, which now depends
+  on `opentelemetry-proto` as well as `protobuf` (`uv.lock` refreshed);
+  without the extra it raises `SpanweaveError` with the new code
+  `otlp_extra_not_installed` (`SPEC.md` §3.10), and `import spanweave`
+  needs neither package. The body is rendered as the Collector's OTLP/JSON
+  -- ids as hex and enums as numbers, the two places the Collector differs
+  from `MessageToDict`, now stated in `SPEC.md` §7 -- and handed to
+  `read_records`. `tests/test_protobuf.py` holds it to the zoo's 29 pairs:
+  the rendering is the Collector's document, the records are equal record
+  by record and the built graphs byte for byte, and the zoo census
+  (`tests/test_zoo.py`) runs every capture from its raw bodies too. Where
+  the pairs are silent, `OPEN_QUESTIONS.md` §23's decisions: a body that
+  will not parse is one `malformed_record` with `source` `null`; a message
+  carrying fields the installed schema does not define is read and draws
+  one new **`unknown_fields`** diagnostic (`warning`; its path and the
+  fields' numbers and wire types, `SPEC.md` §3.7), and the diagnostic code
+  vocabulary in `tests/serialized_shape.json` is regenerated for it -- no
+  other shape change, `schema_version` unchanged; a `doubleValue` is a
+  float, stated as the one rendering no pair checks. The zero-dependencies
+  gate allows that one module the extra's imports, inside a function only;
+  mypy has an override for the absent extra; CI gains an `otlp` job that
+  installs the extra and runs the suite with `SPANWEAVE_REQUIRE_OTLP=1`,
+  so the protobuf tests run there rather than skip. The JSON path is
+  unchanged.
+- **The raw bodies join the record** (wire series, W0). The zoo's
+  protobuf bodies -- the exporter's own bytes, which its `PROBES.md` L1
+  found every one of answered 415 -- are copied byte for byte from
+  `SigorMatt/spanweave-zoo` at `7eb5b69` into
+  `fixtures/zoo/<project>/<run-id>/raw/NNNN.body`, beside the Collector's
+  JSON re-encodings already there, and `.gitattributes` marks them
+  `binary`. `tests/test_zoo.py` re-derives each one's sha256 against its
+  sealed manifest entry (`content_type: application/x-protobuf`), counts
+  them against L1, and pairs every JSON body with the raw body it came
+  from by the manifest's `forwards` list (`tests/zoo_census.py`'s
+  `pairs`), asserting each pair shares its `NNNN` rather than assuming
+  it. `fixtures/zoo/README.md` gains a raw column, held by the test, and
+  says the pairs are the wire series' oracle. No library change.
 - **The last "grades" leaves core, and the neutrality gate learns the
   stem.** The `DiagnosticLevel` docstring in `spanweave/model.py` said
   "This grades the report, not the trace"; it now says a level "is a
@@ -100,7 +196,7 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
   states its limit: the seals are copied from the zoo's manifests at the
   pin and are the pin; the test holds the copy to the README, and holding
   the README to the zoo is a reviewer's comparison against the zoo at
-  `7eb5b69`.
+  `SigorMatt/spanweave-zoo` `7eb5b69`.
 - **Decision rows carry ids, every citation resolves to one, and the relay
   files map to rows** (decisions log D24; R-17, R-18, R-19, R-22). No
   behaviour change. Decisions were cited by date and batch, and on
@@ -1008,6 +1104,74 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Changed
 
+- **CI does what its steps say: the `otlp` job installs the floors exactly,
+  the lock is checked, and the CI-shape tests hold what the steps do** (cold
+  review of 2026-10-17b, R-12, R-13, R-14). The `otlp` job installed
+  `protobuf==5.27.*` and `opentelemetry-proto==1.28.*`, the newest patch of
+  each, while its comment said the lowest versions `[otlp]` admits; it now
+  installs `==5.27.0` and `==1.28.0` and asserts exactly those. Every
+  `uv sync` in CI is `--locked`, and `make check` gains a first stage,
+  `lock`, that runs `uv lock --check`, so a `uv.lock` that has drifted from
+  `pyproject.toml` is red rather than re-locked unseen.
+  `tests/test_acceptance.py` now holds that nothing syncs or installs after
+  the floor install, that the version step's checks are `assert`
+  statements, that `mypy spanweave` and the whole suite run after it (no
+  path or selector on `pytest`), and that every sync is `--locked`. What a
+  test of the steps' text cannot see -- a step's `if:`,
+  `continue-on-error:` or `shell:` -- it does not claim to.
+- **The `otlp` extra's floors are raised to `protobuf>=5.27` and
+  `opentelemetry-proto>=1.28`, and CI now tests them** (cold review of
+  2026-10-17, R-16, R-18). The old floors, `protobuf>=4.25` and
+  `opentelemetry-proto>=1.27`, had never been installed. Measured, that pair
+  resolves (`opentelemetry-proto` 1.27 requires `protobuf>=3.19,<5.0`) and
+  passes the whole suite on Python 3.11–3.13. On 3.14 it fails: `protobuf`
+  before 5.27 does not import there ("Metaclasses with custom tp_new are not
+  supported"), and `opentelemetry-proto` 1.27 cannot take a later
+  `protobuf`. The lowest pair that passes on all four Pythons is
+  `protobuf` 5.27 with `opentelemetry-proto` 1.28. `uv.lock`'s
+  `requires-dist` moves with the bounds, and its resolved versions do not.
+  CI's `check` matrix now syncs `--extra dev --extra otlp`, ENVIRONMENT.md's
+  Setup, with `SPANWEAVE_REQUIRE_OTLP=1`, so the protobuf tests run on every
+  Python and a skip fails. The `otlp` job keeps its name and becomes a
+  matrix over the same Pythons. It installs `protobuf==5.27.*` and
+  `opentelemetry-proto==1.28.*` over the lock, prints and asserts the
+  installed versions, and runs mypy and the suite with `uv run --no-sync`,
+  because a plain `uv run` re-syncs to the lock and would silently undo the
+  floors. `tests/test_acceptance.py` holds that shape: the check job's
+  extras and `REQUIRE`, and the otlp job's pins and asserted versions equal
+  to `pyproject.toml`'s lower bounds, every `uv run` there `--no-sync`, and
+  its matrix equal to the check job's.
+
+- **The wire series is closed, and `WORKPLAN.md` is gone with it** (W2, this
+  commit). No behaviour change: no rule under `spanweave/` moved (one
+  docstring's citation of the plan file is re-pointed),
+  `tests/serialized_shape.json` is untouched, and `SCHEMA_VERSION` is still
+  `"0.1"`, unfrozen. `TASKS.md` now holds everything of the plan file that
+  outlives the series, under *The wire series*:
+  - a registry row per batch, W0–W2, with each final status and commit,
+    including W1's halt and decision (`OPEN_QUESTIONS.md` §23);
+  - the decisions log and the dated resume note, both verbatim. The log's
+    rows carry ids that continue the stranger's-trace log's numbering
+    (decisions log D28 to D33), and `tests/test_doc_truth.py`'s citation
+    resolver now reads both logs, so `decisions log D<n>` still names one
+    row in the whole file;
+  - L1's spanweave half dispositioned (W0, W1); its receiver half is
+    `SigorMatt/spanweave-live`'s V1, not this repository's;
+  - the open items the last resume entry left, registered as open: the
+    `otlp` CI job runs one interpreter, the extra's `protobuf>=4.25` floor
+    is untested, the missing-extra error is a plain `SpanweaveError` and not
+    a subclass, and the zoo thread that would settle how a `doubleValue`
+    renders (decisions log D33).
+
+  `ROADMAP.md`'s Phase 4 line "OTLP protobuf behind the `otlp` extra" is
+  marked done at `4ecf414`, and `TASKS.md`'s Phase 4 bullet with it. The
+  README's Documents row for `WORKPLAN.md` and the `WORKPLAN.md` exclusion
+  in `durable_documents()` are removed, the pair every series close removes.
+  `spanweave/otlp_protobuf.py`'s and `tests/test_protobuf.py`'s citations of
+  the plan file are re-pointed at `TASKS.md`, and `OPEN_QUESTIONS.md`'s §23
+  preamble says where the file's content went. This series has no review
+  archive yet: its cold review, the PR to `main` and Qodo's review of it
+  come after this commit.
 - **`make conformance` runs the zoo readings** (after the stranger's-trace
   close; decisions log D22). No behaviour change. The target
   now runs `tests/test_zoo_readings.py` beside `tests/test_conformance.py` and
@@ -2233,6 +2397,103 @@ shape is **unfrozen until Phase 4** (`ROADMAP.md`).
 
 ### Fixed
 
+- **An OTLP/JSON document is read whole wherever its object states
+  `resourceSpans`** (decisions log D39). The reader decided whether to buffer
+  an input that opens with `{` and read it as one document by its first
+  member key, so a document written over several lines whose object states
+  `resourceSpans` beside another member was one record with `resourceSpans`
+  first and, with it after, every line a `malformed_record`: the order the
+  members were written in decided the graph. The head scan now reads the
+  first top-level object's members -- strings, escapes and nesting tracked,
+  the key compared as JSON reads it -- and buffers when one of them is
+  `resourceSpans`, wherever it stands (`SPEC.md` §7). Such an object is
+  still not an export, and is one record carried verbatim, its other members
+  with it, as it was with `resourceSpans` first. A JSONL file's first record
+  is now scanned to its close rather than to its first key, which the line
+  reader buffers anyway; one whose first record never closes is scanned to
+  the end and then read line by line as before. No graph in the repository
+  changes: every conformance rendering and zoo body that states
+  `resourceSpans` states it alone, and no tracked JSONL file states it.
+- **A `kvlistValue` in an `exception_event` message is written as a map**
+  (decisions log D39). The message names the event's `exception.type` with
+  `repr`, and one stated as a `kvlistValue` folds to a map in the order its
+  list gives the entries, so the same map listed in two orders gave two
+  messages. Its keys are now sorted at every level first, by
+  `jsoncodec.keys_sorted`, the sorter the adapters use (`SPEC.md` §3.3, §7);
+  any other type is written as before. `SPEC.md` §7's key-order sentence now
+  claims what the gate holds, that an object's member order never reaches a
+  graph when each member is stated once, says how a member stated twice is
+  read today, as measured, and says that where the reader carries a list as
+  written (an event's, a resource's and a scope's attributes, an
+  `arrayValue`), its order is the input's and reaches `raw.source`, and that a
+  span's or a link's attributes, and a `kvlistValue` inside one, are folded to
+  a map whose order is not carried, but for the entries the fold cannot take.
+  No graph in the repository changes: no conformance rendering, captured trace
+  or zoo body states an `exception.type` as a `kvlistValue`.
+- **A span kind or operation stated as an object is rendered with sorted
+  keys** (decisions log D38). An exporter that carries nested attributes can
+  state `openinference.span.kind` or `gen_ai.operation.name` as an object, and
+  both adapters rendered it with `str()` in the key order the record wrote,
+  into the node's `attributes.reported_kind` and the `unknown_span_kind`
+  diagnostic's message and source -- so a file holding one span twice, its
+  kind's keys in two orders, built a different graph with its lines swapped.
+  Its keys are now sorted at every level first, by `jsoncodec.keys_sorted`,
+  the one sorting a structured payload's text goes through too; the spelling
+  is still `str()`'s (`SPEC.md` §3.3). The class is held by a gate rather
+  than the site: `tests/test_determinism.py` re-feeds every input the
+  repository holds, and hand-made ones stating a structured value wherever an
+  adapter reads a value, with every object's keys reordered at every depth,
+  and each builds the graph it built as written. No graph in the repository
+  changes: no input here states a kind or an operation as an object, so no
+  expected graph, census count or reading moves.
+- **`read_protobuf` omits an all-zero id only at the length the schema gives
+  it** (the scoped review of 2026-10-18, R-1, R-2). The rule added for Qodo's
+  finding 6 omitted an id whose bytes were all zero at any length, so an
+  all-zero id of 4 or 17 bytes, a 16-byte span id or an 8-byte trace id was
+  dropped with no diagnostic, while a non-zero id of the same length was
+  carried. The Collector's rule is for the lengths it holds ids at. An id is
+  now omitted only when it has its length -- 16 bytes for a `traceId`, 8 for
+  a `spanId` or `parentSpanId`, a span's or a link's -- **and** every byte is
+  zero; an id of any other length, all zero or not, is hex as stated, as the
+  JSON path carries a hex string of any length (`SPEC.md` §7). The tests now
+  hold the one non-zero byte at every position of both widths. No pair
+  moves: no zoo body carries an all-zero id or one of another length.
+- **A structured payload's text is written with sorted keys** (the scoped
+  review of 2026-10-18, R-8). An exporter that carries nested attributes
+  hands an adapter a payload that was never a string, and both adapters
+  rendered it back to text for `raw` -- and for `value`, where the payload
+  has no JSON mime -- in the key order the record wrote. Two lines that
+  parse equal are one record and the reader keeps the first, so a file
+  holding one span twice, its payload's keys in two orders, built a
+  different graph with its lines swapped. The text is now `json.dumps` with
+  `sort_keys=True` at every level, on both adapters (`SPEC.md` §3.3), and
+  the swapped file builds the same bytes but for `meta.source_digest`. No
+  graph in the repository changes: no conformance rendering, captured
+  trace or zoo body (on either path) carries a structured payload, so no
+  expected graph, census count or reading moves.
+- **`read_protobuf` omits an all-zero id, as the Collector does** (Qodo's
+  review of PR #6, finding 6). A `traceId`, `spanId` or `parentSpanId`, a
+  span's or a link's, whose bytes are all zero was rendered as zero hex,
+  which the JSON reader reads as a stated id, so a root span whose exporter
+  wrote zero bytes for its parent drew an `orphan_parent` its Collector JSON
+  twin does not. The Collector treats the all-zero id as empty and omits it;
+  so does the rendering now (`SPEC.md` §7, the Collector's rule, not a
+  pair). The JSON path is unchanged: a JSON record stating
+  `"0000000000000000"` still states an id. No pair moves.
+- **`unknown_fields` says when the number is one the schema defines**
+  (Qodo's review of PR #6, finding 7). The protobuf runtime keeps a field
+  the schema defines that arrives with another wire type -- a span's `name`
+  sent as a varint -- with the numbers it has never heard of, and the
+  diagnostic blamed every one on the schema's age. Each entry in its
+  `source` now carries `defined` (whether the installed schema defines that
+  number on that message) and `expected_wire_type` (the wire type the
+  schema expects, `null` where it defines none), and the message says "not
+  readable as the installed schema defines it" of the first kind and "not
+  defined by the installed schema" of the second, counting each where a
+  message carries both. Still one `unknown_fields` per message and no new
+  code; `diagnostic_source` in `tests/serialized_shape.json` is regenerated
+  for the two keys (`SPEC.md` §3.7, §7), `schema_version` unchanged. No pair
+  moves.
 - **L25's dedup test no longer states the premise its own failure disproves.**
   A docstring; no assertion, no source and no document behaviour moves (from
   the run-5 scoped cold review, finding L25-1). The test explained itself with

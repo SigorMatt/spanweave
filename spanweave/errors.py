@@ -65,6 +65,12 @@ DELTA_UNAVAILABLE = "delta_unavailable"
 # would put the transport's authority behind a statement nobody made.
 NOT_AN_ENVELOPE = "not_an_envelope"
 
+# A caller asked `spanweave.read_protobuf` to read the OTLP protobuf wire
+# format, and the `otlp` extra that reads it is not installed (`SPEC.md` §7,
+# batch W1). The code names the extra because installing it is the fix; core
+# never needs it, so `import spanweave` never raises this.
+OTLP_EXTRA_NOT_INSTALLED = "otlp_extra_not_installed"
+
 #: Every code the library raises. A test asserts this matches `SPEC.md` §3.10.
 ERROR_CODES = (
     ADAPTER_AMBIGUOUS,
@@ -76,6 +82,7 @@ ERROR_CODES = (
     GRAPH_NOT_SERIALIZABLE,
     NO_ADAPTERS_REGISTERED,
     NOT_AN_ENVELOPE,
+    OTLP_EXTRA_NOT_INSTALLED,
     UNKNOWN_ADAPTER,
 )
 
